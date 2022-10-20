@@ -13,16 +13,16 @@ async function set_session_keys() {
     .version('1.0.0')
     .options({
       controllerPrivate: {
-        type: 'string', describe: 'Controller\'s PrivateKey (with 0x prefix)',
+        type: 'string', describe: 'Controller\'s PrivateKey (with 0x prefix)'
       },
       provider: {
         type: 'string',
         describe: 'Provider endpoint',
-        default: 'http://127.0.0.1',
+        default: 'http://127.0.0.1'
       },
       rpcPort: {
-        type: 'number', describe: 'Node RPC Port', default: 9933,
-      },
+        type: 'number', describe: 'Node RPC Port', default: 9933
+      }
     }).help().argv;
 
   if (!argv.controllerPrivate) {
@@ -49,10 +49,14 @@ async function set_session_keys() {
   const LOCAL_NODE_ENDPOINT: string = `${argv.provider}:${argv.rpcPort}`;
 
   const web3 = new Web3(LOCAL_NODE_ENDPOINT);
-  const isSyncing = await web3.eth.isSyncing();
-
-  if (isSyncing !== false) {
-    console.error("Node is not completely sync yet")
+  try {
+    const isSyncing = await web3.eth.isSyncing();
+    if (isSyncing !== false) {
+      console.error('Node is not completely sync yet');
+      process.exit(-1);
+    }
+  } catch (e) {
+    console.error('Node endpoint not reachable');
     process.exit(-1);
   }
 
@@ -78,7 +82,7 @@ async function set_session_keys() {
     await api.tx.session.setKeys({
       aura: auraSessionKey,
       grandpa: granSessionKey,
-      imOnline: imonSessionKey,
+      imOnline: imonSessionKey
     }, '0x00').signAndSend(controller, { nonce: -1 });
 
     console.log('\n🔑 Session Keys');
@@ -87,12 +91,13 @@ async function set_session_keys() {
     console.log(`    imon: ${imonSessionKey}`);
   } catch (error) {
     if (error instanceof Error) {
-      console.error(`Failed to set session keys due to the following error: ${error.message}`);
+      console.error(
+        `Failed to set session keys due to the following error: ${error.message}`);
     }
   }
 }
 
 set_session_keys().catch((error) => {
   console.error(error);
-  process.exit(1);
+  process.exit(0);
 });
