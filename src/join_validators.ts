@@ -13,29 +13,29 @@ async function join_validators() {
     .version('1.0.0')
     .options({
       controllerPrivate: {
-        type: 'string', describe: 'Controller\'s PrivateKey (with 0x prefix)',
+        type: 'string', describe: 'Controller\'s PrivateKey (with 0x prefix)'
       },
       stashPrivate: {
-        type: 'string', describe: 'Stash\'s PrivateKey (with 0x prefix)',
+        type: 'string', describe: 'Stash\'s PrivateKey (with 0x prefix)'
       },
       relayerPrivate: {
         type: 'string',
         describe: 'Relayer\'s PrivateKey (with 0x prefix)',
-        default: '',
+        default: ''
       },
       provider: {
         type: 'string',
         describe: 'Provider endpoint',
-        default: 'http://127.0.0.1',
+        default: 'http://127.0.0.1'
       },
       rpcPort: {
-        type: 'number', describe: 'Node RPC Port', default: 9933,
+        type: 'number', describe: 'Node RPC Port', default: 9933
       },
       bond: {
         type: 'number',
         describe: 'Initial self-bond amount in decimal',
-        default: 1000,
-      },
+        default: 1000
+      }
     }).help().argv;
 
   if (!argv.controllerPrivate) {
@@ -80,10 +80,14 @@ async function join_validators() {
   const LOCAL_NODE_ENDPOINT: string = `${argv.provider}:${argv.rpcPort}`;
 
   const web3 = new Web3(LOCAL_NODE_ENDPOINT);
-  const isSyncing = await web3.eth.isSyncing();
-
-  if (isSyncing !== false) {
-    console.error('Node is not completely sync yet');
+  try {
+    const isSyncing = await web3.eth.isSyncing();
+    if (isSyncing !== false) {
+      console.error('Node is not completely sync yet');
+      process.exit(-1);
+    }
+  } catch (e) {
+    console.error('Node endpoint not reachable');
     process.exit(-1);
   }
 
@@ -105,14 +109,14 @@ async function join_validators() {
         controller.address,
         relayerAddress,
         selfBond.toFixed(),
-        1000,
+        1000
       ).signAndSend(stash, { nonce: -1 });
     } else {
       await api.tx.bfcStaking.joinCandidates(
         controller.address,
         null,
         selfBond.toFixed(),
-        1000,
+        1000
       ).signAndSend(stash, { nonce: -1 });
     }
 
@@ -125,12 +129,13 @@ async function join_validators() {
     console.log(`    self-bond: ${argv.bond}`);
   } catch (error) {
     if (error instanceof Error) {
-      console.error(`Failed to join validators due to the following error: ${error.message}`);
+      console.error(
+        `Failed to join validators due to the following error: ${error.message}`);
     }
   }
 }
 
 join_validators().catch((error) => {
   console.error(error);
-  process.exit(1);
+  process.exit(0);
 });
