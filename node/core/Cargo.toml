@@ -1,0 +1,44 @@
+[package]
+name = "bifrost-node"
+version = "1.1.2"
+description = "The node specification for BIFROST Node"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+build = "build.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[[bin]]
+name = "bifrost-node"
+
+[dependencies]
+# third-party dependencies
+clap = { version = "3.0", features = ["derive"] }
+
+# substrate client dependencies
+sc-cli = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", features = ["wasmtime"] }
+sc-service = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", features = ["wasmtime"] }
+
+# benchmarking dependencies
+frame-benchmarking = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-benchmarking-cli = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# BIFROST runtimes
+bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
+bifrost-testnet-runtime = { path = "../../runtime/testnet", features = ["std", "evm-tracing"] }
+
+# BIFROST node specs
+bifrost-common-node = { path = "../common" }
+bifrost-dev-node = { path = "../dev" }
+bifrost-testnet-node = { path = "../testnet" }
+
+[build-dependencies]
+substrate-build-script-utils = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+default = []
+runtime-benchmarks = []

@@ -1,0 +1,79 @@
+[package]
+name = "bifrost-dev-node"
+version = "1.0.0"
+description = "The node specification for BIFROST Node development"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+# third-party dependencies
+serde_json = "1.0"
+jsonrpc-core = "18.0.0"
+futures = { version = "0.3" }
+hex-literal = { version = "0.3.1" }
+tokio = { version = "1.13.0", features = ["macros", "sync"] }
+
+# substrate client dependencies
+sc-client-api = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-executor = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", features = ["wasmtime"] }
+sc-service = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", features = ["wasmtime"] }
+sc-telemetry = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-transaction-pool = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-transaction-pool-api = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-consensus-manual-seal = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-consensus-aura = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-consensus = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-finality-grandpa = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-finality-grandpa-rpc = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-network = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-rpc = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-rpc-api = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-chain-spec = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sc-basic-authorship = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# substrate primitives dependencies
+sp-core = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-api = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-keystore = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-consensus = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-consensus-aura = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-finality-grandpa = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-block-builder = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-blockchain = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-timestamp = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# FRAME dependencies
+pallet-bfc-staking = { path = "../../pallets/bfc-staking" }
+pallet-im-online = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-transaction-payment-rpc = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+substrate-frame-rpc-system = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# Frontier dependencies
+fc-db = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fc-rpc = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2", features = ["rpc_binary_search_estimate"] }
+fc-rpc-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fc-mapping-sync = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-storage = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-ext = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-rpc = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-evm = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+
+# benchmarking dependencies
+frame-benchmarking = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-benchmarking-cli = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# Local Dependencies
+bp-core = { path = "../../primitives/core" }
+bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
+bifrost-dev-constants = { path = "../../runtime/dev/constants" }
+bifrost-common-node = { path = "../common" }
+
+[features]
+default = []
+runtime-benchmarks = [
+	"bifrost-dev-runtime/runtime-benchmarks",
+]

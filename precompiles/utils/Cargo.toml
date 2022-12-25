@@ -1,0 +1,45 @@
+[package]
+name = "precompile-utils"
+version = "1.0.0"
+description = "Utils to write EVM precompiles."
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+log = "0.4"
+sha3 = { version = "0.9", default-features = false }
+num_enum = { version = "0.5.3", default-features = false }
+
+# Substrate
+codec = { package = "parity-scale-codec", version = "2.2", default-features = false }
+frame-support = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-system = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-io = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-std = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# Frontier
+fp-evm = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-evm = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+
+# Local
+precompile-utils-macro = { path = "macro" }
+
+[dev-dependencies]
+hex-literal = "0.3.1"
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"fp-evm/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-evm/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-std/std",
+]

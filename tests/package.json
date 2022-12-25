@@ -1,0 +1,41 @@
+{
+  "name": "@bifrost-platform/bifrost-node",
+  "version": "1.1.2",
+  "author": "bifrost-platform",
+  "scripts": {
+    "test": "mocha -r ts-node/register tests/**/**/*.ts --exit",
+    "run_node": "ts-node commands/run_node.ts",
+    "set_node": "ts-node commands/set_node.ts",
+    "set_controller": "ts-node commands/set_controller.ts",
+    "rewind_node": "ts-node commands/rewind_node.ts",
+    "purge_chains": "ts-node commands/purge_chains.ts",
+    "purge_containers": "ts-node commands/purge_containers.ts",
+    "benchmark": "NODE_OPTIONS='--no-warnings' ts-node benchmark/index.ts",
+    "max_gas_limit": "ts-node benchmark/max_gas_limit.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bifrost-platform/bifrost-node.git"
+  },
+  "dependencies": {
+    "@polkadot/api": "8.6.2",
+    "axios": "0.27.2",
+    "bignumber.js": "9.1.0",
+    "ethers": "5.6.9",
+    "shelljs": "0.8.5",
+    "tcp-port-used": "^1.0.2",
+    "web3": "1.7.5"
+  },
+  "devDependencies": {
+    "@types/chai": "4.3.3",
+    "@types/mocha": "9.1.1",
+    "@types/node": "17.0.45",
+    "@types/tcp-port-used": "1.0.1",
+    "chai": "4.3.6",
+    "char": "1.0.2",
+    "mocha": "10.0.0",
+    "ts-node": "10.9.1",
+    "ts-node-register": "1.0.0",
+    "typescript": "4.7.4"
+  }
+}

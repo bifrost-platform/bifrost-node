@@ -1,0 +1,1 @@
+../../../../solidity/contracts/interface/IBFC_Staking.sol

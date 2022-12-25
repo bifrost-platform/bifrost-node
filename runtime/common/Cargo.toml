@@ -1,0 +1,30 @@
+[package]
+name = "bifrost-common-runtime"
+version = "1.0.0"
+description = "The common code shared between substrate runtimes for BIFROST Node"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+codec = { package = "parity-scale-codec", version = "2.2", default-features = false, features = ["derive"] }
+
+# Substrate
+frame-system = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-support = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-std = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+std = [
+	"frame-support/std",
+	"sp-core/std",
+	"sp-runtime/std",
+	"sp-std/std",
+]
+try-runtime = [
+	"frame-support/try-runtime",
+]

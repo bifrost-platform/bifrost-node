@@ -1,0 +1,27 @@
+[package]
+name = "bifrost-dev-constants"
+version = "1.0.0"
+description = "The substrate runtime constants for BIFROST Node development"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+# Bifrost
+bifrost-common-constants = { default-features = false, path = "../../common/constants" }
+bp-core = { default-features = false, path = "../../../primitives/core" }
+
+# Substrate
+sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-support = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-evm = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+default = ["std"]
+std = [
+	"pallet-evm/std",
+	"sp-core/std",
+	"frame-support/std"
+]

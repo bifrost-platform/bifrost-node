@@ -1,0 +1,31 @@
+[package]
+name = "bp-staking"
+version = "0.0.1"
+description = "Primitives for pallet bfc staking"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "2.2", default-features = false, features = ["derive"] }
+
+fp-self-contained = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+sp-std = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-staking = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+default = [ "std" ]
+std = [
+	"scale-info/std",
+	"parity-scale-codec/std",
+	"fp-self-contained/std",
+	"sp-std/std",
+	"sp-core/std",
+	"sp-runtime/std",
+	"sp-staking/std",
+]

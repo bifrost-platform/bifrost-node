@@ -1,0 +1,177 @@
+[package]
+name = "bifrost-testnet-runtime"
+version = "1.0.0"
+description = "The substrate runtime for BIFROST Node testnet"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+build = "build.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+# third-party dependencies
+codec = { package = "parity-scale-codec", version = "2.2", default-features = false, features = ["derive"] }
+scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+hex-literal = { version = "0.3.1", optional = true }
+static_assertions = "1.1.0"
+rlp = { version = "0.5", optional = true, default-features = false }
+sha3 = { version = "0.9", optional = true, default-features = false }
+
+# BIFROST
+bifrost-common-runtime = { default-features = false, path = "../common" }
+bifrost-testnet-constants = { default-features = false, path = "./constants" }
+bp-core = { default-features = false, path = "../../primitives/core" }
+account = { default-features = false, path = "../../primitives/account" }
+
+# FRAME dependencies
+frame-system = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-support = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-executive = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-system-rpc-runtime-api = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-benchmarking = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", optional = true }
+frame-system-benchmarking = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", optional = true }
+pallet-aura = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-balances = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-grandpa = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-randomness-collective-flip = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-sudo = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-timestamp = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-transaction-payment = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-transaction-payment-rpc-runtime-api = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-scheduler = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-session = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", features = ["historical"] }
+pallet-authorship = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-utility = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-collective = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-democracy = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-membership = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-im-online = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-offences = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-treasury = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-identity = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# substrate primitives
+sp-io = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-api = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-block-builder = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-consensus-aura = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-inherents = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-offchain = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-session = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-std = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-transaction-pool = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-version = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+# Frontier
+pallet-evm = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-ethereum = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-base-fee = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-self-contained = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-rpc = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-rpc-debug = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+fp-rpc-evm-tracing-events = { default-features = false, optional = true, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+evm-tracer = { default-features = false, optional = true, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+
+# Custom Pallets
+pallet-bfc-staking = { default-features = false, path = "../../pallets/bfc-staking" }
+pallet-bfc-utility = { default-features = false, path = "../../pallets/bfc-utility" }
+pallet-bfc-offences = { default-features = false, path = "../../pallets/bfc-offences" }
+pallet-relay-manager = { default-features = false, path = "../../pallets/relay-manager" }
+
+# Precompiled Contracts
+pallet-evm-precompile-simple = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-evm-precompile-bn128 = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-evm-precompile-modexp = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+pallet-evm-precompile-blake2 = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+
+precompile-bfc-staking = { default-features = false, path = "../../precompiles/bfc-staking" }
+precompile-bfc-offences = { default-features = false, path = "../../precompiles/bfc-offences" }
+precompile-relay-manager = { default-features = false, path = "../../precompiles/relay-manager" }
+precompile-governance = { default-features = false, path = "../../precompiles/governance" }
+precompile-collective = { default-features = false, path = "../../precompiles/collective" }
+precompile-balance = { default-features = false, path = "../../precompiles/balance" }
+
+[build-dependencies]
+substrate-wasm-builder = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"scale-info/std",
+	"bifrost-common-runtime/std",
+	"bp-core/std",
+	"frame-executive/std",
+	"frame-support/std",
+	"frame-system-rpc-runtime-api/std",
+	"frame-system/std",
+	"pallet-treasury/std",
+	"pallet-aura/std",
+	"pallet-balances/std",
+	"pallet-grandpa/std",
+	"pallet-randomness-collective-flip/std",
+	"pallet-sudo/std",
+	"pallet-timestamp/std",
+	"pallet-transaction-payment-rpc-runtime-api/std",
+	"pallet-transaction-payment/std",
+	"pallet-scheduler/std",
+	"pallet-session/std",
+	"pallet-authorship/std",
+	"pallet-utility/std",
+	"pallet-collective/std",
+	"pallet-democracy/std",
+	"pallet-membership/std",
+	"pallet-evm/std",
+	"pallet-ethereum/std",
+	"pallet-base-fee/std",
+	"pallet-bfc-staking/std",
+	"pallet-bfc-utility/std",
+	"pallet-bfc-offences/std",
+	"pallet-relay-manager/std",
+	"pallet-im-online/std",
+	"pallet-offences/std",
+	"pallet-identity/std",
+	"sp-api/std",
+	"sp-consensus-aura/std",
+	"sp-block-builder/std",
+	"sp-core/std",
+	"sp-inherents/std",
+	"sp-offchain/std",
+	"sp-runtime/std",
+	"sp-session/std",
+	"sp-std/std",
+	"sp-io/std",
+	"sp-transaction-pool/std",
+	"sp-version/std",
+	"fp-self-contained/std",
+	"fp-rpc/std",
+	"fp-rpc-debug/std",
+	"evm-tracer/std",
+	"account/std",
+]
+evm-tracing = [
+	"rlp",
+	"sha3",
+	"evm-tracer",
+	"sp-io/disable_oom",
+	"sp-io/disable_panic_handler",
+	"fp-rpc-evm-tracing-events",
+]
+runtime-wasm = []
+runtime-benchmarks = [
+	"hex-literal",
+	"sp-runtime/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system-benchmarking",
+	"frame-system/runtime-benchmarks",
+	"pallet-balances/runtime-benchmarks",
+	"pallet-timestamp/runtime-benchmarks",
+	"pallet-utility/runtime-benchmarks",
+]

@@ -1,0 +1,25 @@
+[package]
+name = "bp-core"
+version = "0.0.1"
+description = "Core primitives for BIFROST runtime"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+account = { path = "../account", default-features = false }
+
+fp-self-contained = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+default = [ "std" ]
+std = [
+	"account/std",
+	"fp-self-contained/std",
+	"sp-core/std",
+	"sp-runtime/std",
+]

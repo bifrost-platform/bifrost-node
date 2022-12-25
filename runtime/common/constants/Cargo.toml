@@ -1,0 +1,16 @@
+[package]
+name = "bifrost-common-constants"
+version = "1.0.0"
+description = "The substrate runtime constants for BIFROST Node development"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+bp-core = { default-features = false, path = "../../../primitives/core" }
+
+[features]
+default = ["std"]
+std = []

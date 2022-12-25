@@ -1,0 +1,33 @@
+[workspace]
+members = [
+	"node/core",
+	"node/common",
+	"node/dev",
+	"node/testnet",
+	"runtime/common",
+	"runtime/dev",
+	"runtime/testnet",
+	"pallets/bfc-staking",
+	"pallets/bfc-utility",
+	"pallets/bfc-offences",
+	"pallets/relay-manager",
+	"precompiles/utils",
+	"precompiles/utils/macro",
+	"precompiles/bfc-staking",
+	"precompiles/bfc-offences",
+	"precompiles/relay-manager",
+	"precompiles/governance",
+	"precompiles/collective",
+	"precompiles/balance",
+	"primitives/account",
+	"primitives/core",
+	"primitives/bfc-staking",
+]
+[profile.release]
+panic = "unwind"
+
+[patch.crates-io]
+evm-core = { git = "ssh://git@github.com/bifrost-platform/evm.git", branch = "bifrost-v1.0.0" }
+evm-gasometer = { git = "ssh://git@github.com/bifrost-platform/evm.git", branch = "bifrost-v1.0.0" }
+evm-runtime = { git = "ssh://git@github.com/bifrost-platform/evm.git", branch = "bifrost-v1.0.0" }
+# ethereum = { git = "ssh://git@github.com/bifrost-platform/ethereum.git", branch = "bifrost-v1.0.0" }

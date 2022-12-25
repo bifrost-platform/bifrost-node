@@ -1,0 +1,62 @@
+[package]
+name = "pallet-bfc-staking"
+version = "1.0.0"
+description = "bfc staking pallet for validator selection and reward distribution"
+authors = ["bifrost-platform"]
+homepage = "https://thebifrost.io"
+edition = "2021"
+license = "Unlicense"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[dependencies]
+log = "0.4"
+serde = { version = "1.0.101", optional = true }
+
+# Substrate
+scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "2.2", default-features = false, features = ["derive"] }
+frame-benchmarking = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2", optional = true }
+frame-support = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+frame-system = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-std = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-staking = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-session = { default-features = false, features = ["historical"], git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-authorship = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+pallet-im-online = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
+
+# Bifrost
+pallet-relay-manager = { default-features = false, path = "../../pallets/relay-manager" }
+pallet-bfc-offences = { default-features = false, path = "../../pallets/bfc-offences" }
+bp-staking = { default-features = false, path = "../../primitives/bfc-staking" }
+
+[dev-dependencies]
+similar-asserts = "1.1.0"
+
+pallet-balances = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-core = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+sp-io = { git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+
+[features]
+default = ["std"]
+std = [
+	"scale-info/std",
+	"parity-scale-codec/std",
+	"frame-benchmarking/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-session/std",
+	"pallet-authorship/std",
+	"pallet-im-online/std",
+	"pallet-relay-manager/std",
+	"pallet-bfc-offences/std",
+	"serde",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-staking/std",
+	"sp-io/std",
+	"bp-staking/std",
+]
+runtime-benchmarks = ["frame-benchmarking"]
+try-runtime = ["frame-support/try-runtime"]

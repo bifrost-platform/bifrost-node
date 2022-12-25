@@ -1,0 +1,10 @@
+target
+tests
+Dockerfile
+.idea
+docs
+scripts
+.editorconfig
+.github
+.gitignore
+data
