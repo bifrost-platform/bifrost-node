@@ -11,9 +11,9 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 [dependencies]
 account = { path = "../account", default-features = false }
 
-fp-self-contained = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
-sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
-sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+fp-self-contained = { default-features = false, git = "https://github.com/bifrost-platform/frontier", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
 
 [features]
 default = [ "std" ]

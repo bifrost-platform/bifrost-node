@@ -12,11 +12,11 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 parity-scale-codec = { version = "2.2", default-features = false, features = ["derive"] }
 
-fp-self-contained = { default-features = false, git = "ssh://git@github.com/bifrost-platform/frontier.git", branch = "bifrost-node-v1.1.2" }
-sp-std = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
-sp-core = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
-sp-runtime = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
-sp-staking = { default-features = false, git = "ssh://git@github.com/bifrost-platform/substrate.git", branch = "bifrost-node-v1.1.2" }
+fp-self-contained = { default-features = false, git = "https://github.com/bifrost-platform/frontier", branch = "bifrost-node-v1.1.2" }
+sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+sp-staking = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
 
 [features]
 default = [ "std" ]
