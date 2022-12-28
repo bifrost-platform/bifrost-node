@@ -30,4 +30,5 @@ pub struct RpcConfig {
 	pub fee_history_limit: u64,
 	pub max_past_logs: u32,
 	pub max_logs_request_duration: u64,
+	pub tracing_raw_max_memory_usage: usize,
 }

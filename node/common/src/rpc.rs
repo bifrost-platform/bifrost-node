@@ -1,7 +1,7 @@
 use crate::cli_opt::EthApi as EthApiCmd;
 use bp_core::{BlockNumber, Hash, Header};
 use fc_rpc::{
-	EthBlockDataCache, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
+	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
 	SchemaV2Override, SchemaV3Override, StorageOverride,
 };
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
@@ -18,10 +18,15 @@ use sc_finality_grandpa::{
 use sc_network::NetworkService;
 use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;
+use sc_service::TaskManager;
 use sc_transaction_pool::{ChainApi, Pool};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use sp_runtime::{generic, traits::BlakeTwo256, OpaqueExtrinsic as UncheckedExtrinsic};
+use sp_runtime::{
+	generic,
+	traits::{BlakeTwo256, Block as BlockT},
+	OpaqueExtrinsic as UncheckedExtrinsic,
+};
 use std::{collections::BTreeMap, sync::Arc};
 
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -111,7 +116,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	/// Ethereum data access overrides.
 	pub overrides: Arc<OverrideHandle<Block>>,
 	/// Cache for Ethereum block data.
-	pub block_data_cache: Arc<EthBlockDataCache<Block>>,
+	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Manual seal command sink
 	pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 	/// Maximum number of logs in one query.
@@ -160,4 +165,15 @@ pub struct MainnetDeps<C, P, BE, SC, A: ChainApi> {
 	pub max_past_logs: u32,
 	/// Maximum `eth_getLogs` request duration.
 	pub max_logs_request_duration: u64,
+}
+
+pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
+	pub task_manager: &'a TaskManager,
+	pub client: Arc<C>,
+	pub substrate_backend: Arc<BE>,
+	pub frontier_backend: Arc<fc_db::Backend<B>>,
+	pub filter_pool: Option<FilterPool>,
+	pub overrides: Arc<OverrideHandle<B>>,
+	pub fee_history_limit: u64,
+	pub fee_history_cache: FeeHistoryCache,
 }
