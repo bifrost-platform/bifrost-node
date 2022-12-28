@@ -65,7 +65,7 @@ macro_rules! impl_common_runtime_apis {
 						// transactions that preceded the requested transaction.
 						for ext in extrinsics.into_iter() {
 							let _ = match &ext.0.function {
-								Call::Ethereum(transact { transaction }) => {
+								RuntimeCall::Ethereum(transact { transaction }) => {
 									if transaction == traced_transaction {
 										EvmTracer::new().trace(|| Executive::apply_extrinsic(ext));
 										return Ok(());
@@ -99,7 +99,7 @@ macro_rules! impl_common_runtime_apis {
 						// Apply all extrinsics. Ethereum extrinsics are traced.
 						for ext in extrinsics.into_iter() {
 							match &ext.0.function {
-								Call::Ethereum(transact { transaction }) => {
+								RuntimeCall::Ethereum(transact { transaction }) => {
 									if known_transactions.contains(&transaction.hash()) {
 										// Each known extrinsic is a new call stack.
 										EvmTracer::emit_new();
@@ -121,7 +121,7 @@ macro_rules! impl_common_runtime_apis {
 					))
 				}
 			}
-			impl fp_rpc::TxPoolRuntimeApi<Block> for Runtime {
+			impl fp_rpc_txpool::TxPoolRuntimeApi<Block> for Runtime {
 				fn extrinsic_filter(
 					xts_ready: Vec<<Block as BlockT>::Extrinsic>,
 					xts_future: Vec<<Block as BlockT>::Extrinsic>,
@@ -130,14 +130,14 @@ macro_rules! impl_common_runtime_apis {
 						ready: xts_ready
 						.into_iter()
 						.filter_map(|xt| match xt.0.function {
-							Call::Ethereum(transact { transaction }) => Some(transaction),
+							RuntimeCall::Ethereum(transact { transaction }) => Some(transaction),
 							_ => None,
 						})
 						.collect(),
 						future: xts_future
 						.into_iter()
 						.filter_map(|xt| match xt.0.function {
-							Call::Ethereum(transact { transaction }) => Some(transaction),
+							RuntimeCall::Ethereum(transact { transaction }) => Some(transaction),
 							_ => None,
 						})
 						.collect(),
@@ -149,10 +149,12 @@ macro_rules! impl_common_runtime_apis {
 					<Runtime as pallet_evm::Config>::ChainId::get()
 				}
 				fn account_basic(address: H160) -> EVMAccount {
-					EVM::account_basic(&address)
+					let (account, _) = EVM::account_basic(&address);
+					account
 				}
 				fn gas_price() -> U256 {
-					<Runtime as pallet_evm::Config>::FeeCalculator::min_gas_price()
+					let (gas_price, _) = <Runtime as pallet_evm::Config>::FeeCalculator::min_gas_price();
+					gas_price
 				}
 				fn account_code_at(address: H160) -> Vec<u8> {
 					EVM::account_codes(address)
@@ -175,7 +177,7 @@ macro_rules! impl_common_runtime_apis {
 					max_priority_fee_per_gas: Option<U256>,
 					nonce: Option<U256>,
 					estimate: bool,
-					_access_list: Option<Vec<(H160, Vec<H256>)>>,
+					access_list: Option<Vec<(H160, Vec<H256>)>>,
 				) -> Result<pallet_evm::CallInfo, sp_runtime::DispatchError> {
 					let config = if estimate {
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
@@ -184,6 +186,8 @@ macro_rules! impl_common_runtime_apis {
 					} else {
 						None
 					};
+					let is_transactional = false;
+					let validate = true;
 					<Runtime as pallet_evm::Config>::Runner::call(
 						from,
 						to,
@@ -193,9 +197,11 @@ macro_rules! impl_common_runtime_apis {
 						max_fee_per_gas,
 						max_priority_fee_per_gas,
 						nonce,
-						Vec::new(),
+						access_list.unwrap_or_default(),
+						is_transactional,
+						validate,
 						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
-					).map_err(|err| err.into())
+					).map_err(|err| err.error.into())
 				}
 				fn create(
 					from: H160,
@@ -206,7 +212,7 @@ macro_rules! impl_common_runtime_apis {
 					max_priority_fee_per_gas: Option<U256>,
 					nonce: Option<U256>,
 					estimate: bool,
-					_access_list: Option<Vec<(H160, Vec<H256>)>>,
+					access_list: Option<Vec<(H160, Vec<H256>)>>,
 				) -> Result<pallet_evm::CreateInfo, sp_runtime::DispatchError> {
 					let config = if estimate {
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
@@ -215,6 +221,8 @@ macro_rules! impl_common_runtime_apis {
 					} else {
 						None
 					};
+					let is_transactional = false;
+					let validate = true;
 					<Runtime as pallet_evm::Config>::Runner::create(
 						from,
 						data,
@@ -223,9 +231,11 @@ macro_rules! impl_common_runtime_apis {
 						max_fee_per_gas,
 						max_priority_fee_per_gas,
 						nonce,
-						Vec::new(),
+						access_list.unwrap_or_default(),
+						is_transactional,
+						validate,
 						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
-					).map_err(|err| err.into())
+					).map_err(|err| err.error.into())
 				}
 				fn current_transaction_statuses() -> Option<Vec<TransactionStatus>> {
 					Ethereum::current_transaction_statuses()
@@ -251,7 +261,7 @@ macro_rules! impl_common_runtime_apis {
 					xts: Vec<<Block as BlockT>::Extrinsic>,
 				) -> Vec<EthereumTransaction> {
 					xts.into_iter().filter_map(|xt| match xt.0.function {
-						Call::Ethereum(transact{transaction}) => Some(transaction),
+						RuntimeCall::Ethereum(transact{transaction}) => Some(transaction),
 						_ => None
 					}).collect::<Vec<EthereumTransaction>>()
 				}
