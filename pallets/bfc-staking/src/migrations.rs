@@ -25,7 +25,7 @@ pub mod v3 {
 		}
 		Pallet::<T>::sort_candidates_by_voting_power();
 		CandidatePool::<T>::put(candidate_pool);
-		StorageVersion::<T>::put(Releases::V3_0_0);
+		// StorageVersion::<T>::put(Releases::V3_0_0);
 		crate::log!(info, "bfc-staking migration passes Releases::V3_0_0 migrate checks ✅");
 		T::BlockWeights::get().max_block
 	}
@@ -48,10 +48,10 @@ pub mod v2 {
 	}
 
 	pub fn pre_migrate<T: Config>() -> Result<(), &'static str> {
-		frame_support::ensure!(
-			StorageVersion::<T>::get() == Releases::V1_0_0,
-			"Storage version must upgrade linearly",
-		);
+		// frame_support::ensure!(
+		// 	StorageVersion::<T>::get() == Releases::V1_0_0,
+		// 	"Storage version must upgrade linearly",
+		// );
 		crate::log!(info, "bfc-staking migration passes pre-migrate checks ✅",);
 		Ok(())
 	}
@@ -76,7 +76,7 @@ pub mod v2 {
 				awarded_tokens_per_candidate,
 			})
 		});
-		StorageVersion::<T>::put(Releases::V2_0_0);
+		// StorageVersion::<T>::put(Releases::V2_0_0);
 
 		crate::log!(info, "bfc-staking migration passes Releases::V2_0_0 migrate checks ✅");
 		T::BlockWeights::get().max_block
@@ -92,7 +92,7 @@ pub mod v1 {
 		// BondedRoundPerSession::<T>::put(old_bonded_round.clone());
 		// BondedRound::<T>::kill();
 
-		StorageVersion::<T>::put(Releases::V1_0_0);
+		// StorageVersion::<T>::put(Releases::V1_0_0);
 
 		crate::log!(info, "bfc-staking migration passes Releases::V1_0_0 migrate checks ✅",);
 		T::BlockWeights::get().max_block
