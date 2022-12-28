@@ -102,6 +102,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(5 as u64))
 			.saturating_add(T::DbWeight::get().writes(3 as u64))
 	}
+	fn cancel_validator_commission_set() -> Weight {
+		Weight::from_ref_time(18_178_000)
+			.saturating_add(T::DbWeight::get().reads(5 as u64))
+			.saturating_add(T::DbWeight::get().writes(3 as u64))
+	}
 	fn set_validator_tier() -> Weight {
 		Weight::from_ref_time(18_178_000)
 			.saturating_add(T::DbWeight::get().reads(5 as u64))
@@ -118,6 +123,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
 	fn set_controller() -> Weight {
+		Weight::from_ref_time(18_178_000)
+			.saturating_add(T::DbWeight::get().reads(6 as u64))
+			.saturating_add(T::DbWeight::get().writes(4 as u64))
+	}
+	fn cancel_controller_set() -> Weight {
 		Weight::from_ref_time(18_178_000)
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
@@ -317,6 +327,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(5 as u64))
 			.saturating_add(RocksDbWeight::get().writes(3 as u64))
 	}
+	fn cancel_validator_commission_set() -> Weight {
+		Weight::from_ref_time(18_178_000)
+			.saturating_add(RocksDbWeight::get().reads(5 as u64))
+			.saturating_add(RocksDbWeight::get().writes(3 as u64))
+	}
 	fn set_validator_tier() -> Weight {
 		Weight::from_ref_time(18_178_000)
 			.saturating_add(RocksDbWeight::get().reads(5 as u64))
@@ -333,6 +348,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
 	fn set_controller() -> Weight {
+		Weight::from_ref_time(18_178_000)
+			.saturating_add(RocksDbWeight::get().reads(6 as u64))
+			.saturating_add(RocksDbWeight::get().writes(4 as u64))
+	}
+	fn cancel_controller_set() -> Weight {
 		Weight::from_ref_time(18_178_000)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
