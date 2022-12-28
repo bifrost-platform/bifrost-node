@@ -1,6 +1,6 @@
 use super::pallet::*;
 
-use crate::{IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence};
+use crate::{pallet::*, IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence};
 
 use bp_staking::{traits::RelayManager, RoundIndex};
 use frame_support::{
@@ -11,7 +11,14 @@ use sp_runtime::traits::Convert;
 use sp_staking::offence::ReportOffence;
 use sp_std::{vec, vec::Vec};
 
-impl<T: Config> RelayManager<T::AccountId> for Pallet<T> {
+impl<T: Config> RelayManager<T::AccountId> for Pallet<T>
+where
+	<T as frame_system::Config>::AccountId: From<
+		<<T as pallet::Config>::ValidatorSet as ValidatorSet<
+			<T as frame_system::Config>::AccountId,
+		>>::ValidatorId,
+	>,
+{
 	fn join_relayers(relayer: T::AccountId, controller: T::AccountId) -> Result<(), DispatchError> {
 		Self::verify_relayer_existance(&relayer, &controller)?;
 		Self::add_to_relayer_pool(relayer.clone(), controller.clone());
