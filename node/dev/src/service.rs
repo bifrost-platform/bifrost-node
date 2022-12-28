@@ -4,13 +4,12 @@ use bp_core::*;
 use futures::StreamExt;
 use jsonrpsee::RpcModule;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
-use tokio::sync::Semaphore;
 
 use bifrost_common_node::{
 	cli_opt::{EthApi as EthApiCmd, RpcConfig},
-	rpc::{FullDeps, GrandpaDeps},
+	rpc::{FullDeps, GrandpaDeps, SpawnTasksParams, TracingConfig},
 	service::open_frontier_backend,
-	tracing::RpcRequesters,
+	tracing::{spawn_tracing_tasks, RpcRequesters},
 };
 
 use crate::rpc::create_full;
@@ -676,62 +675,21 @@ pub fn build_rpc_extensions_builder(
 		),
 	);
 
-	let _tracing_requesters: RpcRequesters = {
+	let tracing_requesters: RpcRequesters = {
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
-			use fc_rpc_debug::DebugHandler;
-			use fc_rpc_trace::CacheTask;
-
-			let permit_pool = Arc::new(Semaphore::new(rpc_config.ethapi_max_permits as usize));
-
-			let (trace_filter_task, trace_filter_requester) =
-				if rpc_config.ethapi.contains(&EthApiCmd::Trace) {
-					let (trace_filter_task, trace_filter_requester) = CacheTask::create(
-						client.clone(),
-						backend.clone(),
-						Duration::from_secs(rpc_config.ethapi_trace_cache_duration),
-						permit_pool.clone(),
-						overrides.clone(),
-					);
-					(Some(trace_filter_task), Some(trace_filter_requester))
-				} else {
-					(None, None)
-				};
-
-			let (debug_task, debug_requester) = if rpc_config.ethapi.contains(&EthApiCmd::Debug) {
-				let (debug_task, debug_requester) = DebugHandler::task(
-					client.clone(),
-					backend.clone(),
-					frontier_backend.clone(),
-					permit_pool.clone(),
-					overrides.clone(),
-					rpc_config.tracing_raw_max_memory_usage,
-				);
-				(Some(debug_task), Some(debug_requester))
-			} else {
-				(None, None)
-			};
-
-			// 'trace_filter' cache task. Essential.
-			// Proxies rpc requests to it's handler.
-			if let Some(trace_filter_task) = trace_filter_task {
-				builder.task_manager.spawn_essential_handle().spawn(
-					"trace-filter-cache",
-					Some("eth-tracing"),
-					trace_filter_task,
-				);
-			}
-
-			// 'debug' task if enabled. Essential.
-			// Proxies rpc requests to it's handler.
-			if let Some(debug_task) = debug_task {
-				builder.task_manager.spawn_essential_handle().spawn(
-					"ethapi-debug",
-					Some("eth-tracing"),
-					debug_task,
-				);
-			}
-
-			RpcRequesters { debug: debug_requester, trace: trace_filter_requester }
+			spawn_tracing_tasks(
+				&rpc_config,
+				SpawnTasksParams {
+					task_manager: &builder.task_manager,
+					client: client.clone(),
+					substrate_backend: backend.clone(),
+					frontier_backend: frontier_backend.clone(),
+					filter_pool: Some(filter_pool.clone()),
+					overrides: overrides.clone(),
+					fee_history_limit: rpc_config.fee_history_limit,
+					fee_history_cache: fee_history_cache.clone(),
+				},
+			)
 		} else {
 			RpcRequesters { debug: None, trace: None }
 		}
@@ -766,7 +724,18 @@ pub fn build_rpc_extensions_builder(
 			max_past_logs: rpc_config.max_past_logs,
 		};
 
-		create_full(deps)
+		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
+			create_full(
+				deps,
+				Some(TracingConfig {
+					tracing_requesters: tracing_requesters.clone(),
+					trace_filter_max_count: rpc_config.ethapi_trace_max_count,
+				}),
+			)
+			.map_err(Into::into)
+		} else {
+			create_full(deps, None).map_err(Into::into)
+		}
 	};
 
 	rpc_extensions_builder
