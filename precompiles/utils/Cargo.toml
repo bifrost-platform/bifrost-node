@@ -10,7 +10,7 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 
 [dependencies]
 log = "0.4"
-sha3 = { version = "0.9", default-features = false }
+sha3 = { version = "0.10", default-features = false }
 num_enum = { version = "0.5.3", default-features = false }
 
 # Substrate

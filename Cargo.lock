@@ -19,12 +19,12 @@ dependencies = [
  "blake2-rfc",
  "hex",
  "impl-serde 0.3.2",
- "libsecp256k1 0.6.0",
+ "libsecp256k1",
  "log",
  "parity-scale-codec",
  "scale-info",
  "serde",
- "sha3 0.9.1",
+ "sha3",
  "sp-core",
  "sp-io",
  "sp-runtime",
@@ -399,12 +399,6 @@ checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
 
 [[package]]
 name = "base64"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
-
-[[package]]
-name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
@@ -604,7 +598,7 @@ dependencies = [
  "parity-scale-codec",
  "rlp",
  "scale-info",
- "sha3 0.9.1",
+ "sha3",
  "sp-api",
  "sp-block-builder",
  "sp-consensus-aura",
@@ -912,7 +906,7 @@ dependencies = [
  "parity-scale-codec",
  "rlp",
  "scale-info",
- "sha3 0.9.1",
+ "sha3",
  "sp-api",
  "sp-block-builder",
  "sp-consensus-aura",
@@ -1035,7 +1029,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0940dc441f31689269e10ac70eb1002a3a1d3ad1390e030043662eb7fe4688b"
 dependencies = [
- "block-padding 0.1.5",
+ "block-padding",
  "byte-tools",
  "byteorder",
  "generic-array 0.12.4",
@@ -1047,7 +1041,6 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
- "block-padding 0.2.1",
  "generic-array 0.14.5",
 ]
 
@@ -1068,12 +1061,6 @@ checksum = "fa79dedbb091f449f1f39e53edf88d5dbe95f895dae6135a8d7b881fb5af73f5"
 dependencies = [
  "byte-tools",
 ]
-
-[[package]]
-name = "block-padding"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
 
 [[package]]
 name = "blocking"
@@ -2073,7 +2060,7 @@ dependencies = [
  "rlp",
  "scale-info",
  "serde",
- "sha3 0.10.1",
+ "sha3",
  "triehash",
 ]
 
@@ -2117,7 +2104,7 @@ dependencies = [
  "rlp",
  "scale-info",
  "serde",
- "sha3 0.10.1",
+ "sha3",
 ]
 
 [[package]]
@@ -2154,7 +2141,7 @@ dependencies = [
  "environmental",
  "evm-core",
  "primitive-types",
- "sha3 0.10.1",
+ "sha3",
 ]
 
 [[package]]
@@ -2294,7 +2281,7 @@ dependencies = [
  "futures 0.3.25",
  "hex",
  "jsonrpsee",
- "libsecp256k1 0.7.0",
+ "libsecp256k1",
  "log",
  "lru 0.8.1",
  "parity-scale-codec",
@@ -2436,7 +2423,7 @@ dependencies = [
  "sc-network",
  "sc-utils",
  "serde",
- "sha3 0.10.1",
+ "sha3",
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
@@ -2463,7 +2450,7 @@ dependencies = [
  "sc-transaction-pool",
  "sc-transaction-pool-api",
  "serde",
- "sha3 0.10.1",
+ "sha3",
  "sp-api",
  "sp-blockchain",
  "sp-io",
@@ -4241,51 +4228,21 @@ dependencies = [
 
 [[package]]
 name = "libsecp256k1"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9d220bc1feda2ac231cb78c3d26f27676b8cf82c96971f7aeef3d0cf2797c73"
-dependencies = [
- "arrayref",
- "base64 0.12.3",
- "digest 0.9.0",
- "hmac-drbg",
- "libsecp256k1-core 0.2.2",
- "libsecp256k1-gen-ecmult 0.2.1",
- "libsecp256k1-gen-genmult 0.2.1",
- "rand 0.7.3",
- "serde",
- "sha2 0.9.9",
- "typenum 1.15.0",
-]
-
-[[package]]
-name = "libsecp256k1"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0452aac8bab02242429380e9b2f94ea20cea2b37e2c1777a1358799bbe97f37"
 dependencies = [
  "arrayref",
- "base64 0.13.0",
+ "base64",
  "digest 0.9.0",
  "hmac-drbg",
- "libsecp256k1-core 0.3.0",
- "libsecp256k1-gen-ecmult 0.3.0",
- "libsecp256k1-gen-genmult 0.3.0",
+ "libsecp256k1-core",
+ "libsecp256k1-gen-ecmult",
+ "libsecp256k1-gen-genmult",
  "rand 0.8.5",
  "serde",
  "sha2 0.9.9",
  "typenum 1.15.0",
-]
-
-[[package]]
-name = "libsecp256k1-core"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0f6ab710cec28cef759c5f18671a27dae2a5f952cdaaee1d8e2908cb2478a80"
-dependencies = [
- "crunchy",
- "digest 0.9.0",
- "subtle",
 ]
 
 [[package]]
@@ -4301,29 +4258,11 @@ dependencies = [
 
 [[package]]
 name = "libsecp256k1-gen-ecmult"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccab96b584d38fac86a83f07e659f0deafd0253dc096dab5a36d53efe653c5c3"
-dependencies = [
- "libsecp256k1-core 0.2.2",
-]
-
-[[package]]
-name = "libsecp256k1-gen-ecmult"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3038c808c55c87e8a172643a7d87187fc6c4174468159cb3090659d55bcb4809"
 dependencies = [
- "libsecp256k1-core 0.3.0",
-]
-
-[[package]]
-name = "libsecp256k1-gen-genmult"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67abfe149395e3aa1c48a2beb32b068e2334402df8181f818d3aee2b304c4f5d"
-dependencies = [
- "libsecp256k1-core 0.2.2",
+ "libsecp256k1-core",
 ]
 
 [[package]]
@@ -4332,7 +4271,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3db8d6ba2cec9eacc40e6e8ccc98931840301f1006e95647ceb2dd5c3aa06f7c"
 dependencies = [
- "libsecp256k1-core 0.3.0",
+ "libsecp256k1-core",
 ]
 
 [[package]]
@@ -4653,7 +4592,7 @@ dependencies = [
  "digest 0.10.3",
  "multihash-derive",
  "sha2 0.10.2",
- "sha3 0.10.1",
+ "sha3",
  "unsigned-varint",
 ]
 
@@ -6616,7 +6555,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0864aeff53f8c05aa08d86e5ef839d3dfcf07aeba2db32f12db0ef716e87bd55"
 dependencies = [
- "base64 0.13.0",
+ "base64",
 ]
 
 [[package]]
@@ -7974,18 +7913,6 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f81199417d4e5de3f04b1e871023acea7389672c4135918f05aa9cbf2f2fa809"
-dependencies = [
- "block-buffer 0.9.0",
- "digest 0.9.0",
- "keccak",
- "opaque-debug 0.3.0",
-]
-
-[[package]]
-name = "sha3"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "881bf8156c87b6301fc5ca6b27f11eeb2761224c7081e69b409d5a1951a70c86"
@@ -8127,7 +8054,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41d1c5305e39e09653383c2c7244f2f78b3bcae37cf50c64cb4789c9f5096ec2"
 dependencies = [
- "base64 0.13.0",
+ "base64",
  "bytes",
  "flate2",
  "futures 0.3.25",
@@ -8341,7 +8268,7 @@ dependencies = [
  "hash256-std-hasher",
  "impl-serde 0.4.0",
  "lazy_static",
- "libsecp256k1 0.7.0",
+ "libsecp256k1",
  "log",
  "merlin",
  "num-traits",
@@ -8379,7 +8306,7 @@ dependencies = [
  "byteorder",
  "digest 0.10.3",
  "sha2 0.10.2",
- "sha3 0.10.1",
+ "sha3",
  "sp-std",
  "twox-hash",
 ]
@@ -8465,7 +8392,7 @@ dependencies = [
  "bytes",
  "futures 0.3.25",
  "hash-db",
- "libsecp256k1 0.7.0",
+ "libsecp256k1",
  "log",
  "parity-scale-codec",
  "parking_lot 0.12.1",
@@ -9901,7 +9828,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bcd849399d17d2270141cfe47fa0d91ee52d5f8ea9b98cf7ddde0d53e5f79882"
 dependencies = [
  "anyhow",
- "base64 0.13.0",
+ "base64",
  "bincode",
  "directories-next",
  "file-per-thread-logger",
