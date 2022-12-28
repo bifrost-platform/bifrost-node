@@ -14,7 +14,7 @@ sha3 = { version = "0.9", default-features = false }
 num_enum = { version = "0.5.3", default-features = false }
 
 # Substrate
-codec = { package = "parity-scale-codec", version = "2.2", default-features = false }
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
 frame-support = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 frame-system = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 sp-io = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
