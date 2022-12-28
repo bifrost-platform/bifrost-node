@@ -344,7 +344,7 @@ impl<T: Config> Pallet<T> {
 
 		// don't underflow uint
 		if now < delay {
-			return 0u64.into()
+			return Weight::from_ref_time(0u64)
 		}
 		let round_to_payout = now - delay;
 
@@ -359,7 +359,7 @@ impl<T: Config> Pallet<T> {
 			// weight consumed by pay_one_validator_reward
 			result.1
 		} else {
-			0u64.into()
+			return Weight::from_ref_time(0u64)
 		}
 	}
 
@@ -449,7 +449,7 @@ impl<T: Config> Pallet<T> {
 	) -> (Option<(T::AccountId, BalanceOf<T>)>, Weight) {
 		let total_points = <Points<T>>::get(round_to_payout);
 		if total_points.is_zero() {
-			return (None, 0u64.into())
+			return (None, Weight::from_ref_time(0u64))
 		}
 		// reward minter
 		let mint = |amt: BalanceOf<T>, to: T::AccountId| {
@@ -516,12 +516,12 @@ impl<T: Config> Pallet<T> {
 					T::WeightInfo::pay_one_validator_reward(num_nominators as u32),
 				)
 			} else {
-				(None, 0u64.into())
+				(None, Weight::from_ref_time(0u64))
 			}
 		} else {
 			// Note that we don't clean up storage here; it is cleaned up in
 			// handle_delayed_payouts()
-			(None, 0u64.into())
+			(None, Weight::from_ref_time(0u64))
 		}
 	}
 
@@ -1114,7 +1114,7 @@ where
 				}
 			}
 		}
-		let consumed_weight: Weight = 0;
+		let consumed_weight: Weight = Weight::from_ref_time(0u64);
 		consumed_weight
 	}
 }
