@@ -13,8 +13,8 @@ log = "0.4"
 serde = { version = "1.0.101", optional = true }
 
 # Substrate
-scale-info = { version = "1.0", default-features = false, features = ["derive"] }
-parity-scale-codec = { version = "2.2", default-features = false, features = ["derive"] }
+scale-info = { version = "2.0", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "3.2.1", default-features = false, features = ["derive"] }
 frame-benchmarking = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32", optional = true }
 frame-support = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 frame-system = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
