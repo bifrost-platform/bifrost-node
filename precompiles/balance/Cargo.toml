@@ -32,7 +32,7 @@ pallet-evm = { default-features = false, git = "https://github.com/dnjscksdn98/f
 [dev-dependencies]
 derive_more = "0.99"
 serde = "1.0.100"
-sha3 = "0.9"
+sha3 = "0.10"
 
 # Substrate
 pallet-timestamp = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
