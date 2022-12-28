@@ -15,7 +15,7 @@ pub mod v2 {
 	pub fn migrate<T: Config>() -> Weight {
 		FullMaximumOffenceCount::<T>::put(10u32);
 		BasicMaximumOffenceCount::<T>::put(5u32);
-		ValidatorOffences::<T>::remove_all(None);
+		// ValidatorOffences::<T>::remove_all(None);
 		StorageVersion::<T>::put(Releases::V2_0_0);
 		log::info!("bfc-offences storage migration passes Releases::V2_0_0 update ✅");
 		T::BlockWeights::get().max_block
