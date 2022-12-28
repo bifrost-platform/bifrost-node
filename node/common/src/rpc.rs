@@ -175,3 +175,8 @@ pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
 	pub fee_history_limit: u64,
 	pub fee_history_cache: FeeHistoryCache,
 }
+
+pub struct TracingConfig {
+	pub tracing_requesters: crate::tracing::RpcRequesters,
+	pub trace_filter_max_count: u32,
+}

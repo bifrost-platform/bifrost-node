@@ -8,7 +8,7 @@
 use jsonrpsee::RpcModule;
 use std::sync::Arc;
 
-use bifrost_common_node::cli_opt::EthApi as EthApiCmd;
+use bifrost_common_node::{cli_opt::EthApi as EthApiCmd, rpc::TracingConfig};
 use bifrost_testnet_runtime::{opaque::Block, AccountId, Balance, Index};
 
 use sp_api::ProvideRuntimeApi;
@@ -22,6 +22,7 @@ use sp_runtime::traits::BlakeTwo256;
 use bifrost_common_node::rpc::{FullDeps, GrandpaDeps};
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 pub use sc_client_api::{AuxStore, BlockOf, BlockchainEvents};
+use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApiServer};
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool::ChainApi;
 use sc_transaction_pool_api::TransactionPool;
@@ -29,6 +30,7 @@ use sc_transaction_pool_api::TransactionPool;
 /// Instantiate all full RPC extensions.
 pub fn create_full<C, P, BE, SC, A>(
 	deps: FullDeps<C, P, BE, SC, A>,
+	maybe_tracing_config: Option<TracingConfig>,
 ) -> Result<RpcModule<()>, sc_service::Error>
 where
 	BE: Backend<Block> + Send + Sync + 'static,
@@ -54,6 +56,8 @@ where
 	use fc_rpc::{
 		Eth, EthApiServer, EthFilter, EthFilterApiServer, Net, NetApiServer, Web3, Web3ApiServer,
 	};
+	use fc_rpc_debug::{Debug, DebugServer};
+	use fc_rpc_trace::{Trace, TraceServer};
 	use fc_rpc_txpool::{TxPool, TxPoolServer};
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use sc_finality_grandpa_rpc::{Grandpa, GrandpaApiServer};
@@ -78,7 +82,7 @@ where
 		fee_history_limit,
 		fee_history_cache,
 		grandpa,
-		command_sink: _,
+		command_sink,
 		max_past_logs,
 	} = deps;
 
@@ -169,6 +173,29 @@ where
 		.into_rpc(),
 	)
 	.ok();
+
+	if let Some(tracing_config) = maybe_tracing_config {
+		if let Some(trace_filter_requester) = tracing_config.tracing_requesters.trace {
+			io.merge(
+				Trace::new(client, trace_filter_requester, tracing_config.trace_filter_max_count)
+					.into_rpc(),
+			)
+			.ok();
+		}
+
+		if let Some(debug_requester) = tracing_config.tracing_requesters.debug {
+			io.merge(Debug::new(debug_requester).into_rpc()).ok();
+		}
+	}
+
+	if let Some(command_sink) = command_sink {
+		io.merge(
+			// We provide the rpc handler with the sending end of the channel to allow the rpc
+			// send EngineCommands to the background block authorship task.
+			ManualSeal::new(command_sink).into_rpc(),
+		)
+		.ok();
+	};
 
 	Ok(io)
 }
