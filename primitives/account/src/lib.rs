@@ -70,9 +70,7 @@ impl std::str::FromStr for AccountId20 {
 }
 
 #[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
-#[derive(
-	Eq, PartialEq, PartialOrd, Ord, Clone, Encode, Decode, sp_core::RuntimeDebug, TypeInfo,
-)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, sp_core::RuntimeDebug, TypeInfo)]
 pub struct EthereumSignature(ecdsa::Signature);
 
 impl From<ecdsa::Signature> for EthereumSignature {
@@ -107,7 +105,9 @@ impl sp_runtime::traits::Verify for EthereumSignature {
 }
 
 /// Public key for an Ethereum / BIFROST compatible account
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, sp_core::RuntimeDebug)]
+#[derive(
+	Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, sp_core::RuntimeDebug, TypeInfo,
+)]
 #[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 pub struct EthereumSigner([u8; 20]);
 

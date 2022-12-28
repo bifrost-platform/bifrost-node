@@ -11,7 +11,7 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 [dependencies]
 log = "0.4"
 getrandom = { version = "0.2", features = ["js"] }
-sha3 = { version = "0.9", default-features = false }
+sha3 = { version = "0.10", default-features = false }
 num_enum = { version = "0.5.3", default-features = false }
 
 # BIFROST
@@ -35,7 +35,7 @@ pallet-evm = { default-features = false, git = "https://github.com/dnjscksdn98/f
 hex-literal = "0.3.1"
 derive_more = "0.99"
 serde = "1.0.100"
-sha3 = "0.9"
+sha3 = "0.10"
 
 # Substrate
 pallet-balances = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
