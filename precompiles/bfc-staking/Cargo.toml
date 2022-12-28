@@ -19,7 +19,7 @@ bp-staking = { path = "../../primitives/bfc-staking", default-features = false }
 precompile-utils = { path = "../utils", default-features = false }
 
 # Substrate
-codec = { package = "parity-scale-codec", version = "2.2", default-features = false, features = ["max-encoded-len"] }
+codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["max-encoded-len"] }
 frame-support = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 frame-system = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 sp-core = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
