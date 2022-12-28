@@ -226,13 +226,21 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_dev_node::service::new_partial(&config)?;
-					Ok((cmd.run(client, backend), task_manager))
+					let aux_revert = Box::new(|client, _, blocks| {
+						sc_finality_grandpa::revert(client, blocks)?;
+						Ok(())
+					});
+					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
 				})
 			} else if chain_spec.is_testnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_testnet_node::service::new_partial(&config)?;
-					Ok((cmd.run(client, backend), task_manager))
+					let aux_revert = Box::new(|client, _, blocks| {
+						sc_finality_grandpa::revert(client, blocks)?;
+						Ok(())
+					});
+					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
 				})
 			} else if chain_spec.is_mainnet() {
 				runner.async_run(|config| {
@@ -244,36 +252,39 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_dev_node::service::new_partial(&config)?;
-					Ok((cmd.run(client, backend), task_manager))
+					let aux_revert = Box::new(|client, _, blocks| {
+						sc_finality_grandpa::revert(client, blocks)?;
+						Ok(())
+					});
+					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
 				})
 			}
 		},
 		Some(Subcommand::Benchmark(cmd)) =>
 			if cfg!(feature = "runtime-benchmarks") {
 				let runner = cli.create_runner(cmd)?;
-				let chain_spec = &runner.config().chain_spec;
+				let _chain_spec = &runner.config().chain_spec;
 
-				if chain_spec.is_dev() {
-					runner.sync_run(|config| {
-						cmd.run::<bifrost_dev_runtime::Block, bifrost_dev_node::service::dev::ExecutorDispatch>(
-							config,
-						)
-					})
-				} else if chain_spec.is_testnet() {
-					runner.sync_run(|config| {
-						cmd.run::<bifrost_testnet_runtime::Block, bifrost_testnet_node::service::testnet::ExecutorDispatch>(config)
-					})
-				} else if chain_spec.is_mainnet() {
-					runner.sync_run(|config| {
-						cmd.run::<bifrost_mainnet_runtime::Block, bifrost_mainnet_node::service::mainnet::ExecutorDispatch>(config)
-					})
-				} else {
-					runner.sync_run(|config| {
-						cmd.run::<bifrost_dev_runtime::Block, bifrost_dev_node::service::dev::ExecutorDispatch>(
-							config,
-						)
-					})
-				}
+				// if chain_spec.is_dev() {
+				// 	runner.sync_run(|config| {
+				// 		cmd.run::<bifrost_dev_runtime::Block,
+				// bifrost_dev_node::service::dev::ExecutorDispatch>( 			config,
+				// 		)
+				// 	})
+				// } else if chain_spec.is_testnet() {
+				// 	runner.sync_run(|config| {
+				// 		cmd.run::<bifrost_testnet_runtime::Block,
+				// bifrost_testnet_node::service::testnet::ExecutorDispatch>(config) 	})
+				// } else {
+				// 	runner.sync_run(|config| {
+				// 		cmd.run::<bifrost_dev_runtime::Block,
+				// bifrost_dev_node::service::dev::ExecutorDispatch>( 			config,
+				// 		)
+				// 	})
+				// }
+				Err("Benchmarking wasn't enabled when building the node. You can enable it with \
+				     `--features runtime-benchmarks`."
+					.into())
 			} else {
 				Err("Benchmarking wasn't enabled when building the node. You can enable it with \
 				     `--features runtime-benchmarks`."
@@ -290,6 +301,7 @@ pub fn run() -> sc_cli::Result<()> {
 				fee_history_limit: cli.fee_history_limit,
 				max_past_logs: cli.max_past_logs,
 				max_logs_request_duration: cli.max_logs_request_duration,
+				tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
 			};
 
 			let runner = cli.create_runner(&cli.run)?;

@@ -121,8 +121,6 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
-	/// Maximum `eth_getLogs` request duration.
-	pub max_logs_request_duration: u64,
 }
 
 /// Mainnet client dependencies.

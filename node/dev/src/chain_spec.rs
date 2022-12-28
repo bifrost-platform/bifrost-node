@@ -1,5 +1,5 @@
 use bifrost_dev_runtime::{
-	opaque::SessionKeys, AccountId, Balance, InflationInfo, Precompiles, Range, WASM_BINARY,
+	opaque::SessionKeys, AccountId, Balance, InflationInfo, Range, WASM_BINARY,
 };
 
 use bifrost_dev_constants::currency::{GWEI, SUPPLY_FACTOR, UNITS as BFC};
@@ -178,7 +178,7 @@ fn development_genesis(
 	// We will pre-deploy it under all of our precompiles to ensure they can be called from
 	// within contracts.
 	// (PUSH1 0x00 PUSH1 0x00 REVERT)
-	let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
+	let _revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
 	devnet::GenesisConfig {
 		system: devnet::SystemConfig {
 			// Add Wasm runtime to storage.
@@ -204,28 +204,10 @@ fn development_genesis(
 		im_online: Default::default(),
 		sudo: devnet::SudoConfig { key: Some(root_key) },
 		transaction_payment: Default::default(),
-		evm: devnet::EVMConfig {
-			accounts: {
-				let accounts: BTreeMap<_, _> = Precompiles::used_addresses()
-					.map(|addr| {
-						(
-							addr,
-							pallet_evm::GenesisAccount {
-								nonce: Default::default(),
-								balance: Default::default(),
-								storage: Default::default(),
-								code: revert_bytecode.clone(),
-							},
-						)
-					})
-					.collect();
-				accounts
-			},
-		},
+		evm: Default::default(),
 		ethereum: Default::default(),
 		base_fee: devnet::BaseFeeConfig::new(
 			sp_core::U256::from(100 * GWEI * SUPPLY_FACTOR),
-			false,
 			sp_runtime::Permill::from_parts(125_000),
 		),
 		relay_manager: Default::default(),
@@ -243,16 +225,16 @@ fn development_genesis(
 		bfc_utility: Default::default(),
 		bfc_offences: Default::default(),
 		democracy: Default::default(),
-		council: Default::default(),
-		technical_committee: Default::default(),
-		council_membership: devnet::CouncilMembershipConfig {
+		council: devnet::CouncilConfig {
 			phantom: Default::default(),
 			members: initial_council_members.clone(),
 		},
-		technical_membership: devnet::TechnicalMembershipConfig {
+		technical_committee: devnet::TechnicalCommitteeConfig {
 			phantom: Default::default(),
 			members: initial_tech_committee_members.clone(),
 		},
+		council_membership: Default::default(),
+		technical_membership: Default::default(),
 		treasury: Default::default(),
 	}
 }
