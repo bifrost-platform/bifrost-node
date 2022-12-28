@@ -131,7 +131,8 @@ impl<T: Config> RelayManager<T::AccountId> for Pallet<T> {
 			})
 			.filter_map(|(_, id)| {
 				let controller: T::AccountId = id.clone().into();
-				let relayer = Self::bonded_controller(&controller).expect("BondedController must exist");
+				let relayer =
+					Self::bonded_controller(&controller).expect("BondedController must exist");
 				let mut relayer_state =
 					<RelayerState<T>>::get(&relayer).expect("RelayerState must exist");
 				relayer_state.go_offline();
@@ -144,6 +145,7 @@ impl<T: Config> RelayManager<T::AccountId> for Pallet<T> {
 
 		// Remove all received heartbeats from the current session, they have already been processed
 		// and won't be needed anymore.
+		#[allow(deprecated)]
 		ReceivedHeartbeats::<T>::remove_prefix(&session_index, None);
 
 		if offenders.is_empty() {

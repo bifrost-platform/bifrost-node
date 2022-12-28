@@ -137,7 +137,7 @@ impl<Offender: Clone, T: pallet::pallet::Config> Offence<Offender>
 		self.session_index
 	}
 
-	fn slash_fraction(_offenders: u32, _validator_set_count: u32) -> Perbill {
+	fn slash_fraction(&self, _offenders: u32) -> Perbill {
 		<HeartbeatSlashFraction<T>>::get()
 	}
 }
