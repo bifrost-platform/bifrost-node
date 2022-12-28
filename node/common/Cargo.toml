@@ -12,6 +12,7 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 # third-party dependencies
 jsonrpc-core = "18.0.0"
 futures = { version = "0.3" }
+tokio = { version = "1.13.0", features = [ "macros", "sync" ] }
 
 # substrate client dependencies
 sc-client-api = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
@@ -26,9 +27,11 @@ sc-network = { git = "https://github.com/dnjscksdn98/substrate", branch = "polka
 sc-service = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32", features = ["wasmtime"] }
 
 # substrate primitives dependencies
+sp-core = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 sp-runtime = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 sp-api = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 sp-blockchain = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
+sp-block-builder = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 
 # Frontier dependencies
 fc-db = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
@@ -37,6 +40,8 @@ fc-rpc-core = { default-features = false, git = "https://github.com/dnjscksdn98/
 fp-rpc-debug = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 fp-storage = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 fp-rpc = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
+fc-rpc-debug = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
+fc-rpc-trace = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 
 # Local Dependencies
 bp-core = { path = "../../primitives/core" }
