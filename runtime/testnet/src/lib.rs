@@ -79,9 +79,9 @@ pub use frame_support::{
 };
 use frame_system::EnsureRoot;
 
-pub mod precompiles;
-use crate::precompiles::BifrostPrecompiles;
-pub type Precompiles = BifrostPrecompiles<Runtime>;
+// pub mod precompiles;
+// use crate::precompiles::BifrostPrecompiles;
+// pub type Precompiles = BifrostPrecompiles<Runtime>;
 
 /// Block type as expected by this runtime.
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
@@ -770,7 +770,7 @@ impl pallet_bfc_utility::Config for Runtime {
 parameter_types! {
 	pub const BifrostChainId: u64 = 49088; // 0xbfc0
 	pub BlockGasLimit: U256 = U256::from(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT / WEIGHT_PER_GAS);
-	pub PrecompilesValue: Precompiles = BifrostPrecompiles::<_>::new();
+	// pub PrecompilesValue: Precompiles = BifrostPrecompiles::<_>::new();
 }
 
 pub struct IntoAddressMapping;
@@ -844,8 +844,8 @@ impl pallet_evm::Config for Runtime {
 	type GasWeightMapping = BifrostGasWeightMapping;
 	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
-	type PrecompilesType = Precompiles;
-	type PrecompilesValue = PrecompilesValue;
+	type PrecompilesType = ();
+	type PrecompilesValue = ();
 }
 
 /// The Ethereum module is responsible for storing block data and provides RPC compatibility.
