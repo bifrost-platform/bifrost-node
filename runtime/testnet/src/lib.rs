@@ -841,8 +841,8 @@ impl pallet_evm::Config for Runtime {
 	type WithdrawOrigin = EnsureAddressNever<AccountId>;
 	type AddressMapping = IntoAddressMapping;
 	type FeeCalculator = FixedGasPrice;
-	type GasWeightMapping = BifrostGasWeightMapping;
-	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
+	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
+	type OnChargeTransaction = EVMCurrencyAdapter<Balances, ()>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = ();
 	type PrecompilesValue = ();
