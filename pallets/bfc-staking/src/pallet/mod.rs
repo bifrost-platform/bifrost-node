@@ -37,11 +37,11 @@ pub mod pallet {
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The currency type
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 		/// The origin for monetary governance
-		type MonetaryGovernanceOrigin: EnsureOrigin<Self::Origin>;
+		type MonetaryGovernanceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// The relay manager type
 		type RelayManager: RelayManager<Self::AccountId>;
 		/// The offence handler type
@@ -671,7 +671,7 @@ pub mod pallet {
 				);
 				candidate_count += 1u32;
 				if let Err(error) = <Pallet<T>>::join_candidates(
-					T::Origin::from(Some(stash.clone()).into()),
+					T::RuntimeOrigin::from(Some(stash.clone()).into()),
 					controller.clone(),
 					Some(relayer.clone()),
 					balance,
@@ -695,7 +695,7 @@ pub mod pallet {
 				let nn_count =
 					if let Some(x) = nominator_nomination_count.get(nominator) { *x } else { 0u32 };
 				if let Err(error) = <Pallet<T>>::nominate(
-					T::Origin::from(Some(nominator.clone()).into()),
+					T::RuntimeOrigin::from(Some(nominator.clone()).into()),
 					target.clone(),
 					balance,
 					vn_count,
