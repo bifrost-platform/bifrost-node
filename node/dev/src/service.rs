@@ -2,6 +2,7 @@
 
 use bp_core::*;
 use futures::StreamExt;
+use jsonrpsee::RpcModule;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::sync::Semaphore;
 
@@ -9,7 +10,7 @@ use bifrost_common_node::{
 	cli_opt::{EthApi as EthApiCmd, RpcConfig},
 	rpc::{FullDeps, GrandpaDeps},
 	service::open_frontier_backend,
-	tracing::{extend_with_tracing, RpcRequesters},
+	tracing::RpcRequesters,
 };
 
 use crate::rpc::create_full;
@@ -30,7 +31,6 @@ use sc_service::{
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
 use sp_api::NumberFor;
-use sp_consensus::SlotData;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_keystore::SyncCryptoStorePtr;
 use sp_runtime::traits::Block as BlockT;
@@ -45,7 +45,7 @@ pub mod dev {
 		type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
 
 		#[cfg(not(feature = "runtime-benchmarks"))]
-		type ExtendHostFunctions = fp_ext::bifrost_ext::HostFunctions;
+		type ExtendHostFunctions = fp_ext::moonbeam_ext::HostFunctions;
 
 		fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
 			bifrost_dev_runtime::api::dispatch(method, data)
@@ -69,9 +69,6 @@ type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 
 /// The transaction pool type definition.
 pub type TransactionPool = sc_transaction_pool::FullPool<Block, FullClient>;
-
-/// A IO handler that uses all Full RPC extensions.
-pub type IoHandler = jsonrpc_core::IoHandler<sc_rpc::Metadata>;
 
 /// Builds a new service for a full client.
 pub fn new_full(config: Configuration, rpc_config: RpcConfig) -> Result<TaskManager, ServiceError> {
@@ -185,7 +182,7 @@ pub fn new_partial(
 		client.clone(),
 	);
 
-	let frontier_backend = open_frontier_backend(config)?;
+	let frontier_backend = open_frontier_backend(client.clone(), config)?;
 
 	let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
 		client.clone(),
@@ -194,7 +191,7 @@ pub fn new_partial(
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
 
-	let slot_duration = sc_consensus_aura::slot_duration(&*client)?.slot_duration();
+	let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
 
 	let import_queue =
 		sc_consensus_aura::import_queue::<AuraPair, _, _, _, _, _>(ImportQueueParams {
@@ -205,7 +202,7 @@ pub fn new_partial(
 				let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
 				let slot =
-					sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
+					sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 						*timestamp,
 						slot_duration,
 					);
@@ -262,7 +259,7 @@ pub fn new_full_base(
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, network_starter) =
+	let (network, system_rpc_tx, tx_handler_controller, network_starter) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			client: client.clone(),
@@ -316,12 +313,14 @@ pub fn new_full_base(
 		client: client.clone(),
 		network: network.clone(),
 		keystore: keystore_container.sync_keystore(),
-		rpc_extensions_builder: Box::new(rpc_extensions_builder),
+		rpc_builder: Box::new(rpc_extensions_builder),
 		transaction_pool: transaction_pool.clone(),
 		task_manager: &mut task_manager,
 		system_rpc_tx,
+		tx_handler_controller,
 		telemetry: telemetry.as_mut(),
-	})?;
+	})
+	.ok();
 
 	if is_authority {
 		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
@@ -333,7 +332,6 @@ pub fn new_full_base(
 		);
 
 		let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
-		let raw_slot_duration = slot_duration.slot_duration();
 
 		let aura = sc_consensus_aura::start_aura::<AuraPair, _, _, _, _, _, _, _, _, _, _>(
 			StartAuraParams {
@@ -346,9 +344,9 @@ pub fn new_full_base(
 					let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
 					let slot =
-						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_duration(
+						sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 							*timestamp,
-							raw_slot_duration,
+							slot_duration,
 						);
 
 					Ok((slot, timestamp))
@@ -412,25 +410,15 @@ pub fn new_full_base(
 			client.clone(),
 			backend.clone(),
 			frontier_backend.clone(),
+			3,
+			0,
 			SyncStrategy::Normal,
 		)
 		.for_each(|()| futures::future::ready(())),
 	);
 
-	task_manager.spawn_essential_handle().spawn(
-		"frontier-schema-cache-task",
-		Some("frontier"),
-		EthTask::ethereum_schema_cache_task(client.clone(), frontier_backend.clone()),
-	);
-
 	network_starter.start_network();
-	Ok(NewFullBase {
-		task_manager,
-		client,
-		network,
-		transaction_pool,
-		rpc_handlers: Some(rpc_handlers),
-	})
+	Ok(NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers })
 }
 
 /// Creates a test service from the configuration.
@@ -470,7 +458,7 @@ pub fn new_manual_base(
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, network_starter) =
+	let (network, system_rpc_tx, tx_handler_controller, network_starter) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			client: client.clone(),
@@ -537,10 +525,11 @@ pub fn new_manual_base(
 			client: client.clone(),
 			network: network.clone(),
 			keystore: keystore_container.sync_keystore(),
-			rpc_extensions_builder: Box::new(rpc_extensions_builder),
+			rpc_builder: Box::new(rpc_extensions_builder),
 			transaction_pool: transaction_pool.clone(),
 			task_manager: &mut task_manager,
 			system_rpc_tx,
+			tx_handler_controller,
 			telemetry: telemetry.as_mut(),
 		})
 		.ok();
@@ -612,15 +601,11 @@ pub fn new_manual_base(
 			client.clone(),
 			backend.clone(),
 			frontier_backend.clone(),
+			3,
+			0,
 			SyncStrategy::Normal,
 		)
 		.for_each(|()| futures::future::ready(())),
-	);
-
-	task_manager.spawn_essential_handle().spawn(
-		"frontier-schema-cache-task",
-		Some("frontier"),
-		EthTask::ethereum_schema_cache_task(client.clone(), frontier_backend.clone()),
 	);
 
 	network_starter.start_network();
@@ -631,7 +616,8 @@ pub fn build_rpc_extensions_builder(
 	config: &Configuration,
 	rpc_config: RpcConfig,
 	builder: RpcExtensionsBuilder,
-) -> impl Fn(DenyUnsafe, sc_rpc::SubscriptionTaskExecutor) -> Result<IoHandler, sc_service::Error> {
+) -> impl Fn(DenyUnsafe, sc_rpc::SubscriptionTaskExecutor) -> Result<RpcModule<()>, sc_service::Error>
+{
 	let justification_stream = builder.justification_stream.clone();
 	let shared_authority_set = builder.shared_authority_set.clone();
 
@@ -648,6 +634,7 @@ pub fn build_rpc_extensions_builder(
 	let backend = builder.backend.clone();
 	let frontier_backend = builder.frontier_backend.clone();
 	let is_authority = config.role.is_authority();
+	let prometheus_registry = config.prometheus_registry().cloned();
 
 	let command_sink = builder.command_sink.clone();
 	let fee_history_cache: FeeHistoryCache = Arc::new(std::sync::Mutex::new(BTreeMap::new()));
@@ -656,11 +643,12 @@ pub fn build_rpc_extensions_builder(
 
 	let overrides = bifrost_common_node::rpc::overrides_handle(client.clone());
 
-	let block_data_cache = Arc::new(fc_rpc::EthBlockDataCache::new(
+	let block_data_cache = Arc::new(fc_rpc::EthBlockDataCacheTask::new(
 		builder.spawn_handle,
 		overrides.clone(),
 		rpc_config.eth_log_block_cache,
 		rpc_config.eth_statuses_cache,
+		prometheus_registry.clone(),
 	));
 
 	// Spawn Frontier FeeHistory cache maintenance task.
@@ -688,9 +676,10 @@ pub fn build_rpc_extensions_builder(
 		),
 	);
 
-	let tracing_requesters: RpcRequesters = {
+	let _tracing_requesters: RpcRequesters = {
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
-			use fc_rpc::{CacheTask, DebugHandler};
+			use fc_rpc_debug::DebugHandler;
+			use fc_rpc_trace::CacheTask;
 
 			let permit_pool = Arc::new(Semaphore::new(rpc_config.ethapi_max_permits as usize));
 
@@ -715,6 +704,7 @@ pub fn build_rpc_extensions_builder(
 					frontier_backend.clone(),
 					permit_pool.clone(),
 					overrides.clone(),
+					rpc_config.tracing_raw_max_memory_usage,
 				);
 				(Some(debug_task), Some(debug_requester))
 			} else {
@@ -774,18 +764,9 @@ pub fn build_rpc_extensions_builder(
 			},
 			command_sink: command_sink.clone(),
 			max_past_logs: rpc_config.max_past_logs,
-			max_logs_request_duration: rpc_config.max_logs_request_duration,
 		};
 
-		let mut io = create_full(deps);
-		extend_with_tracing(
-			client.clone(),
-			tracing_requesters.clone(),
-			rpc_config.ethapi_trace_max_count,
-			&mut io,
-		);
-
-		Ok(io)
+		create_full(deps)
 	};
 
 	rpc_extensions_builder

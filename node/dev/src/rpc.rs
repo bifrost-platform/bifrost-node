@@ -5,6 +5,7 @@
 
 #![warn(missing_docs)]
 
+use jsonrpsee::RpcModule;
 use std::sync::Arc;
 
 use bifrost_common_node::cli_opt::EthApi as EthApiCmd;
@@ -21,8 +22,7 @@ use sp_runtime::traits::BlakeTwo256;
 use bifrost_common_node::rpc::{FullDeps, GrandpaDeps};
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 pub use sc_client_api::{AuxStore, BlockOf, BlockchainEvents};
-use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApi};
-use sc_finality_grandpa_rpc::GrandpaRpcHandler;
+use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApiServer};
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool::ChainApi;
 use sc_transaction_pool_api::TransactionPool;
@@ -30,7 +30,7 @@ use sc_transaction_pool_api::TransactionPool;
 /// Instantiate all full RPC extensions.
 pub fn create_full<C, P, BE, SC, A>(
 	deps: FullDeps<C, P, BE, SC, A>,
-) -> jsonrpc_core::IoHandler<sc_rpc_api::Metadata>
+) -> Result<RpcModule<()>, sc_service::Error>
 where
 	BE: Backend<Block> + Send + Sync + 'static,
 	BE::State: StateBackend<BlakeTwo256>,
@@ -47,20 +47,20 @@ where
 	C::Api: BlockBuilder<Block>,
 	C::Api: fp_rpc::EthereumRuntimeRPCApi<Block>,
 	C::Api: fp_rpc::ConvertTransactionRuntimeApi<Block>,
-	C::Api: fp_rpc::TxPoolRuntimeApi<Block>,
+	C::Api: fp_rpc_txpool::TxPoolRuntimeApi<Block>,
 	P: TransactionPool<Block = Block> + 'static,
 	A: ChainApi<Block = Block> + 'static,
 	SC: SelectChain<Block> + 'static,
 {
 	use fc_rpc::{
-		EthApi, EthApiServer, EthFilterApi, EthFilterApiServer, NetApi, NetApiServer, TxPoolApi,
-		TxPoolApiServer, Web3Api, Web3ApiServer,
+		Eth, EthApiServer, EthFilter, EthFilterApiServer, Net, NetApiServer, Web3, Web3ApiServer,
 	};
-	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApi};
-	use substrate_frame_rpc_system::{FullSystem, SystemApi};
+	use fc_rpc_txpool::{TxPool, TxPoolServer};
+	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
+	use sc_finality_grandpa_rpc::{Grandpa, GrandpaApiServer};
+	use substrate_frame_rpc_system::{System, SystemApiServer};
 
-	let mut io = jsonrpc_core::IoHandler::default();
-
+	let mut io = RpcModule::new(());
 	let FullDeps {
 		client,
 		pool,
@@ -81,7 +81,6 @@ where
 		grandpa,
 		command_sink,
 		max_past_logs,
-		max_logs_request_duration,
 	} = deps;
 
 	let GrandpaDeps {
@@ -92,67 +91,94 @@ where
 		finality_provider,
 	} = grandpa;
 
-	io.extend_with(SystemApi::to_delegate(FullSystem::new(
-		client.clone(),
-		pool.clone(),
-		deny_unsafe,
-	)));
+	io.merge(System::new(Arc::clone(&client), Arc::clone(&pool), deny_unsafe).into_rpc())
+		.ok();
+	io.merge(TransactionPayment::new(Arc::clone(&client)).into_rpc()).ok();
 
-	io.extend_with(TransactionPaymentApi::to_delegate(TransactionPayment::new(client.clone())));
+	io.merge(
+		Grandpa::new(
+			subscription_executor,
+			shared_authority_set.clone(),
+			shared_voter_state,
+			justification_stream,
+			finality_provider,
+		)
+		.into_rpc(),
+	)
+	.ok();
 
-	io.extend_with(sc_finality_grandpa_rpc::GrandpaApi::to_delegate(GrandpaRpcHandler::new(
-		shared_authority_set.clone(),
-		shared_voter_state,
-		justification_stream,
-		subscription_executor,
-		finality_provider,
-	)));
+	io.merge(
+		EthFilter::new(
+			client.clone(),
+			frontier_backend.clone(),
+			filter_pool,
+			500_usize, // max stored filters
+			max_past_logs,
+			block_data_cache.clone(),
+		)
+		.into_rpc(),
+	)
+	.ok();
 
-	io.extend_with(EthFilterApiServer::to_delegate(EthFilterApi::new(
-		client.clone(),
-		frontier_backend.clone(),
-		filter_pool,
-		500_usize,
-		max_past_logs,
-		max_logs_request_duration,
-		block_data_cache.clone(),
-	)));
+	io.merge(
+		Net::new(
+			Arc::clone(&client),
+			network.clone(),
+			// Whether to format the `peer_count` response as Hex (default) or not.
+			true,
+		)
+		.into_rpc(),
+	)
+	.ok();
 
-	io.extend_with(NetApiServer::to_delegate(NetApi::new(client.clone(), network.clone(), true)));
-
-	io.extend_with(Web3ApiServer::to_delegate(Web3Api::new(client.clone())));
+	io.merge(Web3::new(Arc::clone(&client)).into_rpc()).ok();
 
 	if ethapi_cmd.contains(&EthApiCmd::Txpool) {
-		io.extend_with(TxPoolApiServer::to_delegate(TxPoolApi::new(
-			Arc::clone(&client),
-			graph.clone(),
-		)));
+		io.merge(TxPool::new(Arc::clone(&client), graph.clone()).into_rpc()).ok();
 	}
 
 	// Nor any signers
 	let signers = Vec::new();
 
-	io.extend_with(EthApiServer::to_delegate(EthApi::new(
-		client.clone(),
-		pool.clone(),
-		graph,
-		Some(bifrost_dev_runtime::TransactionConverter),
-		network.clone(),
-		signers,
-		overrides.clone(),
-		frontier_backend.clone(),
-		is_authority,
-		max_past_logs,
-		max_logs_request_duration,
-		block_data_cache.clone(),
-		fee_history_limit,
-		fee_history_cache,
-		10,
-	)));
+	enum Never {}
+	impl<T> fp_rpc::ConvertTransaction<T> for Never {
+		fn convert_transaction(&self, _transaction: pallet_ethereum::Transaction) -> T {
+			// The Never type is not instantiable, but this method requires the type to be
+			// instantiated to be called (`&self` parameter), so if the code compiles we have the
+			// guarantee that this function will never be called.
+			unreachable!()
+		}
+	}
+	let convert_transaction: Option<Never> = None;
+
+	io.merge(
+		Eth::new(
+			Arc::clone(&client),
+			Arc::clone(&pool),
+			graph.clone(),
+			convert_transaction,
+			Arc::clone(&network),
+			signers,
+			Arc::clone(&overrides),
+			Arc::clone(&frontier_backend),
+			is_authority,
+			Arc::clone(&block_data_cache),
+			fee_history_cache,
+			fee_history_limit,
+			10,
+		)
+		.into_rpc(),
+	)
+	.ok();
 
 	if let Some(command_sink) = command_sink {
-		io.extend_with(ManualSealApi::to_delegate(ManualSeal::new(command_sink)));
+		io.merge(
+			// We provide the rpc handler with the sending end of the channel to allow the rpc
+			// send EngineCommands to the background block authorship task.
+			ManualSeal::new(command_sink).into_rpc(),
+		)
+		.ok();
 	};
 
-	io
+	Ok(io)
 }
