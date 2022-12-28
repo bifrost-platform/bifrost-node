@@ -13,12 +13,7 @@ pub struct Cli {
 	pub sealing: bool,
 
 	/// Enable EVM tracing & Txpool module. ex) --ethapi=debug,trace,txpool
-	#[clap(
-		long,
-		use_value_delimiter = true,
-		require_value_delimiter = true,
-		multiple_values = true
-	)]
+	#[clap(long, value_delimiter = ',')]
 	pub ethapi: Vec<EthApi>,
 
 	/// Number of concurrent tracing tasks.
@@ -53,6 +48,11 @@ pub struct Cli {
 	/// Maximum fee history cache size.
 	#[clap(long, default_value = "2048")]
 	pub fee_history_limit: u64,
+
+	/// Size in bytes of data a raw tracing request is allowed to use.
+	/// Bound the size of memory, stack and storage data.
+	#[clap(long, default_value = "20000000")]
+	pub tracing_raw_max_memory_usage: usize,
 }
 
 #[derive(Debug, clap::Subcommand)]

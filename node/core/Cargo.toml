@@ -17,11 +17,12 @@ name = "bifrost-node"
 
 [dependencies]
 # third-party dependencies
-clap = { version = "3.0", features = ["derive"] }
+clap = { version = "4.0.9", features = ["derive"] }
 
 # substrate client dependencies
 sc-cli = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32", features = ["wasmtime"] }
 sc-service = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32", features = ["wasmtime"] }
+sc-finality-grandpa = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
 
 # benchmarking dependencies
 frame-benchmarking = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
