@@ -10,7 +10,7 @@ use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
-use sp_runtime::Perbill;
+use sp_runtime::{BoundedVec, Perbill};
 
 use hex_literal::hex;
 
@@ -200,11 +200,13 @@ fn testnet_genesis(
 		democracy: Default::default(),
 		council: testnet::CouncilConfig {
 			phantom: Default::default(),
-			members: initial_council_members.clone(),
+			members: BoundedVec::try_from(initial_council_members.clone())
+				.expect("Membership must be initialized."),
 		},
 		technical_committee: testnet::TechnicalCommitteeConfig {
 			phantom: Default::default(),
-			members: initial_tech_committee_members.clone(),
+			members: BoundedVec::try_from(initial_tech_committee_members.clone())
+				.expect("Membership must be initialized"),
 		},
 		council_membership: Default::default(),
 		technical_membership: Default::default(),
