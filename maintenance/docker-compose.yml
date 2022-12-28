@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.3.1
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.23.0
+    restart: unless-stopped
+    volumes:
+      - alertmanager-data:/alertmanager
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  prometheus:
+    depends_on:
+      - node-exporter
+      - alertmanager
+    image: prom/prometheus:v2.32.0
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus-data:/prometheus
+
+  db:
+    image: mariadb:10.9.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: grafana
+      MYSQL_DATABASE: grafana
+      MYSQL_USER: grafana
+      MYSQL_PASSWORD: grafana
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  grafana:
+    depends_on:
+      - db
+      - prometheus
+    image: grafana/grafana:8.5.2
+    restart: unless-stopped
+    environment:
+      GF_INSTALL_PLUGINS: camptocamp-prometheus-alertmanager-datasource
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+
+
+volumes:
+  mysql-data: { }
+  grafana-data: { }
+  alertmanager-data: { }
+  prometheus-data: { }
