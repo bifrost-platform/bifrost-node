@@ -61,7 +61,9 @@ pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
 pub use frame_support::{
-	construct_runtime, log,
+	construct_runtime,
+	dispatch::{DispatchClass, GetDispatchInfo},
+	log,
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{
@@ -151,8 +153,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 };
 
 /// Maximum weight per block.
-/// We allow for one half second of compute with a 3 second average block time.
-pub const MAXIMUM_BLOCK_WEIGHT: Weight = WEIGHT_PER_SECOND.saturating_div(2);
+/// We allow for 1 second of compute with a 3 second average block time, with maximum proof size.
+const MAXIMUM_BLOCK_WEIGHT: Weight = WEIGHT_PER_SECOND.saturating_div(2).set_proof_size(u64::MAX);
 
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -160,6 +162,8 @@ pub fn native_version() -> NativeVersion {
 	NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
 }
 
+/// We allow `Normal` extrinsics to fill up the block up to 75%, the rest can be used
+/// by  Operational  extrinsics.
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
 parameter_types! {
@@ -333,7 +337,7 @@ impl pallet_sudo::Config for Runtime {
 }
 
 parameter_types! {
-	pub MaximumSchedulerWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
+	pub MaximumSchedulerWeight: Weight = NORMAL_DISPATCH_RATIO * BlockWeights::get().max_block;
 	pub const MaxScheduledPerBlock: u32 = 50;
 }
 
