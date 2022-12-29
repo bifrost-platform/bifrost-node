@@ -2,10 +2,12 @@ import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 
 import { Keyring } from '@polkadot/api';
-import { BN, BN_ZERO } from '@polkadot/util';
 import { blake2AsHex } from '@polkadot/util-crypto';
 
-import { AMOUNT_FACTOR, MIN_PROPOSE_AMOUNT } from '../../constants/currency';
+import {
+  AMOUNT_FACTOR, MIN_PROPOSE_AMOUNT, PREIMAGE_BASE_DEPOSIT,
+  PREIMAGE_BYTE_DEPOSIT
+} from '../../constants/currency';
 import { TEST_CONTROLLERS } from '../../constants/keys';
 import { getExtrinsicResult } from '../extrinsics';
 import { describeDevNode } from '../set_dev_node';
@@ -21,40 +23,40 @@ describeDevNode('pallet_democracy - note preimage', (context) => {
   it('should successfully register a preimage', async function () {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
-    const storageFee = context.polkadotApi.consts.democracy.preimageByteDeposit.mul(
-      encodedProposal
-        ? new BN((encodedProposal.length - 2) / 2)
-        : BN_ZERO
-    );
+    const storageFee = new BigNumber(PREIMAGE_BASE_DEPOSIT).plus(new BigNumber(PREIMAGE_BYTE_DEPOSIT).multipliedBy(xt.length - 1));
     encodedHash = blake2AsHex(encodedProposal);
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
 
     await context.createBlock();
 
-    const rawPreimage: any = await context.polkadotApi.query.democracy.preimages(encodedHash);
+    const rawPreimage: any = await context.polkadotApi.query.preimage.preimageFor([encodedHash, xt.length - 1]);
     const preimage = rawPreimage.unwrap().toJSON();
+    expect(preimage).to.not.be.null;
 
-    expect(preimage.available.data).equal(encodedProposal);
-    expect(preimage.available.provider).equal(alith.address);
-    expect(context.web3.utils.hexToNumberString(preimage.available.deposit)).equal(storageFee.toString());
-    expect(preimage.available.expiry).equal(null);
+    const rawStatusFor: any = await context.polkadotApi.query.preimage.statusFor(encodedHash);
+    const statusFor = rawStatusFor.unwrap().toJSON();
+
+    expect(statusFor).has.key('unrequested');
+    expect(statusFor.unrequested.deposit[0]).equal(alith.address);
+    expect(new BigNumber(statusFor.unrequested.deposit[1]).toFixed()).equal(storageFee.toFixed());
+    expect(statusFor.unrequested.len).equal(xt.length - 1);
   });
 
   it('should fail due to duplicate preimage', async function () {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
 
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'democracy', 'notePreimage');
-    expect(extrinsicResult).equal('DuplicatePreimage');
+    const extrinsicResult = await getExtrinsicResult(context, 'preimage', 'notePreimage');
+    expect(extrinsicResult).equal('AlreadyNoted');
   });
 });
 
@@ -62,18 +64,26 @@ describeDevNode('pallet_democracy - register public proposal', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
   const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   let encodedHash: string = '';
+  let proposalLength: number = 0;
 
   before('generate preimage hash', async function () {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
     encodedHash = blake2AsHex(encodedProposal);
+    proposalLength = xt.length - 1;
   });
 
   it('should fail due to minimum deposit constraint', async function () {
     const value = new BigNumber(MIN_PROPOSE_AMOUNT).minus(10 ** 18);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
 
     await context.polkadotApi.tx.democracy
-      .propose(encodedHash, value.toFixed())
+      .propose(request, value.toFixed())
       .signAndSend(alith);
 
     await context.createBlock();
@@ -84,9 +94,15 @@ describeDevNode('pallet_democracy - register public proposal', (context) => {
 
   it('should successfully register a public proposal', async function () {
     const value = new BigNumber(MIN_PROPOSE_AMOUNT);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
 
     await context.polkadotApi.tx.democracy
-      .propose(encodedHash, value.toFixed())
+      .propose(request, value.toFixed())
       .signAndSend(alith);
 
     await context.createBlock();
@@ -98,12 +114,14 @@ describeDevNode('pallet_democracy - register public proposal', (context) => {
     const depositOf = rawDepositOf.unwrap().toJSON();
 
     const rawPublicProps: any = await context.polkadotApi.query.democracy.publicProps();
-    const publicProps = rawPublicProps.toHuman();
+    const publicProps = rawPublicProps.toJSON();
 
     expect(publicPropCount).equal(1);
     expect(depositOf[0][0]).equal(alith.address);
-    expect(publicProps[0][0]).equal('0');
-    expect(publicProps[0][1]).equal(encodedHash);
+    expect(publicProps[0][0]).equal(0);
+    expect(publicProps[0][1]).has.key('lookup');
+    expect(publicProps[0][1].lookup.hash).equal(encodedHash);
+    expect(publicProps[0][1].lookup.len).equal(proposalLength);
     expect(publicProps[0][2]).equal(alith.address);
   });
 });
@@ -117,17 +135,24 @@ describeDevNode('pallet_democracy - endorse public proposal', (context) => {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
     const encodedHash = blake2AsHex(encodedProposal);
+    const proposalLength = xt.length - 1;
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
 
     await context.createBlock();
 
     const value = new BigNumber(MIN_PROPOSE_AMOUNT);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
 
     await context.polkadotApi.tx.democracy
-      .propose(encodedHash, value.toFixed())
+      .propose(request, value.toFixed())
       .signAndSend(alith);
 
     await context.createBlock();
@@ -135,10 +160,9 @@ describeDevNode('pallet_democracy - endorse public proposal', (context) => {
 
   it('should fail due to wrong proposal index', async function () {
     const proposalIndex = 100;
-    const secondsUpperBound = 100;
 
     await context.polkadotApi.tx.democracy
-      .second(proposalIndex, secondsUpperBound)
+      .second(proposalIndex)
       .signAndSend(baltathar);
 
     await context.createBlock();
@@ -147,26 +171,11 @@ describeDevNode('pallet_democracy - endorse public proposal', (context) => {
     expect(extrinsicResult).equal('ProposalMissing');
   });
 
-  it('should fail due to wrong upper bound', async function () {
-    const proposalIndex = 0;
-    const secondsUpperBound = 0;
-
-    await context.polkadotApi.tx.democracy
-      .second(proposalIndex, secondsUpperBound)
-      .signAndSend(baltathar);
-
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'democracy', 'second');
-    expect(extrinsicResult).equal('WrongUpperBound');
-  });
-
   it('should successfully endorse a public proposal', async function () {
     const proposalIndex = 0;
-    const secondsUpperBound = 100;
 
     await context.polkadotApi.tx.democracy
-      .second(proposalIndex, secondsUpperBound)
+      .second(proposalIndex)
       .signAndSend(baltathar);
 
     await context.createBlock();
@@ -179,10 +188,9 @@ describeDevNode('pallet_democracy - endorse public proposal', (context) => {
 
   it('should allow multiple endorsements for a single account', async function () {
     const proposalIndex = 0;
-    const secondsUpperBound = 100;
 
     await context.polkadotApi.tx.democracy
-      .second(proposalIndex, secondsUpperBound)
+      .second(proposalIndex)
       .signAndSend(alith);
 
     await context.createBlock();
@@ -209,17 +217,24 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
     encodedHash = blake2AsHex(encodedProposal);
+    const proposalLength = xt.length - 1;
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
 
     await context.createBlock();
 
     const value = new BigNumber(MIN_PROPOSE_AMOUNT);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
 
     await context.polkadotApi.tx.democracy
-      .propose(encodedHash, value.toFixed())
+      .propose(request, value.toFixed())
       .signAndSend(alith);
 
     await context.createBlock();
@@ -240,7 +255,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
 
     const rawReferendumInfo: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const referendumInfo = rawReferendumInfo.unwrap().toJSON();
-    expect(referendumInfo.ongoing.proposalHash).equal(encodedHash);
+    expect(referendumInfo.ongoing.proposal.lookup.hash).equal(encodedHash);
   });
 
   it('should fail due to wrong referendum index', async function () {
@@ -523,17 +538,24 @@ describeDevNode('pallet_democracy - delegation', (context) => {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
     const encodedHash = blake2AsHex(encodedProposal);
+    const proposalLength = xt.length - 1;
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
 
     await context.createBlock();
 
     const value = new BigNumber(MIN_PROPOSE_AMOUNT);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
 
     await context.polkadotApi.tx.democracy
-      .propose(encodedHash, value.toFixed())
+      .propose(request, value.toFixed())
       .signAndSend(alith);
 
     await context.createBlock();
