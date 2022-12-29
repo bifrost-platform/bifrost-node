@@ -12,8 +12,10 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 proc-macro = true
 
 [dependencies]
-sha3 = "0.10"
-quote = "1.0"
-proc-macro2 = "1.0"
+case = "1.0"
 num_enum = { version = "0.5.3", default-features = false }
-syn = { version = "1.0", features = ["extra-traits", "fold", "full", "visit"] }
+prettyplease = "0.1.18"
+proc-macro2 = "1.0"
+quote = "1.0"
+sha3 = "0.10"
+syn = { version = "1.0", features = [ "extra-traits", "fold", "full", "visit" ] }
