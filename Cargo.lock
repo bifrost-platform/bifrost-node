@@ -83,6 +83,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "affix"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50e7ea84d3fa2009f355f8429a0b418a96849135a4188fadf384f59127d5d4bc"
+dependencies = [
+ "convert_case 0.5.0",
+]
+
+[[package]]
 name = "ahash"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1408,6 +1417,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3ad85c1f65dc7b37604eb0e89748faf0b9653065f2a8ef69f96a687ec1e9279"
 
 [[package]]
+name = "convert_case"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
+name = "convert_case"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb4a24b1aaf0fd0ce8b45161144d6f42cd91677fd5940fd431183eb023b3a2b8"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1750,8 +1771,10 @@ version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
 dependencies = [
+ "convert_case 0.4.0",
  "proc-macro2",
  "quote",
+ "rustc_version 0.4.0",
  "syn",
 ]
 
@@ -5698,9 +5721,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "1.0.7"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
+checksum = "d01a5bd0424d00070b0098dd17ebca6f961a959dead1dbcbbbc1d1cd8d3deeba"
 
 [[package]]
 name = "pbkdf2"
@@ -5893,6 +5916,34 @@ name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
+
+[[package]]
+name = "precompile-utils"
+version = "1.0.0"
+dependencies = [
+ "affix",
+ "derive_more",
+ "evm",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "hex-literal",
+ "impl-trait-for-tuples",
+ "log",
+ "num_enum",
+ "pallet-evm",
+ "parity-scale-codec",
+ "paste",
+ "precompile-utils-macro",
+ "scale-info",
+ "serde",
+ "sha3",
+ "similar-asserts",
+ "sp-core",
+ "sp-io",
+ "sp-std",
+]
 
 [[package]]
 name = "precompile-utils-macro"

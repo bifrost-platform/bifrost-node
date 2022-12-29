@@ -1,332 +1,95 @@
+// Copyright 2019-2022 PureStake Inc.
+// This file is part of Moonbeam.
+
+// Moonbeam is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Moonbeam is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Moonbeam.  If not, see <http://www.gnu.org/licenses/>.
+
 #![cfg_attr(not(feature = "std"), no_std)]
+#![feature(assert_matches)]
 
 extern crate alloc;
 
-use crate::alloc::borrow::ToOwned;
+pub mod costs;
+pub mod handle;
+pub mod logs;
+pub mod modifier;
+pub mod precompile_set;
+pub mod revert;
+pub mod substrate;
 
-use fp_evm::{Context, ExitError, ExitRevert, PrecompileFailure};
-use frame_support::{
-	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
-	traits::Get,
-};
-use pallet_evm::{GasWeightMapping, Log};
-use sp_core::{H160, H256, U256};
-use sp_std::{marker::PhantomData, vec, vec::Vec};
+#[cfg(feature = "testing")]
+pub mod testing;
 
-mod data;
-pub use data::{Address, Bytes, EvmData, EvmDataReader, EvmDataWriter};
+#[cfg(test)]
+mod tests;
 
-pub use precompile_utils_macro::{generate_function_selector, keccak256};
+use crate::alloc::{borrow::ToOwned, vec::Vec};
+use fp_evm::{ExitRevert, ExitSucceed, PrecompileFailure, PrecompileHandle, PrecompileOutput};
+
+pub mod data;
+
+pub use data::{EvmData, EvmDataReader, EvmDataWriter};
+pub use fp_evm::Precompile;
+pub use precompile_utils_macro::{generate_function_selector, keccak256, precompile};
+
+/// Generated a `PrecompileFailure::Revert` with proper encoding for the output.
+/// If the revert needs improved formatting such as backtraces, `Revert` type should
+/// be used instead.
+#[must_use]
+pub fn revert(output: impl AsRef<[u8]>) -> PrecompileFailure {
+	PrecompileFailure::Revert { exit_status: ExitRevert::Reverted, output: encoded_revert(output) }
+}
+
+pub fn encoded_revert(output: impl AsRef<[u8]>) -> Vec<u8> {
+	EvmDataWriter::new_with_selector(revert::RevertSelector::Generic)
+		.write::<data::UnboundedBytes>(output.as_ref().to_owned().into())
+		.build()
+}
+
+#[must_use]
+pub fn succeed(output: impl AsRef<[u8]>) -> PrecompileOutput {
+	PrecompileOutput { exit_status: ExitSucceed::Returned, output: output.as_ref().to_owned() }
+}
 
 /// Alias for Result returning an EVM precompile error.
 pub type EvmResult<T = ()> = Result<T, PrecompileFailure>;
 
-/// Return an error with provided (static) text.
-/// Using the `revert` function of `Gasometer` is preferred as error
-/// consumed all the gas limit and the error message is not easily
-/// retrievable.
-pub fn error<T: Into<alloc::borrow::Cow<'static, str>>>(text: T) -> PrecompileFailure {
-	PrecompileFailure::Error { exit_status: ExitError::Other(text.into()) }
+/// Trait similar to `fp_evm::Precompile` but with a `&self` parameter to manage some
+/// state (this state is only kept in a single transaction and is lost afterward).
+pub trait StatefulPrecompile {
+	/// Instanciate the precompile.
+	/// Will be called once when building the PrecompileSet at the start of each
+	/// Ethereum transaction.
+	fn new() -> Self;
+
+	/// Execute the precompile with a reference to its state.
+	fn execute(&self, handle: &mut impl PrecompileHandle) -> EvmResult<PrecompileOutput>;
 }
 
-/// Builder for PrecompileOutput.
-#[derive(Clone, Debug)]
-pub struct LogsBuilder {
-	address: H160,
-	logs: Vec<Log>,
-}
-
-impl LogsBuilder {
-	/// Create a new builder with no logs.
-	/// Takes the address of the precompile (usually `context.address`).
-	pub fn new(address: H160) -> Self {
-		Self { logs: vec![], address }
-	}
-
-	/// Returns the logs array.
-	pub fn build(self) -> Vec<Log> {
-		self.logs
-	}
-
-	/// Add a 0-topic log.
-	pub fn log0<D>(mut self, data: D) -> Self
-	where
-		D: Into<Vec<u8>>,
-	{
-		self.logs.push(Log { address: self.address, data: data.into(), topics: vec![] });
-		self
-	}
-
-	/// Add a 1-topic log.
-	pub fn log1<D, T0>(mut self, topic0: T0, data: D) -> Self
-	where
-		D: Into<Vec<u8>>,
-		T0: Into<H256>,
-	{
-		self.logs.push(Log {
-			address: self.address,
-			data: data.into(),
-			topics: vec![topic0.into()],
-		});
-		self
-	}
-
-	/// Add a 2-topics log.
-	pub fn log2<D, T0, T1>(mut self, topic0: T0, topic1: T1, data: D) -> Self
-	where
-		D: Into<Vec<u8>>,
-		T0: Into<H256>,
-		T1: Into<H256>,
-	{
-		self.logs.push(Log {
-			address: self.address,
-			data: data.into(),
-			topics: vec![topic0.into(), topic1.into()],
-		});
-		self
-	}
-
-	/// Add a 3-topics log.
-	pub fn log3<D, T0, T1, T2>(mut self, topic0: T0, topic1: T1, topic2: T2, data: D) -> Self
-	where
-		D: Into<Vec<u8>>,
-		T0: Into<H256>,
-		T1: Into<H256>,
-		T2: Into<H256>,
-	{
-		self.logs.push(Log {
-			address: self.address,
-			data: data.into(),
-			topics: vec![topic0.into(), topic1.into(), topic2.into()],
-		});
-		self
-	}
-
-	/// Add a 4-topics log.
-	pub fn log4<D, T0, T1, T2, T3>(
-		mut self,
-		topic0: T0,
-		topic1: T1,
-		topic2: T2,
-		topic3: T3,
-		data: D,
-	) -> Self
-	where
-		D: Into<Vec<u8>>,
-		T0: Into<H256>,
-		T1: Into<H256>,
-		T2: Into<H256>,
-		T3: Into<H256>,
-	{
-		self.logs.push(Log {
-			address: self.address,
-			data: data.into(),
-			topics: vec![topic0.into(), topic1.into(), topic2.into(), topic3.into()],
-		});
-		self
-	}
-}
-
-/// Helper functions requiring a Runtime.
-/// This runtime must of course implement `pallet_evm::Config`.
-#[derive(Clone, Copy, Debug)]
-pub struct RuntimeHelper<Runtime>(PhantomData<Runtime>);
-
-impl<Runtime> RuntimeHelper<Runtime>
-where
-	Runtime: pallet_evm::Config,
-	Runtime::Call: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-{
-	/// Try to dispatch a Substrate call.
-	/// Return an error if there are not enough gas, or if the call fails.
-	/// If successful returns the used gas using the Runtime GasWeightMapping.
-	pub fn try_dispatch<Call>(
-		origin: <Runtime::Call as Dispatchable>::Origin,
-		call: Call,
-		gasometer: &mut Gasometer,
-	) -> EvmResult<()>
-	where
-		Runtime::Call: From<Call>,
-	{
-		let call = Runtime::Call::from(call);
-		let dispatch_info = call.get_dispatch_info();
-
-		// Make sure there is enough gas.
-		if let Some(gas_limit) = gasometer.remaining_gas()? {
-			let required_gas = Runtime::GasWeightMapping::weight_to_gas(dispatch_info.weight);
-			if required_gas > gas_limit {
-				return Err(PrecompileFailure::Error { exit_status: ExitError::OutOfGas })
-			}
-		}
-
-		// Dispatch call.
-		// It may be possible to not record gas cost if the call returns Pays::No.
-		// However while Substrate handle checking weight while not making the sender pay for it,
-		// the EVM doesn't. It seems this safer to always record the costs to avoid unmetered
-		// computations.
-		let used_weight = call
-			.dispatch(origin)
-			.map_err(|e| {
-				gasometer.revert(alloc::format!("Dispatched call failed with error: {:?}", e))
-			})?
-			.actual_weight;
-
-		let used_gas =
-			Runtime::GasWeightMapping::weight_to_gas(used_weight.unwrap_or(dispatch_info.weight));
-
-		gasometer.record_cost(used_gas)?;
-
-		Ok(())
-	}
-}
-
-impl<Runtime> RuntimeHelper<Runtime>
-where
-	Runtime: pallet_evm::Config,
-{
-	/// Cost of a Substrate DB write in gas.
-	pub fn db_write_gas_cost() -> u64 {
-		<Runtime as pallet_evm::Config>::GasWeightMapping::weight_to_gas(
-			<Runtime as frame_system::Config>::DbWeight::get().write,
-		)
-	}
-
-	/// Cost of a Substrate DB read in gas.
-	pub fn db_read_gas_cost() -> u64 {
-		<Runtime as pallet_evm::Config>::GasWeightMapping::weight_to_gas(
-			<Runtime as frame_system::Config>::DbWeight::get().read,
-		)
-	}
-}
-
-/// Custom Gasometer to record costs in precompiles.
-/// It is advised to record known costs as early as possible to
-/// avoid unnecessary computations if there is an Out of Gas.
-///
-/// Provides functions related to reverts, as reverts takes the recorded amount
-/// of gas into account.
-#[derive(Clone, Copy, Debug)]
-pub struct Gasometer {
-	target_gas: Option<u64>,
-	used_gas: u64,
-}
-
-impl Gasometer {
-	/// Create a new Gasometer with provided gas limit.
-	/// None is no limit.
-	pub fn new(target_gas: Option<u64>) -> Self {
-		Self { target_gas, used_gas: 0 }
-	}
-
-	/// Get used gas.
-	pub fn used_gas(&self) -> u64 {
-		self.used_gas
-	}
-
-	/// Record cost, and return error if it goes out of gas.
-	#[must_use]
-	pub fn record_cost(&mut self, cost: u64) -> EvmResult {
-		self.used_gas = self
-			.used_gas
-			.checked_add(cost)
-			.ok_or(PrecompileFailure::Error { exit_status: ExitError::OutOfGas })?;
-
-		match self.target_gas {
-			Some(gas_limit) if self.used_gas > gas_limit =>
-				Err(PrecompileFailure::Error { exit_status: ExitError::OutOfGas }),
-			_ => Ok(()),
-		}
-	}
-
-	/// Record cost of a log manually.
-	/// This can be useful to record log costs early when their content have static size.
-	#[must_use]
-	pub fn record_log_costs_manual(&mut self, topics: usize, data_len: usize) -> EvmResult {
-		const G_LOG: u64 = 375;
-		const G_LOGDATA: u64 = 8;
-		const G_LOGTOPIC: u64 = 375;
-
-		let topic_cost = G_LOGTOPIC
-			.checked_mul(topics as u64)
-			.ok_or(PrecompileFailure::Error { exit_status: ExitError::OutOfGas })?;
-
-		let data_cost = G_LOGDATA
-			.checked_mul(data_len as u64)
-			.ok_or(PrecompileFailure::Error { exit_status: ExitError::OutOfGas })?;
-
-		self.record_cost(G_LOG)?;
-		self.record_cost(topic_cost)?;
-		self.record_cost(data_cost)?;
-
-		Ok(())
-	}
-
-	/// Record cost of logs.
-	#[must_use]
-	pub fn record_log_costs(&mut self, logs: &[Log]) -> EvmResult {
-		for log in logs {
-			self.record_log_costs_manual(log.topics.len(), log.data.len())?;
-		}
-		Ok(())
-	}
-
-	/// Compute remaining gas.
-	/// Returns error if out of gas.
-	/// Returns None if no gas limit.
-	#[must_use]
-	pub fn remaining_gas(&self) -> EvmResult<Option<u64>> {
-		Ok(match self.target_gas {
-			None => None,
-			Some(gas_limit) => Some(
-				gas_limit
-					.checked_sub(self.used_gas)
-					.ok_or(PrecompileFailure::Error { exit_status: ExitError::OutOfGas })?,
-			),
-		})
-	}
-
-	/// Revert the execution, making the user pay for the the currently
-	/// recorded cost. It is better to **revert** instead of **error** as
-	/// erroring consumes the entire gas limit, and **revert** returns an error
-	/// message to the calling contract.
-	///
-	/// This might be required if we format revert messages using user data.
-	#[must_use]
-	pub fn revert(&self, output: impl AsRef<[u8]>) -> PrecompileFailure {
-		PrecompileFailure::Revert {
-			exit_status: ExitRevert::Reverted,
-			output: output.as_ref().to_owned(),
-			cost: self.used_gas,
-		}
-	}
-
-	/// Check that a function call is compatible with the context it is
-	/// called into.
-	#[must_use]
-	pub fn check_function_modifier(
-		&self,
-		context: &Context,
-		is_static: bool,
-		modifier: FunctionModifier,
-	) -> EvmResult {
-		if is_static && modifier != FunctionModifier::View {
-			return Err(self.revert("can't call non-static function in static context"))
-		}
-		if modifier != FunctionModifier::Payable && context.apparent_value > U256::zero() {
-			return Err(self.revert("function is not payable"))
-		}
-		Ok(())
-	}
-}
-
-/// Represents modifiers a Solidity function can be annotated with.
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum FunctionModifier {
-	/// Function that doesn't modify the state.
-	View,
-	/// Function that modifies the state but refuse receiving funds.
-	/// Correspond to a Solidity function with no modifiers.
-	NonPayable,
-	/// Function that modifies the state and accept funds.
-	Payable,
+pub mod prelude {
+	pub use crate::{
+		data::{
+			Address, BoundedBytes, BoundedString, BoundedVec, EvmData, EvmDataReader,
+			EvmDataWriter, SolidityConvert, UnboundedBytes, UnboundedString,
+		},
+		handle::PrecompileHandleExt,
+		logs::{log0, log1, log2, log3, log4, LogExt},
+		modifier::{check_function_modifier, FunctionModifier},
+		read_args, read_struct, revert,
+		revert::{BacktraceExt, InjectBacktrace, MayRevert, Revert, RevertExt, RevertReason},
+		substrate::{RuntimeHelper, TryDispatchError},
+		succeed, EvmResult, StatefulPrecompile,
+	};
+	pub use pallet_evm::{PrecompileHandle, PrecompileOutput};
+	pub use precompile_utils_macro::{generate_function_selector, keccak256, precompile};
 }
