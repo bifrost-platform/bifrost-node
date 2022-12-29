@@ -26,6 +26,7 @@ bifrost-common-runtime = { default-features = false, path = "../common" }
 bifrost-dev-constants = { default-features = false, path = "./constants" }
 bp-core = { default-features = false, path = "../../primitives/core" }
 account = { default-features = false, path = "../../primitives/account" }
+precompile-utils = { default-features = false, path = "../../precompiles/utils" }
 
 # FRAME dependencies
 frame-system = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
@@ -159,6 +160,7 @@ std = [
 	"fp-rpc-txpool/std",
 	"evm-tracer/std",
 	"account/std",
+	"precompile-utils/std",
 ]
 evm-tracing = [
 	"rlp",
