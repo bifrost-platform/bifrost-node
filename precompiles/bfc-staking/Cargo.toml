@@ -20,16 +20,16 @@ precompile-utils = { path = "../utils", default-features = false }
 
 # Substrate
 codec = { package = "parity-scale-codec", version = "2.2", default-features = false, features = ["max-encoded-len"] }
-frame-support = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-frame-system = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-io = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+frame-support = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+frame-system = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-io = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
 
 # Frontier
-fp-evm = { default-features = false, git = "https://github.com/bifrost-platform/frontier", branch = "bifrost-node-v1.1.2" }
-pallet-evm = { default-features = false, git = "https://github.com/bifrost-platform/frontier", branch = "bifrost-node-v1.1.2" }
+fp-evm = { default-features = false, git = "https://github.com/bifrost-platform/frontier", branch = "bifrost-node-v1.1.3" }
+pallet-evm = { default-features = false, git = "https://github.com/bifrost-platform/frontier", branch = "bifrost-node-v1.1.3" }
 
 [dev-dependencies]
 derive_more = "0.99"
@@ -37,9 +37,9 @@ serde = "1.0.100"
 sha3 = "0.9"
 
 # Substrate
-pallet-balances = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-pallet-timestamp = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-runtime = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+pallet-balances = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+pallet-timestamp = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-runtime = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 
 [features]

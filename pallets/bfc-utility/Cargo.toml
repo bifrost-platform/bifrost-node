@@ -16,19 +16,19 @@ impl-serde = { default-features = false, version = "0.3.2" }
 # Substrate
 scale-info = { version = "1.0", default-features = false, features = ["derive"] }
 parity-scale-codec = { version = "2.2", default-features = false, features = ["derive"] }
-frame-benchmarking = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2", optional = true }
-frame-support = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-frame-system = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+frame-benchmarking = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3", optional = true }
+frame-support = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+frame-system = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
 
 [dev-dependencies]
 similar-asserts = "1.1.0"
 
-pallet-balances = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-core = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
-sp-io = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.2" }
+pallet-balances = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-core = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-io = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
 
 [features]
 default = ["std"]
