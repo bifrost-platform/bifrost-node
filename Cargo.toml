@@ -14,7 +14,7 @@ members = [
 	"pallets/bfc-offences",
 	"pallets/relay-manager",
 	# "precompiles/utils",
-	# "precompiles/utils/macro",
+	"precompiles/utils/macro",
 	# "precompiles/bfc-staking",
 	# "precompiles/bfc-offences",
 	# "precompiles/relay-manager",
