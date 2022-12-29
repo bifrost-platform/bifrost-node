@@ -43,20 +43,28 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
 
   let encodedHash: string = '';
   let proposalHash: string = '';
+  let proposalLength: number = 0;
 
   before('should successfully register a preimage', async function () {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
     encodedHash = blake2AsHex(encodedProposal);
+    proposalLength = xt.length;
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
     await context.createBlock();
   });
 
   it('should fail due to invalid length bound', async function () {
-    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
+    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     await context.polkadotApi.tx.council
       .propose(3, proposalXt, 0)
       .signAndSend(alith);
@@ -67,7 +75,13 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
   });
 
   it('should fail due to non-council member', async function () {
-    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
+    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     await context.polkadotApi.tx.council
       .propose(3, proposalXt, 1000)
       .signAndSend(dorothy);
@@ -81,7 +95,13 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
   it('should successfully register an external proposal', async function () {
     // if threshold < 2, it will execute proposal with normal origin
     // else, it will start a council proposal for council members to vote
-    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
+    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     proposalHash = ((proposalXt as SubmittableExtrinsic)?.method.hash || '').toHex();
 
     await context.polkadotApi.tx.council
@@ -96,14 +116,18 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     expect(proposals[0]).equal(proposalHash);
 
     const rawProposalOf: any = await context.polkadotApi.query.council.proposalOf(proposals[0]);
-    const proposalOf = rawProposalOf.toHuman();
-    expect(proposalOf.args.proposal_hash).equal(encodedHash);
-    expect(proposalOf.method).equal('externalProposeMajority');
-    expect(proposalOf.section).equal('democracy');
+    const proposalOf = rawProposalOf.toJSON();
+    expect(proposalOf.args.proposal.lookup.hash).equal(encodedHash);
   });
 
   it('should fail due to duplicate proposal', async function () {
-    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
+    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     await context.polkadotApi.tx.council
       .propose(3, proposalXt, 1000)
       .signAndSend(alith);
@@ -142,7 +166,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     await context.createBlock();
 
     await context.polkadotApi.tx.council
-      .close(proposalHash, proposalIndex, 1000, 1000)
+      .close(proposalHash, proposalIndex, { ref_time: 1000, proof_size: 1000 }, 1000)
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -159,12 +183,18 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
   });
 
   it('should successfully be closed - approved', async function () {
-    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
+    const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     proposalHash = ((proposalXt as SubmittableExtrinsic)?.method.hash || '').toHex();
-    const proposalLength = proposalXt.length;
+    const proposalLengthV2 = proposalXt.length;
 
     await context.polkadotApi.tx.council
-      .propose(3, proposalXt, proposalLength)
+      .propose(3, proposalXt, proposalLengthV2)
       .signAndSend(alith);
     await context.createBlock();
 
@@ -186,10 +216,10 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
       .signAndSend(charleth);
     await context.createBlock();
 
-    const proposalWeight = (await proposalXt.paymentInfo(alith)).weight.toString();
+    const proposalWeight = (await proposalXt.paymentInfo(alith)).weight;
 
     await context.polkadotApi.tx.council
-      .close(proposalHash, proposalIndex, proposalWeight, proposalLength)
+      .close(proposalHash, proposalIndex, proposalWeight, proposalLengthV2)
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -206,7 +236,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
 
     const rawNextExternal: any = await context.polkadotApi.query.democracy.nextExternal();
     const nextExternal = rawNextExternal.toJSON();
-    expect(nextExternal[0]).equal(encodedHash);
+    expect(nextExternal[0].lookup.hash).equal(encodedHash);
   });
 
   it('should successfully launch an external proposal', async function () {
@@ -216,7 +246,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
 
     const rawReferendumInfoOf: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const referendumInfo = rawReferendumInfoOf.toJSON();
-    expect(referendumInfo.ongoing.proposalHash).equal(encodedHash);
+    expect(referendumInfo.ongoing.proposal.lookup.hash).equal(encodedHash);
   });
 });
 
@@ -227,6 +257,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
 
   let encodedHash: string = '';
+  let proposalLength: number = 0;
 
   // 1. cancel_proposal - not passed - CancelProposalOrigin - TC
   // 2. cancel_queued - cancel enactment - Root (council proposal required)
@@ -238,8 +269,9 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
     const xt = context.polkadotApi.tx.bfcStaking.setMaxFullSelected(20);
     const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
     encodedHash = blake2AsHex(encodedProposal);
+    proposalLength = xt.length - 1;
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
 
@@ -248,9 +280,15 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
 
   beforeEach('should successfully register a public proposal', async function () {
     const value = new BigNumber(MIN_PROPOSE_AMOUNT);
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
 
     await context.polkadotApi.tx.democracy
-      .propose(encodedHash, value.toFixed())
+      .propose(request, value.toFixed())
       .signAndSend(alith);
 
     await context.createBlock();
@@ -259,7 +297,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
   it('should successfully cancel public proposal', async function () {
     // propose cancellation of a public proposal - democracy.externalProposeMajority
     const cancelProposal = context.polkadotApi.tx.democracy.cancelProposal(0);
-    const proposalWeight = (await cancelProposal.paymentInfo(alith)).weight.toString();
+    const proposalWeight = (await cancelProposal.paymentInfo(alith)).weight;
     const proposalLength = cancelProposal.length;
 
     await context.polkadotApi.tx.technicalCommittee
@@ -314,18 +352,24 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
     const encodedProposal = (clearProposals as SubmittableExtrinsic)?.method.toHex() || '';
     const encodedHash = blake2AsHex(encodedProposal);
 
-    await context.polkadotApi.tx.democracy
+    await context.polkadotApi.tx.preimage
       .notePreimage(encodedProposal)
       .signAndSend(alith);
     await context.createBlock();
 
     // create external proposal for clear_public_proposals()
-    const externalProposal = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
-    const proposalWeight = (await externalProposal.paymentInfo(alith)).weight.toString();
-    const proposalLength = externalProposal.length;
+    const request = {
+      'Lookup': {
+        hash: encodedHash,
+        len: proposalLength,
+      }
+    };
+    const externalProposal = context.polkadotApi.tx.democracy.externalProposeMajority(request);
+    const proposalWeight = (await externalProposal.paymentInfo(alith)).weight;
+    const proposalLengthV2 = externalProposal.length;
 
     await context.polkadotApi.tx.council
-      .propose(2, externalProposal, proposalLength)
+      .propose(2, externalProposal, proposalLengthV2)
       .signAndSend(alith);
     await context.createBlock();
 
@@ -346,7 +390,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
 
     // close when threshold reached
     await context.polkadotApi.tx.council
-      .close(externalProposalHash, externalProposalIndex, proposalWeight, proposalLength)
+      .close(externalProposalHash, externalProposalIndex, proposalWeight, proposalLengthV2)
       .signAndSend(alith);
     const block = await context.createBlock();
 
