@@ -29,7 +29,7 @@ sp-runtime = { default-features = false, git = "https://github.com/dnjscksdn98/s
 
 # Frontier
 fp-evm = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
-pallet-evm = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
+pallet-evm = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32", features = [ "forbid-evm-reentrancy" ] }
 
 [dev-dependencies]
 derive_more = "0.99"

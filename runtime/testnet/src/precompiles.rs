@@ -19,9 +19,9 @@ use pallet_evm_precompile_bn128::{Bn128Add, Bn128Mul, Bn128Pairing};
 use pallet_evm_precompile_modexp::Modexp;
 use pallet_evm_precompile_simple::{ECRecover, Identity, Ripemd160, Sha256};
 
+use precompile_bfc_staking::BfcStakingPrecompile;
 // use precompile_balance::BalancePrecompile;
 // use precompile_bfc_offences::BfcOffencesPrecompile;
-// use precompile_bfc_staking::BfcStakingPrecompile;
 // use precompile_collective::CollectivePrecompile;
 // use precompile_governance::GovernancePrecompile;
 // use precompile_relay_manager::RelayManagerPrecompile;
@@ -54,7 +54,7 @@ pub type BifrostPrecompiles<R> = PrecompileSetBuilder<
 				PrecompileAt<AddressU64<8>, Bn128Pairing, ForbidRecursion, AllowDelegateCall>,
 				PrecompileAt<AddressU64<9>, Blake2F, ForbidRecursion, AllowDelegateCall>,
 				// Moonbeam specific precompiles:
-				// PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>>,
+				PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>>,
 				// PrecompileAt<AddressU64<1280>, BfcOffencesPrecompile<R>>,
 				// PrecompileAt<AddressU64<2048>, GovernancePrecompile<R>>,
 				// PrecompileAt<AddressU64<2049>, CollectivePrecompile<R, CouncilInstance>>,
