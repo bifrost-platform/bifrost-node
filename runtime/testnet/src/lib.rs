@@ -141,7 +141,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 410,
+	spec_version: 415,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -872,7 +872,7 @@ impl pallet_evm::Config for Runtime {
 	type AddressMapping = IntoAddressMapping;
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = BifrostGasWeightMapping;
-	type OnChargeTransaction = EVMCurrencyAdapter<Balances, ()>;
+	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = Precompiles;
 	type PrecompilesValue = PrecompilesValue;
