@@ -32,7 +32,7 @@ impl EvmData for () {
 	}
 }
 
-#[impl_for_tuples(1, 18)]
+#[impl_for_tuples(1, 20)]
 impl EvmData for Tuple {
 	fn has_static_size() -> bool {
 		for_tuples!(#( Tuple::has_static_size() )&*)
