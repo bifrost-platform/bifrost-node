@@ -40,7 +40,7 @@ pub type BifrostPrecompiles<R> = PrecompileSetBuilder<
 	(
 		// Skip precompiles if out of range.
 		PrecompilesInRangeInclusive<
-			(AddressU64<1>, AddressU64<4095>),
+			(AddressU64<1>, AddressU64<8192>),
 			(
 				// Ethereum precompiles:
 				// We allow DELEGATECALL to stay compliant with Ethereum behavior.
