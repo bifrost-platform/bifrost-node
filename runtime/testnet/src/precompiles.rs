@@ -18,6 +18,8 @@ use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
 
+use fp_evm::{ExitRevert, PrecompileFailure};
+
 use sp_core::H160;
 use sp_std::marker::PhantomData;
 
@@ -58,6 +60,13 @@ where
 		context: &Context,
 		is_static: bool,
 	) -> Option<PrecompileResult> {
+		if self.is_precompile(address) && address > hash(9) && address != context.address {
+			return Some(Err(PrecompileFailure::Revert {
+				exit_status: ExitRevert::Reverted,
+				output: "Cannot be called with DELEGATECALL or CALLCODE".into(),
+				cost: 0,
+			}))
+		}
 		match address {
 			// Standard Ethereum precompiles
 			a if a == hash(1) => Some(ECRecover::execute(input, target_gas, context, is_static)),
