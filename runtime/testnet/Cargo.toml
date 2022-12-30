@@ -75,6 +75,7 @@ pallet-evm = { default-features = false, git = "https://github.com/dnjscksdn98/f
 pallet-ethereum = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 pallet-base-fee = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 fp-self-contained = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
+fp-evm = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 fp-rpc = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 fp-rpc-debug = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
 fp-rpc-txpool = { default-features = false, git = "https://github.com/dnjscksdn98/frontier", branch = "polkadot-v0.9.32" }
