@@ -67,6 +67,10 @@ impl SubstrateCli for Cli {
 			"testnet" => Box::new(bifrost_testnet_node::chain_spec::ChainSpec::from_json_file(
 				std::path::PathBuf::from("./specs/bifrost-testnet.json"),
 			)?),
+			"mainnet-local" => Box::new(bifrost_mainnet_node::chain_spec::mainnet_config()?),
+			"mainnet" => Box::new(bifrost_mainnet_node::chain_spec::ChainSpec::from_json_file(
+				std::path::PathBuf::from("./specs/bifrost-mainnet.json"),
+			)?),
 			path => Box::new(bifrost_dev_node::chain_spec::ChainSpec::from_json_file(
 				std::path::PathBuf::from(path),
 			)?),
@@ -78,6 +82,8 @@ impl SubstrateCli for Cli {
 			&bifrost_dev_runtime::VERSION
 		} else if chain_spec.is_testnet() {
 			&bifrost_testnet_runtime::VERSION
+		} else if chain_spec.is_mainnet() {
+			&bifrost_mainnet_runtime::VERSION
 		} else {
 			&bifrost_dev_runtime::VERSION
 		}
@@ -108,6 +114,12 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
 						bifrost_testnet_node::service::new_partial(&config)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			} else if chain_spec.is_mainnet() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						bifrost_mainnet_node::service::new_partial(&config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else {
@@ -158,6 +170,12 @@ pub fn run() -> sc_cli::Result<()> {
 						bifrost_testnet_node::service::new_partial(&config)?;
 					Ok((cmd.run(client, config.chain_spec), task_manager))
 				})
+			} else if chain_spec.is_mainnet() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, .. } =
+						bifrost_mainnet_node::service::new_partial(&config)?;
+					Ok((cmd.run(client, config.chain_spec), task_manager))
+				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
@@ -180,6 +198,12 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
 						bifrost_testnet_node::service::new_partial(&config)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			} else if chain_spec.is_mainnet() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						bifrost_mainnet_node::service::new_partial(&config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else {
@@ -210,6 +234,12 @@ pub fn run() -> sc_cli::Result<()> {
 						bifrost_testnet_node::service::new_partial(&config)?;
 					Ok((cmd.run(client, backend), task_manager))
 				})
+			} else if chain_spec.is_mainnet() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, backend, .. } =
+						bifrost_mainnet_node::service::new_partial(&config)?;
+					Ok((cmd.run(client, backend), task_manager))
+				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
@@ -232,6 +262,10 @@ pub fn run() -> sc_cli::Result<()> {
 				} else if chain_spec.is_testnet() {
 					runner.sync_run(|config| {
 						cmd.run::<bifrost_testnet_runtime::Block, bifrost_testnet_node::service::testnet::ExecutorDispatch>(config)
+					})
+				} else if chain_spec.is_mainnet() {
+					runner.sync_run(|config| {
+						cmd.run::<bifrost_mainnet_runtime::Block, bifrost_mainnet_node::service::mainnet::ExecutorDispatch>(config)
 					})
 				} else {
 					runner.sync_run(|config| {
@@ -276,6 +310,11 @@ pub fn run() -> sc_cli::Result<()> {
 			} else if chain_spec.is_testnet() {
 				runner.run_node_until_exit(|config| async move {
 					bifrost_testnet_node::service::new_full(config, rpc_config)
+						.map_err(sc_cli::Error::Service)
+				})
+			} else if chain_spec.is_mainnet() {
+				runner.run_node_until_exit(|config| async move {
+					bifrost_mainnet_node::service::new_full(config, rpc_config)
 						.map_err(sc_cli::Error::Service)
 				})
 			} else {

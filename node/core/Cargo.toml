@@ -30,11 +30,13 @@ frame-benchmarking-cli = { git = "https://github.com/bifrost-platform/substrate"
 # BIFROST runtimes
 bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
 bifrost-testnet-runtime = { path = "../../runtime/testnet", features = ["std", "evm-tracing"] }
+bifrost-mainnet-runtime = { path = "../../runtime/mainnet", features = ["std", "evm-tracing"] }
 
 # BIFROST node specs
 bifrost-common-node = { path = "../common" }
 bifrost-dev-node = { path = "../dev" }
 bifrost-testnet-node = { path = "../testnet" }
+bifrost-mainnet-node = { path = "../mainnet" }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
