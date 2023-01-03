@@ -249,7 +249,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const request = {
       vote: {
         aye: true,
-        conviction: 1,
+        conviction: 2,
       },
       balance: AMOUNT_FACTOR,
     };
@@ -270,7 +270,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const request = {
       vote: {
         aye: true,
-        conviction: 1,
+        conviction: 2,
       },
       balance: AMOUNT_FACTOR,
     };
@@ -286,7 +286,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
 
     expect(referendumInfo.ongoing.tally.ayes).equal(
       context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
+        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
         32,
       ),
     );
@@ -318,7 +318,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const request = {
       vote: {
         aye: false,
-        conviction: 1,
+        conviction: 2,
       },
       balance: AMOUNT_FACTOR,
     };
@@ -334,13 +334,13 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
 
     expect(referendumInfo.ongoing.tally.ayes).equal(
       context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
+        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
         32,
       ),
     );
     expect(referendumInfo.ongoing.tally.nays).equal(
       context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
+        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
         32,
       ),
     );
