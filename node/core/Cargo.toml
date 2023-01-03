@@ -20,12 +20,12 @@ name = "bifrost-node"
 clap = { version = "3.0", features = ["derive"] }
 
 # substrate client dependencies
-sc-cli = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3", features = ["wasmtime"] }
-sc-service = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3", features = ["wasmtime"] }
+sc-cli = { git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4", features = ["wasmtime"] }
+sc-service = { git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4", features = ["wasmtime"] }
 
 # benchmarking dependencies
-frame-benchmarking = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
-frame-benchmarking-cli = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+frame-benchmarking = { git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
+frame-benchmarking-cli = { git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
 
 # BIFROST runtimes
 bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
@@ -37,7 +37,7 @@ bifrost-dev-node = { path = "../dev" }
 bifrost-testnet-node = { path = "../testnet" }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+substrate-build-script-utils = { git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
 
 [features]
 default = []

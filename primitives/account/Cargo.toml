@@ -23,11 +23,11 @@ serde = { version = "1.0.101", optional = true, default-features = false, featur
 # Substrate
 scale-info = { version = "1.0", default-features = false, features = [ "derive" ] }
 parity-scale-codec = { version = "2.2", default-features = false, features = [ "derive" ] }
-sp-io = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
-sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
-sp-runtime-interface = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "bifrost-node-v1.1.3" }
+sp-io = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
+sp-std = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
+sp-core = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
+sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
+sp-runtime-interface = { default-features = false, git = "https://github.com/bifrost-platform/substrate", branch = "thebifrost-legacy-v1.1.4" }
 
 [dev-dependencies]
 hex = "0.4.3"
