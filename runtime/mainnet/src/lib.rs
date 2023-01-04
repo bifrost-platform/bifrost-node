@@ -136,7 +136,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The identifier for the different Substrate runtimes.
 	spec_name: create_runtime_str!("moonbeam"),
 	// The name of the implementation of the spec.
-	impl_name: create_runtime_str!("bifrost-mainnet"),
+	impl_name: create_runtime_str!("bifrost-test-mainnet"),
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
