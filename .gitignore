@@ -20,7 +20,7 @@ solidity/package.json
 
 # chain data base path
 tmp/
-ata/
+data/chains/
 
 # chain data backup path
 backup/
