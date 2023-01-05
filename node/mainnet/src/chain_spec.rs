@@ -97,7 +97,7 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 		"BIFROST Test Mainnet",
 		// ID
 		"mainnet",
-		ChainType::Live,
+		ChainType::Development,
 		move || {
 			mainnet_genesis(
 				wasm_binary,

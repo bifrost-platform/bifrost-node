@@ -1,7 +1,7 @@
 {
   "name": "BIFROST Test Mainnet",
   "id": "mainnet",
-  "chainType": "Live",
+  "chainType": "Development",
   "bootNodes": [],
   "telemetryEndpoints": null,
   "protocolId": null,
