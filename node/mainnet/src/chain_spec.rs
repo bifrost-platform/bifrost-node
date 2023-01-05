@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use hex_literal::hex;
 
 use crate::test_accounts::{
-	get_council_member_accounts, get_master_account, get_sudo_account,
+	get_council_member_accounts, get_master_account, get_registrar_account, get_sudo_account,
 	get_technical_committee_member_accounts,
 };
 
@@ -84,6 +84,7 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 		genesis_relayer,
 		get_sudo_account(),
 		get_master_account(),
+		get_registrar_account(),
 	];
 	get_council_member_accounts().iter().for_each(|account| {
 		prefunded_accounts.push(*account);
@@ -182,7 +183,7 @@ fn mainnet_genesis(
 					.map(|(idx, account)| {
 						if idx == 0 {
 							// genesis stash
-							(*account, 4_000_000 * SUPPLY_FACTOR * BFC)
+							(*account, 4_010_000 * SUPPLY_FACTOR * BFC)
 						} else if idx == 1 {
 							// genesis controller
 							(*account, 10_000 * SUPPLY_FACTOR * BFC)
@@ -192,12 +193,15 @@ fn mainnet_genesis(
 						} else if idx == 3 {
 							// sudo
 							(*account, 10_000 * SUPPLY_FACTOR * BFC)
-						} else if idx > 4 && idx < 15 {
+						} else if idx == 4 {
+							// registrar
+							(*account, 10_000 * SUPPLY_FACTOR * BFC)
+						} else if idx > 5 && idx < 16 {
 							// council & tech
 							(*account, 30_000 * SUPPLY_FACTOR * BFC)
 						} else {
 							// master
-							(*account, 2_364_254_074 * SUPPLY_FACTOR * BFC)
+							(*account, 2_364_234_074 * SUPPLY_FACTOR * BFC)
 						}
 					})
 					.collect::<Vec<_>>()
