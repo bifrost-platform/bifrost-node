@@ -12,6 +12,11 @@ pub fn get_sudo_account() -> AccountId {
 	AccountId::from(hex!("07712D727bC6c4933317d1C13AAd3beAAb0d1474"))
 }
 
+/// Returns registrar account
+pub fn get_registrar_account() -> AccountId {
+	AccountId::from(hex!("dBa60Ad8C11675Fdd1DBa505502893B9e6BDa6AB"))
+}
+
 /// Return council member accounts
 pub fn get_council_member_accounts() -> Vec<AccountId> {
 	vec![
