@@ -218,13 +218,13 @@ fn testnet_genesis(
 		bfc_utility: Default::default(),
 		bfc_offences: Default::default(),
 		democracy: Default::default(),
-		council_collective: Default::default(),
-		tech_committee_collective: Default::default(),
+		council: Default::default(),
+		technical_committee: Default::default(),
 		council_membership: testnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: initial_council_members.clone(),
 		},
-		tech_committee_membership: testnet::TechCommitteeMembershipConfig {
+		technical_membership: testnet::TechnicalMembershipConfig {
 			phantom: Default::default(),
 			members: initial_tech_committee_members.clone(),
 		},
