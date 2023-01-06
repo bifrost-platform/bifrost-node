@@ -133,13 +133,13 @@ pub mod opaque {
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The identifier for the different Substrate runtimes.
-	spec_name: create_runtime_str!("moonbeam"),
+	spec_name: create_runtime_str!("root"),
 	// The name of the implementation of the spec.
 	impl_name: create_runtime_str!("bifrost-dev"),
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 250,
+	spec_version: 255,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -443,8 +443,8 @@ impl pallet_membership::Config<pallet_membership::Instance1> for Runtime {
 	type AddOrigin = MoreThanHalfCouncil;
 	type Event = Event;
 	type MaxMembers = CouncilMaxMembers;
-	type MembershipChanged = CouncilCollective;
-	type MembershipInitialized = CouncilCollective;
+	type MembershipChanged = Council;
+	type MembershipInitialized = Council;
 	type PrimeOrigin = MoreThanHalfCouncil;
 	type RemoveOrigin = MoreThanHalfCouncil;
 	type ResetOrigin = MoreThanHalfCouncil;
@@ -457,8 +457,8 @@ impl pallet_membership::Config<pallet_membership::Instance2> for Runtime {
 	type AddOrigin = MoreThanHalfCouncil;
 	type Event = Event;
 	type MaxMembers = TechCommitteeMaxMembers;
-	type MembershipChanged = TechCommitteeCollective;
-	type MembershipInitialized = TechCommitteeCollective;
+	type MembershipChanged = TechnicalCommittee;
+	type MembershipInitialized = TechnicalCommittee;
 	type PrimeOrigin = MoreThanHalfCouncil;
 	type RemoveOrigin = MoreThanHalfCouncil;
 	type ResetOrigin = MoreThanHalfCouncil;
@@ -918,10 +918,10 @@ construct_runtime!(
 		// Governance
 		Scheduler: pallet_scheduler::{Pallet, Storage, Event<T>, Call} = 50,
 		Democracy: pallet_democracy::{Pallet, Storage, Config<T>, Event<T>, Call} = 51,
-		CouncilCollective: pallet_collective::<Instance1>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 52,
-		TechCommitteeCollective: pallet_collective::<Instance2>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 53,
+		Council: pallet_collective::<Instance1>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 52,
+		TechnicalCommittee: pallet_collective::<Instance2>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 53,
 		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
-		TechCommitteeMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
+		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
 		Treasury: pallet_treasury::{Pallet, Call, Storage, Config, Event<T>} = 56,
 
 		// Temporary
