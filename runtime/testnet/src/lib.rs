@@ -426,13 +426,6 @@ impl pallet_utility::Config for Runtime {
 	type WeightInfo = pallet_utility::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct MigratePalletUtility;
-impl frame_support::traits::OnRuntimeUpgrade for MigratePalletUtility {
-	fn on_runtime_upgrade() -> frame_support::weights::Weight {
-		pallet_bfc_utility::migrations::v2::migrate::<Runtime>()
-	}
-}
-
 parameter_types! {
 	/// The maximum amount of time (in blocks) for council members to vote on motions.
 	/// Motions may end in fewer blocks if enough votes are cast to determine the result.
@@ -663,15 +656,6 @@ impl pallet_bfc_offences::Config for Runtime {
 	type WeightInfo = pallet_bfc_offences::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct MigrateBfcOffences;
-impl frame_support::traits::OnRuntimeUpgrade for MigrateBfcOffences {
-	fn on_runtime_upgrade() -> Weight {
-		pallet_bfc_offences::migrations::v2::pre_migrate::<Runtime>().ok();
-		let weight = pallet_bfc_offences::migrations::v2::migrate::<Runtime>();
-		weight
-	}
-}
-
 parameter_types! {
 	pub const StorageCacheLifetimeInRounds: u32 = 64u32;
 	pub const IsHeartbeatOffenceActive: bool = false;
@@ -687,15 +671,6 @@ impl pallet_relay_manager::Config for Runtime {
 	type IsHeartbeatOffenceActive = IsHeartbeatOffenceActive;
 	type DefaultHeartbeatSlashFraction = DefaultHeartbeatSlashFraction;
 	type WeightInfo = pallet_relay_manager::weights::SubstrateWeight<Runtime>;
-}
-
-pub struct MigrateRelayManager;
-impl frame_support::traits::OnRuntimeUpgrade for MigrateRelayManager {
-	fn on_runtime_upgrade() -> Weight {
-		pallet_relay_manager::migrations::v2::pre_migrate::<Runtime>().ok();
-		let weight = pallet_relay_manager::migrations::v2::migrate::<Runtime>();
-		weight
-	}
 }
 
 parameter_types! {
@@ -783,16 +758,16 @@ impl pallet_bfc_staking::Config for Runtime {
 	type WeightInfo = pallet_bfc_staking::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct MigrateBfcStaking;
-impl frame_support::traits::OnRuntimeUpgrade for MigrateBfcStaking {
-	fn on_runtime_upgrade() -> Weight {
-		pallet_bfc_staking::migrations::v3::migrate::<Runtime>()
-	}
-}
+type MintableOrigin = EnsureOneOf<
+	EnsureRoot<AccountId>,
+	pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>,
+>;
 
 /// A module that manages this networks community
 impl pallet_bfc_utility::Config for Runtime {
 	type Event = Event;
+	type Currency = Balances;
+	type MintableOrigin = MintableOrigin;
 	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 

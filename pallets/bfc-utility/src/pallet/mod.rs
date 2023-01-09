@@ -1,9 +1,13 @@
-use crate::{PropIndex, Proposal, Releases, WeightInfo};
+use crate::{BalanceOf, PropIndex, Proposal, Releases, WeightInfo};
 
-use frame_support::pallet_prelude::*;
+use frame_support::{
+	pallet_prelude::*,
+	traits::{Currency, Imbalance, ReservableCurrency},
+};
 use frame_system::pallet_prelude::*;
 
 use impl_serde::serialize::to_hex;
+use sp_runtime::traits::Zero;
 use sp_std::prelude::*;
 
 #[frame_support::pallet]
@@ -20,10 +24,20 @@ pub mod pallet {
 	/// Configuration trait of this pallet
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Overarching event type
+		/// Overarching event type.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		/// The currency type.
+		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
+		/// The origin which may forcibly mint native tokens.
+		type MintableOrigin: EnsureOrigin<Self::Origin>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
+	}
+
+	#[pallet::error]
+	pub enum Error<T> {
+		FailedToMintNative,
+		AmountToLow,
 	}
 
 	#[pallet::event]
@@ -31,6 +45,8 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// A motion has been proposed by a public account.
 		Proposed { proposal_index: PropIndex },
+		/// Minted native tokens and deposit.
+		MintNative { beneficiary: T::AccountId, minted: BalanceOf<T> },
 	}
 
 	#[pallet::storage]
@@ -84,6 +100,25 @@ pub mod pallet {
 			ProposalIndex::<T>::put(proposal_index);
 
 			Self::deposit_event(Event::Proposed { proposal_index });
+			Ok(().into())
+		}
+
+		#[pallet::weight(<T as Config>::WeightInfo::mint_native())]
+		/// Mint the exact amount of native tokens and deposit to the target address.
+		pub fn mint_native(
+			origin: OriginFor<T>,
+			beneficiary: T::AccountId,
+			mint: BalanceOf<T>,
+		) -> DispatchResultWithPostInfo {
+			T::MintableOrigin::ensure_origin(origin)?;
+			ensure!(!mint.is_zero(), Error::<T>::AmountToLow);
+
+			if let Ok(minted) = T::Currency::deposit_into_existing(&beneficiary, mint) {
+				Self::deposit_event(Event::MintNative { beneficiary, minted: minted.peek() });
+			} else {
+				return Err((Error::<T>::FailedToMintNative).into())
+			}
+
 			Ok(().into())
 		}
 	}
