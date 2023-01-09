@@ -4,6 +4,7 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
+use frame_support::traits::Currency;
 pub use pallet::{pallet::*, *};
 use weights::WeightInfo;
 
@@ -13,6 +14,9 @@ use scale_info::TypeInfo;
 use scale_info::prelude::string::String;
 use sp_runtime::RuntimeDebug;
 use sp_std::prelude::*;
+
+pub type BalanceOf<T> =
+	<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// The type that indicates the index of a general proposal
 pub type PropIndex = u32;
