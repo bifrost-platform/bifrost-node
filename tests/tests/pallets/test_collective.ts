@@ -18,16 +18,16 @@ describeDevNode('pallet_collective - prime member', (context) => {
 
   it('should successfully set prime tc member', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.techCommitteeMembership.setPrime(alith.address)
+      context.polkadotApi.tx.technicalMembership.setPrime(alith.address)
     ).signAndSend(alith);
 
     await context.createBlock();
 
-    const rawPrimeM: any = await context.polkadotApi.query.techCommitteeMembership.prime();
+    const rawPrimeM: any = await context.polkadotApi.query.technicalMembership.prime();
     const primeM = rawPrimeM.unwrap().toJSON();
     expect(primeM).equal(alith.address);
 
-    const rawPrimeC: any = await context.polkadotApi.query.techCommitteeCollective.prime();
+    const rawPrimeC: any = await context.polkadotApi.query.technicalCommittee.prime();
     const primeC = rawPrimeC.unwrap().toJSON();
     expect(primeC).equal(alith.address);
   });
@@ -57,24 +57,24 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
 
   it('should fail due to invalid length bound', async function () {
     const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .propose(3, proposalXt, 0)
       .signAndSend(alith);
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'councilCollective', 'propose');
+    const extrinsicResult = await getExtrinsicResult(context, 'council', 'propose');
     expect(extrinsicResult).equal('WrongProposalLength');
   });
 
   it('should fail due to non-council member', async function () {
     const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .propose(3, proposalXt, 1000)
       .signAndSend(dorothy);
 
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'councilCollective', 'propose');
+    const extrinsicResult = await getExtrinsicResult(context, 'council', 'propose');
     expect(extrinsicResult).equal('NotMember');
   });
 
@@ -84,18 +84,18 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
     proposalHash = ((proposalXt as SubmittableExtrinsic)?.method.hash || '').toHex();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .propose(3, proposalXt, 1000)
       .signAndSend(alith);
 
     await context.createBlock();
 
-    const rawProposals: any = await context.polkadotApi.query.councilCollective.proposals();
+    const rawProposals: any = await context.polkadotApi.query.council.proposals();
     const proposals = rawProposals.toJSON();
     expect(proposals).is.not.empty;
     expect(proposals[0]).equal(proposalHash);
 
-    const rawProposalOf: any = await context.polkadotApi.query.councilCollective.proposalOf(proposals[0]);
+    const rawProposalOf: any = await context.polkadotApi.query.council.proposalOf(proposals[0]);
     const proposalOf = rawProposalOf.toHuman();
     expect(proposalOf.args.proposal_hash).equal(encodedHash);
     expect(proposalOf.method).equal('externalProposeMajority');
@@ -104,25 +104,25 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
 
   it('should fail due to duplicate proposal', async function () {
     const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(encodedHash);
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .propose(3, proposalXt, 1000)
       .signAndSend(alith);
 
     await context.createBlock();
-    const extrinsicResult = await getExtrinsicResult(context, 'councilCollective', 'propose');
+    const extrinsicResult = await getExtrinsicResult(context, 'council', 'propose');
     expect(extrinsicResult).equal('DuplicateProposal');
   });
 
   it('should successfully vote an aye', async function () {
     const proposalIndex = 0;
     const approve = true;
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(proposalHash, proposalIndex, approve)
       .signAndSend(alith);
 
     await context.createBlock();
 
-    const rawVotingOf: any = await context.polkadotApi.query.councilCollective.voting(proposalHash);
+    const rawVotingOf: any = await context.polkadotApi.query.council.voting(proposalHash);
     const votingOf = rawVotingOf.toJSON();
     expect(votingOf.ayes[0]).equal(alith.address);
   });
@@ -131,17 +131,17 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     const proposalIndex = 0;
     const approve = false;
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(proposalHash, proposalIndex, approve)
       .signAndSend(baltathar);
     await context.createBlock();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(proposalHash, proposalIndex, approve)
       .signAndSend(charleth);
     await context.createBlock();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .close(proposalHash, proposalIndex, 1000, 1000)
       .signAndSend(alith);
     const block = await context.createBlock();
@@ -151,8 +151,8 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
       context,
       block.block.hash,
       [
-        { method: 'Closed', section: 'councilCollective' },
-        { method: 'Disapproved', section: 'councilCollective' },
+        { method: 'Closed', section: 'council' },
+        { method: 'Disapproved', section: 'council' },
       ],
     );
     expect(success).equal(true);
@@ -163,7 +163,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     proposalHash = ((proposalXt as SubmittableExtrinsic)?.method.hash || '').toHex();
     const proposalLength = proposalXt.length;
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .propose(3, proposalXt, proposalLength)
       .signAndSend(alith);
     await context.createBlock();
@@ -171,24 +171,24 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     const proposalIndex = 1;
     const approve = true;
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(proposalHash, proposalIndex, approve)
       .signAndSend(alith);
     await context.createBlock();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(proposalHash, proposalIndex, approve)
       .signAndSend(baltathar);
     await context.createBlock();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(proposalHash, proposalIndex, approve)
       .signAndSend(charleth);
     await context.createBlock();
 
     const proposalWeight = (await proposalXt.paymentInfo(alith)).weight.toString();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .close(proposalHash, proposalIndex, proposalWeight, proposalLength)
       .signAndSend(alith);
     const block = await context.createBlock();
@@ -198,8 +198,8 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
       context,
       block.block.hash,
       [
-        { method: 'Closed', section: 'councilCollective' },
-        { method: 'Approved', section: 'councilCollective' },
+        { method: 'Closed', section: 'council' },
+        { method: 'Approved', section: 'council' },
       ],
     );
     expect(success).equal(true);
@@ -262,7 +262,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
     const proposalWeight = (await cancelProposal.paymentInfo(alith)).weight.toString();
     const proposalLength = cancelProposal.length;
 
-    await context.polkadotApi.tx.techCommitteeCollective
+    await context.polkadotApi.tx.technicalCommittee
       .propose(2, cancelProposal, proposalLength)
       .signAndSend(alith);
     await context.createBlock();
@@ -272,18 +272,18 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
     const approve = true;
 
     // vote
-    await context.polkadotApi.tx.techCommitteeCollective
+    await context.polkadotApi.tx.technicalCommittee
       .vote(cancelProposalHash, cancelProposalIndex, approve)
       .signAndSend(alith);
     await context.createBlock();
 
-    await context.polkadotApi.tx.techCommitteeCollective
+    await context.polkadotApi.tx.technicalCommittee
       .vote(cancelProposalHash, cancelProposalIndex, approve)
       .signAndSend(baltathar);
     await context.createBlock();
 
     // close when threshold reached
-    await context.polkadotApi.tx.techCommitteeCollective
+    await context.polkadotApi.tx.technicalCommittee
       .close(cancelProposalHash, cancelProposalIndex, proposalWeight, proposalLength)
       .signAndSend(alith);
     const block = await context.createBlock();
@@ -295,10 +295,10 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
       context,
       block.block.hash,
       [
-        { method: 'Closed', section: 'techCommitteeCollective' },
-        { method: 'Approved', section: 'techCommitteeCollective' },
+        { method: 'Closed', section: 'technicalCommittee' },
+        { method: 'Approved', section: 'technicalCommittee' },
         { method: 'Slashed', section: 'balances' },
-        { method: 'Executed', section: 'techCommitteeCollective' },
+        { method: 'Executed', section: 'technicalCommittee' },
       ],
     );
     expect(success).equal(true);
@@ -324,7 +324,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
     const proposalWeight = (await externalProposal.paymentInfo(alith)).weight.toString();
     const proposalLength = externalProposal.length;
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .propose(2, externalProposal, proposalLength)
       .signAndSend(alith);
     await context.createBlock();
@@ -334,18 +334,18 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
     const approve = true;
 
     // vote
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(externalProposalHash, externalProposalIndex, approve)
       .signAndSend(baltathar);
     await context.createBlock();
 
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .vote(externalProposalHash, externalProposalIndex, approve)
       .signAndSend(charleth);
     await context.createBlock();
 
     // close when threshold reached
-    await context.polkadotApi.tx.councilCollective
+    await context.polkadotApi.tx.council
       .close(externalProposalHash, externalProposalIndex, proposalWeight, proposalLength)
       .signAndSend(alith);
     const block = await context.createBlock();
@@ -355,9 +355,9 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
       context,
       block.block.hash,
       [
-        { method: 'Closed', section: 'councilCollective' },
-        { method: 'Approved', section: 'councilCollective' },
-        { method: 'Executed', section: 'councilCollective' },
+        { method: 'Closed', section: 'council' },
+        { method: 'Approved', section: 'council' },
+        { method: 'Executed', section: 'council' },
       ],
     );
     expect(success).equal(true);
