@@ -134,7 +134,7 @@ pub mod opaque {
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The identifier for the different Substrate runtimes.
-	spec_name: create_runtime_str!("moonbeam"),
+	spec_name: create_runtime_str!("thebifrost-testnet"),
 	// The name of the implementation of the spec.
 	impl_name: create_runtime_str!("bifrost-testnet"),
 	// The version of the authorship interface.
