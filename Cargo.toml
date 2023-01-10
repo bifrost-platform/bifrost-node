@@ -20,7 +20,7 @@ members = [
 	# "precompiles/relay-manager",
 	# "precompiles/governance",
 	# "precompiles/collective",
-	# "precompiles/balance",
+	"precompiles/balance",
 	"primitives/account",
 	"primitives/core",
 	"primitives/bfc-staking",
