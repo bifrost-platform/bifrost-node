@@ -3,32 +3,26 @@
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
-	traits::{Currency, Get},
+	traits::Get,
 };
+
+use pallet_bfc_staking::{Call as StakingCall, NominationChange, RewardDestination};
+use pallet_evm::AddressMapping;
+
+use precompile_utils::prelude::*;
 
 use bp_staking::{RoundIndex, TierType};
 use fp_evm::PrecompileHandle;
-use pallet_bfc_staking::{Call as StakingCall, NominationChange, RewardDestination};
-use pallet_evm::AddressMapping;
-use precompile_utils::prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::Perbill;
 use sp_std::{convert::TryInto, marker::PhantomData, vec, vec::Vec};
 
 mod types;
 use types::{
-	CandidateState, CandidateStates, EvmCandidateStateOf, EvmCandidateStatesOf,
-	EvmNominatorRequestsOf, EvmNominatorStateOf, EvmRoundInfoOf, EvmTotalOf, NominatorState,
-	TotalStake,
+	BalanceOf, BlockNumberOf, CandidateState, CandidateStates, EvmCandidateStateOf,
+	EvmCandidateStatesOf, EvmNominatorRequestsOf, EvmNominatorStateOf, EvmRoundInfoOf, EvmTotalOf,
+	NominatorState, StakingOf, TotalStake,
 };
-
-pub type BalanceOf<Runtime> = <<Runtime as pallet_bfc_staking::Config>::Currency as Currency<
-	<Runtime as frame_system::Config>::AccountId,
->>::Balance;
-
-pub type BlockNumberOf<Runtime> = <Runtime as frame_system::Config>::BlockNumber;
-
-type StakingOf<Runtime> = pallet_bfc_staking::Pallet<Runtime>;
 
 /// A precompile to wrap the functionality from pallet_bfc_staking.
 pub struct BfcStakingPrecompile<Runtime>(PhantomData<Runtime>);
