@@ -98,7 +98,7 @@ precompile-bfc-staking = { default-features = false, path = "../../precompiles/b
 precompile-bfc-offences = { default-features = false, path = "../../precompiles/bfc-offences" }
 # precompile-relay-manager = { default-features = false, path = "../../precompiles/relay-manager" }
 # precompile-governance = { default-features = false, path = "../../precompiles/governance" }
-# precompile-collective = { default-features = false, path = "../../precompiles/collective" }
+precompile-collective = { default-features = false, path = "../../precompiles/collective" }
 precompile-balance = { default-features = false, path = "../../precompiles/balance" }
 
 [build-dependencies]
