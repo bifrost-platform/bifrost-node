@@ -606,6 +606,7 @@ dependencies = [
  "pallet-utility",
  "parity-scale-codec",
  "precompile-balance",
+ "precompile-bfc-offences",
  "precompile-bfc-staking",
  "precompile-utils",
  "rlp",
@@ -917,6 +918,7 @@ dependencies = [
  "pallet-utility",
  "parity-scale-codec",
  "precompile-balance",
+ "precompile-bfc-offences",
  "precompile-bfc-staking",
  "precompile-utils",
  "rlp",
@@ -5944,6 +5946,33 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-bfc-offences"
+version = "1.0.0"
+dependencies = [
+ "bp-staking",
+ "derive_more",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "log",
+ "num_enum",
+ "pallet-balances",
+ "pallet-bfc-offences",
+ "pallet-evm",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "precompile-utils",
+ "scale-info",
+ "serde",
+ "sha3",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-staking",
  "sp-std",
 ]
 
