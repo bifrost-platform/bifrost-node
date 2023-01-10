@@ -95,10 +95,10 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 
 	Ok(ChainSpec::from_genesis(
 		// Name
-		"BIFROST Test Mainnet",
+		"BIFROST Mainnet",
 		// ID
 		"mainnet",
-		ChainType::Development,
+		ChainType::Live,
 		move || {
 			mainnet_genesis(
 				wasm_binary,
@@ -259,13 +259,13 @@ fn mainnet_genesis(
 		bfc_utility: Default::default(),
 		bfc_offences: Default::default(),
 		democracy: Default::default(),
-		council_collective: Default::default(),
-		tech_committee_collective: Default::default(),
+		council: Default::default(),
+		technical_committee: Default::default(),
 		council_membership: mainnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: initial_council_members.clone(),
 		},
-		tech_committee_membership: mainnet::TechCommitteeMembershipConfig {
+		technical_membership: mainnet::TechnicalMembershipConfig {
 			phantom: Default::default(),
 			members: initial_tech_committee_members.clone(),
 		},
