@@ -99,7 +99,7 @@ precompile-bfc-staking = { default-features = false, path = "../../precompiles/b
 # precompile-relay-manager = { default-features = false, path = "../../precompiles/relay-manager" }
 # precompile-governance = { default-features = false, path = "../../precompiles/governance" }
 # precompile-collective = { default-features = false, path = "../../precompiles/collective" }
-# precompile-balance = { default-features = false, path = "../../precompiles/balance" }
+precompile-balance = { default-features = false, path = "../../precompiles/balance" }
 
 [build-dependencies]
 substrate-wasm-builder = { git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
