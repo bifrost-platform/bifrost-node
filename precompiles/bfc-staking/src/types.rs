@@ -1,13 +1,23 @@
-use crate::{BalanceOf, BlockNumberOf};
+use frame_support::traits::Currency;
 
-use bp_staking::TierType;
 use pallet_bfc_staking::{
 	CandidateMetadata, CapacityStatus, Nominator, NominatorStatus, RewardDestination,
 	TotalSnapshot, ValidatorStatus,
 };
+
 use precompile_utils::prelude::*;
+
+use bp_staking::TierType;
 use sp_core::{H160, U256};
 use sp_std::{vec, vec::Vec};
+
+pub type BalanceOf<Runtime> = <<Runtime as pallet_bfc_staking::Config>::Currency as Currency<
+	<Runtime as frame_system::Config>::AccountId,
+>>::Balance;
+
+pub type BlockNumberOf<Runtime> = <Runtime as frame_system::Config>::BlockNumber;
+
+pub type StakingOf<Runtime> = pallet_bfc_staking::Pallet<Runtime>;
 
 pub type EvmTotalOf = (
 	U256,
