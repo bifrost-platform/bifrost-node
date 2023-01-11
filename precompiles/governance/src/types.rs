@@ -1,10 +1,14 @@
 use frame_support::traits::Currency;
 
-use pallet_democracy::{Conviction, PropIndex};
+use pallet_democracy::Conviction;
 
 use precompile_utils::prelude::Address;
 
-use sp_core::{H160, H256};
+use sp_core::{ConstU32, H160, U256};
+use sp_std::{vec, vec::Vec};
+
+const ENCODED_PROPOSAL_SIZE_LIMIT: u32 = 2u32.pow(16);
+pub type GetEncodedProposalSizeLimit = ConstU32<ENCODED_PROPOSAL_SIZE_LIMIT>;
 
 pub type BalanceOf<Runtime> = <<Runtime as pallet_democracy::Config>::Currency as Currency<
 	<Runtime as frame_system::Config>::AccountId,
@@ -16,7 +20,18 @@ pub type HashOf<Runtime> = <Runtime as frame_system::Config>::Hash;
 
 pub type DemocracyOf<Runtime> = pallet_democracy::Pallet<Runtime>;
 
-pub type EvmPublicProposalsOf = (Vec<PropIndex>, Vec<H256>, Vec<Address>);
+pub type EvmVotingOf<Runtime> = (U256, Vec<Address>, Vec<BalanceOf<Runtime>>, Vec<bool>, Vec<u32>);
+
+pub type EvmAccountVotes<Runtime> = (
+	Vec<u32>,
+	Vec<BalanceOf<Runtime>>,
+	Vec<bool>,
+	Vec<u32>,
+	U256,
+	U256,
+	BlockNumberOf<Runtime>,
+	U256,
+);
 
 /// EVM struct for referenda voting information
 pub struct ReferendaVotes<Runtime: pallet_democracy::Config> {
@@ -147,5 +162,24 @@ where
 	) {
 		self.lock_expired_at = lock_expired_at;
 		self.lock_balance = lock_balance;
+	}
+}
+
+impl<Runtime> From<AccountVotes<Runtime>> for EvmAccountVotes<Runtime>
+where
+	Runtime: pallet_democracy::Config,
+	BalanceOf<Runtime>: Into<U256>,
+{
+	fn from(votes: AccountVotes<Runtime>) -> Self {
+		(
+			votes.ref_index,
+			votes.raw_votes,
+			votes.voting_sides,
+			votes.convictions,
+			votes.delegated_votes.into(),
+			votes.delegated_raw_votes.into(),
+			votes.lock_expired_at,
+			votes.lock_balance.into(),
+		)
 	}
 }
