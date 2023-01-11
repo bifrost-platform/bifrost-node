@@ -754,16 +754,12 @@ impl pallet_bfc_staking::Config for Runtime {
 	type WeightInfo = pallet_bfc_staking::weights::SubstrateWeight<Runtime>;
 }
 
-type MintableOrigin = EnsureOneOf<
-	EnsureRoot<AccountId>,
-	pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>,
->;
-
 /// A module that manages this networks community
 impl pallet_bfc_utility::Config for Runtime {
 	type Event = Event;
 	type Currency = Balances;
-	type MintableOrigin = MintableOrigin;
+	type MintableOrigin =
+		pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>;
 	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 
