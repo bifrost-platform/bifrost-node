@@ -29,7 +29,7 @@ pub mod pallet {
 		/// The currency type.
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 		/// The origin which may forcibly mint native tokens.
-		type MintableOrigin: EnsureOrigin<Self::Origin>;
+		type MintableOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}

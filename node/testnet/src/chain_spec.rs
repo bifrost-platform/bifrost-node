@@ -198,18 +198,18 @@ fn testnet_genesis(
 		bfc_utility: Default::default(),
 		bfc_offences: Default::default(),
 		democracy: Default::default(),
-		council: testnet::CouncilConfig {
+		council: Default::default(),
+		technical_committee: Default::default(),
+		council_membership: testnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_council_members.clone())
 				.expect("Membership must be initialized."),
 		},
-		technical_committee: testnet::TechnicalCommitteeConfig {
+		technical_membership: testnet::TechnicalMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_tech_committee_members.clone())
 				.expect("Membership must be initialized"),
 		},
-		council_membership: Default::default(),
-		technical_membership: Default::default(),
 		treasury: Default::default(),
 	}
 }
