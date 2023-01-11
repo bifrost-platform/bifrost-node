@@ -83,8 +83,8 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 		genesis_controller,
 		genesis_relayer,
 		get_sudo_account(),
-		get_master_account(),
 		get_registrar_account(),
+		get_master_account(),
 	];
 	get_council_member_accounts().iter().for_each(|account| {
 		prefunded_accounts.push(*account);
@@ -201,7 +201,7 @@ fn mainnet_genesis(
 							(*account, 30_000 * SUPPLY_FACTOR * BFC)
 						} else {
 							// master
-							(*account, 2_364_234_074 * SUPPLY_FACTOR * BFC)
+							(*account, (754_351_000 + 100_000_000) * SUPPLY_FACTOR * BFC)
 						}
 					})
 					.collect::<Vec<_>>()
