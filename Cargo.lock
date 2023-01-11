@@ -6067,6 +6067,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-relay-manager"
+version = "1.0.0"
+dependencies = [
+ "bp-staking",
+ "derive_more",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "log",
+ "num_enum",
+ "pallet-balances",
+ "pallet-evm",
+ "pallet-relay-manager",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "precompile-utils",
+ "scale-info",
+ "serde",
+ "sha3",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-utils"
 version = "1.0.0"
 dependencies = [
