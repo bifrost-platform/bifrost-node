@@ -18,7 +18,7 @@ members = [
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	# "precompiles/relay-manager",
-	# "precompiles/governance",
+	"precompiles/governance",
 	"precompiles/collective",
 	"precompiles/balance",
 	"primitives/account",
