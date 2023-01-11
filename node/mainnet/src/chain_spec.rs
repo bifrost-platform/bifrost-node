@@ -201,7 +201,7 @@ fn mainnet_genesis(
 							(*account, 30_000 * SUPPLY_FACTOR * BFC)
 						} else {
 							// master
-							(*account, (754_351_000 + 100_000_000) * SUPPLY_FACTOR * BFC)
+							(*account, (746_271_000 + 100_000_000) * SUPPLY_FACTOR * BFC)
 						}
 					})
 					.collect::<Vec<_>>()
