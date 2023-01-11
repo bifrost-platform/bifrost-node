@@ -97,7 +97,7 @@ pallet-evm-precompile-blake2 = { default-features = false, git = "https://github
 precompile-bfc-staking = { default-features = false, path = "../../precompiles/bfc-staking" }
 precompile-bfc-offences = { default-features = false, path = "../../precompiles/bfc-offences" }
 # precompile-relay-manager = { default-features = false, path = "../../precompiles/relay-manager" }
-# precompile-governance = { default-features = false, path = "../../precompiles/governance" }
+precompile-governance = { default-features = false, path = "../../precompiles/governance" }
 precompile-collective = { default-features = false, path = "../../precompiles/collective" }
 precompile-balance = { default-features = false, path = "../../precompiles/balance" }
 
