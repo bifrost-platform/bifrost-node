@@ -787,7 +787,7 @@ impl pallet_bfc_utility::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MintableOrigin =
-		pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>;
+		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>;
 	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 

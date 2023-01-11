@@ -223,18 +223,18 @@ fn development_genesis(
 		bfc_utility: Default::default(),
 		bfc_offences: Default::default(),
 		democracy: Default::default(),
-		council: devnet::CouncilConfig {
+		council: Default::default(),
+		technical_committee: Default::default(),
+		council_membership: devnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_council_members.clone())
 				.expect("Membership must be initialized."),
 		},
-		technical_committee: devnet::TechnicalCommitteeConfig {
+		technical_membership: devnet::TechnicalMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_tech_committee_members.clone())
 				.expect("Membership must be initialized"),
 		},
-		council_membership: Default::default(),
-		technical_membership: Default::default(),
 		treasury: Default::default(),
 	}
 }
