@@ -166,7 +166,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     await context.createBlock();
 
     await context.polkadotApi.tx.council
-      .close(proposalHash, proposalIndex, { ref_time: 1000, proof_size: 1000 }, 1000)
+      .close(proposalHash, proposalIndex, { refTime: 1000, proofSize: 1000 }, 1000)
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -191,6 +191,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     };
     const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     proposalHash = ((proposalXt as SubmittableExtrinsic)?.method.hash || '').toHex();
+    const proposalWeight = (await proposalXt.paymentInfo(alith)).weight;
     const proposalLengthV2 = proposalXt.length;
 
     await context.polkadotApi.tx.council
@@ -216,10 +217,8 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
       .signAndSend(charleth);
     await context.createBlock();
 
-    const proposalWeight = (await proposalXt.paymentInfo(alith)).weight;
-
     await context.polkadotApi.tx.council
-      .close(proposalHash, proposalIndex, proposalWeight, proposalLengthV2)
+      .close(proposalHash, proposalIndex, proposalWeight.toJSON(), proposalLengthV2)
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -322,7 +321,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
 
     // close when threshold reached
     await context.polkadotApi.tx.technicalCommittee
-      .close(cancelProposalHash, cancelProposalIndex, proposalWeight, proposalLength)
+      .close(cancelProposalHash, cancelProposalIndex, proposalWeight.toJSON(), proposalLength)
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -390,7 +389,7 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
 
     // close when threshold reached
     await context.polkadotApi.tx.council
-      .close(externalProposalHash, externalProposalIndex, proposalWeight, proposalLengthV2)
+      .close(externalProposalHash, externalProposalIndex, proposalWeight.toJSON(), proposalLengthV2)
       .signAndSend(alith);
     const block = await context.createBlock();
 

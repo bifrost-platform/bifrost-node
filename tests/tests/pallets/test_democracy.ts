@@ -477,7 +477,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
 
     const rawVoteLockingPeriod: any = context.polkadotApi.consts.democracy.voteLockingPeriod;
     // locking period * conviction
-    const voteLockingPeriod = rawVoteLockingPeriod.toNumber() * 1;
+    const voteLockingPeriod = rawVoteLockingPeriod.toNumber() * 2;
 
     const rawBakedReferendumInfo: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const bakedReferendumInfo = rawBakedReferendumInfo.unwrap().toJSON();
