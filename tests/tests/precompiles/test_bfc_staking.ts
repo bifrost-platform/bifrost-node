@@ -22,21 +22,30 @@ const SELECTORS = {
   is_previous_selected_candidate: '0b32e591',
   is_previous_selected_candidates: 'e200c8e3',
   // Common storage getters
-  round: '146ca531',
+  round_info: 'f8aa8ddd',
+  latest_round: '6f31dd98',
   majority: 'b6e54bdf',
   previous_majority: 'e0f9ab40',
   points: '9799b4e7',
   validator_points: '59a595fb',
-  total: '2ddbd13a',
+  rewards: '9ec5a894',
+  total: 'b119ebfe',
+  inflation_config: '10db2de9',
+  inflation_rate: '180692d0',
+  estimated_yearly_return: 'fd0c6dc1',
   min_nomination: 'c9f593b2',
+  max_nominations_per_nominator: '8b88f0e1',
+  max_nominations_per_candidate: '547eaba9',
+  candidate_bond_less_delay: '7abd4bbb',
+  nominator_bond_less_delay: '804d185e',
   // Validator storage getters
   candidate_count: '4b1c4c29',
   selected_candidates: 'a5542eea',
   previous_selected_candidates: 'd9c62dc8',
   candidate_pool: '96b41b5b',
   candidate_state: '36f3b497',
-  candidate_states: '49eba98d',
-  candidate_states_by_selection: 'e501e646',
+  candidate_states: '3b368c8c',
+  candidate_states_by_selection: 'd631e15c',
   candidate_request: '2e388768',
   candidate_top_nominations: '2a9cdf2b',
   candidate_bottom_nominations: '9be794c0',
@@ -304,4 +313,8 @@ describeDevNode('precompile_bfc_staking - join nominators', (context) => {
     const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
     expect(receipt.status).equal(true);
   });
+});
+
+describeDevNode('precompile_bfc_staking - common storage getters', (context) => {
+
 });
