@@ -26,7 +26,7 @@ use precompile_bfc_offences::BfcOffencesPrecompile;
 use precompile_bfc_staking::BfcStakingPrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
-// use precompile_relay_manager::RelayManagerPrecompile;
+use precompile_relay_manager::RelayManagerPrecompile;
 
 use precompile_utils::precompile_set::*;
 
@@ -62,7 +62,7 @@ pub type BifrostPrecompiles<R> = PrecompileSetBuilder<
 				PrecompileAt<AddressU64<2049>, CollectivePrecompile<R, CouncilInstance>>,
 				PrecompileAt<AddressU64<2050>, CollectivePrecompile<R, TechCommitteeInstance>>,
 				PrecompileAt<AddressU64<4096>, BalancePrecompile<R>>,
-				// PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>>,
+				PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>>,
 			),
 		>,
 	),
