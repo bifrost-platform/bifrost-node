@@ -9,7 +9,7 @@
   ],
   "telemetryEndpoints": [
     [
-      "wss://telemetry-connector.testnet.thebifrost.io/submit",
+      "wss://telemetry-connector.thebifrost.io/submit",
       0
     ]
   ],
