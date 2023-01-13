@@ -16,11 +16,6 @@ use std::collections::BTreeMap;
 
 use hex_literal::hex;
 
-use crate::test_accounts::{
-	get_council_member_accounts, get_master_account, get_registrar_account, get_sudo_account,
-	get_technical_committee_member_accounts,
-};
-
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec<mainnet::GenesisConfig>;
 
@@ -71,28 +66,6 @@ pub fn inflation_config() -> InflationInfo<Balance> {
 pub fn mainnet_config() -> Result<ChainSpec, String> {
 	let wasm_binary = WASM_BINARY.ok_or_else(|| "Mainnet wasm not available".to_string())?;
 
-	// The following accounts are all dummy data for tests
-	let genesis_stash = AccountId::from(hex!("6a0bD757b3FE28A1a665CC33cBD621B99240122c"));
-	let genesis_controller = AccountId::from(hex!("90082BBFed3ff32d5ac604b01C34F09E233C393b"));
-	let genesis_relayer = AccountId::from(hex!("6ffb96F8B765e5DCD2Bf0b485fC1C2e9c3746FEf"));
-	let session_key_inspector =
-		"0x757cd694d91f412d5388857bab4b85b542df8f6cb9eee7a9a82d1b76f235b4f2";
-
-	let mut prefunded_accounts = vec![
-		genesis_stash,
-		genesis_controller,
-		genesis_relayer,
-		get_sudo_account(),
-		get_registrar_account(),
-		get_master_account(),
-	];
-	get_council_member_accounts().iter().for_each(|account| {
-		prefunded_accounts.push(*account);
-	});
-	get_technical_committee_member_accounts().iter().for_each(|account| {
-		prefunded_accounts.push(*account);
-	});
-
 	Ok(ChainSpec::from_genesis(
 		// Name
 		"BIFROST Mainnet",
@@ -105,26 +78,41 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 				// Validator candidates
 				vec![(
 					// Stash account
-					genesis_stash,
+					AccountId::from(hex!("912F9D002E46DF70C78495D29Faa523c2c0382a2")),
 					// Controller account
-					genesis_controller,
+					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 					// Relayer account
-					genesis_relayer,
-					inspect_key::<AuraId>(session_key_inspector),
-					inspect_key::<GrandpaId>(session_key_inspector),
-					inspect_key::<ImOnlineId>(session_key_inspector),
-					4_000_000 * SUPPLY_FACTOR * BFC,
+					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
+					get_from_seed::<AuraId>("Alice"),
+					get_from_seed::<GrandpaId>("Alice"),
+					get_from_seed::<ImOnlineId>("Alice"),
+					4_000_000 * BFC * SUPPLY_FACTOR,
 				)],
 				// Nominations
 				vec![],
 				// Council Members
-				get_council_member_accounts(),
+				vec![
+					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+					AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
+					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
+				],
 				// Technical Committee Members
-				get_technical_committee_member_accounts(),
+				vec![
+					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+					AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
+					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
+				],
 				// Sudo account
-				get_sudo_account(),
+				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 				// Pre-funded accounts
-				prefunded_accounts.clone(),
+				vec![
+					// Stash accounts
+					AccountId::from(hex!("912F9D002E46DF70C78495D29Faa523c2c0382a2")),
+					// Controller accounts
+					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+					// Relayer accounts
+					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
+				],
 				true,
 			)
 		},
@@ -176,36 +164,7 @@ fn mainnet_genesis(
 			code: wasm_binary.to_vec(),
 		},
 		balances: mainnet::BalancesConfig {
-			balances: {
-				endowed_accounts
-					.iter()
-					.enumerate()
-					.map(|(idx, account)| {
-						if idx == 0 {
-							// genesis stash
-							(*account, 4_010_000 * SUPPLY_FACTOR * BFC)
-						} else if idx == 1 {
-							// genesis controller
-							(*account, 10_000 * SUPPLY_FACTOR * BFC)
-						} else if idx == 2 {
-							// genesis relayer
-							(*account, 10_000 * SUPPLY_FACTOR * BFC)
-						} else if idx == 3 {
-							// sudo
-							(*account, 10_000 * SUPPLY_FACTOR * BFC)
-						} else if idx == 4 {
-							// registrar
-							(*account, 10_000 * SUPPLY_FACTOR * BFC)
-						} else if idx > 5 && idx < 16 {
-							// council & tech
-							(*account, 30_000 * SUPPLY_FACTOR * BFC)
-						} else {
-							// master
-							(*account, (746_271_000 + 100_000_000) * SUPPLY_FACTOR * BFC)
-						}
-					})
-					.collect::<Vec<_>>()
-			},
+			balances: endowed_accounts.iter().cloned().map(|k| (k, 10_000_000 * BFC)).collect(),
 		},
 		session: mainnet::SessionConfig {
 			keys: initial_validators
