@@ -167,10 +167,11 @@ where
 	#[precompile::view]
 	fn is_previous_selected_relayer(
 		handle: &mut impl PrecompileHandle,
-		round_index: RoundIndex,
+		round_index: SolidityConvert<U256, RoundIndex>,
 		relayer: Address,
 		is_initial: bool,
 	) -> EvmResult<bool> {
+		let round_index = round_index.converted();
 		let relayer = Runtime::AddressMapping::into_account_id(relayer.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
@@ -210,11 +211,12 @@ where
 	#[precompile::view]
 	fn is_previous_selected_relayers(
 		handle: &mut impl PrecompileHandle,
-		round_index: RoundIndex,
+		round_index: SolidityConvert<U256, RoundIndex>,
 		relayers: Vec<Address>,
 		is_initial: bool,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let round_index = round_index.converted();
 		let mut unique_relayers = relayers
 			.clone()
 			.into_iter()
@@ -309,10 +311,11 @@ where
 	#[precompile::view]
 	fn previous_selected_relayers(
 		handle: &mut impl PrecompileHandle,
-		round_index: RoundIndex,
+		round_index: SolidityConvert<U256, RoundIndex>,
 		is_initial: bool,
 	) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let round_index = round_index.converted();
 		let previous_selected_relayers = match is_initial {
 			true => RelayManagerOf::<Runtime>::cached_initial_selected_relayers(),
 			false => RelayManagerOf::<Runtime>::cached_selected_relayers(),
@@ -375,10 +378,11 @@ where
 	#[precompile::view]
 	fn previous_majority(
 		handle: &mut impl PrecompileHandle,
-		round_index: RoundIndex,
+		round_index: SolidityConvert<U256, RoundIndex>,
 		is_initial: bool,
 	) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let round_index = round_index.converted();
 		let cached_majority = match is_initial {
 			true => RelayManagerOf::<Runtime>::cached_initial_majority(),
 			false => RelayManagerOf::<Runtime>::cached_majority(),
