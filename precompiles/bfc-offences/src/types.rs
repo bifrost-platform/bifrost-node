@@ -89,8 +89,8 @@ where
 		}
 	}
 
-	pub fn insert_empty(&mut self) {
-		self.validator.push(Address(Default::default()));
+	pub fn insert_empty(&mut self, validator: Runtime::AccountId) {
+		self.validator.push(Address(validator.into()));
 		self.latest_offence_round_index.push(0u32);
 		self.latest_offence_session_index.push(0u32);
 		self.offence_count.push(0u32);
