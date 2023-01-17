@@ -67,9 +67,11 @@ where
 	#[precompile::view]
 	fn deposit_of(
 		handle: &mut impl PrecompileHandle,
-		prop_index: u32,
+		prop_index: SolidityConvert<U256, u32>,
 	) -> EvmResult<(U256, U256, Vec<Address>)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let prop_index: u32 = prop_index.converted();
+
 		let zero = 0u32;
 		let mut total_deposit: U256 = zero.into();
 		let mut initial_deposit: U256 = zero.into();
@@ -91,9 +93,10 @@ where
 	#[precompile::view]
 	fn voting_of(
 		handle: &mut impl PrecompileHandle,
-		ref_index: u32,
+		ref_index: SolidityConvert<U256, u32>,
 	) -> EvmResult<EvmVotingOf<Runtime>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let ref_index: u32 = ref_index.converted();
 		let mut referenda_votes = ReferendaVotes::<Runtime>::default(ref_index);
 
 		for voting_of in pallet_democracy::VotingOf::<Runtime>::iter() {
@@ -184,9 +187,10 @@ where
 	#[precompile::view]
 	fn ongoing_referendum_info(
 		handle: &mut impl PrecompileHandle,
-		ref_index: u32,
+		ref_index: SolidityConvert<U256, u32>,
 	) -> EvmResult<(U256, H256, u8, U256, U256, U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let ref_index: u32 = ref_index.converted();
 		let ref_status = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
 			Some(ReferendumInfo::Ongoing(ref_status)) => ref_status,
 			Some(ReferendumInfo::Finished { .. }) => Err(revert("Referendum is finished"))?,
@@ -215,9 +219,10 @@ where
 	#[precompile::view]
 	fn finished_referendum_info(
 		handle: &mut impl PrecompileHandle,
-		ref_index: u32,
+		ref_index: SolidityConvert<U256, u32>,
 	) -> EvmResult<(bool, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let ref_index: u32 = ref_index.converted();
 		let (approved, end) = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
 			Some(ReferendumInfo::Ongoing(_)) => Err(revert("Referendum is ongoing"))?,
 			Some(ReferendumInfo::Finished { approved, end }) => (approved, end),
@@ -346,8 +351,7 @@ where
 		Ok(())
 	}
 
-	#[precompile::public("unDelegate()")]
-	#[precompile::public("un_delegate()")]
+	#[precompile::public("undelegate()")]
 	fn un_delegate(handle: &mut impl PrecompileHandle) -> EvmResult {
 		handle.record_log_costs_manual(2, 0)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);

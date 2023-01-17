@@ -17,20 +17,6 @@ interface Governance {
     function public_prop_count() external view returns (uint256);
 
     /**
-     * Get details about all public porposals.
-     * Selector: b089f202
-     * @return (prop index, proposal hash, proposer address)
-     */
-    function public_props()
-        external
-        view
-        returns (
-            uint256[] memory,
-            bytes32[] memory,
-            address[] memory
-        );
-
-    /**
      * Get details of the deposit for a proposal.
      * Selector: a30305e9
      * @param prop_index The index of the proposal you are interested in
@@ -244,12 +230,4 @@ interface Governance {
      * @param encoded_proposal The scale-encoded proposal whose hash has been submitted on-chain.
      */
     function note_imminent_preimage(bytes memory encoded_proposal) external;
-
-    function external_propose(bytes32 proposal_hash) external;
-
-    function external_propose_majority(bytes32 proposal_hash) external;
-
-    function external_propose_default(bytes32 proposal_hash) external;
-
-    function emergancy_cancel(uint256 ref_index) external;
 }
