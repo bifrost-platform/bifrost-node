@@ -103,7 +103,7 @@ interface RelayManager {
         returns (address[] memory);
 
     /// @dev Get the current state of joined relayers
-    /// Selector: 96b41b5b
+    /// Selector: 6e93ba34
     /// @return The list of the joined relayers
     function relayer_pool()
         external

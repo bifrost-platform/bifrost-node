@@ -123,8 +123,8 @@ where
 		Ok(is_relayers)
 	}
 
-	#[precompile::public("isCompleteSelectedRelayers(address[],bool")]
-	#[precompile::public("is_complete_selected_relayers(address[],bool")]
+	#[precompile::public("isCompleteSelectedRelayers(address[],bool)")]
+	#[precompile::public("is_complete_selected_relayers(address[],bool)")]
 	#[precompile::view]
 	fn is_complete_selected_relayers(
 		handle: &mut impl PrecompileHandle,
@@ -162,8 +162,8 @@ where
 		Ok(is_relayers)
 	}
 
-	#[precompile::public("isPreviousSelectedRelayer(address,uint256,bool)")]
-	#[precompile::public("is_previous_selected_relayer(address,uint256,bool)")]
+	#[precompile::public("isPreviousSelectedRelayer(uint256,address,bool)")]
+	#[precompile::public("is_previous_selected_relayer(uint256,address,bool)")]
 	#[precompile::view]
 	fn is_previous_selected_relayer(
 		handle: &mut impl PrecompileHandle,
