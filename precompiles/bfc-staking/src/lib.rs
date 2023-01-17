@@ -19,9 +19,9 @@ use sp_std::{convert::TryInto, marker::PhantomData, vec, vec::Vec};
 
 mod types;
 use types::{
-	BalanceOf, BlockNumberOf, CandidateState, CandidateStates, EvmCandidateStateOf,
-	EvmCandidateStatesOf, EvmNominatorRequestsOf, EvmNominatorStateOf, EvmRoundInfoOf, EvmTotalOf,
-	NominatorState, StakingOf, TotalStake,
+	BalanceOf, BlockNumberOf, CandidateState, CandidateStates, EvmCandidatePoolOf,
+	EvmCandidateStateOf, EvmCandidateStatesOf, EvmNominatorRequestsOf, EvmNominatorStateOf,
+	EvmRoundInfoOf, EvmTotalOf, NominatorState, StakingOf, TotalStake,
 };
 
 /// A precompile to wrap the functionality from pallet_bfc_staking.
@@ -687,19 +687,17 @@ where
 	#[precompile::public("candidatePool()")]
 	#[precompile::public("candidate_pool()")]
 	#[precompile::view]
-	fn candidate_pool(
-		handle: &mut impl PrecompileHandle,
-	) -> EvmResult<(Vec<Address>, Vec<BalanceOf<Runtime>>)> {
+	fn candidate_pool(handle: &mut impl PrecompileHandle) -> EvmResult<EvmCandidatePoolOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let candidate_pool = <StakingOf<Runtime>>::candidate_pool();
 
 		let mut candidates: Vec<Address> = vec![];
-		let mut bonds: Vec<BalanceOf<Runtime>> = vec![];
+		let mut bonds: Vec<U256> = vec![];
 
 		for candidate in candidate_pool {
 			candidates.push(Address(candidate.owner.into()));
-			bonds.push(candidate.amount);
+			bonds.push(candidate.amount.into());
 		}
 
 		Ok((candidates, bonds))

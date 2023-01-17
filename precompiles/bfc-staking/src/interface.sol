@@ -32,6 +32,29 @@ interface BfcStaking {
         uint256 tier;
     }
 
+    struct candidates_meta_data {
+        address[] candidates;
+        address[] stashes;
+        uint256[] bonds;
+        uint256[] initial_bonds;
+        uint256[] nominations_counts;
+        uint256[] voting_powers;
+        uint256[] lowest_top_nomination_amounts;
+        uint256[] highest_bottom_nomination_amounts;
+        uint256[] lowest_bottom_nomination_amounts;
+        uint256[] top_capacities;
+        uint256[] bottom_capacities;
+        uint256[] status;
+        bool[] is_selected;
+        uint256[] commissions;
+        uint256[] last_blocks;
+        uint256[] blocks_produced;
+        uint256[] productivity;
+        uint256[] reward_dst;
+        uint256[] awarded_tokens;
+        uint256[] tiers;
+    }
+
     struct candidate_request_data {
         address candidate;
         uint256 amount;
@@ -88,6 +111,17 @@ interface BfcStaking {
         uint256 active_stake;
         uint256 total_voting_power;
         uint256 active_voting_power;
+    }
+
+    struct round_meta_data {
+        uint256 current_round_index;
+        uint256 first_session_index;
+        uint256 current_session_index;
+        uint256 first_round_block;
+        uint256 first_session_block;
+        uint256 current_block;
+        uint256 round_length;
+        uint256 session_length;
     }
 
     /// @dev Check whether the specified address is currently a staking nominator
@@ -160,19 +194,7 @@ interface BfcStaking {
     /// Selector: f8aa8ddd
     /// @return The current rounds index, first session index, current session index,
     ///         first round block, first session block, current block, round length, session length
-    function round_info()
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        );
+    function round_info() external view returns (round_meta_data memory);
 
     /// @dev Get the current rounds index
     /// Selector: 6f31dd98
@@ -329,28 +351,7 @@ interface BfcStaking {
     function candidate_states(uint256 tier)
         external
         view
-        returns (
-            address[] memory,
-            address[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            bool[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory
-        );
+        returns (candidates_meta_data memory);
 
     /// @dev Get every candidate states by the given selector
     /// Selector: d631e15c
@@ -360,28 +361,7 @@ interface BfcStaking {
     function candidate_states_by_selection(uint256 tier, bool is_selected)
         external
         view
-        returns (
-            address[] memory,
-            address[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            bool[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory
-        );
+        returns (candidates_meta_data memory);
 
     /// @dev Get the request status of the given candidate
     /// Selector: 2e388768
