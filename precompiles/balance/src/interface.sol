@@ -10,7 +10,7 @@ pragma solidity >=0.8.0;
 
 interface Balances {
     /// @dev Total issuance of the network currency
-    /// Selector:
+    /// Selector: 7f5097b7
     /// @return The total issuance
     function total_issuance() external view returns (uint256);
 }
