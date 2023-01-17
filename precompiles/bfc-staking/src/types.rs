@@ -51,6 +51,8 @@ pub type EvmRoundInfoOf<Runtime> = (
 	u32,
 );
 
+pub type EvmCandidatePoolOf = (Vec<Address>, Vec<U256>);
+
 pub type EvmCandidateStateOf<Runtime> = (
 	Address,
 	Address,
@@ -99,13 +101,13 @@ pub type EvmCandidateStatesOf<Runtime> = (
 
 pub type EvmNominatorStateOf<Runtime> = (
 	Address,
+	BalanceOf<Runtime>,
+	u32,
+	u32,
+	BalanceOf<Runtime>,
 	Vec<Address>,
 	Vec<BalanceOf<Runtime>>,
 	Vec<BalanceOf<Runtime>>,
-	BalanceOf<Runtime>,
-	u32,
-	BalanceOf<Runtime>,
-	u32,
 	u32,
 	BalanceOf<Runtime>,
 	Vec<BalanceOf<Runtime>>,
@@ -507,13 +509,13 @@ where
 	pub fn from_owner(&self, owner: Address) -> EvmNominatorStateOf<Runtime> {
 		(
 			owner,
+			self.total,
+			self.status,
+			self.request_revocations_count,
+			self.request_less_total,
 			self.candidates.clone(),
 			self.nominations.clone(),
 			self.initial_nominations.clone(),
-			self.total,
-			self.request_revocations_count,
-			self.request_less_total,
-			self.status,
 			self.reward_dst,
 			self.awarded_tokens,
 			self.awarded_tokens_per_candidate.clone(),
