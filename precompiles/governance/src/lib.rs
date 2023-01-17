@@ -99,6 +99,12 @@ where
 		let ref_index: u32 = ref_index.converted();
 		let mut referenda_votes = ReferendaVotes::<Runtime>::default(ref_index);
 
+		let _ref_status = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
+			Some(ReferendumInfo::Ongoing(ref_status)) => ref_status,
+			Some(ReferendumInfo::Finished { .. }) => Err(revert("Referendum is finished"))?,
+			None => Err(revert("Unknown referendum"))?,
+		};
+
 		for voting_of in pallet_democracy::VotingOf::<Runtime>::iter() {
 			let voter: Runtime::AccountId = voting_of.0;
 			let state = voting_of.1;
