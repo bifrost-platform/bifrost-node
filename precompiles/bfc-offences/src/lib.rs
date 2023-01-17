@@ -73,7 +73,7 @@ where
 			new.set_offence(validator, offence);
 			validator_offence.insert_offence(new);
 		} else {
-			validator_offence.insert_empty();
+			validator_offence.insert_empty(validator);
 		}
 
 		Ok(validator_offence.into())
@@ -108,7 +108,7 @@ where
 				new.set_offence(v, offence);
 				validator_offences.insert_offence(new);
 			} else {
-				validator_offences.insert_empty();
+				validator_offences.insert_empty(v);
 			}
 		});
 

@@ -19,9 +19,9 @@ interface BfcOffences {
         returns (uint256[] memory);
 
     /// @dev Get the current offence state of the given validator
-    /// Selector: 3f4e4fae
+    /// Selector: c63c3f8a
     /// @return The current offence state of the given validator
-    function validator_offence(address relayer)
+    function validator_offence(address validator)
         external
         view
         returns (
@@ -32,9 +32,9 @@ interface BfcOffences {
         );
 
     /// @dev Get the current offence state of the given validators
-    /// Selector: a77293f0
+    /// Selector: 2962bb0b
     /// @return The current offence state of the given validators
-    function validator_offences(address[] memory)
+    function validator_offences(address[] calldata validators)
         external
         view
         returns (
