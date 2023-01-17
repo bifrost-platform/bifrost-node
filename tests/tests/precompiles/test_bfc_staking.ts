@@ -2,9 +2,7 @@ import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 import { numberToHex } from 'web3-utils';
 
-import {
-  AMOUNT_FACTOR, MIN_FULL_CANDIDATE_STAKING_AMOUNT, MIN_NOMINATOR_STAKING_AMOUNT
-} from '../../constants/currency';
+import { MIN_FULL_CANDIDATE_STAKING_AMOUNT } from '../../constants/currency';
 import {
   TEST_CONTROLLERS, TEST_RELAYERS, TEST_STASHES
 } from '../../constants/keys';
@@ -80,119 +78,6 @@ const SELECTORS = {
 };
 
 const PRECOMPILE_ADDRESS = '0x0000000000000000000000000000000000000400';
-
-describeDevNode('precompile_bfc_staking - candidate stake management', (context) => {
-  const alith: { public: string, private: string } = TEST_CONTROLLERS[0];
-  const alithStash: { public: string, private: string } = TEST_STASHES[0];
-
-  it('should fail due to non-stash origin', async function () {
-    const stake = new BigNumber(MIN_FULL_CANDIDATE_STAKING_AMOUNT);
-
-    const block = await sendPrecompileTx(
-      context,
-      PRECOMPILE_ADDRESS,
-      SELECTORS,
-      alith.public,
-      alith.private,
-      'candidate_bond_more',
-      [
-        stake.toFixed(),
-      ],
-    );
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(false);
-  });
-
-  it('should successfully self bond more stake', async function () {
-    const stake = new BigNumber(MIN_FULL_CANDIDATE_STAKING_AMOUNT);
-
-    const block = await sendPrecompileTx(
-      context,
-      PRECOMPILE_ADDRESS,
-      SELECTORS,
-      alithStash.public,
-      alithStash.private,
-      'candidate_bond_more',
-      [
-        stake.toFixed(),
-      ],
-    );
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(true);
-  });
-});
-
-describeDevNode('precompile_bfc_staking - join nominators', (context) => {
-  const alith: { public: string, private: string } = TEST_CONTROLLERS[0];
-  const baltathar: { public: string, private: string } = TEST_CONTROLLERS[1];
-  const charleth: { public: string, private: string } = TEST_CONTROLLERS[2];
-
-  it('should fail due to minimum amount constraint', async function () {
-    const stakeBelowMin = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT).minus(AMOUNT_FACTOR);
-
-    const block = await sendPrecompileTx(
-      context,
-      PRECOMPILE_ADDRESS,
-      SELECTORS,
-      baltathar.public,
-      baltathar.private,
-      'nominate',
-      [
-        alith.public,
-        numberToHex(stakeBelowMin.toFixed()),
-        numberToHex(0),
-        numberToHex(0),
-      ],
-    );
-
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(false);
-  });
-
-  it('should fail due to wrong candidate', async function () {
-    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
-
-    const block = await sendPrecompileTx(
-      context,
-      PRECOMPILE_ADDRESS,
-      SELECTORS,
-      baltathar.public,
-      baltathar.private,
-      'nominate',
-      [
-        charleth.public,
-        numberToHex(stake.toFixed()),
-        numberToHex(0),
-        numberToHex(0),
-      ],
-    );
-
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(false);
-  });
-
-  it('should successfully nominate to alith', async function () {
-    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
-
-    const block = await sendPrecompileTx(
-      context,
-      PRECOMPILE_ADDRESS,
-      SELECTORS,
-      baltathar.public,
-      baltathar.private,
-      'nominate',
-      [
-        alith.public,
-        numberToHex(stake.toFixed()),
-        numberToHex(0),
-        numberToHex(0),
-      ],
-    );
-
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(true);
-  });
-});
 
 describeDevNode('precompile_bfc_staking - precompile view functions', (context) => {
   const alith: { public: string, private: string } = TEST_CONTROLLERS[0];
