@@ -12,11 +12,11 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
 
 # Substrate
-frame-system = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
-frame-support = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
-sp-core = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
-sp-runtime = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
-sp-std = { default-features = false, git = "https://github.com/dnjscksdn98/substrate", branch = "polkadot-v0.9.32" }
+frame-system = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+frame-support = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+sp-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+sp-std = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
 
 [features]
 std = [
