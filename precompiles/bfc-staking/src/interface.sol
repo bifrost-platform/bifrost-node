@@ -68,6 +68,11 @@ interface BfcStaking {
         uint256[] nominations;
     }
 
+    struct candidate_pool_meta_data {
+        address[] candidates;
+        uint256[] bonds;
+    }
+
     struct nominator_meta_data {
         address nominator;
         uint256 total;
@@ -333,7 +338,7 @@ interface BfcStaking {
     function candidate_pool()
         external
         view
-        returns (address[] memory, uint256[] memory);
+        returns (candidate_pool_meta_data memory);
 
     /// @dev Get the current state of the given candidate
     /// Selector: 36f3b497
