@@ -9,6 +9,20 @@ pragma solidity >=0.8.0;
  */
 
 interface BfcOffences {
+    struct validator_offence_meta_data {
+        address validator;
+        uint256 latest_offence_round_index;
+        uint256 latest_offence_session_index;
+        uint256 offence_count;
+    }
+
+    struct validator_offences_meta_data {
+        address[] validators;
+        uint256[] latest_offence_round_index;
+        uint256[] latest_offence_session_index;
+        uint256[] offence_count;
+    }
+
     /// @dev Get the maximum offence count
     /// Selector: 42caa150
     /// @param tier the type of the validator tier (0: All, 1: Basic, 2: Full)
@@ -24,12 +38,7 @@ interface BfcOffences {
     function validator_offence(address validator)
         external
         view
-        returns (
-            address,
-            uint256,
-            uint256,
-            uint256
-        );
+        returns (validator_offence_meta_data memory);
 
     /// @dev Get the current offence state of the given validators
     /// Selector: 2962bb0b
@@ -37,10 +46,5 @@ interface BfcOffences {
     function validator_offences(address[] calldata validators)
         external
         view
-        returns (
-            address[] memory,
-            uint256[] memory,
-            uint256[] memory,
-            uint256[] memory
-        );
+        returns (validator_offences_meta_data memory);
 }
