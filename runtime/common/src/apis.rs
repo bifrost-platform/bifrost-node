@@ -61,6 +61,7 @@ macro_rules! impl_common_runtime_apis {
 				> {
 					#[cfg(feature = "evm-tracing")]
 					{
+						use evm_tracer::tracer::EvmTracer;
 						// Apply the a subset of extrinsics: all the substrate-specific or ethereum
 						// transactions that preceded the requested transaction.
 						for ext in extrinsics.into_iter() {
@@ -94,6 +95,7 @@ macro_rules! impl_common_runtime_apis {
 				> {
 					#[cfg(feature = "evm-tracing")]
 					{
+						use evm_tracer::tracer::EvmTracer;
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
 						config.estimate = true;
 						// Apply all extrinsics. Ethereum extrinsics are traced.
@@ -193,7 +195,7 @@ macro_rules! impl_common_runtime_apis {
 						to,
 						data,
 						value,
-						gas_limit.unique_saturated_into(),
+						gas_limit.low_u64(),
 						max_fee_per_gas,
 						max_priority_fee_per_gas,
 						nonce,
@@ -227,7 +229,7 @@ macro_rules! impl_common_runtime_apis {
 						from,
 						data,
 						value,
-						gas_limit.unique_saturated_into(),
+						gas_limit.low_u64(),
 						max_fee_per_gas,
 						max_priority_fee_per_gas,
 						nonce,

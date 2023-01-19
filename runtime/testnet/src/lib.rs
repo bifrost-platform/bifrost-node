@@ -9,9 +9,6 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Index, Signature};
 use codec::{Decode, Encode};
 
-#[cfg(feature = "evm-tracing")]
-pub use evm_tracer::tracer::EvmTracer;
-
 pub use bifrost_testnet_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
@@ -29,7 +26,7 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		NumberFor, OpaqueKeys, PostDispatchInfoOf,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
