@@ -6,6 +6,7 @@ import { MIN_FULL_CANDIDATE_STAKING_AMOUNT } from '../../constants/currency';
 import {
   TEST_CONTROLLERS, TEST_RELAYERS, TEST_STASHES
 } from '../../constants/keys';
+import { BFC_STAKING_ABI } from '../abi/bfc_staking';
 import { describeDevNode } from '../set_dev_node';
 import { callPrecompile, sendPrecompileTx } from '../transactions';
 import { jumpToRound } from '../utils';
@@ -646,5 +647,15 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       candidate_state.result,
     )[0];
     expect(new BigNumber(decoded_candidate_state[2]).toFixed()).equal(new BigNumber(more).multipliedBy(2).toFixed());
+  });
+});
+
+describeDevNode('precompile_bfc_staking - precompile gas estimation', (context) => {
+  const alithStash: { public: string, private: string } = TEST_STASHES[0];
+
+  it('should successfully estimate dispatch functions', async function () {
+    const bfc_staking = new context.web3.eth.Contract(BFC_STAKING_ABI, PRECOMPILE_ADDRESS);
+    const gas = await bfc_staking.methods.candidate_bond_more(new BigNumber(100).multipliedBy(10 ** 18).toFixed()).estimateGas({ from: alithStash.public });
+    expect(gas).greaterThan(0);
   });
 });
