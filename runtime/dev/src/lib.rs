@@ -15,9 +15,6 @@ pub use bifrost_dev_constants::{
 	time::*,
 };
 
-#[cfg(feature = "evm-tracing")]
-pub use evm_tracer::tracer::EvmTracer;
-
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
@@ -29,7 +26,7 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		NumberFor, OpaqueKeys, PostDispatchInfoOf,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
