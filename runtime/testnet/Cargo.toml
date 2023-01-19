@@ -159,6 +159,7 @@ std = [
 	"fp-rpc/std",
 	"fp-rpc-debug/std",
 	"fp-rpc-txpool/std",
+	"fp-rpc-evm-tracing-events/std",
 	"evm-tracer/std",
 	"account/std",
 	"precompile-utils/std",
