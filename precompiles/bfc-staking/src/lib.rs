@@ -1076,7 +1076,7 @@ where
 		bond: U256,
 		candidate_count: u32,
 	) -> EvmResult {
-		let bond = Self::u256_to_amount(bond)?;
+		let bond = Self::u256_to_amount(bond).in_field("bond")?;
 		let zero_address = Address(Default::default());
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -1107,7 +1107,7 @@ where
 	#[precompile::public("candidateBondMore(uint256)")]
 	#[precompile::public("candidate_bond_more(uint256)")]
 	fn candidate_bond_more(handle: &mut impl PrecompileHandle, more: U256) -> EvmResult {
-		let more = Self::u256_to_amount(more)?;
+		let more = Self::u256_to_amount(more).in_field("more")?;
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::candidate_bond_more { more };
@@ -1135,7 +1135,7 @@ where
 	#[precompile::public("scheduleCandidateBondLess(uint256)")]
 	#[precompile::public("schedule_candidate_bond_less(uint256)")]
 	fn schedule_candidate_bond_less(handle: &mut impl PrecompileHandle, less: U256) -> EvmResult {
-		let less = Self::u256_to_amount(less)?;
+		let less = Self::u256_to_amount(less).in_field("less")?;
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_candidate_bond_less { less };
@@ -1259,7 +1259,7 @@ where
 	) -> EvmResult {
 		let candidate_nomination_count: u32 = candidate_nomination_count.converted();
 		let nomination_count: u32 = nomination_count.converted();
-		let amount = Self::u256_to_amount(amount)?;
+		let amount = Self::u256_to_amount(amount).in_field("amount")?;
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -1282,7 +1282,7 @@ where
 		candidate: Address,
 		more: U256,
 	) -> EvmResult {
-		let more = Self::u256_to_amount(more)?;
+		let more = Self::u256_to_amount(more).in_field("more")?;
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -1327,7 +1327,7 @@ where
 		candidate: Address,
 		less: U256,
 	) -> EvmResult {
-		let less = Self::u256_to_amount(less)?;
+		let less = Self::u256_to_amount(less).in_field("less")?;
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
