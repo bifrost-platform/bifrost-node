@@ -313,17 +313,21 @@ impl<T: Config> Pallet<T> {
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
 		if let Some(mut nominator_state) = <NominatorState<T>>::get(&nominator) {
-			if nominator_state.reward_dst == RewardDestination::Staked {
-				// increment the awarded tokens of this nominator
-				nominator_state.increment_awarded_tokens(&validator, reward);
-				// auto-compound nomination
-				nominator_state.increase_nomination::<T>(validator.clone(), reward)?;
-				<NominatorState<T>>::insert(&nominator, nominator_state);
-				Self::sort_candidates_by_voting_power();
-			} else {
-				// increment the awarded tokens of this nominator
-				nominator_state.increment_awarded_tokens(&validator, reward);
-				<NominatorState<T>>::insert(&nominator, nominator_state);
+			match nominator_state.reward_dst {
+				RewardDestination::Staked => {
+					// increment the awarded tokens of this nominator
+					nominator_state.increment_awarded_tokens(&validator, reward);
+					// auto-compound nomination
+					if nominator_state.increase_nomination::<T>(validator.clone(), reward).is_ok() {
+						<NominatorState<T>>::insert(&nominator, nominator_state);
+						Self::sort_candidates_by_voting_power();
+					}
+				},
+				RewardDestination::Account => {
+					// increment the awarded tokens of this nominator
+					nominator_state.increment_awarded_tokens(&validator, reward);
+					<NominatorState<T>>::insert(&nominator, nominator_state);
+				},
 			}
 		}
 		Ok(().into())
