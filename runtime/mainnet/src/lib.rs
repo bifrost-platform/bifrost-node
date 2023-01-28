@@ -140,7 +140,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2002,
+	spec_version: 2003,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -675,9 +675,9 @@ parameter_types! {
 	/// Blocks per round.
 	pub const DefaultBlocksPerRound: u32 = 12 * HOURS;
 	/// Rounds before the validator leaving the candidates request can be executed.
-	pub const LeaveCandidatesDelay: u32 = 1;
+	pub const LeaveCandidatesDelay: u32 = 14;
 	/// Rounds before the candidate bond increase/decrease can be executed.
-	pub const CandidateBondLessDelay: u32 = 1;
+	pub const CandidateBondLessDelay: u32 = 14;
 	/// Rounds before the nominator exit can be executed.
 	pub const LeaveNominatorsDelay: u32 = 2;
 	/// Rounds before the nominator revocation can be executed.
@@ -697,7 +697,7 @@ parameter_types! {
 	/// Maximum bottom nominations per candidate.
 	pub const MaxBottomNominationsPerCandidate: u32 = 50;
 	/// Maximum nominations per nominator.
-	pub const MaxNominationsPerNominator: u32 = 30;
+	pub const MaxNominationsPerNominator: u32 = 50;
 	/// Default commission rate for full validators.
 	pub const DefaultFullValidatorCommission: Perbill = Perbill::from_percent(30);
 	/// Default commission rate for basic validators.
