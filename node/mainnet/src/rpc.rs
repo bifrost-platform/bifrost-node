@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use bifrost_common_node::{
 	cli_opt::EthApi as EthApiCmd,
-	rpc::{FullDeps, GrandpaDeps},
+	rpc::{GrandpaDeps, MainnetDeps},
 };
 use bifrost_mainnet_runtime::{opaque::Block, AccountId, Balance, Index};
 
@@ -23,7 +23,6 @@ use sp_runtime::traits::BlakeTwo256;
 
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 pub use sc_client_api::{AuxStore, BlockOf, BlockchainEvents};
-use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApi};
 use sc_finality_grandpa_rpc::GrandpaRpcHandler;
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool::ChainApi;
@@ -31,7 +30,7 @@ use sc_transaction_pool_api::TransactionPool;
 
 /// Instantiate all full RPC extensions.
 pub fn create_full<C, P, BE, SC, A>(
-	deps: FullDeps<C, P, BE, SC, A>,
+	deps: MainnetDeps<C, P, BE, SC, A>,
 ) -> jsonrpc_core::IoHandler<sc_rpc_api::Metadata>
 where
 	BE: Backend<Block> + Send + Sync + 'static,
@@ -63,7 +62,7 @@ where
 
 	let mut io = jsonrpc_core::IoHandler::default();
 
-	let FullDeps {
+	let MainnetDeps {
 		client,
 		pool,
 		select_chain: _,
@@ -81,7 +80,6 @@ where
 		fee_history_limit,
 		fee_history_cache,
 		grandpa,
-		command_sink,
 		max_past_logs,
 		max_logs_request_duration,
 	} = deps;
@@ -151,10 +149,6 @@ where
 		fee_history_cache,
 		10,
 	)));
-
-	if let Some(command_sink) = command_sink {
-		io.extend_with(ManualSealApi::to_delegate(ManualSeal::new(command_sink)));
-	};
 
 	io
 }

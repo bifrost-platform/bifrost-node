@@ -119,3 +119,45 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	/// Maximum `eth_getLogs` request duration.
 	pub max_logs_request_duration: u64,
 }
+
+/// Mainnet client dependencies.
+pub struct MainnetDeps<C, P, BE, SC, A: ChainApi> {
+	/// The client instance to use.
+	pub client: Arc<C>,
+	/// Transaction pool instance.
+	pub pool: Arc<P>,
+	/// The SelectChain Strategy
+	pub select_chain: SC,
+	/// A copy of the chain spec.
+	pub chain_spec: Box<dyn sc_chain_spec::ChainSpec>,
+	/// Graph pool instance.
+	pub graph: Arc<Pool<A>>,
+	/// Whether to deny unsafe calls
+	pub deny_unsafe: DenyUnsafe,
+	/// GRANDPA specific dependencies.
+	pub grandpa: GrandpaDeps<BE>,
+	/// The Node authority flag
+	pub is_authority: bool,
+	/// Network service
+	pub network: Arc<NetworkService<Block, Hash>>,
+	/// EthFilterApi pool.
+	pub filter_pool: FilterPool,
+	/// List of optional RPC extensions.
+	pub ethapi_cmd: Vec<EthApiCmd>,
+	/// Frontier backend.
+	pub frontier_backend: Arc<fc_db::Backend<Block>>,
+	/// Backend.
+	pub backend: Arc<BE>,
+	/// Maximum fee history cache size.
+	pub fee_history_limit: u64,
+	/// Fee history cache.
+	pub fee_history_cache: FeeHistoryCache,
+	/// Ethereum data access overrides.
+	pub overrides: Arc<OverrideHandle<Block>>,
+	/// Cache for Ethereum block data.
+	pub block_data_cache: Arc<EthBlockDataCache<Block>>,
+	/// Maximum number of logs in one query.
+	pub max_past_logs: u32,
+	/// Maximum `eth_getLogs` request duration.
+	pub max_logs_request_duration: u64,
+}
