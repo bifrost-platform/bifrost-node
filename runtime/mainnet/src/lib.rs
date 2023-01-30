@@ -140,7 +140,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2003,
+	spec_version: 2004,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -679,11 +679,11 @@ parameter_types! {
 	/// Rounds before the candidate bond increase/decrease can be executed.
 	pub const CandidateBondLessDelay: u32 = 14;
 	/// Rounds before the nominator exit can be executed.
-	pub const LeaveNominatorsDelay: u32 = 2;
+	pub const LeaveNominatorsDelay: u32 = 14;
 	/// Rounds before the nominator revocation can be executed.
-	pub const RevokeNominationDelay: u32 = 2;
+	pub const RevokeNominationDelay: u32 = 14;
 	/// Rounds before the nominator bond increase/decrease can be executed.
-	pub const NominationBondLessDelay: u32 = 2;
+	pub const NominationBondLessDelay: u32 = 14;
 	/// Rounds before the reward is paid.
 	pub const RewardPaymentDelay: u32 = 1;
 	/// Default maximum full validators selected per round, default at genesis.
