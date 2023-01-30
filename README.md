@@ -18,10 +18,10 @@ Learn to use the BIFROST network with our [technical docs](https://docs.thebifro
 ### BIFROST Network Mainnet (ChainID: 3068)
 |Public Endpoints (rpc/ws)|
 |------|
-|-|
-|-|
-|-|
-|-|
+|https://public-01.mainnet.thebifrost.io/rpc|
+|https://public-02.mainnet.thebifrost.io/rpc|
+|wss://public-01.mainnet.thebifrost.io/wss|
+|wss://public-02.mainnet.thebifrost.io/wss|
 
 ### Rust Setup
 
