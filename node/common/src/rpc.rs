@@ -158,7 +158,7 @@ pub struct MainnetDeps<C, P, BE, SC, A: ChainApi> {
 	/// Ethereum data access overrides.
 	pub overrides: Arc<OverrideHandle<Block>>,
 	/// Cache for Ethereum block data.
-	pub block_data_cache: Arc<EthBlockDataCache<Block>>,
+	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
 	/// Maximum `eth_getLogs` request duration.
