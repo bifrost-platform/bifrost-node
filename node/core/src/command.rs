@@ -246,7 +246,11 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_mainnet_node::service::new_partial(&config)?;
-					Ok((cmd.run(client, backend), task_manager))
+					let aux_revert = Box::new(|client, _, blocks| {
+						sc_finality_grandpa::revert(client, blocks)?;
+						Ok(())
+					});
+					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
 				})
 			} else {
 				runner.async_run(|config| {

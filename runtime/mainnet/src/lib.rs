@@ -9,26 +9,24 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Index, Signature};
 use codec::{Decode, Encode};
 
-#[cfg(feature = "evm-tracing")]
-pub use evm_tracer::tracer::EvmTracer;
-
 pub use bifrost_mainnet_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
 	time::*,
 };
 
-use fp_rpc::{TransactionStatus, TxPoolResponse};
+use fp_rpc::TransactionStatus;
+use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{crypto::KeyTypeId, u32_trait::*, OpaqueMetadata, H160, H256, U256};
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H160, H256, U256};
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		NumberFor, OpaqueKeys, PostDispatchInfoOf,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
@@ -47,8 +45,6 @@ pub use pallet_bfc_staking::{InflationInfo, Range};
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, Transaction as EthereumTransaction,
 };
-#[cfg(feature = "std")]
-pub use pallet_evm::GenesisAccount;
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
 	FeeCalculator, Runner,
@@ -62,25 +58,28 @@ pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
 pub use frame_support::{
-	construct_runtime, log,
+	construct_runtime,
+	dispatch::{DispatchClass, GetDispatchInfo},
+	log,
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{
-		ConstU128, ConstU32, ConstU8, Contains, Currency, EnsureOneOf, EqualPrivilegeOnly,
-		FindAuthor, Imbalance, KeyOwnerProofSystem, LockIdentifier, OnUnbalanced, Randomness,
-		StorageInfo, U128CurrencyToVote,
+		ConstU128, ConstU32, ConstU8, Contains, Currency, EitherOfDiverse, EqualPrivilegeOnly,
+		FindAuthor, Imbalance, KeyOwnerProofSystem, LockIdentifier, NeverEnsureOrigin,
+		OnUnbalanced, Randomness, StorageInfo, U128CurrencyToVote,
 	},
 	weights::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
-		DispatchClass, GetDispatchInfo, IdentityFee, Weight, WeightToFeeCoefficient,
-		WeightToFeeCoefficients, WeightToFeePolynomial,
+		ConstantMultiplier, IdentityFee, Weight, WeightToFeeCoefficient, WeightToFeeCoefficients,
+		WeightToFeePolynomial,
 	},
 	ConsensusEngineId, PalletId, StorageValue,
 };
 use frame_system::EnsureRoot;
 
-pub mod precompiles;
-use crate::precompiles::BifrostPrecompiles;
+mod precompiles;
+pub use precompiles::BifrostPrecompiles;
+
 pub type Precompiles = BifrostPrecompiles<Runtime>;
 
 /// Block type as expected by this runtime.
@@ -100,7 +99,7 @@ pub type SignedExtra = (
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-	fp_self_contained::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
+	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -152,8 +151,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 };
 
 /// Maximum weight per block.
-/// We allow for one half second of compute with a 3 second average block time.
-pub const MAXIMUM_BLOCK_WEIGHT: Weight = WEIGHT_PER_SECOND / 2;
+/// We allow for 1 second of compute with a 3 second average block time, with maximum proof size.
+const MAXIMUM_BLOCK_WEIGHT: Weight = WEIGHT_PER_SECOND.saturating_div(2).set_proof_size(u64::MAX);
 
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -185,7 +184,7 @@ impl frame_system::Config for Runtime {
 	/// The identifier used to distinguish between accounts.
 	type AccountId = AccountId;
 	/// The aggregated dispatch type that is available for extrinsics.
-	type Call = Call;
+	type RuntimeCall = RuntimeCall;
 	/// The lookup mechanism to get the account ID from whatever is passed in dispatchers.
 	type Lookup = IdentityLookup<AccountId>;
 	/// The index type for storing how many extrinsics an account has signed.
@@ -199,9 +198,9 @@ impl frame_system::Config for Runtime {
 	/// The header type.
 	type Header = generic::Header<BlockNumber, BlakeTwo256>;
 	/// The ubiquitous event type.
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	/// The ubiquitous origin type.
-	type Origin = Origin;
+	type RuntimeOrigin = RuntimeOrigin;
 	/// Maximum number of block number to block hash mappings to keep (oldest pruned first).
 	type BlockHashCount = BlockHashCount;
 	/// The weight of database operations that the runtime can invoke.
@@ -243,8 +242,7 @@ impl pallet_aura::Config for Runtime {
 
 /// Provides the GRANDPA block finality gadget.
 impl pallet_grandpa::Config for Runtime {
-	type Event = Event;
-	type Call = Call;
+	type RuntimeEvent = RuntimeEvent;
 	type KeyOwnerProofSystem = ();
 	type KeyOwnerProof =
 		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
@@ -275,7 +273,7 @@ impl pallet_balances::Config for Runtime {
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
 	type Balance = Balance;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type DustRemoval = ();
 	type ExistentialDeposit = ConstU128<0>;
 	type AccountStore = System;
@@ -309,13 +307,18 @@ where
 	}
 }
 
+parameter_types! {
+	pub const TransactionByteFee: Balance = TRANSACTION_BYTE_FEE;
+}
+
 /// Provides the basic logic needed to pay the absolute minimum amount needed for a transaction to
 /// be included.
 impl pallet_transaction_payment::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type OnChargeTransaction = CurrencyAdapter<Balances, DealWithFees<Runtime>>;
-	type TransactionByteFee = ConstU128<{ TRANSACTION_BYTE_FEE }>;
 	type OperationalFeeMultiplier = ConstU8<5>;
 	type WeightToFee = IdentityFee<Balance>;
+	type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
 	type FeeMultiplierUpdate = ();
 }
 
@@ -323,29 +326,28 @@ impl pallet_transaction_payment::Config for Runtime {
 /// to execute dispatchable functions that require a `Root` call
 /// or designate a new account to replace them as the sudo key.
 impl pallet_sudo::Config for Runtime {
-	type Event = Event;
-	type Call = Call;
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
 }
 
 parameter_types! {
-	pub MaximumSchedulerWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
+	pub MaximumSchedulerWeight: Weight = NORMAL_DISPATCH_RATIO * BlockWeights::get().max_block;
 	pub const MaxScheduledPerBlock: u32 = 50;
 }
 
 /// The Scheduler module exposes capabilities for scheduling dispatches to occur at a
 /// specified block number or at a specified period.
 impl pallet_scheduler::Config for Runtime {
-	type Event = Event;
-	type Origin = Origin;
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeOrigin = RuntimeOrigin;
 	type PalletsOrigin = OriginCaller;
-	type Call = Call;
+	type RuntimeCall = RuntimeCall;
 	type MaximumWeight = MaximumSchedulerWeight;
 	type ScheduleOrigin = EnsureRoot<AccountId>;
 	type MaxScheduledPerBlock = MaxScheduledPerBlock;
 	type OriginPrivilegeCmp = EqualPrivilegeOnly;
 	type WeightInfo = pallet_scheduler::weights::SubstrateWeight<Runtime>;
-	type PreimageProvider = ();
-	type NoPreimagePostponement = ();
+	type Preimages = Preimage;
 }
 
 parameter_types! {
@@ -356,7 +358,7 @@ parameter_types! {
 /// The Session module allows validators to manage their session keys, provides a function for
 /// changing the session length, and handles session rotation.
 impl pallet_session::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = <Self as frame_system::Config>::AccountId;
 	type ValidatorIdOf = ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<SessionPeriod, Offset>;
@@ -382,16 +384,16 @@ parameter_types! {
 
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
 where
-	Call: From<C>,
+	RuntimeCall: From<C>,
 {
 	type Extrinsic = UncheckedExtrinsic;
-	type OverarchingCall = Call;
+	type OverarchingCall = RuntimeCall;
 }
 
 /// The module that manages validator livenesses.
 impl pallet_im_online::Config for Runtime {
 	type AuthorityId = ImOnlineId;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type NextSessionRotation = BfcStaking;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
@@ -405,7 +407,7 @@ impl pallet_im_online::Config for Runtime {
 
 /// The module that manages validator offences.
 impl pallet_offences::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
 	type OnOffenceHandler = BfcStaking;
 }
@@ -420,8 +422,8 @@ impl pallet_authorship::Config for Runtime {
 
 /// A stateless module with helpers for dispatch management.
 impl pallet_utility::Config for Runtime {
-	type Event = Event;
-	type Call = Call;
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
 	type PalletsOrigin = OriginCaller;
 	type WeightInfo = pallet_utility::weights::SubstrateWeight<Runtime>;
 }
@@ -449,9 +451,9 @@ pub type CouncilInstance = pallet_collective::Instance1;
 
 /// A module that grants council members to participate for governance
 impl pallet_collective::Config<CouncilInstance> for Runtime {
-	type Origin = Origin;
-	type Event = Event;
-	type Proposal = Call;
+	type RuntimeOrigin = RuntimeOrigin;
+	type RuntimeEvent = RuntimeEvent;
+	type Proposal = RuntimeCall;
 	type MotionDuration = CouncilMotionDuration;
 	type MaxProposals = CouncilMaxProposals;
 	type MaxMembers = CouncilMaxMembers;
@@ -464,9 +466,9 @@ pub type TechCommitteeInstance = pallet_collective::Instance2;
 
 /// A module that grants technical committee members to participate for governance
 impl pallet_collective::Config<TechCommitteeInstance> for Runtime {
-	type Origin = Origin;
-	type Event = Event;
-	type Proposal = Call;
+	type RuntimeOrigin = RuntimeOrigin;
+	type RuntimeEvent = RuntimeEvent;
+	type Proposal = RuntimeCall;
 	type MotionDuration = TechCommitteeMotionDuration;
 	type MaxProposals = TechCommitteeMaxProposals;
 	type MaxMembers = TechCommitteeMaxMembers;
@@ -474,15 +476,15 @@ impl pallet_collective::Config<TechCommitteeInstance> for Runtime {
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 }
 
-type MoreThanHalfCouncil = EnsureOneOf<
+type MoreThanHalfCouncil = EitherOfDiverse<
 	EnsureRoot<AccountId>,
-	pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>,
+	pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>,
 >;
 
 /// A module that manages council member authorities
 impl pallet_membership::Config<pallet_membership::Instance1> for Runtime {
 	type AddOrigin = MoreThanHalfCouncil;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type MaxMembers = CouncilMaxMembers;
 	type MembershipChanged = Council;
 	type MembershipInitialized = Council;
@@ -496,7 +498,7 @@ impl pallet_membership::Config<pallet_membership::Instance1> for Runtime {
 /// A module that manages technical committee member authorities
 impl pallet_membership::Config<pallet_membership::Instance2> for Runtime {
 	type AddOrigin = MoreThanHalfCouncil;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type MaxMembers = TechCommitteeMaxMembers;
 	type MembershipChanged = TechnicalCommittee;
 	type MembershipInitialized = TechnicalCommittee;
@@ -517,14 +519,15 @@ parameter_types! {
 	pub const MinimumDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
 	pub const MaxVotes: u32 = 1_000;
 	pub const MaxProposals: u32 = 1_000;
+	pub const MaxDeposits: u32 = 1_000;
+	pub const MaxBlacklisted: u32 = 1_000;
 	pub const PreimageByteDeposit: Balance = STORAGE_BYTE_FEE;
 	pub const InstantAllowed: bool = true;
 }
 
 /// The core module that supports governance functionality to this network
 impl pallet_democracy::Config for Runtime {
-	type Proposal = Call;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type EnactmentPeriod = EnactmentPeriod;
 	type LaunchPeriod = LaunchPeriod;
@@ -534,43 +537,58 @@ impl pallet_democracy::Config for Runtime {
 	type MinimumDeposit = MinimumDeposit;
 	/// To decide what their next motion is.
 	type ExternalOrigin =
-		pallet_collective::EnsureProportionAtLeast<_1, _2, AccountId, CouncilInstance>;
+		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 1, 2>;
 	/// To have the next scheduled referendum be a straight majority-carries vote.
 	type ExternalMajorityOrigin =
-		pallet_collective::EnsureProportionAtLeast<_3, _5, AccountId, CouncilInstance>;
+		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>;
 	/// To have the next scheduled referendum be a straight default-carries (NTB) vote.
 	type ExternalDefaultOrigin =
-		pallet_collective::EnsureProportionAtLeast<_3, _5, AccountId, CouncilInstance>;
+		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>;
 	/// To allow a shorter voting/enactment period for external proposals.
 	type FastTrackOrigin =
-		pallet_collective::EnsureProportionAtLeast<_1, _2, AccountId, TechCommitteeInstance>;
+		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 1, 2>;
 	/// To instant fast track.
 	type InstantOrigin =
-		pallet_collective::EnsureProportionAtLeast<_3, _5, AccountId, TechCommitteeInstance>;
+		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 3, 5>;
 	// To cancel a proposal which has been passed.
-	type CancellationOrigin = EnsureOneOf<
+	type CancellationOrigin = EitherOfDiverse<
 		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionAtLeast<_3, _5, AccountId, CouncilInstance>,
+		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>,
 	>;
 	// To cancel a proposal before it has been passed.
-	type CancelProposalOrigin = EnsureOneOf<
+	type CancelProposalOrigin = EitherOfDiverse<
 		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionAtLeast<_3, _5, AccountId, TechCommitteeInstance>,
+		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 3, 5>,
 	>;
 	type BlacklistOrigin = EnsureRoot<AccountId>;
 	// Any single technical committee member may veto a coming council proposal, however they can
 	// only do it once and it lasts only for the cooloff period.
 	type VetoOrigin = pallet_collective::EnsureMember<AccountId, TechCommitteeInstance>;
 	type CooloffPeriod = CooloffPeriod;
-	type PreimageByteDeposit = PreimageByteDeposit;
 	type Slash = Treasury;
 	type InstantAllowed = InstantAllowed;
 	type Scheduler = Scheduler;
 	type MaxVotes = MaxVotes;
-	type OperationalPreimageOrigin = pallet_collective::EnsureMember<AccountId, CouncilInstance>;
 	type PalletsOrigin = OriginCaller;
 	type WeightInfo = pallet_democracy::weights::SubstrateWeight<Runtime>;
 	type MaxProposals = MaxProposals;
+	type Preimages = Preimage;
+	type MaxDeposits = MaxDeposits;
+	type MaxBlacklisted = MaxBlacklisted;
+}
+
+parameter_types! {
+	pub const BaseDeposit: Balance = 5 * SUPPLY_FACTOR * BFC;
+	pub const ByteDeposit: Balance = STORAGE_BYTE_FEE;
+}
+
+impl pallet_preimage::Config for Runtime {
+	type WeightInfo = pallet_preimage::weights::SubstrateWeight<Runtime>;
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	type ManagerOrigin = EnsureRoot<AccountId>;
+	type BaseDeposit = BaseDeposit;
+	type ByteDeposit = ByteDeposit;
 }
 
 parameter_types! {
@@ -585,15 +603,15 @@ parameter_types! {
 impl pallet_treasury::Config for Runtime {
 	type PalletId = TreasuryPalletId;
 	type Currency = Balances;
-	type ApproveOrigin = EnsureOneOf<
+	type ApproveOrigin = EitherOfDiverse<
 		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionAtLeast<_3, _5, AccountId, CouncilInstance>,
+		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>,
 	>;
-	type RejectOrigin = EnsureOneOf<
+	type RejectOrigin = EitherOfDiverse<
 		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>,
+		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>,
 	>;
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type OnSlash = Treasury;
 	type ProposalBond = ProposalBond;
 	type ProposalBondMinimum = ProposalBondMinimum;
@@ -604,6 +622,7 @@ impl pallet_treasury::Config for Runtime {
 	type WeightInfo = pallet_treasury::weights::SubstrateWeight<Runtime>;
 	type SpendFunds = ();
 	type MaxApprovals = MaxApprovals;
+	type SpendOrigin = NeverEnsureOrigin<Balance>;
 }
 
 parameter_types! {
@@ -617,7 +636,7 @@ parameter_types! {
 
 /// The module that manages account identities and registrar judgements.
 impl pallet_identity::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type BasicDeposit = BasicDeposit;
 	type FieldDeposit = FieldDeposit;
@@ -641,7 +660,7 @@ parameter_types! {
 
 /// A module that wraps `pallet_offences` to act as a central offence handler
 impl pallet_bfc_offences::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type Slash = Treasury;
 	type DefaultOffenceExpirationInSessions = DefaultOffenceExpirationInSessions;
@@ -660,7 +679,7 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
@@ -720,7 +739,7 @@ parameter_types! {
 
 /// Minimal staking pallet that implements validator selection by total backed stake.
 impl pallet_bfc_staking::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MonetaryGovernanceOrigin = EnsureRoot<AccountId>;
 	type RelayManager = RelayManager;
@@ -756,16 +775,17 @@ impl pallet_bfc_staking::Config for Runtime {
 
 /// A module that manages this networks community
 impl pallet_bfc_utility::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MintableOrigin =
-		pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilInstance>;
+		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>;
 	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
 	pub const BifrostChainId: u64 = 3068; // 0xbfc
-	pub BlockGasLimit: U256 = U256::from(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT / WEIGHT_PER_GAS);
+	pub BlockGasLimit: U256 = U256::from(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT.ref_time() / WEIGHT_PER_GAS);
+	pub WeightPerGas: Weight = Weight::from_ref_time(WEIGHT_PER_GAS);
 	pub PrecompilesValue: Precompiles = BifrostPrecompiles::<_>::new();
 }
 
@@ -820,14 +840,14 @@ impl fp_rpc::ConvertTransaction<opaque::UncheckedExtrinsic> for TransactionConve
 
 pub struct FixedGasPrice;
 impl FeeCalculator for FixedGasPrice {
-	fn min_gas_price() -> U256 {
-		pallet_base_fee::Pallet::<Runtime>::min_gas_price()
+	fn min_gas_price() -> (U256, Weight) {
+		(pallet_base_fee::Pallet::<Runtime>::min_gas_price().0, Weight::zero())
 	}
 }
 
 /// The EVM module allows unmodified EVM code to be executed in a Substrate-based blockchain.
 impl pallet_evm::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type BlockGasLimit = BlockGasLimit;
 	type ChainId = BifrostChainId;
@@ -837,22 +857,23 @@ impl pallet_evm::Config for Runtime {
 	type WithdrawOrigin = EnsureAddressNever<AccountId>;
 	type AddressMapping = IntoAddressMapping;
 	type FeeCalculator = FixedGasPrice;
-	type GasWeightMapping = BifrostGasWeightMapping;
+	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
+	type WeightPerGas = WeightPerGas;
 	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
-	type PrecompilesType = Precompiles;
+	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
 }
 
 /// The Ethereum module is responsible for storing block data and provides RPC compatibility.
 impl pallet_ethereum::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type StateRoot = pallet_ethereum::IntermediateStateRoot<Self>;
 }
 
 parameter_types! {
-	pub IsActive: bool = false;
 	pub DefaultBaseFeePerGas: U256 = (1_000 * SUPPLY_FACTOR * GWEI).into();
+	pub DefaultElasticity: Permill = Permill::zero();
 }
 
 pub struct BaseFeeThreshold;
@@ -870,10 +891,10 @@ impl pallet_base_fee::BaseFeeThreshold for BaseFeeThreshold {
 
 /// The Base fee module adds support for EIP-1559 transactions and handles base fee calculations.
 impl pallet_base_fee::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Threshold = BaseFeeThreshold;
-	type IsActive = IsActive;
 	type DefaultBaseFeePerGas = DefaultBaseFeePerGas;
+	type DefaultElasticity = DefaultElasticity;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -901,7 +922,7 @@ construct_runtime!(
 
 		// Monetary
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 10,
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config} = 11,
+		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config, Event<T>} = 11,
 
 		// Staking
 		RelayManager: pallet_relay_manager::{Pallet, Call, Storage, Config, Event<T>} = 20,
@@ -926,6 +947,7 @@ construct_runtime!(
 		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
 		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
 		Treasury: pallet_treasury::{Pallet, Call, Storage, Config, Event<T>} = 56,
+		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>} = 57,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,
