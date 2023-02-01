@@ -3,9 +3,7 @@
   "id": "testnet",
   "chainType": "Live",
   "bootNodes": [
-    "/dns/bootnode-01.testnet.thebifrost.io/tcp/30333/p2p/12D3KooWMYoMpkYePWcCZKXPrwjGrzpc8bF2GaR8ZtwTXigKVBvf",
-    "/dns/bootnode-02.testnet.thebifrost.io/tcp/30333/p2p/12D3KooWPRYjGnRoCxE5KdajZtSK4HSqbV2G92pgLTDp95YSoUfd",
-    "/dns/bootnode-03.testnet.thebifrost.io/tcp/30333/p2p/12D3KooWGdmrWwuX1TbWnErzgSdYCXcE6zXFnrrajQCQzwAi1QR1"
+    "/dns/bootnode-01.testnet.thebifrost.io/tcp/30333/p2p/12D3KooWMYoMpkYePWcCZKXPrwjGrzpc8bF2GaR8ZtwTXigKVBvf"
   ],
   "telemetryEndpoints": [
     [
