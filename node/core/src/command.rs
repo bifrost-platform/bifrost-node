@@ -2,6 +2,7 @@ use crate::cli::{Cli, Subcommand};
 
 use bifrost_common_node::cli_opt::RpcConfig;
 
+use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
 use sc_service::PartialComponents;
 
@@ -264,36 +265,52 @@ pub fn run() -> sc_cli::Result<()> {
 				})
 			}
 		},
-		Some(Subcommand::Benchmark(cmd)) =>
-			if cfg!(feature = "runtime-benchmarks") {
-				let runner = cli.create_runner(cmd)?;
-				let _chain_spec = &runner.config().chain_spec;
+		Some(Subcommand::Benchmark(cmd)) => {
+			let runner = cli.create_runner(cmd)?;
 
-				// if chain_spec.is_dev() {
-				// 	runner.sync_run(|config| {
-				// 		cmd.run::<bifrost_dev_runtime::Block,
-				// bifrost_dev_node::service::dev::ExecutorDispatch>( 			config,
-				// 		)
-				// 	})
-				// } else if chain_spec.is_testnet() {
-				// 	runner.sync_run(|config| {
-				// 		cmd.run::<bifrost_testnet_runtime::Block,
-				// bifrost_testnet_node::service::testnet::ExecutorDispatch>(config) 	})
-				// } else {
-				// 	runner.sync_run(|config| {
-				// 		cmd.run::<bifrost_dev_runtime::Block,
-				// bifrost_dev_node::service::dev::ExecutorDispatch>( 			config,
-				// 		)
-				// 	})
-				// }
-				Err("Benchmarking wasn't enabled when building the node. You can enable it with \
-				     `--features runtime-benchmarks`."
-					.into())
-			} else {
-				Err("Benchmarking wasn't enabled when building the node. You can enable it with \
-				     `--features runtime-benchmarks`."
-					.into())
-			},
+			runner.sync_run(|config| {
+				// This switch needs to be in the client, since the client decides
+				// which sub-commands it wants to support.
+				match cmd {
+					BenchmarkCmd::Pallet(cmd) => {
+						if !cfg!(feature = "runtime-benchmarks") {
+							return Err(
+								"Runtime benchmarking wasn't enabled when building the node. \
+							You can enable it with `--features runtime-benchmarks`."
+									.into(),
+							)
+						}
+
+						cmd.run::<bifrost_dev_runtime::Block, bifrost_dev_node::service::dev::ExecutorDispatch>(config)
+					},
+					BenchmarkCmd::Block(cmd) => {
+						let PartialComponents { client, .. } =
+							bifrost_dev_node::service::new_partial(&config)?;
+						cmd.run(client)
+					},
+					#[cfg(not(feature = "runtime-benchmarks"))]
+					BenchmarkCmd::Storage(_) => Err(
+						"Storage benchmarking can be enabled with `--features runtime-benchmarks`."
+							.into(),
+					),
+					#[cfg(feature = "runtime-benchmarks")]
+					BenchmarkCmd::Storage(cmd) => {
+						let PartialComponents { client, backend, .. } =
+							service::new_partial(&config)?;
+						let db = backend.expose_db();
+						let storage = backend.expose_storage();
+
+						cmd.run(config, client, db, storage)
+					},
+					BenchmarkCmd::Machine(cmd) =>
+						cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()),
+					_ =>
+						return Err("Runtime benchmarking wasn't enabled when building the node. \
+					You can enable it with `--features runtime-benchmarks`."
+							.into()),
+				}
+			})
+		},
 		None => {
 			let rpc_config = RpcConfig {
 				ethapi: cli.ethapi.clone(),
@@ -304,7 +321,6 @@ pub fn run() -> sc_cli::Result<()> {
 				eth_statuses_cache: cli.eth_statuses_cache,
 				fee_history_limit: cli.fee_history_limit,
 				max_past_logs: cli.max_past_logs,
-				max_logs_request_duration: cli.max_logs_request_duration,
 				tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
 			};
 

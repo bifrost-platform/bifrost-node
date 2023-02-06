@@ -82,7 +82,7 @@ pub struct GrandpaDeps<B> {
 }
 
 /// Full client dependencies.
-pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
+pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -123,8 +123,8 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub max_past_logs: u32,
 }
 
-/// Mainnet client dependencies.
-pub struct MainnetDeps<C, P, BE, SC, A: ChainApi> {
+/// Mainnet/Testnet client dependencies.
+pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -161,8 +161,6 @@ pub struct MainnetDeps<C, P, BE, SC, A: ChainApi> {
 	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
-	/// Maximum `eth_getLogs` request duration.
-	pub max_logs_request_duration: u64,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
