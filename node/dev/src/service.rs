@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use bifrost_common_node::{
 	cli_opt::{EthApi as EthApiCmd, RpcConfig},
-	rpc::{FullDeps, GrandpaDeps, SpawnTasksParams, TracingConfig},
+	rpc::{FullDevDeps, GrandpaDeps, SpawnTasksParams, TracingConfig},
 	service::open_frontier_backend,
 	tracing::{spawn_tracing_tasks, RpcRequesters},
 };
@@ -698,7 +698,7 @@ pub fn build_rpc_extensions_builder(
 	};
 
 	let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
-		let deps = FullDeps {
+		let deps = FullDevDeps {
 			client: client.clone(),
 			pool: pool.clone(),
 			graph: pool.pool().clone(),

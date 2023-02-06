@@ -3,7 +3,6 @@
 use bp_core::*;
 use futures::StreamExt;
 use jsonrpsee::RpcModule;
-use sc_consensus_manual_seal::EngineCommand;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use bifrost_common_node::{
@@ -108,8 +107,6 @@ pub struct RpcExtensionsBuilder<'a> {
 	pub network: Arc<NetworkService<Block, <Block as BlockT>::Hash>>,
 	pub keystore_container: SyncCryptoStorePtr,
 	pub frontier_backend: Arc<fc_db::Backend<Block>>,
-
-	pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 }
 
 pub fn new_partial(
@@ -298,7 +295,6 @@ pub fn new_full_base(
 			network: network.clone(),
 			keystore_container: keystore_container.sync_keystore(),
 			frontier_backend: frontier_backend.clone(),
-			command_sink: None,
 		},
 	);
 
@@ -441,7 +437,6 @@ pub fn build_rpc_extensions_builder(
 	let is_authority = config.role.is_authority();
 	let prometheus_registry = config.prometheus_registry().cloned();
 
-	let command_sink = builder.command_sink.clone();
 	let fee_history_cache: FeeHistoryCache = Arc::new(std::sync::Mutex::new(BTreeMap::new()));
 	let filter_pool: FilterPool = Arc::new(std::sync::Mutex::new(BTreeMap::new()));
 	let ethapi_cmd = rpc_config.ethapi.clone();
@@ -526,7 +521,6 @@ pub fn build_rpc_extensions_builder(
 				subscription_executor,
 				finality_provider: finality_proof_provider.clone(),
 			},
-			command_sink: command_sink.clone(),
 			max_past_logs: rpc_config.max_past_logs,
 		};
 
