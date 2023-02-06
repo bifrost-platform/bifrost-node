@@ -19,7 +19,7 @@ use sp_blockchain::{
 use sp_consensus::SelectChain;
 use sp_runtime::traits::BlakeTwo256;
 
-use bifrost_common_node::rpc::{FullDeps, GrandpaDeps};
+use bifrost_common_node::rpc::{FullDevDeps, GrandpaDeps};
 use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
 pub use sc_client_api::{AuxStore, BlockOf, BlockchainEvents};
 use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApiServer};
@@ -29,7 +29,7 @@ use sc_transaction_pool_api::TransactionPool;
 
 /// Instantiate all full RPC extensions.
 pub fn create_full<C, P, BE, SC, A>(
-	deps: FullDeps<C, P, BE, SC, A>,
+	deps: FullDevDeps<C, P, BE, SC, A>,
 	maybe_tracing_config: Option<TracingConfig>,
 ) -> Result<RpcModule<()>, sc_service::Error>
 where
@@ -64,7 +64,7 @@ where
 	use substrate_frame_rpc_system::{System, SystemApiServer};
 
 	let mut io = RpcModule::new(());
-	let FullDeps {
+	let FullDevDeps {
 		client,
 		pool,
 		select_chain: _,
