@@ -20,13 +20,13 @@ name = "bifrost-node"
 clap = { version = "4.0.9", features = ["derive"] }
 
 # substrate client dependencies
-sc-cli = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32", features = ["wasmtime"] }
-sc-service = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32", features = ["wasmtime"] }
-sc-finality-grandpa = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+sc-cli = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+sc-service = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+sc-finality-grandpa = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
 
 # benchmarking dependencies
-frame-benchmarking = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
-frame-benchmarking-cli = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+frame-benchmarking = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+frame-benchmarking-cli = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
 
 # BIFROST runtimes
 bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
@@ -40,7 +40,7 @@ bifrost-testnet-node = { path = "../testnet" }
 bifrost-mainnet-node = { path = "../mainnet" }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.32" }
+substrate-build-script-utils = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
 
 [features]
 default = []
