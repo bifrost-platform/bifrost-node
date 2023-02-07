@@ -36,7 +36,7 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<StakingCall<Runtime>>,
 	BalanceOf<Runtime>: TryFrom<U256> + Into<U256> + EvmData,
-	BlockNumberOf<Runtime>: EvmData,
+	BlockNumberOf<Runtime>: Into<U256> + EvmData,
 {
 	// Role Verifiers
 
@@ -300,7 +300,7 @@ where
 	#[precompile::public("roundInfo()")]
 	#[precompile::public("round_info()")]
 	#[precompile::view]
-	fn round_info(handle: &mut impl PrecompileHandle) -> EvmResult<EvmRoundInfoOf<Runtime>> {
+	fn round_info(handle: &mut impl PrecompileHandle) -> EvmResult<EvmRoundInfoOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let round_info = StakingOf::<Runtime>::round();
 
@@ -308,9 +308,9 @@ where
 			round_info.current_round_index,
 			round_info.first_session_index,
 			round_info.current_session_index,
-			round_info.first_round_block,
-			round_info.first_session_block,
-			round_info.current_block,
+			round_info.first_round_block.into(),
+			round_info.first_session_block.into(),
+			round_info.current_block.into(),
 			round_info.round_length,
 			round_info.session_length,
 		))
@@ -733,7 +733,7 @@ where
 	fn candidate_state(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
-	) -> EvmResult<EvmCandidateStateOf<Runtime>> {
+	) -> EvmResult<EvmCandidateStateOf> {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
@@ -762,7 +762,7 @@ where
 	fn candidate_states(
 		handle: &mut impl PrecompileHandle,
 		tier: SolidityConvert<U256, u32>,
-	) -> EvmResult<EvmCandidateStatesOf<Runtime>> {
+	) -> EvmResult<EvmCandidateStatesOf> {
 		let tier: u32 = tier.converted();
 		let tier = match tier {
 			2 => TierType::Full,
@@ -805,7 +805,7 @@ where
 		handle: &mut impl PrecompileHandle,
 		tier: SolidityConvert<U256, u32>,
 		is_selected: bool,
-	) -> EvmResult<EvmCandidateStatesOf<Runtime>> {
+	) -> EvmResult<EvmCandidateStatesOf> {
 		let tier: u32 = tier.converted();
 		let tier = match tier {
 			2 => TierType::Full,
@@ -956,7 +956,7 @@ where
 	fn nominator_state(
 		handle: &mut impl PrecompileHandle,
 		nominator: Address,
-	) -> EvmResult<EvmNominatorStateOf<Runtime>> {
+	) -> EvmResult<EvmNominatorStateOf> {
 		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;

@@ -44,7 +44,7 @@ where
 	Runtime::RuntimeCall: From<DemocracyCall<Runtime>>,
 	Runtime::RuntimeCall: From<PreimageCall<Runtime>>,
 	BalanceOf<Runtime>: TryFrom<U256> + Into<U256> + EvmData,
-	BlockNumberOf<Runtime>: EvmData,
+	BlockNumberOf<Runtime>: Into<U256> + EvmData,
 	HashOf<Runtime>: Into<H256> + From<H256> + EvmData,
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
@@ -94,7 +94,7 @@ where
 	fn voting_of(
 		handle: &mut impl PrecompileHandle,
 		ref_index: SolidityConvert<U256, u32>,
-	) -> EvmResult<EvmVotingOf<Runtime>> {
+	) -> EvmResult<EvmVotingOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let ref_index: u32 = ref_index.converted();
 		let mut referenda_votes = ReferendaVotes::<Runtime>::default(ref_index);
@@ -135,7 +135,12 @@ where
 		Ok((
 			referenda_votes.ref_index.into(),
 			referenda_votes.voters,
-			referenda_votes.raw_votes,
+			referenda_votes
+				.raw_votes
+				.clone()
+				.into_iter()
+				.map(|v| v.into())
+				.collect::<Vec<U256>>(),
 			referenda_votes.voting_sides,
 			referenda_votes.convictions,
 		))
@@ -147,7 +152,7 @@ where
 	fn account_votes(
 		handle: &mut impl PrecompileHandle,
 		account: Address,
-	) -> EvmResult<EvmAccountVotes<Runtime>> {
+	) -> EvmResult<EvmAccountVotes> {
 		let account = Runtime::AddressMapping::into_account_id(account.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
