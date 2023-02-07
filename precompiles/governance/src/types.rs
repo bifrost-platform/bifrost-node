@@ -20,18 +20,9 @@ pub type HashOf<Runtime> = <Runtime as frame_system::Config>::Hash;
 
 pub type DemocracyOf<Runtime> = pallet_democracy::Pallet<Runtime>;
 
-pub type EvmVotingOf<Runtime> = (U256, Vec<Address>, Vec<BalanceOf<Runtime>>, Vec<bool>, Vec<u32>);
+pub type EvmVotingOf = (U256, Vec<Address>, Vec<U256>, Vec<bool>, Vec<u32>);
 
-pub type EvmAccountVotes<Runtime> = (
-	Vec<u32>,
-	Vec<BalanceOf<Runtime>>,
-	Vec<bool>,
-	Vec<u32>,
-	U256,
-	U256,
-	BlockNumberOf<Runtime>,
-	U256,
-);
+pub type EvmAccountVotes = (Vec<u32>, Vec<U256>, Vec<bool>, Vec<u32>, U256, U256, U256, U256);
 
 /// EVM struct for referenda voting information
 pub struct ReferendaVotes<Runtime: pallet_democracy::Config> {
@@ -165,20 +156,21 @@ where
 	}
 }
 
-impl<Runtime> From<AccountVotes<Runtime>> for EvmAccountVotes<Runtime>
+impl<Runtime> From<AccountVotes<Runtime>> for EvmAccountVotes
 where
 	Runtime: pallet_democracy::Config,
 	BalanceOf<Runtime>: Into<U256>,
+	BlockNumberOf<Runtime>: Into<U256>,
 {
 	fn from(votes: AccountVotes<Runtime>) -> Self {
 		(
 			votes.ref_index,
-			votes.raw_votes,
+			votes.raw_votes.clone().into_iter().map(|v| v.into()).collect::<Vec<U256>>(),
 			votes.voting_sides,
 			votes.convictions,
 			votes.delegated_votes.into(),
 			votes.delegated_raw_votes.into(),
-			votes.lock_expired_at,
+			votes.lock_expired_at.into(),
 			votes.lock_balance.into(),
 		)
 	}

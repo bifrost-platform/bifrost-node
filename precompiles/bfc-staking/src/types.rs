@@ -40,20 +40,11 @@ pub type EvmTotalOf = (
 	U256,
 );
 
-pub type EvmRoundInfoOf<Runtime> = (
-	u32,
-	u32,
-	u32,
-	BlockNumberOf<Runtime>,
-	BlockNumberOf<Runtime>,
-	BlockNumberOf<Runtime>,
-	u32,
-	u32,
-);
+pub type EvmRoundInfoOf = (u32, u32, u32, U256, U256, U256, u32, u32);
 
 pub type EvmCandidatePoolOf = (Vec<Address>, Vec<U256>);
 
-pub type EvmCandidateStateOf<Runtime> = (
+pub type EvmCandidateStateOf = (
 	Address,
 	Address,
 	U256,
@@ -68,7 +59,7 @@ pub type EvmCandidateStateOf<Runtime> = (
 	u32,
 	bool,
 	u32,
-	BlockNumberOf<Runtime>,
+	U256,
 	u32,
 	u32,
 	u32,
@@ -76,42 +67,31 @@ pub type EvmCandidateStateOf<Runtime> = (
 	u32,
 );
 
-pub type EvmCandidateStatesOf<Runtime> = (
+pub type EvmCandidateStatesOf = (
 	Vec<Address>,
 	Vec<Address>,
-	Vec<BalanceOf<Runtime>>,
-	Vec<BalanceOf<Runtime>>,
+	Vec<U256>,
+	Vec<U256>,
 	Vec<u32>,
-	Vec<BalanceOf<Runtime>>,
-	Vec<BalanceOf<Runtime>>,
-	Vec<BalanceOf<Runtime>>,
-	Vec<BalanceOf<Runtime>>,
+	Vec<U256>,
+	Vec<U256>,
+	Vec<U256>,
+	Vec<U256>,
 	Vec<u32>,
 	Vec<u32>,
 	Vec<u32>,
 	Vec<bool>,
 	Vec<u32>,
-	Vec<BlockNumberOf<Runtime>>,
+	Vec<U256>,
 	Vec<u32>,
 	Vec<u32>,
 	Vec<u32>,
-	Vec<BalanceOf<Runtime>>,
+	Vec<U256>,
 	Vec<u32>,
 );
 
-pub type EvmNominatorStateOf<Runtime> = (
-	Address,
-	BalanceOf<Runtime>,
-	u32,
-	u32,
-	BalanceOf<Runtime>,
-	Vec<Address>,
-	Vec<BalanceOf<Runtime>>,
-	Vec<BalanceOf<Runtime>>,
-	u32,
-	BalanceOf<Runtime>,
-	Vec<BalanceOf<Runtime>>,
-);
+pub type EvmNominatorStateOf =
+	(Address, U256, u32, u32, U256, Vec<Address>, Vec<U256>, Vec<U256>, u32, U256, Vec<U256>);
 
 pub type EvmNominatorRequestsOf = (Address, u32, U256, Vec<Address>, Vec<U256>, Vec<u32>, Vec<u32>);
 
@@ -159,12 +139,13 @@ pub struct CandidateStates<Runtime: pallet_bfc_staking::Config> {
 	pub tier: Vec<u32>,
 }
 
-impl<Runtime> From<CandidateStates<Runtime>> for EvmCandidateStateOf<Runtime>
+impl<Runtime> From<CandidateStates<Runtime>> for EvmCandidateStateOf
 where
 	Runtime: pallet_bfc_staking::Config,
 	BalanceOf<Runtime>: Into<U256>,
+	BlockNumberOf<Runtime>: Into<U256>,
 {
-	fn from(state: CandidateStates<Runtime>) -> EvmCandidateStateOf<Runtime> {
+	fn from(state: CandidateStates<Runtime>) -> EvmCandidateStateOf {
 		(
 			state.controller[0],
 			state.stash[0],
@@ -180,7 +161,7 @@ where
 			state.status[0],
 			state.is_selected[0],
 			state.commission[0],
-			state.last_block[0],
+			state.last_block[0].into(),
 			state.blocks_produced[0],
 			state.productivity[0],
 			state.reward_dst[0],
@@ -190,31 +171,53 @@ where
 	}
 }
 
-impl<Runtime> From<CandidateStates<Runtime>> for EvmCandidateStatesOf<Runtime>
+impl<Runtime> From<CandidateStates<Runtime>> for EvmCandidateStatesOf
 where
 	Runtime: pallet_bfc_staking::Config,
+	BalanceOf<Runtime>: Into<U256>,
+	BlockNumberOf<Runtime>: Into<U256>,
 {
-	fn from(state: CandidateStates<Runtime>) -> EvmCandidateStatesOf<Runtime> {
+	fn from(state: CandidateStates<Runtime>) -> EvmCandidateStatesOf {
 		(
 			state.controller,
 			state.stash,
-			state.bond,
-			state.initial_bond,
+			state.bond.clone().into_iter().map(|b| b.into()).collect::<Vec<U256>>(),
+			state.initial_bond.clone().into_iter().map(|i| i.into()).collect::<Vec<U256>>(),
 			state.nomination_count,
-			state.voting_power,
-			state.lowest_top_nomination_amount,
-			state.highest_bottom_nomination_amount,
-			state.lowest_bottom_nomination_amount,
+			state.voting_power.clone().into_iter().map(|v| v.into()).collect::<Vec<U256>>(),
+			state
+				.lowest_top_nomination_amount
+				.clone()
+				.into_iter()
+				.map(|n| n.into())
+				.collect::<Vec<U256>>(),
+			state
+				.highest_bottom_nomination_amount
+				.clone()
+				.into_iter()
+				.map(|n| n.into())
+				.collect::<Vec<U256>>(),
+			state
+				.lowest_bottom_nomination_amount
+				.clone()
+				.into_iter()
+				.map(|n| n.into())
+				.collect::<Vec<U256>>(),
 			state.top_capacity,
 			state.bottom_capacity,
 			state.status,
 			state.is_selected,
 			state.commission,
-			state.last_block,
+			state.last_block.clone().into_iter().map(|b| b.into()).collect::<Vec<U256>>(),
 			state.blocks_produced,
 			state.productivity,
 			state.reward_dst,
-			state.awarded_tokens,
+			state
+				.awarded_tokens
+				.clone()
+				.into_iter()
+				.map(|a| a.into())
+				.collect::<Vec<U256>>(),
 			state.tier,
 		)
 	}
@@ -352,6 +355,7 @@ impl<Runtime> CandidateState<Runtime>
 where
 	Runtime: pallet_bfc_staking::Config,
 	Runtime::AccountId: Into<H160>,
+	BlockNumberOf<Runtime>: Into<U256>,
 {
 	pub fn default() -> Self {
 		let zero = 0u32;
@@ -414,7 +418,7 @@ where
 		self.is_selected = state.is_selected.into();
 
 		self.commission = state.commission.deconstruct();
-		self.last_block = state.last_block.into();
+		self.last_block = state.last_block;
 		self.blocks_produced = state.blocks_produced.into();
 		self.productivity = state.productivity.deconstruct();
 
@@ -460,6 +464,7 @@ impl<Runtime> NominatorState<Runtime>
 where
 	Runtime: pallet_bfc_staking::Config,
 	Runtime::AccountId: Into<H160>,
+	BalanceOf<Runtime>: Into<U256>,
 {
 	pub fn default() -> Self {
 		let zero = 0u32;
@@ -480,15 +485,15 @@ where
 	pub fn set_state(&mut self, state: Nominator<Runtime::AccountId, BalanceOf<Runtime>>) {
 		for nomination in state.nominations.0 {
 			self.candidates.push(Address(nomination.owner.into()));
-			self.nominations.push(nomination.amount.into());
+			self.nominations.push(nomination.amount);
 		}
 		for nomination in state.initial_nominations.0 {
-			self.initial_nominations.push(nomination.amount.into());
+			self.initial_nominations.push(nomination.amount);
 		}
 
-		self.total = state.total.into();
+		self.total = state.total;
 		self.request_revocations_count = state.requests.revocations_count.into();
-		self.request_less_total = state.requests.less_total.into();
+		self.request_less_total = state.requests.less_total;
 
 		self.status = match state.status {
 			NominatorStatus::Active => 1u32.into(),
@@ -501,24 +506,32 @@ where
 		};
 
 		for awarded_token in state.awarded_tokens_per_candidate.0 {
-			self.awarded_tokens_per_candidate.push(awarded_token.amount.into());
+			self.awarded_tokens_per_candidate.push(awarded_token.amount);
 		}
-		self.awarded_tokens = state.awarded_tokens.into();
+		self.awarded_tokens = state.awarded_tokens;
 	}
 
-	pub fn from_owner(&self, owner: Address) -> EvmNominatorStateOf<Runtime> {
+	pub fn from_owner(&self, owner: Address) -> EvmNominatorStateOf {
 		(
 			owner,
-			self.total,
+			self.total.into(),
 			self.status,
 			self.request_revocations_count,
-			self.request_less_total,
+			self.request_less_total.into(),
 			self.candidates.clone(),
-			self.nominations.clone(),
-			self.initial_nominations.clone(),
+			self.nominations.clone().into_iter().map(|n| n.into()).collect::<Vec<U256>>(),
+			self.initial_nominations
+				.clone()
+				.into_iter()
+				.map(|n| n.into())
+				.collect::<Vec<U256>>(),
 			self.reward_dst,
-			self.awarded_tokens,
-			self.awarded_tokens_per_candidate.clone(),
+			self.awarded_tokens.into(),
+			self.awarded_tokens_per_candidate
+				.clone()
+				.into_iter()
+				.map(|a| a.into())
+				.collect::<Vec<U256>>(),
 		)
 	}
 }
