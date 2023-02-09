@@ -407,9 +407,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       [],
     );
     const decoded_candidate_pool = context.web3.eth.abi.decodeParameters(
-      ['tuple(address[],uint256[])'],
+      ['address[]', 'uint256[]'],
       candidate_pool.result,
-    )[0];
+    );
     expect(decoded_candidate_pool[0].length).equal(1);
     expect(decoded_candidate_pool[1].length).equal(1);
     expect(decoded_candidate_pool[0][0]).equal(alith.public);
@@ -440,10 +440,29 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_candidate_states = context.web3.eth.abi.decodeParameters(
       [
-        'tuple(address[],address[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],bool[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[])',
+        'address[]',
+        'address[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'bool[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
       ],
       candidate_states.result,
-    )[0];
+    );
     expect(decoded_candidate_states[0][0]).equal(alith.public);
 
     const candidate_states_by_selection = await callPrecompile(
@@ -456,10 +475,29 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_candidate_states_by_selection = context.web3.eth.abi.decodeParameters(
       [
-        'tuple(address[],address[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],bool[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[],uint256[])',
+        'address[]',
+        'address[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'bool[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
       ],
       candidate_states_by_selection.result,
-    )[0];
+    );
     expect(decoded_candidate_states_by_selection[0][0]).equal(alith.public);
 
     const candidate_request = await callPrecompile(
@@ -488,10 +526,13 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_candidate_top_nominations = context.web3.eth.abi.decodeParameters(
       [
-        'tuple(address,uint256,address[],uint256[])',
+        'address',
+        'uint256',
+        'address[]',
+        'uint256[]',
       ],
       candidate_top_nominations.result,
-    )[0];
+    );
     expect(decoded_candidate_top_nominations[0]).equal(alith.public);
 
     const candidate_bottom_nominations = await callPrecompile(
@@ -504,10 +545,13 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_candidate_bottom_nominations = context.web3.eth.abi.decodeParameters(
       [
-        'tuple(address,uint256,address[],uint256[])',
+        'address',
+        'uint256',
+        'address[]',
+        'uint256[]',
       ],
       candidate_bottom_nominations.result,
-    )[0];
+    );
     expect(decoded_candidate_bottom_nominations[0]).equal(alith.public);
 
     const candidate_nomination_count = await callPrecompile(
@@ -538,10 +582,20 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_nominator_state = context.web3.eth.abi.decodeParameters(
       [
-        'tuple(address,uint256,uint256,uint256,uint256,address[],uint256[],uint256[],uint256,uint256,uint256[])',
+        'address',
+        'uint256',
+        'uint256',
+        'uint256',
+        'uint256',
+        'address[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256',
+        'uint256',
+        'uint256[]',
       ],
       nominator_state.result,
-    )[0];
+    );
     expect(decoded_nominator_state[0]).equal(alith.public);
 
     const nominator_requests = await callPrecompile(
@@ -554,10 +608,16 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_nominator_requests = context.web3.eth.abi.decodeParameters(
       [
-        'tuple(address,uint256,uint256,address[],uint256[],uint256[],uint256[])',
+        'address',
+        'uint256',
+        'uint256',
+        'address[]',
+        'uint256[]',
+        'uint256[]',
+        'uint256[]',
       ],
       nominator_requests.result,
-    )[0];
+    );
     expect(decoded_nominator_requests[0]).equal(alith.public);
 
     const nominator_nomination_count = await callPrecompile(
@@ -608,9 +668,9 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       [],
     );
     const decoded_candidate_pool = context.web3.eth.abi.decodeParameters(
-      ['tuple(address[],uint256[])'],
+      ['address[]', 'uint256[]'],
       candidate_pool.result,
-    )[0];
+    );
     expect(decoded_candidate_pool[0].length).equal(2);
     expect(decoded_candidate_pool[1].length).equal(2);
     expect(decoded_candidate_pool[0]).includes(baltathar.public);

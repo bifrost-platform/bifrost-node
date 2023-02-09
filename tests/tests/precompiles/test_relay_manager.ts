@@ -172,9 +172,9 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       [],
     );
     const decoded_relayer_pool = context.web3.eth.abi.decodeParameters(
-      ['tuple(address[],address[])'],
+      ['address[]', 'address[]'],
       relayer_pool.result,
-    )[0];
+    );
     expect(decoded_relayer_pool[0][0]).equal(alithRelayer.public);
 
     const majority = await callPrecompile(
@@ -228,9 +228,9 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       [],
     );
     const decoded_relayer_states = context.web3.eth.abi.decodeParameters(
-      ['tuple(address[],address[],uint256[])'],
+      ['address[]', 'address[]', 'uint256[]'],
       relayer_states.result,
-    )[0];
+    );
     expect(decoded_relayer_states[0][0]).equal(alithRelayer.public);
   });
 });
