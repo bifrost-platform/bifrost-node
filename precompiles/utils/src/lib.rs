@@ -12,13 +12,15 @@ pub mod revert;
 pub mod substrate;
 
 use crate::alloc::{borrow::ToOwned, vec::Vec};
-use fp_evm::{ExitRevert, ExitSucceed, PrecompileFailure, PrecompileHandle, PrecompileOutput};
+use fp_evm::{ExitRevert, ExitSucceed, PrecompileFailure, PrecompileOutput};
 
 pub mod data;
 
 pub use data::{EvmData, EvmDataReader, EvmDataWriter};
 pub use fp_evm::Precompile;
-pub use precompile_utils_macro::{generate_function_selector, keccak256, precompile};
+pub use precompile_utils_macro::{
+	generate_function_selector, keccak256, precompile, precompile_name_from_address,
+};
 
 /// Generated a `PrecompileFailure::Revert` with proper encoding for the output.
 /// If the revert needs improved formatting such as backtraces, `Revert` type should
@@ -42,18 +44,6 @@ pub fn succeed(output: impl AsRef<[u8]>) -> PrecompileOutput {
 /// Alias for Result returning an EVM precompile error.
 pub type EvmResult<T = ()> = Result<T, PrecompileFailure>;
 
-/// Trait similar to `fp_evm::Precompile` but with a `&self` parameter to manage some
-/// state (this state is only kept in a single transaction and is lost afterward).
-pub trait StatefulPrecompile {
-	/// Instanciate the precompile.
-	/// Will be called once when building the PrecompileSet at the start of each
-	/// Ethereum transaction.
-	fn new() -> Self;
-
-	/// Execute the precompile with a reference to its state.
-	fn execute(&self, handle: &mut impl PrecompileHandle) -> EvmResult<PrecompileOutput>;
-}
-
 pub mod prelude {
 	pub use crate::{
 		data::{
@@ -66,7 +56,7 @@ pub mod prelude {
 		read_args, read_struct, revert,
 		revert::{BacktraceExt, InjectBacktrace, MayRevert, Revert, RevertExt, RevertReason},
 		substrate::{RuntimeHelper, TryDispatchError},
-		succeed, EvmResult, StatefulPrecompile,
+		succeed, EvmResult,
 	};
 	pub use pallet_evm::{PrecompileHandle, PrecompileOutput};
 	pub use precompile_utils_macro::{generate_function_selector, keccak256, precompile};

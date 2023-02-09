@@ -32,69 +32,10 @@ interface BfcStaking {
         uint256 tier;
     }
 
-    struct candidates_meta_data {
-        address[] candidates;
-        address[] stashes;
-        uint256[] bonds;
-        uint256[] initial_bonds;
-        uint256[] nominations_counts;
-        uint256[] voting_powers;
-        uint256[] lowest_top_nomination_amounts;
-        uint256[] highest_bottom_nomination_amounts;
-        uint256[] lowest_bottom_nomination_amounts;
-        uint256[] top_capacities;
-        uint256[] bottom_capacities;
-        uint256[] status;
-        bool[] is_selected;
-        uint256[] commissions;
-        uint256[] last_blocks;
-        uint256[] blocks_produced;
-        uint256[] productivity;
-        uint256[] reward_dst;
-        uint256[] awarded_tokens;
-        uint256[] tiers;
-    }
-
     struct candidate_request_data {
         address candidate;
         uint256 amount;
         uint256 when_executable;
-    }
-
-    struct candidate_nominations {
-        address candidate;
-        uint256 total;
-        address[] nominators;
-        uint256[] nominations;
-    }
-
-    struct candidate_pool_meta_data {
-        address[] candidates;
-        uint256[] bonds;
-    }
-
-    struct nominator_meta_data {
-        address nominator;
-        uint256 total;
-        uint256 status;
-        uint256 request_revocations_count;
-        uint256 request_less_total;
-        address[] candidates;
-        uint256[] nominations;
-        uint256[] initial_nominations;
-        uint256 reward_dst;
-        uint256 awarded_tokens;
-        uint256[] awarded_tokens_per_candidate;
-    }
-
-    struct nominator_requests_data {
-        address nominator;
-        uint256 revocations_count;
-        uint256 less_total;
-        address[] candidates;
-        uint256[] amounts;
-        uint256[] when_executables;
-        uint256[] actions;
     }
 
     struct total_stake {
@@ -338,7 +279,7 @@ interface BfcStaking {
     function candidate_pool()
         external
         view
-        returns (candidate_pool_meta_data memory);
+        returns (address[] memory, uint256[] memory);
 
     /// @dev Get the current state of the given candidate
     /// Selector: 36f3b497
@@ -356,7 +297,28 @@ interface BfcStaking {
     function candidate_states(uint256 tier)
         external
         view
-        returns (candidates_meta_data memory);
+        returns (
+            address[] memory,
+            address[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            bool[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory
+        );
 
     /// @dev Get every candidate states by the given selector
     /// Selector: d631e15c
@@ -366,7 +328,28 @@ interface BfcStaking {
     function candidate_states_by_selection(uint256 tier, bool is_selected)
         external
         view
-        returns (candidates_meta_data memory);
+        returns (
+            address[] memory,
+            address[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            bool[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory
+        );
 
     /// @dev Get the request status of the given candidate
     /// Selector: 2e388768
@@ -384,7 +367,12 @@ interface BfcStaking {
     function candidate_top_nominations(address candidate)
         external
         view
-        returns (candidate_nominations memory);
+        returns (
+            address,
+            uint256,
+            address[] memory,
+            uint256[] memory
+        );
 
     /// @dev Get the bottom nominations of the given candidate
     /// Selector: 9be794c0
@@ -393,7 +381,12 @@ interface BfcStaking {
     function candidate_bottom_nominations(address candidate)
         external
         view
-        returns (candidate_nominations memory);
+        returns (
+            address,
+            uint256,
+            address[] memory,
+            uint256[] memory
+        );
 
     /// @dev Get the CandidateNominationCount weight hint
     /// Selector: 1c8ad6fe
@@ -411,7 +404,19 @@ interface BfcStaking {
     function nominator_state(address nominator)
         external
         view
-        returns (nominator_meta_data memory);
+        returns (
+            address,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            address[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256,
+            uint256,
+            uint256[] memory
+        );
 
     /// @dev Get the pending requests of the given nominator
     /// Selector: 24f81326
@@ -420,7 +425,15 @@ interface BfcStaking {
     function nominator_requests(address nominator)
         external
         view
-        returns (nominator_requests_data memory);
+        returns (
+            address,
+            uint256,
+            uint256,
+            address[] memory,
+            uint256[] memory,
+            uint256[] memory,
+            uint256[] memory
+        );
 
     /// @dev Get the NominatorNominationCount weight hint
     /// Selector: dae5659b

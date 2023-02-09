@@ -9,21 +9,10 @@ pragma solidity >=0.8.0;
  */
 
 interface RelayManager {
-    struct relayer_pool_meta_data {
-        address[] relayers;
-        address[] controllers;
-    }
-
     struct relayer_state_meta_data {
         address relayer;
         address controller;
         uint256 status;
-    }
-
-    struct relayer_states_meta_data {
-        address[] relayers;
-        address[] controllers;
-        uint256[] status;
     }
 
     /// @dev Check whether the specified address is currently a part of the relayer pool
@@ -125,7 +114,7 @@ interface RelayManager {
     function relayer_pool()
         external
         view
-        returns (relayer_pool_meta_data memory);
+        returns (address[] memory, address[] memory);
 
     /// @dev Get the active relayer sets majority of the current round
     /// Selector: d2ea63fb
@@ -162,7 +151,11 @@ interface RelayManager {
     function relayer_states()
         external
         view
-        returns (relayer_states_meta_data memory);
+        returns (
+            address[] memory,
+            address[] memory,
+            uint256[] memory
+        );
 
     /// @dev Sends a heartbeat that sets relayer unresponsiveness
     /// Selector: 3defb962

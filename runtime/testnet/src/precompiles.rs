@@ -14,6 +14,40 @@ use precompile_relay_manager::RelayManagerPrecompile;
 
 use precompile_utils::precompile_set::*;
 
+type EthereumPrecompilesChecks = (AcceptDelegateCall, CallableByContract, CallableByPrecompile);
+type BifrostPrecompilesChecks = (CallableByContract, CallableByPrecompile);
+
+#[precompile_utils::precompile_name_from_address]
+pub type BifrostPrecompilesAt<R> = (
+	// Ethereum precompiles:
+	// We allow DELEGATECALL to stay compliant with Ethereum behavior.
+	PrecompileAt<AddressU64<1>, ECRecover, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<2>, Sha256, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<3>, Ripemd160, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<4>, Identity, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<5>, Modexp, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<6>, Bn128Add, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<7>, Bn128Mul, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<8>, Bn128Pairing, EthereumPrecompilesChecks>,
+	PrecompileAt<AddressU64<9>, Blake2F, EthereumPrecompilesChecks>,
+	// BIFROST specific precompiles:
+	PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<1280>, BfcOffencesPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<2048>, GovernancePrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<
+		AddressU64<2049>,
+		CollectivePrecompile<R, CouncilInstance>,
+		BifrostPrecompilesChecks,
+	>,
+	PrecompileAt<
+		AddressU64<2050>,
+		CollectivePrecompile<R, TechCommitteeInstance>,
+		BifrostPrecompilesChecks,
+	>,
+	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
+);
+
 /// The PrecompileSet installed in the BIFROST runtime.
 /// We include the nine Istanbul precompiles
 /// (https://github.com/ethereum/go-ethereum/blob/3c46f557/core/vm/contracts.go#L69)
@@ -25,29 +59,6 @@ pub type BifrostPrecompiles<R> = PrecompileSetBuilder<
 	R,
 	(
 		// Skip precompiles if out of range.
-		PrecompilesInRangeInclusive<
-			(AddressU64<1>, AddressU64<8192>),
-			(
-				// Ethereum precompiles:
-				// We allow DELEGATECALL to stay compliant with Ethereum behavior.
-				PrecompileAt<AddressU64<1>, ECRecover, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<2>, Sha256, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<3>, Ripemd160, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<4>, Identity, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<5>, Modexp, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<6>, Bn128Add, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<7>, Bn128Mul, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<8>, Bn128Pairing, ForbidRecursion, AllowDelegateCall>,
-				PrecompileAt<AddressU64<9>, Blake2F, ForbidRecursion, AllowDelegateCall>,
-				// BIFROST specific precompiles:
-				PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>>,
-				PrecompileAt<AddressU64<1280>, BfcOffencesPrecompile<R>>,
-				PrecompileAt<AddressU64<2048>, GovernancePrecompile<R>>,
-				PrecompileAt<AddressU64<2049>, CollectivePrecompile<R, CouncilInstance>>,
-				PrecompileAt<AddressU64<2050>, CollectivePrecompile<R, TechCommitteeInstance>>,
-				PrecompileAt<AddressU64<4096>, BalancePrecompile<R>>,
-				PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>>,
-			),
-		>,
+		PrecompilesInRangeInclusive<(AddressU64<1>, AddressU64<8192>), BifrostPrecompilesAt<R>>,
 	),
 >;
