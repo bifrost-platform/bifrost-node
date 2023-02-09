@@ -20,6 +20,7 @@ hex-literal = { version = "0.3.1", optional = true }
 static_assertions = "1.1.0"
 rlp = { version = "0.5", optional = true, default-features = false }
 sha3 = { version = "0.10", optional = true, default-features = false }
+num_enum = { version = "0.5.3", default-features = false }
 
 # BIFROST
 bifrost-common-runtime = { default-features = false, path = "../common" }
