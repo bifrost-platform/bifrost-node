@@ -20,6 +20,9 @@ pub trait EvmData: Sized {
 	fn write(writer: &mut EvmDataWriter, value: Self);
 	fn has_static_size() -> bool;
 	fn solidity_type() -> String;
+	fn is_explicit_tuple() -> bool {
+		false
+	}
 }
 
 /// Wrapper around an EVM input slice, helping to parse it.
@@ -57,6 +60,18 @@ impl<'a> EvmDataReader<'a> {
 		})?;
 
 		Ok(selector)
+	}
+
+	/// Read selector as u32
+	pub fn read_u32_selector(input: &'a [u8]) -> MayRevert<u32> {
+		if input.len() < 4 {
+			return Err(RevertReason::read_out_of_bounds("selector").into())
+		}
+
+		let mut buffer = [0u8; 4];
+		buffer.copy_from_slice(&input[0..4]);
+
+		Ok(u32::from_be_bytes(buffer))
 	}
 
 	/// Create a new input parser from a selector-initial input.
@@ -286,6 +301,17 @@ where
 
 	fn solidity_type() -> String {
 		P::solidity_type()
+	}
+}
+
+/// Wrapper around values being returned by functions.
+/// Handle special case with tuple encoding.
+pub fn encode_as_function_return_value<T: EvmData>(value: T) -> Vec<u8> {
+	let output = EvmDataWriter::new().write(value).build();
+	if T::is_explicit_tuple() && !T::has_static_size() {
+		output[32..].to_vec()
+	} else {
+		output
 	}
 }
 

@@ -9,31 +9,6 @@ pragma solidity >=0.8.0;
  */
 
 interface Governance {
-    struct deposit_of_meta_data {
-        uint256 total_deposit;
-        uint256 initial_deposit;
-        address[] depositors;
-    }
-
-    struct voting_of_meta_data {
-        uint256 ref_index;
-        address[] voters;
-        uint256[] voting_powers;
-        bool[] voting_sides;
-        uint256[] convictions;
-    }
-
-    struct account_votes_meta_data {
-        uint256[] ref_index;
-        uint256[] raw_votes;
-        bool[] voting_sides;
-        uint256[] convictions;
-        uint256 delegated_votes;
-        uint256 delegated_raw_votes;
-        uint256 lock_expired_at;
-        uint256 lock_balance;
-    }
-
     struct ongoing_referendum_info_meta_data {
         uint256 end;
         bytes32 proposal_hash;
@@ -65,7 +40,11 @@ interface Governance {
     function deposit_of(uint256 prop_index)
         external
         view
-        returns (deposit_of_meta_data memory);
+        returns (
+            uint256,
+            uint256,
+            address[] memory
+        );
 
     /**
      * Get details of the votes for a referendum.
@@ -76,7 +55,13 @@ interface Governance {
     function voting_of(uint256 ref_index)
         external
         view
-        returns (voting_of_meta_data memory);
+        returns (
+            uint256,
+            address[] memory,
+            uint256[] memory,
+            bool[] memory,
+            uint256[] memory
+        );
 
     /**
      * Get details of the votes for the given account.
@@ -95,7 +80,16 @@ interface Governance {
     function account_votes(address account)
         external
         view
-        returns (account_votes_meta_data memory);
+        returns (
+            uint256[] memory,
+            uint256[] memory,
+            bool[] memory,
+            uint256[] memory,
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        );
 
     /**
      * Get the index of the lowest unbaked referendum
