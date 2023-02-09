@@ -56,9 +56,9 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
       ],
     );
     const decoded_validator_offences = context.web3.eth.abi.decodeParameters(
-      ['tuple(address[],uint256[],uint256[],uint256[])'],
+      ['address[]', 'uint256[]', 'uint256[]', 'uint256[]'],
       validator_offences.result,
-    )[0];
+    );
     expect(decoded_validator_offences[0][0]).equal(alith.public);
   });
 });
