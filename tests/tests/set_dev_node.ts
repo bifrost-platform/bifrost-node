@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import { ethers } from 'ethers';
 import tcpPortUsed from 'tcp-port-used';
+import { setTimeout } from 'timers/promises';
 import { HttpProvider } from 'web3-core';
 import { JsonRpcResponse } from 'web3-core-helpers';
 
@@ -105,7 +106,7 @@ export function describeDevNode(
         // We keep track of the polkadotApis to close them at the end of the test
         context._polkadotApis.push(apiPromise);
         await apiPromise.isReady;
-        await sleep(100);
+        await setTimeout(100);
         // Necessary hack to allow polkadotApi to finish its internal metadata loading
         // apiPromise.isReady unfortunately doesn't wait for those properly
         return apiPromise;
