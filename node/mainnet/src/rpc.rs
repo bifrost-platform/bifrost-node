@@ -99,7 +99,7 @@ where
 
 	io.merge(
 		Grandpa::new(
-			subscription_executor,
+			Arc::clone(&subscription_executor),
 			shared_authority_set.clone(),
 			shared_voter_state,
 			justification_stream,
@@ -139,7 +139,7 @@ where
 			Arc::clone(&client),
 			network.clone(),
 			Arc::clone(&subscription_executor),
-			overrides,
+			Arc::clone(&overrides),
 		)
 		.into_rpc(),
 	)
