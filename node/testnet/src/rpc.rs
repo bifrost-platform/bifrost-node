@@ -141,7 +141,7 @@ where
 			Arc::clone(&client),
 			network.clone(),
 			Arc::clone(&subscription_executor),
-			overrides,
+			Arc::clone(&overrides),
 		)
 		.into_rpc(),
 	)
