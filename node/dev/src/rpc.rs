@@ -54,7 +54,8 @@ where
 	SC: SelectChain<Block> + 'static,
 {
 	use fc_rpc::{
-		Eth, EthApiServer, EthFilter, EthFilterApiServer, Net, NetApiServer, Web3, Web3ApiServer,
+		Eth, EthApiServer, EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, Net,
+		NetApiServer, Web3, Web3ApiServer,
 	};
 	use fc_rpc_debug::{Debug, DebugServer};
 	use fc_rpc_trace::{Trace, TraceServer};
@@ -129,6 +130,18 @@ where
 			network.clone(),
 			// Whether to format the `peer_count` response as Hex (default) or not.
 			true,
+		)
+		.into_rpc(),
+	)
+	.ok();
+
+	io.merge(
+		EthPubSub::new(
+			Arc::clone(&pool),
+			Arc::clone(&client),
+			network.clone(),
+			Arc::clone(&subscription_executor),
+			overrides,
 		)
 		.into_rpc(),
 	)
