@@ -140,7 +140,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 435,
+	spec_version: 440,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -291,8 +291,8 @@ where
 	// this seems to be called for substrate-based transactions
 	fn on_unbalanceds<B>(mut fees_then_tips: impl Iterator<Item = NegativeImbalance<R>>) {
 		if let Some(fees) = fees_then_tips.next() {
-			// for fees, 20% are burned, 80% to the treasury
-			let (_, to_treasury) = fees.ration(20, 80);
+			// for fees, 50% are burned, 50% to the treasury
+			let (_, to_treasury) = fees.ration(50, 50);
 			// Balances pallet automatically burns dropped Negative Imbalances by decreasing
 			// total_supply accordingly
 			<pallet_treasury::Pallet<R> as OnUnbalanced<_>>::on_unbalanced(to_treasury);
@@ -304,7 +304,7 @@ where
 	fn on_nonzero_unbalanced(amount: NegativeImbalance<R>) {
 		// Balances pallet automatically burns dropped Negative Imbalances by decreasing
 		// total_supply accordingly
-		let (_, to_treasury) = amount.ration(20, 80);
+		let (_, to_treasury) = amount.ration(50, 50);
 		<pallet_treasury::Pallet<R> as OnUnbalanced<_>>::on_unbalanced(to_treasury);
 	}
 }
