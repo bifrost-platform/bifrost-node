@@ -146,7 +146,6 @@ export function describeDevNode(
 
 export async function startMultiDevNode() {
   await startSingleDevNode(9934);
-  await startSingleDevNode(9935);
   return await startSingleDevNode(9933);
 }
 
