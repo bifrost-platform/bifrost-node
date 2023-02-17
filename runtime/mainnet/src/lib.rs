@@ -733,7 +733,7 @@ parameter_types! {
 	/// Minimum stake required to become a basic validator.
 	pub const MinBasicValidatorStk: u128 = 2_000_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a full candidate.
-	pub const MinFullCandidateStk: u128 = 300_000 * SUPPLY_FACTOR * BFC;
+	pub const MinFullCandidateStk: u128 = 400_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a basic candidate.
 	pub const MinBasicCandidateStk: u128 = 400_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a nominator.
