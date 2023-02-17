@@ -28,8 +28,20 @@ where
 		Ok(().into())
 	}
 
+	fn refresh_relayer_pool() {
+		let pool = <RelayerPool<T>>::get();
+		pool.iter().for_each(|r| {
+			let mut relayer_state =
+				<RelayerState<T>>::get(&r.relayer).expect("RelayerState must exist");
+			relayer_state.go_offline();
+			<RelayerState<T>>::insert(&r.relayer, relayer_state);
+		});
+	}
+
 	fn refresh_selected_relayers(round: RoundIndex, selected_candidates: Vec<T::AccountId>) {
 		let mut selected_relayers = vec![];
+		Self::refresh_relayer_pool();
+
 		for controller in selected_candidates {
 			if let Some(relayer) = <BondedController<T>>::get(&controller) {
 				selected_relayers.push(relayer.clone());
