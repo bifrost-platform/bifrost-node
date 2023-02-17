@@ -78,7 +78,7 @@ pub struct RelayerMetadata<AccountId> {
 
 impl<AccountId: PartialEq + Clone> RelayerMetadata<AccountId> {
 	pub fn new(controller: AccountId) -> Self {
-		RelayerMetadata { controller, status: RelayerStatus::Active }
+		RelayerMetadata { controller, status: RelayerStatus::Idle }
 	}
 
 	pub fn go_offline(&mut self) {
