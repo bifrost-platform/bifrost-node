@@ -712,9 +712,9 @@ where
 		let tier: u32 = tier.converted();
 
 		let raw_selected_candidates = match tier {
-			2 => StakingOf::<Runtime>::selected_full_candidates(),
-			1 => StakingOf::<Runtime>::selected_basic_candidates(),
-			_ => StakingOf::<Runtime>::selected_candidates(),
+			2 => StakingOf::<Runtime>::selected_full_candidates().into_inner(),
+			1 => StakingOf::<Runtime>::selected_basic_candidates().into_inner(),
+			_ => StakingOf::<Runtime>::selected_candidates().into_inner(),
 		};
 		let selected_candidates = raw_selected_candidates
 			.into_iter()
@@ -1486,9 +1486,9 @@ where
 			result = false;
 		} else {
 			let raw_selected_candidates = match tier {
-				TierType::Full => StakingOf::<Runtime>::selected_full_candidates(),
-				TierType::Basic => StakingOf::<Runtime>::selected_basic_candidates(),
-				TierType::All => StakingOf::<Runtime>::selected_candidates(),
+				TierType::Full => StakingOf::<Runtime>::selected_full_candidates().into_inner(),
+				TierType::Basic => StakingOf::<Runtime>::selected_basic_candidates().into_inner(),
+				TierType::All => StakingOf::<Runtime>::selected_candidates().into_inner(),
 			};
 			let selected_candidates = raw_selected_candidates
 				.into_iter()

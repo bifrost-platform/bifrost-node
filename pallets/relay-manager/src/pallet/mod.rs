@@ -8,7 +8,7 @@ use crate::{
 use frame_support::{pallet_prelude::*, traits::ValidatorSetWithIdentification, Twox64Concat};
 use frame_system::pallet_prelude::*;
 
-use bp_staking::RoundIndex;
+use bp_staking::{RoundIndex, MAX_VALIDATORS};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
 use sp_std::prelude::*;
@@ -113,7 +113,8 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn relayer_pool)]
 	/// The pool of relayers of the current round (including selected and non-selected relayers)
-	pub type RelayerPool<T: Config> = StorageValue<_, Vec<Relayer<T::AccountId>>, ValueQuery>;
+	pub type RelayerPool<T: Config> =
+		StorageValue<_, BoundedVec<Relayer<T::AccountId>, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn relayer_state)]
@@ -124,12 +125,14 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn selected_relayers)]
 	/// The active relayer set selected for the current round
-	pub type SelectedRelayers<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type SelectedRelayers<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn initial_selected_relayers)]
 	/// The active relayer set selected at the beginning of the current round
-	pub type InitialSelectedRelayers<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type InitialSelectedRelayers<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn cached_selected_relayers)]

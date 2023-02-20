@@ -190,7 +190,7 @@ describeDevNode('pallet_relay_manager - relayer heartbeat', (context) => {
     const rawRelayerState: any = await context.polkadotApi.query.relayManager.relayerState(charlethRelayer.address);
     const relayerState = rawRelayerState.unwrap().toJSON();
     expect(relayerState.controller).equal(charleth.address);
-    expect(relayerState.status).equal('Active');
+    expect(relayerState.status).equal('Idle');
 
     await context.polkadotApi.tx.relayManager.heartbeat()
       .signAndSend(charlethRelayer);

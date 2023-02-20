@@ -2,31 +2,31 @@ use super::*;
 
 pub mod v3 {
 	use super::*;
-	use frame_support::traits::Get;
+	// use frame_support::traits::Get;
 
 	pub fn migrate<T: Config>() -> Weight {
-		let mut candidate_pool = CandidatePool::<T>::get();
-		for mut candidate in CandidateInfo::<T>::iter() {
-			let mut is_contained = false;
-			for c in candidate_pool.iter() {
-				if c.owner == candidate.0 {
-					is_contained = true;
-					break
-				}
-			}
-			if !is_contained {
-				candidate.1.reset_blocks_produced();
-				candidate_pool
-					.push(Bond { owner: candidate.0.clone(), amount: candidate.1.voting_power });
-			}
-			candidate.1.reset_productivity();
-			candidate.1.status = ValidatorStatus::Active;
-			CandidateInfo::<T>::insert(&candidate.0, candidate.1.clone());
-		}
-		Pallet::<T>::sort_candidates_by_voting_power();
-		CandidatePool::<T>::put(candidate_pool);
-		// StorageVersion::<T>::put(Releases::V3_0_0);
-		crate::log!(info, "bfc-staking migration passes Releases::V3_0_0 migrate checks ✅");
+		// let mut candidate_pool = CandidatePool::<T>::get();
+		// for mut candidate in CandidateInfo::<T>::iter() {
+		// 	let mut is_contained = false;
+		// 	for c in candidate_pool.iter() {
+		// 		if c.owner == candidate.0 {
+		// 			is_contained = true;
+		// 			break
+		// 		}
+		// 	}
+		// 	if !is_contained {
+		// 		candidate.1.reset_blocks_produced();
+		// 		candidate_pool
+		// 			.push(Bond { owner: candidate.0.clone(), amount: candidate.1.voting_power });
+		// 	}
+		// 	candidate.1.reset_productivity();
+		// 	candidate.1.status = ValidatorStatus::Active;
+		// 	CandidateInfo::<T>::insert(&candidate.0, candidate.1.clone());
+		// }
+		// Pallet::<T>::sort_candidates_by_voting_power();
+		// CandidatePool::<T>::put(candidate_pool);
+		// // StorageVersion::<T>::put(Releases::V3_0_0);
+		// crate::log!(info, "bfc-staking migration passes Releases::V3_0_0 migrate checks ✅");
 		T::BlockWeights::get().max_block
 	}
 }

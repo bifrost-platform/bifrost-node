@@ -8,7 +8,10 @@ use crate::{
 	TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
-use bp_staking::traits::{OffenceHandler, RelayManager};
+use bp_staking::{
+	traits::{OffenceHandler, RelayManager},
+	MAX_VALIDATORS,
+};
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::*,
@@ -169,6 +172,7 @@ pub mod pallet {
 		RoundLengthMustBeAtLeastTotalSelectedValidators,
 		RoundLengthMustBeLongerThanCreatedBlocks,
 		NoWritingSameValue,
+		TooManyCandidates,
 		TooLowCandidateCountWeightHintJoinCandidates,
 		TooLowCandidateCountWeightHintCancelLeaveCandidates,
 		TooLowCandidateCountToLeaveCandidates,
@@ -256,14 +260,14 @@ pub mod pallet {
 			amount_to_decrease: BalanceOf<T>,
 			execute_round: RoundIndex,
 		},
-		// Nomination increased.
+		/// Nomination increased.
 		NominationIncreased {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
 			in_top: bool,
 		},
-		// Nomination decreased.
+		/// Nomination decreased.
 		NominationDecreased {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
@@ -497,17 +501,20 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn selected_candidates)]
 	/// The active validator set (full and basic) selected for the current round
-	pub type SelectedCandidates<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type SelectedCandidates<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_full_candidates)]
 	/// The active full validator set selected for the current round
-	pub type SelectedFullCandidates<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type SelectedFullCandidates<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_basic_candidates)]
 	/// The active basic validator set selected for the current round
-	pub type SelectedBasicCandidates<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type SelectedBasicCandidates<T: Config> =
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn cached_selected_candidates)]
@@ -533,8 +540,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn candidate_pool)]
 	/// The pool of validator candidates, each with their total voting power
-	pub(crate) type CandidatePool<T: Config> =
-		StorageValue<_, Vec<Bond<T::AccountId, BalanceOf<T>>>, ValueQuery>;
+	pub(crate) type CandidatePool<T: Config> = StorageValue<
+		_,
+		BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_VALIDATORS>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn at_stake)]
@@ -568,7 +578,7 @@ pub mod pallet {
 		_,
 		Twox64Concat,
 		RoundIndex,
-		Vec<DelayedControllerSet<T::AccountId>>,
+		BoundedVec<DelayedControllerSet<T::AccountId>, ConstU32<MAX_VALIDATORS>>,
 		ValueQuery,
 	>;
 
@@ -578,7 +588,7 @@ pub mod pallet {
 		_,
 		Twox64Concat,
 		RoundIndex,
-		Vec<DelayedCommissionSet<T::AccountId>>,
+		BoundedVec<DelayedCommissionSet<T::AccountId>, ConstU32<MAX_VALIDATORS>>,
 		ValueQuery,
 	>;
 
@@ -1209,7 +1219,9 @@ pub mod pallet {
 			<TopNominations<T>>::insert(&controller, empty_nominations.clone());
 			// insert empty bottom nominations
 			<BottomNominations<T>>::insert(&controller, empty_nominations);
-			candidates.push(Bond { owner: controller.clone(), amount: bond });
+			candidates
+				.try_push(Bond { owner: controller.clone(), amount: bond })
+				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			Self::sort_candidates_by_voting_power();
 			let new_total = <Total<T>>::get().saturating_add(bond);
@@ -1346,7 +1358,9 @@ pub mod pallet {
 				candidates.len() as u32 <= candidate_count,
 				Error::<T>::TooLowCandidateCountWeightHintCancelLeaveCandidates,
 			);
-			candidates.push(Bond { owner: controller.clone(), amount: state.voting_power });
+			candidates
+				.try_push(Bond { owner: controller.clone(), amount: state.voting_power })
+				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
 			Self::sort_candidates_by_voting_power();
@@ -1453,7 +1467,7 @@ pub mod pallet {
 			let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
 			cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
 			cached_selected_candidates
-				.push((round.current_round_index, selected_candidates.clone()));
+				.push((round.current_round_index, selected_candidates.clone().into_inner()));
 			<CachedSelectedCandidates<T>>::put(cached_selected_candidates);
 			// refresh majority
 			let majority: u32 = Self::compute_majority();
@@ -1495,7 +1509,9 @@ pub mod pallet {
 			ensure!(!state.is_leaving(), Error::<T>::CannotGoOnlineIfLeaving);
 			state.go_online();
 			let mut candidates = <CandidatePool<T>>::get();
-			candidates.push(Bond { owner: controller.clone(), amount: state.voting_power });
+			candidates
+				.try_push(Bond { owner: controller.clone(), amount: state.voting_power })
+				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
 			Self::deposit_event(Event::CandidateBackOnline { candidate: controller });
