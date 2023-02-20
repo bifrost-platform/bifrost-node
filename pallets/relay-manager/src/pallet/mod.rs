@@ -285,5 +285,27 @@ pub mod pallet {
 			}
 			Ok(().into())
 		}
+
+		#[pallet::weight(<T as Config>::WeightInfo::heartbeat_v2())]
+		/// Sends a new heartbeat to manage relayer liveness for the current session. The origin
+		/// must be the registered relayer account, and only the selected relayers can request.
+		pub fn heartbeat_v2(
+			origin: OriginFor<T>,
+			_impl_version: u32,
+			_spec_version: T::Hash,
+		) -> DispatchResultWithPostInfo {
+			let relayer = ensure_signed(origin)?;
+			ensure!(Self::is_relayer(&relayer), Error::<T>::RelayerDNE);
+			ensure!(Self::is_selected_relayer(&relayer, false), Error::<T>::RelayerInactive);
+			let is_pulsed = Self::pulse_heartbeat(&relayer);
+			if is_pulsed {
+				let mut relayer_state =
+					<RelayerState<T>>::get(&relayer).expect("RelayerState must exist");
+				relayer_state.go_online();
+				<RelayerState<T>>::insert(&relayer, relayer_state);
+				Self::deposit_event(Event::<T>::HeartbeatReceived { relayer });
+			}
+			Ok(().into())
+		}
 	}
 }
