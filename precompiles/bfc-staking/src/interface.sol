@@ -136,6 +136,27 @@ interface BfcStaking {
         address[] calldata candidates
     ) external view returns (bool);
 
+    /// @dev Get the maximum seat capacity of each tier
+    /// Selector: 584eda98
+    /// @return The maximum seat capacity (full, basic)
+    function validator_seats() external view returns (uint256, uint256);
+
+    /// @dev Get the minimum required self-bond amount of each tier
+    /// Selector: b877ab9f
+    /// @return The minimum required self-bond amount (full, basic)
+    function candidate_minimum_self_bond()
+        external
+        view
+        returns (uint256, uint256);
+
+    /// @dev Get the minimum required voting power of each tier
+    /// Selector: 4f237d04
+    /// @return The minimum required voting power (full, basic)
+    function candidate_minimum_voting_power()
+        external
+        view
+        returns (uint256, uint256);
+
     /// @dev Get the current rounds info
     /// Selector: f8aa8ddd
     /// @return The current rounds index, first session index, current session index,
