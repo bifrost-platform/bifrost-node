@@ -294,6 +294,63 @@ where
 
 	// Common storage getters
 
+	#[precompile::public("validatorSeats()")]
+	#[precompile::public("validator_seats()")]
+	#[precompile::view]
+	fn validator_seats(handle: &mut impl PrecompileHandle) -> EvmResult<(U256, U256)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let full_validator_seats: U256 = <StakingOf<Runtime>>::max_full_selected().into();
+		let basic_validator_seats: U256 = <StakingOf<Runtime>>::max_basic_selected().into();
+
+		Ok((full_validator_seats, basic_validator_seats))
+	}
+
+	#[precompile::public("candidateMinimumSelfBond()")]
+	#[precompile::public("candidate_minimum_self_bond()")]
+	#[precompile::view]
+	fn candidate_minimum_self_bond(handle: &mut impl PrecompileHandle) -> EvmResult<(U256, U256)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let full_candidate_stk: U256 =
+			<<Runtime as pallet_bfc_staking::Config>::MinFullCandidateStk as Get<
+				BalanceOf<Runtime>,
+			>>::get()
+			.try_into()
+			.map_err(|_| revert("Amount is too large for provided balance type"))?;
+
+		let basic_candidate_stk: U256 =
+			<<Runtime as pallet_bfc_staking::Config>::MinBasicCandidateStk as Get<
+				BalanceOf<Runtime>,
+			>>::get()
+			.try_into()
+			.map_err(|_| revert("Amount is too large for provided balance type"))?;
+
+		Ok((full_candidate_stk, basic_candidate_stk))
+	}
+
+	#[precompile::public("candidateMinimumVotingPower()")]
+	#[precompile::public("candidate_minimum_voting_power()")]
+	#[precompile::view]
+	fn candidate_minimum_voting_power(
+		handle: &mut impl PrecompileHandle,
+	) -> EvmResult<(U256, U256)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let full_validator_stk: U256 =
+			<<Runtime as pallet_bfc_staking::Config>::MinFullValidatorStk as Get<
+				BalanceOf<Runtime>,
+			>>::get()
+			.try_into()
+			.map_err(|_| revert("Amount is too large for provided balance type"))?;
+
+		let basic_validator_stk: U256 =
+			<<Runtime as pallet_bfc_staking::Config>::MinBasicValidatorStk as Get<
+				BalanceOf<Runtime>,
+			>>::get()
+			.try_into()
+			.map_err(|_| revert("Amount is too large for provided balance type"))?;
+
+		Ok((full_validator_stk, basic_validator_stk))
+	}
+
 	/// Returns the information of the current round
 	/// @return: The current rounds index, first session index, current session index,
 	///          first round block, first session block, current block, round length, session length
