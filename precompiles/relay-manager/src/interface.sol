@@ -157,7 +157,11 @@ interface RelayManager {
             uint256[] memory
         );
 
-    /// @dev Sends a heartbeat that sets relayer unresponsiveness
+    /// @dev Sends a heartbeat that sets relayer liveness
     /// Selector: 3defb962
     function heartbeat() external;
+
+    /// @dev Sends a heartbeat that sets relayer liveness
+    /// Selector: e86ddbbd
+    function heartbeat_v2(uint256 impl_version, bytes32 spec_version) external;
 }

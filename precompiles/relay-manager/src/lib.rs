@@ -470,4 +470,24 @@ where
 
 		Ok(())
 	}
+
+	#[precompile::public("heartbeatV2(uint256,bytes32)")]
+	#[precompile::public("heartbeat_v2(uint256,bytes32)")]
+	fn heartbeat_v2(
+		handle: &mut impl PrecompileHandle,
+		impl_version: SolidityConvert<U256, u32>,
+		spec_version: H256,
+	) -> EvmResult {
+		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+
+		let impl_version: u32 = impl_version.converted();
+		let call = RelayManagerCall::<Runtime>::heartbeat_v2 {
+			impl_version,
+			spec_version: spec_version.into(),
+		};
+
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+
+		Ok(())
+	}
 }
