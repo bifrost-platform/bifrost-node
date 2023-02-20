@@ -33,7 +33,9 @@ where
 		pool.iter().for_each(|r| {
 			let mut relayer_state =
 				<RelayerState<T>>::get(&r.relayer).expect("RelayerState must exist");
-			relayer_state.go_offline();
+			if !relayer_state.is_kicked_out() {
+				relayer_state.go_offline();
+			}
 			<RelayerState<T>>::insert(&r.relayer, relayer_state);
 		});
 	}
@@ -58,8 +60,13 @@ where
 		}
 		<Round<T>>::put(round);
 		selected_relayers.sort();
-		<SelectedRelayers<T>>::put(selected_relayers.clone());
-		<InitialSelectedRelayers<T>>::put(selected_relayers.clone());
+		<SelectedRelayers<T>>::put(
+			BoundedVec::try_from(selected_relayers.clone()).expect("SelectedRelayers out of bound"),
+		);
+		<InitialSelectedRelayers<T>>::put(
+			BoundedVec::try_from(selected_relayers.clone())
+				.expect("InitialSelectedRelayers out of bound"),
+		);
 		Self::refresh_cached_selected_relayers(round, selected_relayers.clone());
 	}
 
@@ -255,7 +262,7 @@ impl<T: Config> Pallet<T> {
 	/// Add the given `relayer` to the `SelectedRelayers`
 	fn add_to_selected_relayers(relayer: T::AccountId) {
 		let mut selected_relayers = <SelectedRelayers<T>>::get();
-		selected_relayers.push(relayer);
+		selected_relayers.try_push(relayer).expect("SelectedRelayers out of bound");
 		<SelectedRelayers<T>>::put(selected_relayers);
 	}
 
@@ -265,7 +272,7 @@ impl<T: Config> Pallet<T> {
 		let selected_relayers = <SelectedRelayers<T>>::get();
 		let mut cached_selected_relayers = <CachedSelectedRelayers<T>>::get();
 		cached_selected_relayers.retain(|r| r.0 != round);
-		cached_selected_relayers.push((round, selected_relayers));
+		cached_selected_relayers.push((round, selected_relayers.into_inner()));
 		<CachedSelectedRelayers<T>>::put(cached_selected_relayers);
 	}
 
@@ -294,7 +301,8 @@ impl<T: Config> Pallet<T> {
 	/// Add the given `relayer` and `controller` pair to the `RelayerPool`
 	fn add_to_relayer_pool(relayer: T::AccountId, controller: T::AccountId) {
 		let mut pool = <RelayerPool<T>>::get();
-		pool.push(Relayer { relayer, controller });
+		pool.try_push(Relayer { relayer, controller })
+			.expect("RelayerPool out of bound");
 		<RelayerPool<T>>::put(pool);
 	}
 

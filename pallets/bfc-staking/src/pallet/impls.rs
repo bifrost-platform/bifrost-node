@@ -82,7 +82,9 @@ impl<T: Config> Pallet<T> {
 	pub fn add_to_controller_sets(stash: T::AccountId, old: T::AccountId, new: T::AccountId) {
 		let round = <Round<T>>::get();
 		let mut controller_sets = <DelayedControllerSets<T>>::get(round.current_round_index);
-		controller_sets.push(DelayedControllerSet::new(stash, old, new));
+		controller_sets
+			.try_push(DelayedControllerSet::new(stash, old, new))
+			.expect("DelayedControllerSets out of bound");
 		<DelayedControllerSets<T>>::insert(round.current_round_index, controller_sets);
 	}
 
@@ -90,29 +92,39 @@ impl<T: Config> Pallet<T> {
 	pub fn add_to_commission_sets(who: &T::AccountId, old: Perbill, new: Perbill) {
 		let round = <Round<T>>::get();
 		let mut commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
-		commission_sets.push(DelayedCommissionSet::new(who.clone(), old, new));
+		commission_sets
+			.try_push(DelayedCommissionSet::new(who.clone(), old, new))
+			.expect("DelayedCommissionSets out of bound");
 		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
 	}
 
 	/// Remove the given `who` from the `DelayedControllerSets` of the current round.
 	pub fn remove_controller_set(who: &T::AccountId) {
 		let round = <Round<T>>::get();
-		let mut controller_sets = <DelayedControllerSets<T>>::get(round.current_round_index);
+		let mut controller_sets =
+			<DelayedControllerSets<T>>::get(round.current_round_index).into_inner();
 		controller_sets = controller_sets.into_iter().filter(|c| c.old != *who).collect();
-		<DelayedControllerSets<T>>::insert(round.current_round_index, controller_sets);
+		<DelayedControllerSets<T>>::insert(
+			round.current_round_index,
+			BoundedVec::try_from(controller_sets).expect("DelayedControllerSets out of bound"),
+		);
 	}
 
 	/// Remove the given `who` from the `DelayedCommissionSets` of the current round.
 	pub fn remove_commission_set(who: &T::AccountId) {
 		let round = <Round<T>>::get();
-		let mut commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
+		let mut commission_sets =
+			<DelayedCommissionSets<T>>::get(round.current_round_index).into_inner();
 		commission_sets = commission_sets.into_iter().filter(|c| c.who != *who).collect();
-		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
+		<DelayedCommissionSets<T>>::insert(
+			round.current_round_index,
+			BoundedVec::try_from(commission_sets).expect("DelayedCommissionSets out of bound"),
+		);
 	}
 
 	/// Updates the given candidates voting power persisted in the `CandidatePool`
 	pub(crate) fn update_active(candidate: &T::AccountId, total: BalanceOf<T>) {
-		let mut pool = <CandidatePool<T>>::get();
+		let mut pool = <CandidatePool<T>>::get().into_inner();
 		pool = pool
 			.iter()
 			.map(|c| {
@@ -123,15 +135,15 @@ impl<T: Config> Pallet<T> {
 				}
 			})
 			.collect();
-		<CandidatePool<T>>::put(pool);
+		<CandidatePool<T>>::put(BoundedVec::try_from(pool).expect("CandidatePool out of bound"));
 	}
 
 	/// Sort `CandidatePool` candidates by voting power in descending order
 	pub fn sort_candidates_by_voting_power() {
-		let mut pool = <CandidatePool<T>>::get();
+		let mut pool = <CandidatePool<T>>::get().into_inner();
 		pool.sort_by(|x, y| y.amount.cmp(&x.amount));
 		pool.dedup_by(|x, y| x.owner == y.owner);
-		<CandidatePool<T>>::put(pool);
+		<CandidatePool<T>>::put(BoundedVec::try_from(pool).expect("CandidatePool out of bound"));
 	}
 
 	/// Removes the given `candidate` from the `CandidatePool`. Returns `true` if a candidate has
@@ -147,7 +159,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Replace the bonded `old` account to the given `new` account from the `CandidatePool`
 	pub fn replace_from_candidate_pool(old: &T::AccountId, new: &T::AccountId) {
-		let mut pool = <CandidatePool<T>>::get();
+		let mut pool = <CandidatePool<T>>::get().into_inner();
 		pool = pool
 			.iter()
 			.map(|c| {
@@ -158,24 +170,30 @@ impl<T: Config> Pallet<T> {
 				}
 			})
 			.collect();
-		<CandidatePool<T>>::put(pool);
+		<CandidatePool<T>>::put(BoundedVec::try_from(pool).expect("CandidatePool out of bound"));
 	}
 
 	/// Adds the given `candidate` to the `SelectedCandidates`. Depends on the given `tier` whether
 	/// it's added to the `SelectedFullCandidates` or `SelectedBasicCandidates`.
 	fn add_to_selected_candidates(candidate: T::AccountId, tier: TierType) {
 		let mut selected_candidates = <SelectedCandidates<T>>::get();
-		selected_candidates.push(candidate.clone());
+		selected_candidates
+			.try_push(candidate.clone())
+			.expect("SelectedCandidates out of bound");
 		<SelectedCandidates<T>>::put(selected_candidates);
 		match tier {
 			TierType::Full => {
 				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
-				selected_full_candidates.push(candidate.clone());
+				selected_full_candidates
+					.try_push(candidate.clone())
+					.expect("SelectedFullCandidates out of bound");
 				<SelectedFullCandidates<T>>::put(selected_full_candidates);
 			},
 			_ => {
 				let mut selected_basic_candidates = <SelectedBasicCandidates<T>>::get();
-				selected_basic_candidates.push(candidate.clone());
+				selected_basic_candidates
+					.try_push(candidate.clone())
+					.expect("SelectedBasicCandidates out of bound");
 				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
 			},
 		};
@@ -665,9 +683,17 @@ impl<T: Config> Pallet<T> {
 		validators.sort();
 
 		// reset active validator set
-		<SelectedCandidates<T>>::put(validators.clone());
-		<SelectedFullCandidates<T>>::put(full_validators.clone());
-		<SelectedBasicCandidates<T>>::put(basic_validators.clone());
+		<SelectedCandidates<T>>::put(
+			BoundedVec::try_from(validators.clone()).expect("SelectedCandidates out of bound"),
+		);
+		<SelectedFullCandidates<T>>::put(
+			BoundedVec::try_from(full_validators.clone())
+				.expect("SelectedFullCandidates out of bound"),
+		);
+		<SelectedBasicCandidates<T>>::put(
+			BoundedVec::try_from(basic_validators.clone())
+				.expect("SelectedBasicCandidates out of bound"),
+		);
 		Self::refresh_cached_selected_candidates(now, validators.clone());
 
 		// refresh active relayer set
@@ -725,7 +751,8 @@ impl<T: Config> Pallet<T> {
 		let selected_candidates = <SelectedCandidates<T>>::get();
 		let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
 		cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
-		cached_selected_candidates.push((round.current_round_index, selected_candidates));
+		cached_selected_candidates
+			.push((round.current_round_index, selected_candidates.into_inner()));
 		<CachedSelectedCandidates<T>>::put(cached_selected_candidates);
 	}
 
@@ -1003,10 +1030,10 @@ where
 			} else {
 				// This would brick the chain in the next session
 				log::error!("💥 empty validator set received");
-				Some(validators)
+				Some(validators.into_inner())
 			}
 		} else {
-			Some(validators)
+			Some(validators.into_inner())
 		}
 	}
 
