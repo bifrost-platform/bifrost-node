@@ -14,6 +14,7 @@ pub trait WeightInfo {
 	fn set_heartbeat_slash_fraction() -> Weight;
 	fn set_relayer() -> Weight;
 	fn heartbeat() -> Weight;
+	fn heartbeat_v2() -> Weight;
 }
 
 /// Weights for `pallet_relay_manager` using the Substrate node and recommended hardware.
@@ -44,6 +45,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
+	fn heartbeat_v2() -> Weight {
+		Weight::from_ref_time(18_178_000)
+			.saturating_add(T::DbWeight::get().reads(6 as u64))
+			.saturating_add(T::DbWeight::get().writes(4 as u64))
+	}
 }
 
 // For backwards compatibility and tests
@@ -69,6 +75,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
 	fn heartbeat() -> Weight {
+		Weight::from_ref_time(18_178_000)
+			.saturating_add(RocksDbWeight::get().reads(6 as u64))
+			.saturating_add(RocksDbWeight::get().writes(4 as u64))
+	}
+	fn heartbeat_v2() -> Weight {
 		Weight::from_ref_time(18_178_000)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))

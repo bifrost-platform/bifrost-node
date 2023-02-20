@@ -137,12 +137,12 @@ interface BfcStaking {
     ) external view returns (bool);
 
     /// @dev Get the maximum seat capacity of each tier
-    /// Selector: 584eda98
+    /// Selector: 1b3b1bf9
     /// @return The maximum seat capacity (full, basic)
     function validator_seats() external view returns (uint256, uint256);
 
     /// @dev Get the minimum required self-bond amount of each tier
-    /// Selector: b877ab9f
+    /// Selector: 4165316b
     /// @return The minimum required self-bond amount (full, basic)
     function candidate_minimum_self_bond()
         external
@@ -150,7 +150,7 @@ interface BfcStaking {
         returns (uint256, uint256);
 
     /// @dev Get the minimum required voting power of each tier
-    /// Selector: 4f237d04
+    /// Selector: d2ae4e3f
     /// @return The minimum required voting power (full, basic)
     function candidate_minimum_voting_power()
         external
