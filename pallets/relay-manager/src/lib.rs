@@ -96,6 +96,10 @@ impl<AccountId: PartialEq + Clone> RelayerMetadata<AccountId> {
 	pub fn set_controller(&mut self, controller: AccountId) {
 		self.controller = controller;
 	}
+
+	pub fn is_kicked_out(&self) -> bool {
+		matches!(self.status, RelayerStatus::KickedOut)
+	}
 }
 
 #[derive(RuntimeDebug, TypeInfo)]
