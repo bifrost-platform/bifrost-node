@@ -40,7 +40,7 @@ where
 	pub fn set_state(
 		&mut self,
 		relayer: Runtime::AccountId,
-		state: RelayerMetadata<Runtime::AccountId>,
+		state: RelayerMetadata<Runtime::AccountId, Runtime::Hash>,
 	) {
 		self.relayer = Address(relayer.into());
 		self.controller = Address(state.controller.into());
