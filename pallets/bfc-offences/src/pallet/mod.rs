@@ -122,7 +122,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V1_0_0);
+			StorageVersion::<T>::put(Releases::V2_0_0);
 			OffenceExpirationInSessions::<T>::put(T::DefaultOffenceExpirationInSessions::get());
 			FullMaximumOffenceCount::<T>::put(T::DefaultFullMaximumOffenceCount::get());
 			BasicMaximumOffenceCount::<T>::put(T::DefaultBasicMaximumOffenceCount::get());
@@ -133,6 +133,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::set_offence_expiration()
 		)]
@@ -150,6 +151,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(1)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::set_max_offence_count()
 		)]
@@ -198,6 +200,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(2)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::set_offence_activation()
 		)]
@@ -213,6 +216,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(3)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::set_slash_activation()
 		)]

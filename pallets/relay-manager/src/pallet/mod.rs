@@ -217,6 +217,7 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_storage_cache_lifetime())]
 		/// Set the `StorageCacheLifetime` round length
 		pub fn set_storage_cache_lifetime(
@@ -232,6 +233,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_heartbeat_offence_activation())]
 		/// Set the activation of relayer heartbeat management
 		pub fn set_heartbeat_offence_activation(
@@ -248,6 +250,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_heartbeat_slash_fraction())]
 		/// Set a new slash fraction for heartbeat offences
 		pub fn set_heartbeat_slash_fraction(
@@ -262,6 +265,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_relayer())]
 		/// (Re-)set the bonded relayer account. The origin must be the bonded controller account.
 		/// The state reflection will be immediately applied.
@@ -276,6 +280,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::heartbeat())]
 		/// DEPRECATED, this extrinsic will be removed later on. Please use `heartbeat_v2()`
 		/// instead. Sends a new heartbeat to manage relayer liveness for the current session. The
@@ -296,6 +301,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::heartbeat_v2())]
 		/// Sends a new heartbeat to manage relayer liveness for the current session. The origin
 		/// must be the registered relayer account, and only the selected relayers can request.
