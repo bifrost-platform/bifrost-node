@@ -9,7 +9,7 @@ use sp_staking::SessionIndex;
 /// The type that indicates the index of a round
 pub type RoundIndex = u32;
 
-pub const MAX_VALIDATORS: u32 = 1_000;
+pub const MAX_AUTHORITIES: u32 = 1_000;
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo)]
 /// The tier type of a validator node.
