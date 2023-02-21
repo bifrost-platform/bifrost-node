@@ -39,11 +39,12 @@ pub type IdentificationTuple<T> = (
 enum Releases {
 	V1_0_0,
 	V2_0_0,
+	V3_0_0,
 }
 
 impl Default for Releases {
 	fn default() -> Self {
-		Releases::V2_0_0
+		Releases::V3_0_0
 	}
 }
 
@@ -69,16 +70,25 @@ pub struct Relayer<AccountId> {
 
 #[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 /// The current state of a specific relayer
-pub struct RelayerMetadata<AccountId> {
+pub struct RelayerMetadata<AccountId, Hash> {
 	/// This relayer's bonded controller address
 	pub controller: AccountId,
 	/// This relayer's current status
 	pub status: RelayerStatus,
+	/// This relayer's implementation version
+	pub impl_version: Option<u32>,
+	/// This relayer's hashed spec version
+	pub spec_version: Option<Hash>,
 }
 
-impl<AccountId: PartialEq + Clone> RelayerMetadata<AccountId> {
+impl<AccountId: PartialEq + Clone, Hash> RelayerMetadata<AccountId, Hash> {
 	pub fn new(controller: AccountId) -> Self {
-		RelayerMetadata { controller, status: RelayerStatus::Idle }
+		RelayerMetadata {
+			controller,
+			status: RelayerStatus::Idle,
+			impl_version: None,
+			spec_version: None,
+		}
 	}
 
 	pub fn go_offline(&mut self) {
@@ -95,6 +105,14 @@ impl<AccountId: PartialEq + Clone> RelayerMetadata<AccountId> {
 
 	pub fn set_controller(&mut self, controller: AccountId) {
 		self.controller = controller;
+	}
+
+	pub fn set_impl_version(&mut self, impl_version: Option<u32>) {
+		self.impl_version = impl_version;
+	}
+
+	pub fn set_spec_version(&mut self, spec_version: Option<Hash>) {
+		self.spec_version = spec_version;
 	}
 
 	pub fn is_kicked_out(&self) -> bool {

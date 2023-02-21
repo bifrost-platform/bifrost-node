@@ -119,8 +119,13 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn relayer_state)]
 	/// The current state of a specific relayer
-	pub type RelayerState<T: Config> =
-		StorageMap<_, Twox64Concat, T::AccountId, RelayerMetadata<T::AccountId>, OptionQuery>;
+	pub type RelayerState<T: Config> = StorageMap<
+		_,
+		Twox64Concat,
+		T::AccountId,
+		RelayerMetadata<T::AccountId, T::Hash>,
+		OptionQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_relayers)]
@@ -203,7 +208,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V1_0_0);
+			StorageVersion::<T>::put(Releases::V3_0_0);
 			StorageCacheLifetime::<T>::put(T::StorageCacheLifetimeInRounds::get());
 			IsHeartbeatOffenceActive::<T>::put(T::IsHeartbeatOffenceActive::get());
 			HeartbeatSlashFraction::<T>::put(T::DefaultHeartbeatSlashFraction::get());
@@ -272,8 +277,10 @@ pub mod pallet {
 		}
 
 		#[pallet::weight(<T as Config>::WeightInfo::heartbeat())]
-		/// Sends a new heartbeat to manage relayer liveness for the current session. The origin
-		/// must be the registered relayer account, and only the selected relayers can request.
+		/// DEPRECATED, this extrinsic will be removed later on. Please use `heartbeat_v2()`
+		/// instead. Sends a new heartbeat to manage relayer liveness for the current session. The
+		/// origin must be the registered relayer account, and only the selected relayers can
+		/// request.
 		pub fn heartbeat(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let relayer = ensure_signed(origin)?;
 			ensure!(Self::is_relayer(&relayer), Error::<T>::RelayerDNE);
@@ -294,8 +301,8 @@ pub mod pallet {
 		/// must be the registered relayer account, and only the selected relayers can request.
 		pub fn heartbeat_v2(
 			origin: OriginFor<T>,
-			_impl_version: u32,
-			_spec_version: T::Hash,
+			impl_version: u32,
+			spec_version: T::Hash,
 		) -> DispatchResultWithPostInfo {
 			let relayer = ensure_signed(origin)?;
 			ensure!(Self::is_relayer(&relayer), Error::<T>::RelayerDNE);
@@ -305,6 +312,8 @@ pub mod pallet {
 				let mut relayer_state =
 					<RelayerState<T>>::get(&relayer).expect("RelayerState must exist");
 				relayer_state.go_online();
+				relayer_state.set_impl_version(Some(impl_version));
+				relayer_state.set_spec_version(Some(spec_version));
 				<RelayerState<T>>::insert(&relayer, relayer_state);
 				Self::deposit_event(Event::<T>::HeartbeatReceived { relayer });
 			}
