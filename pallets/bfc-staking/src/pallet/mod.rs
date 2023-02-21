@@ -10,7 +10,7 @@ use crate::{
 
 use bp_staking::{
 	traits::{OffenceHandler, RelayManager},
-	MAX_VALIDATORS,
+	MAX_AUTHORITIES,
 };
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
@@ -502,19 +502,19 @@ pub mod pallet {
 	#[pallet::getter(fn selected_candidates)]
 	/// The active validator set (full and basic) selected for the current round
 	pub type SelectedCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_full_candidates)]
 	/// The active full validator set selected for the current round
 	pub type SelectedFullCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_basic_candidates)]
 	/// The active basic validator set selected for the current round
 	pub type SelectedBasicCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_VALIDATORS>>, ValueQuery>;
+		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn cached_selected_candidates)]
@@ -542,7 +542,7 @@ pub mod pallet {
 	/// The pool of validator candidates, each with their total voting power
 	pub(crate) type CandidatePool<T: Config> = StorageValue<
 		_,
-		BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_VALIDATORS>>,
+		BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
@@ -578,7 +578,7 @@ pub mod pallet {
 		_,
 		Twox64Concat,
 		RoundIndex,
-		BoundedVec<DelayedControllerSet<T::AccountId>, ConstU32<MAX_VALIDATORS>>,
+		BoundedVec<DelayedControllerSet<T::AccountId>, ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
@@ -588,7 +588,7 @@ pub mod pallet {
 		_,
 		Twox64Concat,
 		RoundIndex,
-		BoundedVec<DelayedCommissionSet<T::AccountId>, ConstU32<MAX_VALIDATORS>>,
+		BoundedVec<DelayedCommissionSet<T::AccountId>, ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
