@@ -106,7 +106,7 @@ export function describeDevNode(
         // We keep track of the polkadotApis to close them at the end of the test
         context._polkadotApis.push(apiPromise);
         await apiPromise.isReady;
-        await setTimeout(100);
+        await setTimeout(200);
         // Necessary hack to allow polkadotApi to finish its internal metadata loading
         // apiPromise.isReady unfortunately doesn't wait for those properly
         return apiPromise;

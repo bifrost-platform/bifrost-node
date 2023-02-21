@@ -9,8 +9,6 @@ use sp_std::marker::PhantomData;
 
 /// Weight functions needed for pallet_bfc_staking.
 pub trait WeightInfo {
-	fn hotfix_remove_nomination_requests(x: u32) -> Weight;
-	fn hotfix_update_candidate_pool_value(x: u32) -> Weight;
 	fn set_staking_expectations() -> Weight;
 	fn set_inflation() -> Weight;
 	fn set_max_total_selected() -> Weight;
@@ -55,18 +53,6 @@ pub trait WeightInfo {
 /// Weights for pallet_bfc_staking using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	fn hotfix_remove_nomination_requests(x: u32) -> Weight {
-		Weight::from_ref_time(0)
-			.saturating_add(Weight::from_ref_time(8_132_000).saturating_mul(x as u64))
-			.saturating_add(T::DbWeight::get().reads((1 as u64).saturating_mul(x as u64)))
-			.saturating_add(T::DbWeight::get().writes((1 as u64).saturating_mul(x as u64)))
-	}
-	fn hotfix_update_candidate_pool_value(x: u32) -> Weight {
-		Weight::from_ref_time(0)
-			.saturating_add(Weight::from_ref_time(26_825_000).saturating_mul(x as u64))
-			.saturating_add(T::DbWeight::get().reads((1 as u64).saturating_mul(x as u64)))
-			.saturating_add(T::DbWeight::get().writes(1 as u64))
-	}
 	fn set_staking_expectations() -> Weight {
 		Weight::from_ref_time(20_719_000)
 			.saturating_add(T::DbWeight::get().reads(5 as u64))
@@ -280,18 +266,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 
 // For backwards compatibility and tests
 impl WeightInfo for () {
-	fn hotfix_remove_nomination_requests(x: u32) -> Weight {
-		Weight::from_ref_time(0)
-			.saturating_add(Weight::from_ref_time(8_132_000).saturating_mul(x as u64))
-			.saturating_add(RocksDbWeight::get().reads((1 as u64).saturating_mul(x as u64)))
-			.saturating_add(RocksDbWeight::get().writes((1 as u64).saturating_mul(x as u64)))
-	}
-	fn hotfix_update_candidate_pool_value(x: u32) -> Weight {
-		Weight::from_ref_time(0)
-			.saturating_add(Weight::from_ref_time(26_825_000).saturating_mul(x as u64))
-			.saturating_add(RocksDbWeight::get().reads((1 as u64).saturating_mul(x as u64)))
-			.saturating_add(RocksDbWeight::get().writes(1 as u64))
-	}
 	fn set_staking_expectations() -> Weight {
 		Weight::from_ref_time(20_719_000)
 			.saturating_add(RocksDbWeight::get().reads(5 as u64))

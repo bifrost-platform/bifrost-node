@@ -74,13 +74,14 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V1_0_0);
+			StorageVersion::<T>::put(Releases::V2_0_0);
 			ProposalIndex::<T>::put(0);
 		}
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::community_proposal())]
 		/// General Proposal
 		/// ####
@@ -103,6 +104,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::mint_native())]
 		/// Mint the exact amount of native tokens and deposit to the target address.
 		pub fn mint_native(
