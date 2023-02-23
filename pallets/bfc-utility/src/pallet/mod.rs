@@ -36,8 +36,7 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		FailedToMintNative,
-		AmountToLow,
+		AmountTooLow,
 	}
 
 	#[pallet::event]
@@ -113,13 +112,10 @@ pub mod pallet {
 			mint: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			T::MintableOrigin::ensure_origin(origin)?;
-			ensure!(!mint.is_zero(), Error::<T>::AmountToLow);
+			ensure!(!mint.is_zero(), Error::<T>::AmountTooLow);
 
-			if let Ok(minted) = T::Currency::deposit_into_existing(&beneficiary, mint) {
-				Self::deposit_event(Event::MintNative { beneficiary, minted: minted.peek() });
-			} else {
-				return Err((Error::<T>::FailedToMintNative).into())
-			}
+			let minted = T::Currency::deposit_creating(&beneficiary, mint);
+			Self::deposit_event(Event::MintNative { beneficiary, minted: minted.peek() });
 
 			Ok(().into())
 		}
