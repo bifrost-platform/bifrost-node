@@ -397,6 +397,7 @@ impl<T: Config> Pallet<T> {
 		});
 	}
 
+	/// Apply the delayed candidate rate set requests.
 	pub fn handle_delayed_commission_sets(now: RoundIndex) {
 		let delayed_round = now - 1;
 		let commission_sets = <DelayedCommissionSets<T>>::take(delayed_round);
