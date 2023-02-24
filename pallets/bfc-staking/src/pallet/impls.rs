@@ -103,7 +103,7 @@ impl<T: Config> Pallet<T> {
 		let round = <Round<T>>::get();
 		let mut controller_sets =
 			<DelayedControllerSets<T>>::get(round.current_round_index).into_inner();
-		controller_sets = controller_sets.into_iter().filter(|c| c.old != *who).collect();
+		controller_sets.retain(|c| c.old != *who);
 		<DelayedControllerSets<T>>::insert(
 			round.current_round_index,
 			BoundedVec::try_from(controller_sets).expect("DelayedControllerSets out of bound"),
@@ -115,7 +115,7 @@ impl<T: Config> Pallet<T> {
 		let round = <Round<T>>::get();
 		let mut commission_sets =
 			<DelayedCommissionSets<T>>::get(round.current_round_index).into_inner();
-		commission_sets = commission_sets.into_iter().filter(|c| c.who != *who).collect();
+		commission_sets.retain(|c| c.who != *who);
 		<DelayedCommissionSets<T>>::insert(
 			round.current_round_index,
 			BoundedVec::try_from(commission_sets).expect("DelayedCommissionSets out of bound"),
@@ -124,18 +124,19 @@ impl<T: Config> Pallet<T> {
 
 	/// Updates the given candidates voting power persisted in the `CandidatePool`
 	pub(crate) fn update_active(candidate: &T::AccountId, total: BalanceOf<T>) {
-		let mut pool = <CandidatePool<T>>::get().into_inner();
-		pool = pool
-			.iter()
-			.map(|c| {
-				if &c.owner == candidate {
-					Bond { owner: candidate.clone(), amount: total }
-				} else {
-					c.clone()
+		let origin_pool = <CandidatePool<T>>::get().into_inner();
+		let new_pool = origin_pool
+			.into_iter()
+			.map(|mut c| {
+				if c.owner == *candidate {
+					c.amount = total;
 				}
+				c
 			})
-			.collect();
-		<CandidatePool<T>>::put(BoundedVec::try_from(pool).expect("CandidatePool out of bound"));
+			.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>();
+		<CandidatePool<T>>::put(
+			BoundedVec::try_from(new_pool).expect("CandidatePool out of bound"),
+		);
 	}
 
 	/// Sort `CandidatePool` candidates by voting power in descending order
@@ -159,18 +160,19 @@ impl<T: Config> Pallet<T> {
 
 	/// Replace the bonded `old` account to the given `new` account from the `CandidatePool`
 	pub fn replace_from_candidate_pool(old: &T::AccountId, new: &T::AccountId) {
-		let mut pool = <CandidatePool<T>>::get().into_inner();
-		pool = pool
-			.iter()
-			.map(|c| {
-				if &c.owner == old {
-					Bond { owner: new.clone(), amount: c.amount }
-				} else {
-					c.clone()
+		let origin_pool = <CandidatePool<T>>::get().into_inner();
+		let new_pool = origin_pool
+			.into_iter()
+			.map(|mut c| {
+				if c.owner == *old {
+					c.owner = new.clone();
 				}
+				c
 			})
-			.collect();
-		<CandidatePool<T>>::put(BoundedVec::try_from(pool).expect("CandidatePool out of bound"));
+			.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>();
+		<CandidatePool<T>>::put(
+			BoundedVec::try_from(new_pool).expect("CandidatePool out of bound"),
+		);
 	}
 
 	/// Adds the given `candidate` to the `SelectedCandidates`. Depends on the given `tier` whether
