@@ -36,6 +36,7 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// The given amount is too low to process.
 		AmountTooLow,
 	}
 

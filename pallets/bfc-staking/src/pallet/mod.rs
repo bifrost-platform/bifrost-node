@@ -135,57 +135,109 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// A nominator does not exist with the target account.
 		NominatorDNE,
+		/// A candidate does not exist with the target controller account.
 		CandidateDNE,
+		/// A candidate does not exist with the target stash account.
 		StashDNE,
+		/// A nomination does not exist with the target nominator and candidate account.
 		NominationDNE,
+		/// A commission set request does not exist with the target controller account.
 		CommissionSetDNE,
+		/// A controller set request does not exist with the target controller account.
 		ControllerSetDNE,
+		/// The given account is already used as a nominator.
 		NominatorExists,
+		/// The given account is already used as a candidate.
 		CandidateExists,
+		/// The given amount does not reach the minimum self-bond requirement.
 		CandidateBondBelowMin,
+		/// The given account has insufficient balance to pay.
 		InsufficientBalance,
+		/// The given amount does not reach the minimum nomination requirement.
 		NominatorBondBelowMin,
+		/// The given amount does not reach the minimum nomination requirement.
 		NominationBelowMin,
+		/// The given candidate is already offline.
 		AlreadyOffline,
+		/// The given candidate is already online.
 		AlreadyActive,
+		/// The given stash account is already bonded.
 		AlreadyBonded,
+		/// The given controller account is already paired.
 		AlreadyPaired,
+		/// The given nominator is already leaving.
 		NominatorAlreadyLeaving,
+		/// The given nominator is not leaving.
 		NominatorNotLeaving,
+		/// The given nominator cannot execute to leave yet.
 		NominatorCannotLeaveYet,
+		/// The given nominator cannot nominate due to its leaving state.
 		CannotNominateIfLeaving,
+		/// The given candidate is already leaving.
 		CandidateAlreadyLeaving,
+		/// The given candidate is not leaving.
 		CandidateNotLeaving,
+		/// The given candidate cannot execute to leave yet.
 		CandidateCannotLeaveYet,
+		/// The given candidate cannot go online due to its leaving state.
 		CannotGoOnlineIfLeaving,
+		/// The given candidate cannot leave due to its offline state.
 		CannotLeaveIfOffline,
+		/// The given nominator exceeds the maximum limit of nominations.
 		ExceedMaxNominationsPerNominator,
+		/// The given nominator already nominated the candidate.
 		AlreadyNominatedCandidate,
+		/// The given candidate has already requested a controller set.
 		AlreadyControllerSetRequested,
+		/// The given candidate has already requested a commission set.
 		AlreadyCommissionSetRequested,
+		/// The requested inflation options are invalid.
 		InvalidSchedule,
+		/// The requested tier type are invalid.
 		InvalidTierType,
+		/// The requested value are below the minimum value.
 		CannotSetBelowMin,
+		/// The requested value are below one.
 		CannotSetBelowOne,
+		/// The requested value are above the maximum value.
 		CannotSetAboveMax,
+		/// The requested round length must be at least the number of validators.
 		RoundLengthMustBeAtLeastTotalSelectedValidators,
+		/// The requested round length must be at least the number of created blocks.
 		RoundLengthMustBeLongerThanCreatedBlocks,
+		/// Cannot overwrite to the same value.
 		NoWritingSameValue,
+		/// Cannot join candidate pool due to too many candidates.
 		TooManyCandidates,
+		/// Cannot join candidate pool due to too low candidate count.
 		TooLowCandidateCountWeightHintJoinCandidates,
+		/// Cannot cancel leave candidate pool due to too low candidate count.
 		TooLowCandidateCountWeightHintCancelLeaveCandidates,
+		/// Cannot leave candidate pool due to too low candidate count.
 		TooLowCandidateCountToLeaveCandidates,
+		/// Cannot nominate due to too low nomination count.
 		TooLowNominationCountToNominate,
+		/// Cannot nominate due to too low candidate nomination count.
 		TooLowCandidateNominationCountToNominate,
+		/// Cannot leave candidate pool due to too low nomination count.
 		TooLowCandidateNominationCountToLeaveCandidates,
+		/// Cannot leave as a nominator due to too low nomination count.
 		TooLowNominationCountToLeaveNominators,
+		/// Pending(scheduled) candidate request does not exist.
 		PendingCandidateRequestsDNE,
+		/// A pending(scheduled) candidate request already exists.
 		PendingCandidateRequestAlreadyExists,
+		/// Cannot execute the pending(scheduled) candidate request yet.
 		PendingCandidateRequestNotDueYet,
+		/// Pending(scheduled) nomination request does not exist.
 		PendingNominationRequestDNE,
+		/// A pending(scheduled) nomination request already exists.
 		PendingNominationRequestAlreadyExists,
+		/// Cannot execute the pending(scheduled) nominator request yet.
 		PendingNominationRequestNotDueYet,
+		/// Cannot nominate if the given amount is less than the lowest bottom.
 		CannotNominateLessThanLowestBottomWhenBottomIsFull,
 	}
 
@@ -584,6 +636,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn delayed_commission_sets)]
+	/// Delayed candidate commission rate set requests
 	pub type DelayedCommissionSets<T: Config> = StorageMap<
 		_,
 		Twox64Concat,
