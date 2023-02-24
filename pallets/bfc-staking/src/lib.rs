@@ -1545,26 +1545,24 @@ impl<
 			.nominations
 			.0
 			.clone()
-			.iter()
-			.map(|n| {
-				if &n.owner == old {
-					Bond { owner: new.clone(), amount: n.amount }
-				} else {
-					n.clone()
+			.into_iter()
+			.map(|mut n| {
+				if n.owner == *old {
+					n.owner = new.clone();
 				}
+				n
 			})
 			.collect();
 		self.initial_nominations.0 = self
 			.initial_nominations
 			.0
 			.clone()
-			.iter()
-			.map(|n| {
-				if &n.owner == old {
-					Bond { owner: new.clone(), amount: n.amount }
-				} else {
-					n.clone()
+			.into_iter()
+			.map(|mut n| {
+				if n.owner == *old {
+					n.owner = new.clone();
 				}
+				n
 			})
 			.collect();
 	}
