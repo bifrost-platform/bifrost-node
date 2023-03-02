@@ -1,7 +1,7 @@
 # build stage: where we create binary
 FROM rust:1.66 AS builder
 
-RUN apt update && apt install -y make clang pkg-config libssl-dev
+RUN apt update && apt install -y make clang pkg-config libssl-dev protobuf-compiler
 RUN rustup default stable && \
   rustup update && \
   rustup update nightly && \
@@ -18,7 +18,7 @@ FROM ubuntu:22.04
 RUN apt update && apt install -y curl unzip
 
 RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "/root/.fnm"
-RUN /root/.fnm/fnm install 16.18.1
+RUN /root/.fnm/fnm install 16.19.1
 
 COPY --from=builder /bifrost/target/release/bifrost-node /usr/local/bin
 COPY --from=builder /bifrost/tools /tools
