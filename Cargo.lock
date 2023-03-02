@@ -47,7 +47,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a76fd60b23679b7d19bd066031410fb7e458ccc5e958eb5c325888ce4baedc97"
 dependencies = [
- "gimli 0.27.1",
+ "gimli 0.27.2",
 ]
 
 [[package]]
@@ -380,9 +380,9 @@ checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
 
 [[package]]
 name = "base64ct"
-version = "1.5.3"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b645a089122eccb6111b4f81cbc1a49f5900ac4666bb93ac027feaecf15607bf"
+checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "beef"
@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-node"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bifrost-common-node",
  "bifrost-dev-node",
@@ -1118,9 +1118,9 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f0778972c64420fdedc63f09919c8a88bda7b25135357fd25a5d9f3257e832"
+checksum = "5ffdb39cb703212f3c11973452c2861b972f757b021158f3516ba10f2fa8b2c1"
 dependencies = [
  "memchr",
  "serde",
@@ -1178,9 +1178,9 @@ dependencies = [
 
 [[package]]
 name = "camino"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c77df041dc383319cc661b428b6961a005db4d6808d5e12536931b1ca9556055"
+checksum = "6031a462f977dd38968b6f23378356512feeace69cef817e1a4475108093cec3"
 dependencies = [
  "serde",
 ]
@@ -1316,9 +1316,9 @@ dependencies = [
 
 [[package]]
 name = "clang-sys"
-version = "1.4.0"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa2e27ae6ab525c3d369ded447057bca5438d86dc3a68f6faafb8269ba82ebf3"
+checksum = "77ed9a53e5d4d9c573ae844bfac6872b159cb1d1585a83b29e7a64b7eef7332a"
 dependencies = [
  "glob",
  "libc",
@@ -1327,9 +1327,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.1.4"
+version = "4.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f13b9c79b5d1dd500d20ef541215a6423c75829ef43117e1b4d17fd8af0b5d76"
+checksum = "c3d7ae14b20b94cb02149ed21a86c423859cbe18dc7ed69845cace50e52b40a5"
 dependencies = [
  "bitflags",
  "clap_derive",
@@ -1342,9 +1342,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.1.0"
+version = "4.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "684a277d672e91966334af371f1a7b5833f9aa00b07c84e92fbce95e00208ce8"
+checksum = "44bec8e5c9d09e439c4335b1af0abaab56dcf3b94999a936e1bb47b9134288f0"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -1355,9 +1355,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "783fe232adfca04f90f56201b26d79682d4cd2625e0bc7290b95123afe558ade"
+checksum = "350b9cf31731f9957399229e9b2adc51eeabdfbe9d71d9a0552275fd12710d09"
 dependencies = [
  "os_str_bytes",
 ]
@@ -1406,9 +1406,9 @@ dependencies = [
 
 [[package]]
 name = "const-oid"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cec318a675afcb6a1ea1d4340e2d377e56e47c266f28043ceccbf4412ddfdd3b"
+checksum = "520fbf3c07483f94e3e3ca9d0cfd913d7718ef2483d2cfd91c0d9e91474ab913"
 
 [[package]]
 name = "constant_time_eq"
@@ -1586,9 +1586,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.6"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2dd04ddaf88237dc3b8d8f9a3c1004b506b54b3313403944054d23c0870c521"
+checksum = "cf2b3e8478797446514c91ef04bafcb59faba183e621ad488df88983cc14128c"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
@@ -1596,9 +1596,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-deque"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "715e8152b692bba2d374b53d4875445368fdf21a94751410af607a5ac677d1fc"
+checksum = "ce6fd6f855243022dcecf8702fef0c297d4338e226845fe067f6341ad9fa0cef"
 dependencies = [
  "cfg-if",
  "crossbeam-epoch",
@@ -1607,22 +1607,22 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.13"
+version = "0.9.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01a9af1f4c2ef74bb8aa1f7e19706bc72d03598c8a570bb5de72243c7a9d9d5a"
+checksum = "46bd5f3f85273295a9d14aedfb86f6aadbff6d8f5295c4a9edb08e819dcf5695"
 dependencies = [
  "autocfg",
  "cfg-if",
  "crossbeam-utils",
- "memoffset 0.7.1",
+ "memoffset 0.8.0",
  "scopeguard",
 ]
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.14"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fb766fa798726286dbbb842f174001dab8abc7b627a1dd86e0b7222a95d929f"
+checksum = "3c063cd8cc95f5c377ed0d4b49a4b21f632396ff690e8470c29b3359b346984b"
 dependencies = [
  "cfg-if",
 ]
@@ -1726,9 +1726,9 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.90"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90d59d9acd2a682b4e40605a242f6670eaa58c5957471cbf85e8aa6a0b97a5e8"
+checksum = "86d3488e7665a7a483b57e25bdd90d0aeb2bc7608c8d0346acf2ad3f1caf1d62"
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -1738,9 +1738,9 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-version = "1.0.90"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebfa40bda659dd5c864e65f4c9a2b0aff19bea56b017b9b77c73d3766a453a38"
+checksum = "48fcaf066a053a41a81dfb14d57d99738b767febb8b735c3016e469fac5da690"
 dependencies = [
  "cc",
  "codespan-reporting",
@@ -1753,15 +1753,15 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.90"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "457ce6757c5c70dc6ecdbda6925b958aae7f959bda7d8fb9bde889e34a09dc03"
+checksum = "a2ef98b8b717a829ca5603af80e1f9e2e48013ab227b68ef37872ef84ee479bf"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.90"
+version = "1.0.91"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebf883b7aacd7b2aeb2a7b338648ee19f57c140d4ee8e52c68979c6b2f7f2263"
+checksum = "086c685979a698443656e5cf7856c95c642295a38599f12fb1ff76fb28d19892"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1944,9 +1944,9 @@ dependencies = [
 
 [[package]]
 name = "dyn-clone"
-version = "1.0.10"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9b0705efd4599c15a38151f4721f7bc388306f61084d3bfd50bd07fbca5cb60"
+checksum = "68b0cf012f1230e43cd00ebb729c6bb58707ecfa8ad08b52ef3a4ccd2697fc30"
 
 [[package]]
 name = "ecdsa"
@@ -2216,7 +2216,7 @@ dependencies = [
 [[package]]
 name = "evm-tracer"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "evm",
@@ -2266,7 +2266,7 @@ dependencies = [
 [[package]]
 name = "fc-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "async-trait",
  "fc-db",
@@ -2285,7 +2285,7 @@ dependencies = [
 [[package]]
 name = "fc-db"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fp-storage",
  "kvdb-rocksdb",
@@ -2304,7 +2304,7 @@ dependencies = [
 [[package]]
 name = "fc-evm-tracing"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "fp-rpc-debug",
@@ -2319,7 +2319,7 @@ dependencies = [
 [[package]]
 name = "fc-mapping-sync"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fc-db",
  "fp-consensus",
@@ -2336,7 +2336,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2379,7 +2379,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core"
 version = "1.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2393,7 +2393,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -2408,7 +2408,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -2422,7 +2422,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2435,7 +2435,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-types"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "serde",
@@ -2445,7 +2445,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2474,7 +2474,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2507,7 +2507,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "fc-rpc",
@@ -2654,7 +2654,7 @@ dependencies = [
 [[package]]
 name = "fp-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -2666,7 +2666,7 @@ dependencies = [
 [[package]]
 name = "fp-ethereum"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2681,7 +2681,7 @@ dependencies = [
 [[package]]
 name = "fp-evm"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "evm",
  "frame-support",
@@ -2694,7 +2694,7 @@ dependencies = [
 [[package]]
 name = "fp-ext"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum-types",
  "fp-rpc-evm-tracing-events",
@@ -2707,7 +2707,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2724,7 +2724,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "environmental",
  "ethereum",
@@ -2743,7 +2743,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-evm-tracing-events"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "environmental",
  "ethereum",
@@ -2758,7 +2758,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -2771,7 +2771,7 @@ dependencies = [
 [[package]]
 name = "fp-self-contained"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "frame-support",
@@ -2784,7 +2784,7 @@ dependencies = [
 [[package]]
 name = "fp-storage"
 version = "2.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -3241,9 +3241,9 @@ dependencies = [
 
 [[package]]
 name = "gimli"
-version = "0.27.1"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "221996f774192f0f718773def8201c4ae31f02616a54ccfc2d358bb0e5cefdec"
+checksum = "ad0a93d233ebf96623465aad4046a8d3aa4da22d4f4beba5388838c8a434bbb4"
 
 [[package]]
 name = "glob"
@@ -3258,7 +3258,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "029d74589adefde59de1a0c4f4732695c32805624aec7b68d91503d4dba79afc"
 dependencies = [
  "aho-corasick",
- "bstr 1.2.0",
+ "bstr 1.3.0",
  "fnv",
  "log",
  "regex",
@@ -3277,9 +3277,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.15"
+version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f9f29bc9dda355256b2916cf526ab02ce0aeaaaf2bad60d65ef3f12f11dd0f4"
+checksum = "5be7b54589b581f624f566bf5d8eb2bab1db736c51528720b6bd36b96b55924d"
 dependencies = [
  "bytes",
  "fnv",
@@ -3430,9 +3430,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.2.8"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75f43d41e26995c17e71ee126451dd3941010b0514a81a9d11f3b341debc2399"
+checksum = "bd6effc99afb63425aff9b05836f029929e345a6148a14b7ecd5ab67af944482"
 dependencies = [
  "bytes",
  "fnv",
@@ -3704,9 +3704,9 @@ checksum = "30e22bd8629359895450b59ea7a776c850561b96a3b1d31321c1949d9e6c9146"
 
 [[package]]
 name = "is-terminal"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e18b0a45d56fe973d6db23972bf5bc46f988a4a2385deac9cc29572f09daef"
+checksum = "21b6b32576413a8e69b90e952e4a026476040d81017b80445deda5f2d3921857"
 dependencies = [
  "hermit-abi 0.3.1",
  "io-lifetimes 1.0.5",
@@ -3731,9 +3731,9 @@ checksum = "fad582f4b9e86b6caa621cabeb0963332d92eea04729ab12892c2533951e6440"
 
 [[package]]
 name = "jobserver"
-version = "0.1.25"
+version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "068b1ee6743e4d11fb9c6a1e6064b3693a1b600e7f5f5988047d98b3dc9fb90b"
+checksum = "936cfd212a0155903bcbc060e316fb6cc7cbf2e1907329391ebadc1fe0ce77c2"
 dependencies = [
  "libc",
 ]
@@ -4512,9 +4512,9 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.5.8"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b182332558b18d807c4ce1ca8ca983b34c3ee32765e47b3f0f69b90355cc1dc"
+checksum = "83faa42c0a078c393f6b29d5db232d8be22776a891f8f56e5284faee4a20b327"
 dependencies = [
  "libc",
 ]
@@ -4530,9 +4530,9 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
+checksum = "d61c719bcfbcf5d62b3a09efa6088de8c54bc0bfcd3ea7ae39fcc186108b8de1"
 dependencies = [
  "autocfg",
 ]
@@ -4582,14 +4582,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d732bc30207a6423068df043e3d02e0735b155ad7ce1a6f76fe2baa5b158de"
+checksum = "5b9d9a46eff5b4ff64b45a9e316a6d1e0bc719ef429cbec4dc630684212bfdf9"
 dependencies = [
  "libc",
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -4941,18 +4941,18 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.5.9"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d829733185c1ca374f17e52b762f24f535ec625d2cc1f070e34c8a9068f341b"
+checksum = "1f646caf906c20226733ed5b1374287eb97e3c2a5c227ce668c1f2ce20ae57c9"
 dependencies = [
  "num_enum_derive",
 ]
 
 [[package]]
 name = "num_enum_derive"
-version = "0.5.9"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2be1598bf1c313dcdd12092e3f1920f463462525a21b7b4e11b4168353d0123e"
+checksum = "dcbff9bc912032c62bf65ef1d5aea88983b420f4f839db1e9b0c281a25c9c799"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -4983,9 +4983,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.17.0"
+version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f61fba1741ea2b3d6a1e3178721804bb716a68a6aeba1149b5d52e3d464ea66"
+checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
 
 [[package]]
 name = "opaque-debug"
@@ -5070,7 +5070,7 @@ dependencies = [
 [[package]]
 name = "pallet-base-fee"
 version = "1.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fp-evm",
  "frame-support",
@@ -5189,7 +5189,7 @@ dependencies = [
 [[package]]
 name = "pallet-ethereum"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -5216,7 +5216,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm"
 version = "6.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "environmental",
  "evm",
@@ -5241,7 +5241,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-blake2"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fp-evm",
 ]
@@ -5249,7 +5249,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-bn128"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fp-evm",
  "sp-core",
@@ -5259,7 +5259,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-modexp"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fp-evm",
  "num",
@@ -5268,7 +5268,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-simple"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#f736e8f75be3a5b23ddbc2cbe236f7ce0d8e9b55"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.35#63da5acee6ea0f2ac99b63c3040805163cd4d1f3"
 dependencies = [
  "fp-evm",
  "ripemd",
@@ -6217,9 +6217,9 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.11.6"
+version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21dc42e00223fc37204bd4aa177e69420c604ca4a183209a8f9de30c6d934698"
+checksum = "e48e50df39172a3e7eb17e14642445da64996989bc212b583015435d39a58537"
 dependencies = [
  "bytes",
  "prost-derive",
@@ -6227,9 +6227,9 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.11.6"
+version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3f8ad728fb08fe212df3c05169e940fbb6d9d16a877ddde14644a983ba2012e"
+checksum = "2c828f93f5ca4826f97fedcbd3f9a536c16b12cff3dbbb4a007f932bbad95b12"
 dependencies = [
  "bytes",
  "heck",
@@ -6262,9 +6262,9 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.11.6"
+version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bda8c0881ea9f722eb9629376db3d0b903b462477c1aafcb0566610ac28ac5d"
+checksum = "4ea9b0f8cbe5e15a8a042d030bd96668db28ecb567ec37d691971ff5731d2b1b"
 dependencies = [
  "anyhow",
  "itertools",
@@ -6275,11 +6275,10 @@ dependencies = [
 
 [[package]]
 name = "prost-types"
-version = "0.11.6"
+version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5e0526209433e96d83d750dd81a99118edbc55739e7e61a46764fd2ad537788"
+checksum = "379119666929a1afd7a043aa6cf96fa67a6dce9af60c88095a4686dbce4c9c88"
 dependencies = [
- "bytes",
  "prost",
 ]
 
@@ -6529,15 +6528,6 @@ name = "regex-syntax"
 version = "0.6.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
-
-[[package]]
-name = "remove_dir_all"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
-dependencies = [
- "winapi",
-]
 
 [[package]]
 name = "resolv-conf"
@@ -8029,9 +8019,9 @@ dependencies = [
 
 [[package]]
 name = "serde_nanos"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e44969a61f5d316be20a42ff97816efb3b407a924d06824c3d8a49fa8450de0e"
+checksum = "8ae801b7733ca8d6a2b580debe99f67f36826a0f5b8a36055dc6bc40f8d6bc71"
 dependencies = [
  "serde",
 ]
@@ -8163,9 +8153,9 @@ dependencies = [
 
 [[package]]
 name = "slab"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4614a76b2a8be0058caa9dbbaf66d988527d86d003c11a94fbd335d7661edcef"
+checksum = "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d"
 dependencies = [
  "autocfg",
 ]
@@ -8913,9 +8903,9 @@ dependencies = [
 
 [[package]]
 name = "ss58-registry"
-version = "1.38.0"
+version = "1.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e40c020d72bc0a9c5660bb71e4a6fdef081493583062c474740a7d59f55f0e7b"
+checksum = "ecf0bd63593ef78eca595a7fc25e9a443ca46fe69fd472f8f09f5245cdcd769d"
 dependencies = [
  "Inflector",
  "num-format",
@@ -9110,9 +9100,9 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
 name = "syn"
-version = "1.0.107"
+version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f4064b5b16e03ae50984a5a8ed5d4f8803e6bc1fd170a3cda91a1be4b18e3f5"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9166,16 +9156,15 @@ checksum = "8ae9980cab1db3fceee2f6c6f643d5d8de2997c58ee8d25fb0cc8a9e9e7348e5"
 
 [[package]]
 name = "tempfile"
-version = "3.3.0"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cdb1ef4eaeeaddc8fbd371e5017057064af0911902ef36b39801f67cc6d79e4"
+checksum = "af18f7ae1acd354b992402e9ec5864359d693cd8a79dcbef59f76891701c1e95"
 dependencies = [
  "cfg-if",
  "fastrand",
- "libc",
  "redox_syscall",
- "remove_dir_all",
- "winapi",
+ "rustix 0.36.8",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -9304,9 +9293,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.25.0"
+version = "1.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8e00990ebabbe4c14c08aca901caed183ecd5c09562a12c824bb53d3c3fd3af"
+checksum = "03201d01c3c27a29c8a5cee5b55a93ddae1ccf6f08f65365c2c918f8c1b76f64"
 dependencies = [
  "autocfg",
  "bytes",
@@ -9319,7 +9308,7 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tokio-macros",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -9346,9 +9335,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d660770404473ccd7bc9f8b28494a811bc18542b915c0855c51e8f419d5223ce"
+checksum = "8fb52b74f05dbf495a8fba459fdc331812b96aa086d9eb78101fa0d4569c3313"
 dependencies = [
  "futures-core",
  "pin-project-lite 0.2.9",

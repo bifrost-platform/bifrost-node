@@ -1,6 +1,6 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "bifrost-platform",
   "scripts": {
     "set_session_keys": "ts-node src/set_session_keys.ts",
