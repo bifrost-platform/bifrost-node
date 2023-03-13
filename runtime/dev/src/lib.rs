@@ -695,7 +695,7 @@ parameter_types! {
 	/// Minimum round length is 30 seconds (10 * 3 second block times).
 	pub const MinBlocksPerRound: u32 = 1;
 	/// Blocks per round.
-	pub const DefaultBlocksPerRound: u32 = 2 * MINUTES;
+	pub const DefaultBlocksPerRound: u32 = 1 * MINUTES;
 	/// Rounds before the validator leaving the candidates request can be executed.
 	pub const LeaveCandidatesDelay: u32 = 1;
 	/// Rounds before the candidate bond increase/decrease can be executed.

@@ -301,53 +301,67 @@ impl<T: Config> Pallet<T> {
 		<DelayedPayouts<T>>::insert(round_to_payout, payout);
 	}
 
-	/// Handle validators auto-compoundable round rewards
-	/// If the reward destination is set to `Staked`, it will be auto-compounded
-	pub fn handle_validator_auto_compounding(
-		validator: T::AccountId,
+	/// Handle validators auto-compoundable round rewards payout. If the reward destination is set
+	/// to `Staked`, it will be auto-compounded
+	pub fn handle_validator_reward_payout(
+		controller: T::AccountId,
+		stash: T::AccountId,
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
-		if let Some(mut validator_state) = <CandidateInfo<T>>::get(&validator) {
+		if let Some(mut validator_state) = <CandidateInfo<T>>::get(&controller) {
+			// mint rewards to the validators stash account
+			Self::mint_reward(reward, stash);
 			// increment the awarded tokens of this validator
 			validator_state.increment_awarded_tokens(reward);
 
+			// auto-compound round rewards if `reward_dst` is set to `Staked`
 			if validator_state.reward_dst == RewardDestination::Staked {
 				validator_state.bond_more::<T>(
 					validator_state.stash.clone(),
-					validator.clone(),
+					controller.clone(),
 					reward,
 				)?;
-				Self::update_active(&validator, validator_state.voting_power);
+				Self::update_active(&controller, validator_state.voting_power);
 				Self::sort_candidates_by_voting_power();
 			}
-			<CandidateInfo<T>>::insert(&validator, validator_state);
+			<CandidateInfo<T>>::insert(&controller, validator_state);
 		}
 		Ok(().into())
 	}
 
-	/// Handle nominators auto-compoundable round rewards
-	/// If the reward destination is set to `Staked`, it will be auto-compounded
-	pub fn handle_nominator_auto_compounding(
-		validator: T::AccountId,
+	/// Handle nominators auto-compoundable round rewards payout. If the reward destination is set
+	/// to `Staked`, it will be auto-compounded
+	pub fn handle_nominator_reward_payout(
+		controller: T::AccountId,
 		nominator: T::AccountId,
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
 		if let Some(mut nominator_state) = <NominatorState<T>>::get(&nominator) {
-			match nominator_state.reward_dst {
-				RewardDestination::Staked => {
-					// increment the awarded tokens of this nominator
-					nominator_state.increment_awarded_tokens(&validator, reward);
-					// auto-compound nomination
-					if nominator_state.increase_nomination::<T>(validator.clone(), reward).is_ok() {
+			// the nominator must not be revoking and leaving
+			if !nominator_state.is_revoking(&controller) && !nominator_state.is_leaving() {
+				// mint rewards to the nominator account
+				Self::mint_reward(reward, nominator.clone());
+
+				// auto-compound round rewards if `reward_dst` is set to `Staked`
+				match nominator_state.reward_dst {
+					RewardDestination::Staked => {
+						// increment the awarded tokens of this nominator
+						nominator_state.increment_awarded_tokens(&controller, reward);
+						// auto-compound nomination
+						if nominator_state
+							.increase_nomination::<T>(controller.clone(), reward)
+							.is_ok()
+						{
+							<NominatorState<T>>::insert(&nominator, nominator_state);
+							Self::sort_candidates_by_voting_power();
+						}
+					},
+					RewardDestination::Account => {
+						// increment the awarded tokens of this nominator
+						nominator_state.increment_awarded_tokens(&controller, reward);
 						<NominatorState<T>>::insert(&nominator, nominator_state);
-						Self::sort_candidates_by_voting_power();
-					}
-				},
-				RewardDestination::Account => {
-					// increment the awarded tokens of this nominator
-					nominator_state.increment_awarded_tokens(&validator, reward);
-					<NominatorState<T>>::insert(&nominator, nominator_state);
-				},
+					},
+				}
 			}
 		}
 		Ok(().into())
@@ -460,6 +474,19 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// Mints exactly `amount` native tokens to the `to` account.
+	fn mint_reward(amount: BalanceOf<T>, to: T::AccountId) {
+		if let Ok(amount_transferred) = T::Currency::deposit_into_existing(&to, amount) {
+			let mut awarded_tokens = <AwardedTokens<T>>::get();
+			awarded_tokens += amount_transferred.peek();
+			<AwardedTokens<T>>::put(awarded_tokens);
+			Self::deposit_event(Event::Rewarded {
+				account: to.clone(),
+				rewards: amount_transferred.peek(),
+			});
+		}
+	}
+
 	/// Payout a single validator from the given round.
 	///
 	/// Returns an optional tuple of (Validator's AccountId, total paid)
@@ -472,18 +499,6 @@ impl<T: Config> Pallet<T> {
 		if total_points.is_zero() {
 			return (None, Weight::from_ref_time(0u64))
 		}
-		// reward minter
-		let mint = |amt: BalanceOf<T>, to: T::AccountId| {
-			if let Ok(amount_transferred) = T::Currency::deposit_into_existing(&to, amt) {
-				let mut awarded_tokens = <AwardedTokens<T>>::get();
-				awarded_tokens += amount_transferred.peek();
-				<AwardedTokens<T>>::put(awarded_tokens);
-				Self::deposit_event(Event::Rewarded {
-					account: to.clone(),
-					rewards: amount_transferred.peek(),
-				});
-			}
-		};
 
 		if let Some((validator, pts)) = <AwardedPts<T>>::iter_prefix(round_to_payout).drain().next()
 		{
@@ -502,10 +517,12 @@ impl<T: Config> Pallet<T> {
 
 				if snapshot.nominations.is_empty() {
 					// solo validator with no nominators
-					mint(total_reward_amount, state.stash.clone());
-					// handle auto-compounding
-					Self::handle_validator_auto_compounding(validator.clone(), total_reward_amount)
-						.expect("Graceful validator reward auto-compound");
+					Self::handle_validator_reward_payout(
+						validator.clone(),
+						state.stash.clone(),
+						total_reward_amount,
+					)
+					.expect("Graceful validator reward payout");
 				} else {
 					// pay validator first; commission + due_portion
 					let validator_stake_pct = Perbill::from_rational(snapshot.bond, snapshot.total);
@@ -513,21 +530,23 @@ impl<T: Config> Pallet<T> {
 					let amount_due = total_reward_amount - commission;
 					let validator_reward = (validator_stake_pct * amount_due) + commission;
 
-					mint(validator_reward, state.stash.clone());
-					Self::handle_validator_auto_compounding(validator.clone(), validator_reward)
-						.expect("Graceful validator reward auto-compound");
+					Self::handle_validator_reward_payout(
+						validator.clone(),
+						state.stash.clone(),
+						validator_reward,
+					)
+					.expect("Graceful validator reward payout");
 					// pay nominators due portion
 					for Bond { owner, amount } in snapshot.nominations {
 						let nominator_stake_pct = Perbill::from_rational(amount, snapshot.total);
 						let nominator_reward = nominator_stake_pct * amount_due;
 						if !nominator_reward.is_zero() {
-							mint(nominator_reward, owner.clone());
-							Self::handle_nominator_auto_compounding(
+							Self::handle_nominator_reward_payout(
 								validator.clone(),
 								owner.clone(),
 								nominator_reward,
 							)
-							.expect("Graceful nominator reward auto-compound");
+							.expect("Graceful nominator reward payout");
 						}
 					}
 				}
