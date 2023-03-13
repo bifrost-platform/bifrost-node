@@ -1536,6 +1536,10 @@ impl<
 		matches!(self.status, NominatorStatus::Active)
 	}
 
+	pub fn is_revoking(&self, candidate: &AccountId) -> bool {
+		self.requests().get(candidate).is_some()
+	}
+
 	pub fn is_leaving(&self) -> bool {
 		matches!(self.status, NominatorStatus::Leaving(_))
 	}
