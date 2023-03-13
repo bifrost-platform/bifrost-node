@@ -1537,7 +1537,12 @@ impl<
 	}
 
 	pub fn is_revoking(&self, candidate: &AccountId) -> bool {
-		self.requests().get(candidate).is_some()
+		if let Some(request) = self.requests().get(candidate) {
+			if request.action == NominationChange::Revoke {
+				return true
+			}
+		}
+		false
 	}
 
 	pub fn is_leaving(&self) -> bool {
