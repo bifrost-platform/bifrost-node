@@ -110,7 +110,6 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
-	MigrateRelayManager,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -690,15 +689,6 @@ impl pallet_relay_manager::Config for Runtime {
 	type IsHeartbeatOffenceActive = IsHeartbeatOffenceActive;
 	type DefaultHeartbeatSlashFraction = DefaultHeartbeatSlashFraction;
 	type WeightInfo = pallet_relay_manager::weights::SubstrateWeight<Runtime>;
-}
-
-pub struct MigrateRelayManager;
-impl frame_support::traits::OnRuntimeUpgrade for MigrateRelayManager {
-	fn on_runtime_upgrade() -> Weight {
-		pallet_relay_manager::migrations::v3::pre_migrate::<Runtime>().ok();
-		let weight = pallet_relay_manager::migrations::v3::migrate::<Runtime>();
-		weight
-	}
 }
 
 parameter_types! {
