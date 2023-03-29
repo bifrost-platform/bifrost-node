@@ -2,11 +2,11 @@
 name = "bifrost-mainnet-constants"
 version = "1.0.0"
 description = "The substrate runtime constants for BIFROST Node development"
-authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
-edition = "2021"
-license = "Unlicense"
-repository = "https://github.com/bifrost-platform/bifrost-node"
+authors = { workspace = true }
+homepage = { workspace = true}
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 # Bifrost
@@ -14,9 +14,9 @@ bifrost-common-constants = { default-features = false, path = "../../common/cons
 bp-core = { default-features = false, path = "../../../primitives/core" }
 
 # Substrate
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
-frame-support = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
-pallet-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v0.9.37" }
+sp-core = { workspace = true }
+frame-support = { workspace = true }
+pallet-evm = { workspace = true }
 
 [features]
 default = ["std"]

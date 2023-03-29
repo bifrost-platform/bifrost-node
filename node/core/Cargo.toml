@@ -2,11 +2,11 @@
 name = "bifrost-node"
 version = "1.2.1"
 description = "The node specification for BIFROST Node"
-authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
-edition = "2021"
-license = "Unlicense"
-repository = "https://github.com/bifrost-platform/bifrost-node"
+authors = { workspace = true }
+homepage = { workspace = true}
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 build = "build.rs"
 
 [package.metadata.docs.rs]
@@ -20,13 +20,13 @@ name = "bifrost-node"
 clap = { version = "4.0.9", features = ["derive"] }
 
 # substrate client dependencies
-sc-cli = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
-sc-service = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
-sc-finality-grandpa = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
+sc-cli = { workspace = true }
+sc-service = { workspace = true }
+sc-finality-grandpa = { workspace = true }
 
 # benchmarking dependencies
-frame-benchmarking = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
-frame-benchmarking-cli = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
+frame-benchmarking = { workspace = true, features = ["std"] }
+frame-benchmarking-cli = { workspace = true}
 
 # BIFROST runtimes
 bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
@@ -40,7 +40,7 @@ bifrost-testnet-node = { path = "../testnet" }
 bifrost-mainnet-node = { path = "../mainnet" }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.37" }
+substrate-build-script-utils = { workspace = true }
 
 [features]
 default = []
