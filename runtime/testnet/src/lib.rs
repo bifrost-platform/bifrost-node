@@ -872,6 +872,7 @@ impl pallet_evm::Config for Runtime {
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
+	type OnCreate = ();
 }
 
 /// The Ethereum module is responsible for storing block data and provides RPC compatibility.
