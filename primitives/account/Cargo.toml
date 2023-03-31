@@ -2,11 +2,11 @@
 name = "account"
 version = "0.0.1"
 description = "Util module for Ethereum account support"
-authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
-edition = "2021"
-license = "Unlicense"
-repository = "https://github.com/bifrost-platform/bifrost-node"
+authors = { workspace = true }
+homepage = { workspace = true}
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
 [package.metadata.docs.rs]
 targets = [ "x86_64-unknown-linux-gnu" ]
@@ -17,17 +17,17 @@ hex = { version = "0.4", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 impl-serde = { version = "0.3.1", default-features = false }
 blake2-rfc = { version = "0.2.18", optional = true, default-features = false }
-libsecp256k1 = { version = "0.7", default-features = false, features = [ "hmac" ] }
-serde = { version = "1.0.101", optional = true, default-features = false, features = [ "derive" ] }
+libsecp256k1 = { version = "0.7", default-features = false, features = ["hmac"] }
+serde = { version = "1.0.101", optional = true, default-features = false, features = ["derive"] }
 
 # Substrate
-scale-info = { version = "2.0", default-features = false, features = [ "derive" ] }
-parity-scale-codec = { version = "3.2.1", default-features = false, features = [ "derive" ] }
-sp-io = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-runtime-interface = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+scale-info = { version = "2.0", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "3.2.1", default-features = false, features = ["derive"] }
+sp-io = { workspace = true }
+sp-std = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-runtime-interface = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4.3"

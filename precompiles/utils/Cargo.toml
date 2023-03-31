@@ -2,11 +2,11 @@
 name = "precompile-utils"
 version = "1.0.0"
 description = "Utils to write EVM precompiles."
-authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
-edition = "2021"
-license = "Unlicense"
-repository = "https://github.com/bifrost-platform/bifrost-node"
+authors = { workspace = true }
+homepage = { workspace = true}
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 affix = "0.1.2"
@@ -17,23 +17,23 @@ impl-trait-for-tuples = "0.2.2"
 log = "0.4"
 num_enum = { version = "0.5.3", default-features = false }
 paste = "1.0.8"
-scale-info = { version = "2.0", optional = true, default-features = false, features = [ "derive" ] }
+scale-info = { version = "2.0", optional = true, default-features = false, features = ["derive"] }
 serde = { version = "1.0.100", optional = true }
 sha3 = { version = "0.10", default-features = false }
 similar-asserts = { version = "1.1.0", optional = true }
 
 # Substrate
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
-frame-support = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-frame-system = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-io = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-io = { workspace = true }
+sp-std = { workspace = true }
+sp-core = { workspace = true }
 
 # Frontier
-evm = { version = "0.37.0", default-features = false, features = [ "with-codec" ] }
-fp-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v0.9.35" }
-pallet-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v0.9.35", features = [ "forbid-evm-reentrancy" ] }
+evm = { version = "0.37.0", default-features = false, features = ["with-codec"] }
+fp-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
 # Local
 precompile-utils-macro = { path = "macro" }

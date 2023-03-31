@@ -2,21 +2,21 @@
 name = "bifrost-common-runtime"
 version = "1.0.0"
 description = "The common code shared between substrate runtimes for BIFROST Node"
-authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
-edition = "2021"
-license = "Unlicense"
-repository = "https://github.com/bifrost-platform/bifrost-node"
+authors = { workspace = true }
+homepage = { workspace = true}
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["derive"] }
 
 # Substrate
-frame-system = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-frame-support = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+frame-system = { workspace = true }
+frame-support = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
 
 [features]
 std = [

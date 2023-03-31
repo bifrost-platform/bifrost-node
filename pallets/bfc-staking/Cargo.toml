@@ -2,29 +2,29 @@
 name = "pallet-bfc-staking"
 version = "1.0.0"
 description = "bfc staking pallet for validator selection and reward distribution"
-authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
-edition = "2021"
-license = "Unlicense"
-repository = "https://github.com/bifrost-platform/bifrost-node"
+authors = { workspace = true }
+homepage = { workspace = true}
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 log = "0.4"
 serde = { version = "1.0.101", optional = true }
+substrate-fixed = { workspace = true }
 
 # Substrate
 scale-info = { version = "2.0", default-features = false, features = ["derive"] }
 parity-scale-codec = { version = "3.2.1", default-features = false, features = ["derive"] }
-frame-benchmarking = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35", optional = true }
-frame-support = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-frame-system = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-runtime = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-std = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-staking = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-pallet-session = { default-features = false, features = ["historical"], git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-pallet-authorship = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-pallet-im-online = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
+frame-benchmarking = { workspace = true, optional = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+sp-staking = { workspace = true }
+pallet-session = { workspace = true, features = ["historical"] }
+pallet-authorship = { workspace = true }
+pallet-im-online = { workspace = true }
 
 # Bifrost
 pallet-relay-manager = { default-features = false, path = "../../pallets/relay-manager" }
@@ -34,9 +34,9 @@ bp-staking = { default-features = false, path = "../../primitives/bfc-staking" }
 [dev-dependencies]
 similar-asserts = "1.1.0"
 
-pallet-balances = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-core = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
-sp-io = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.35" }
+pallet-balances = { workspace = true, features = ["std"] }
+sp-core = { workspace = true, features = ["std"] }
+sp-io = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
