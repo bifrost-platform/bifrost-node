@@ -18,7 +18,7 @@ FROM ubuntu:22.04
 RUN apt update && apt install -y curl unzip
 
 RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "/root/.fnm"
-RUN /root/.fnm/fnm install 16.19.1
+RUN /root/.fnm/fnm install 19.7.0
 
 COPY --from=builder /bifrost/target/release/bifrost-node /usr/local/bin
 COPY --from=builder /bifrost/tools /tools
