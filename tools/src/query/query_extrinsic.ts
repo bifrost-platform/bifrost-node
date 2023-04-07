@@ -91,7 +91,7 @@ async function query_extrinsic() {
     console.log(`           Event: ${event.event.method}`);
     console.log(`           Data:`);
     for (const data of event.event.data) {
-      console.log(`               ${JSON.stringify(data, null, '\t       ')}`);
+      console.log(`               ${JSON.stringify(data)}`);
     }
   }
 }
