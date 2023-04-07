@@ -5,7 +5,8 @@
   "scripts": {
     "set_session_keys": "ts-node src/set_session_keys.ts",
     "join_validators": "ts-node src/join_validators.ts",
-    "create_accounts": "ts-node src/create_accounts.ts"
+    "create_accounts": "ts-node src/create_accounts.ts",
+    "query_extrinsics": "ts-node src/query/query_extrinsics.ts"
   },
   "repository": {
     "type": "git",
@@ -15,6 +16,7 @@
     "@polkadot/api": "8.6.2",
     "axios": "0.27.2",
     "bignumber.js": "9.1.0",
+    "gauge": "^5.0.0",
     "shelljs": "0.8.5",
     "web3": "1.7.5",
     "yargs": "17.5.1"
