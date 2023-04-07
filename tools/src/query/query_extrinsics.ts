@@ -99,7 +99,7 @@ async function query_extrinsics() {
     const signedBlock = await api.rpc.chain.getBlock(blockHash);
 
     let matchedExtrinsics = [];
-    for (const rawXt of signedBlock.block.extrinsics) {
+    for (const [index, rawXt] of signedBlock.block.extrinsics.entries()) {
       const xt = rawXt.toHuman();
       const method = xt.method.method.toLowerCase();
       const section = xt.method.section.toLowerCase();
@@ -108,7 +108,7 @@ async function query_extrinsics() {
         from = from.toLowerCase();
         const signer = xt.signer.toLowerCase();
         if (signer === from && section === pallet && method === extrinsic) {
-          matchedExtrinsics.push(rawXt.hash.toHex());
+          matchedExtrinsics.push({ index, hash: rawXt.hash.toHex() });
         }
         continue;
       }
@@ -136,7 +136,7 @@ async function query_extrinsics() {
   for (const result of results) {
     console.log(`✨ Found extrinsics in block #${result.block}`);
     for (const xt of result.extrinsics) {
-      console.log(`     🔖 Extrinsic hash(${xt})`);
+      console.log(`     🔖 Extrinsic #${result.block}-${xt.index} hash(${xt.hash})`);
     }
     console.log();
   }

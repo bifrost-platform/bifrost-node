@@ -97,7 +97,7 @@ async function query_events() {
         const index = Number(e.phase.ApplyExtrinsic);
         const signedBlock = await api.rpc.chain.getBlock(blockHash);
         const xt = signedBlock.block.extrinsics[index];
-        matchedEvents.push(xt.hash.toHex());
+        matchedEvents.push({ index, hash: xt.hash.toHex() });
       }
     }
 
@@ -119,7 +119,7 @@ async function query_events() {
   for (const result of results) {
     console.log(`✨ Found events in block #${result.block}`);
     for (const xt of result.extrinsics) {
-      console.log(`     🔖 Event emitted extrinsic hash(${xt})`);
+      console.log(`     🔖 Event emitted at extrinsic #${result.block}-${xt.index} hash(${xt.hash})`);
     }
     console.log();
   }
