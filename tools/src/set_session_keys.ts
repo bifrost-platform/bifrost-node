@@ -52,11 +52,11 @@ async function set_session_keys() {
   try {
     const isSyncing = await web3.eth.isSyncing();
     if (isSyncing !== false) {
-      console.error('Node is not completely sync yet');
+      console.error('Node is not completely synced yet');
       process.exit(-1);
     }
   } catch (e) {
-    console.error('Node endpoint not reachable');
+    console.error('Node endpoint is not reachable');
     process.exit(-1);
   }
 
