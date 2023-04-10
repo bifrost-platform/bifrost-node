@@ -53,7 +53,19 @@ npm run join_validators -- \
 ## 2. Data Query
 
 ### 1.1. Query Extrinsics
+This command will query historical extrinsics that matches the requested parameters.
 
+**Query Parameters**
+|Name      |Description                                     |Example                                                         |Required                                                         |
+|----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
+|from        |The account address who submitted the extrinsic.  |0x81143D1d29B101B84FE87BCB2f684534b20EBaAd  |X|
+|start       |The starting block number where query will start.  |5047917  |O|
+|end         |The ending block number where the query will end. The default value will be the highest block of the connected provider.  |5048007  |X|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.thebifrost.io/rpc`  |O|
+|pallet      |The name of the pallet where the extrinsic locates.  |bfcStaking  |O|
+|extrinsic   |The name of the extrinsic to query.  |nominate  |O|
+
+**Example Request**
 ```
 npm run query_extrinsics -- \
   --from 0x81143D1d29B101B84FE87BCB2f684534b20EBaAd \
@@ -64,13 +76,25 @@ npm run query_extrinsics -- \
   --extrinsic nominate
 ```
 
+**Example Response**
 ```
 ✨ Found extrinsics in block #5047917
      🔖 Extrinsic #5047917-1 hash(0x38aed5995f65f9fa49c4387ad7c5302b6c7e27443ca986e7c7861d429a34665b)
 ```
 
 ### 1.2. Query Events
+This command will query historical events that matches the requested parameters.
 
+**Query Parameters**
+|Name      |Description                                     |Example                                                         |Required                                                         |
+|----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
+|start       |The starting block number where query will start.  |5047917  |O|
+|end         |The ending block number where the query will end. The default value will be the highest block of the connected provider.  |5048007  |X|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.thebifrost.io/rpc`  |O|
+|pallet      |The name of the pallet where the event locates.  |bfcStaking  |O|
+|event   |The name of the event to query.  |Nomination  |O|
+
+**Example Request**
 ```
 npm run query_events -- \
   --start 5047917 \
@@ -80,13 +104,23 @@ npm run query_events -- \
   --event Nomination
 ```
 
+**Example Response**
 ```
 ✨ Found events in block #5047917
      🔖 Event emitted at extrinsic #5047917-1 hash(0x38aed5995f65f9fa49c4387ad7c5302b6c7e27443ca986e7c7861d429a34665b)
 ```
 
 ### 1.3. Query Extrinsic Details
+This command will query the detail information of the extrinsic that matches the requested parameters.
 
+**Query Parameters**
+|Name      |Description                                     |Example                                                         |Required                                                         |
+|----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
+|block       |The block number where the extrinsic is included.  |5047917  |O|
+|index       |The index of the extrinsic.  |1  |O|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.thebifrost.io/rpc`  |O|
+
+**Example Request**
 ```
 npm run query_extrinsic -- \
   --block 5047917 \
@@ -94,6 +128,7 @@ npm run query_extrinsic -- \
   --provider https://public-01.testnet.thebifrost.io/rpc
 ```
 
+**Example Response**
 ```
 🔖 Extrinsic #5047917-1 hash(0x38aed5995f65f9fa49c4387ad7c5302b6c7e27443ca986e7c7861d429a34665b)
      Pallet: bfcStaking
