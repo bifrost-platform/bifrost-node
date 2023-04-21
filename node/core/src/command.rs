@@ -321,6 +321,7 @@ pub fn run() -> sc_cli::Result<()> {
 				eth_statuses_cache: cli.eth_statuses_cache,
 				fee_history_limit: cli.fee_history_limit,
 				max_past_logs: cli.max_past_logs,
+				logs_request_timeout: cli.logs_request_timeout,
 				tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
 			};
 

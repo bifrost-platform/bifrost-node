@@ -522,6 +522,7 @@ pub fn build_rpc_extensions_builder(
 				finality_provider: finality_proof_provider.clone(),
 			},
 			max_past_logs: rpc_config.max_past_logs,
+			logs_request_timeout: rpc_config.logs_request_timeout,
 		};
 
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {

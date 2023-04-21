@@ -83,6 +83,7 @@ where
 		fee_history_cache,
 		grandpa,
 		max_past_logs,
+		logs_request_timeout,
 	} = deps;
 
 	let GrandpaDeps {
@@ -116,6 +117,7 @@ where
 			filter_pool,
 			500_usize, // max stored filters
 			max_past_logs,
+			logs_request_timeout,
 			block_data_cache.clone(),
 		)
 		.into_rpc(),

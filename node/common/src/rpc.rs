@@ -121,6 +121,8 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
+	/// Timeout for eth logs query in seconds. (default 10)
+	pub logs_request_timeout: u64,
 }
 
 /// Mainnet/Testnet client dependencies.
@@ -161,6 +163,8 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
+	/// Timeout for eth logs query in seconds. (default 10)
+	pub logs_request_timeout: u64,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
