@@ -9,8 +9,8 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-scale-info = { version = "2.0", default-features = false, features = ["derive"] }
-parity-scale-codec = { version = "3.2.1", default-features = false, features = ["derive"] }
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
 
 fp-self-contained = { workspace = true }
 sp-std = { workspace = true }

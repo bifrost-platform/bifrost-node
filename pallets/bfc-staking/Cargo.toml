@@ -9,13 +9,13 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-log = "0.4"
-serde = { version = "1.0.101", optional = true }
+log = { workspace = true }
+serde = { workspace = true, optional = true }
 substrate-fixed = { workspace = true }
 
 # Substrate
-scale-info = { version = "2.0", default-features = false, features = ["derive"] }
-parity-scale-codec = { version = "3.2.1", default-features = false, features = ["derive"] }
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
@@ -27,12 +27,12 @@ pallet-authorship = { workspace = true }
 pallet-im-online = { workspace = true }
 
 # Bifrost
-pallet-relay-manager = { default-features = false, path = "../../pallets/relay-manager" }
-pallet-bfc-offences = { default-features = false, path = "../../pallets/bfc-offences" }
-bp-staking = { default-features = false, path = "../../primitives/bfc-staking" }
+pallet-relay-manager = { workspace = true }
+pallet-bfc-offences = { workspace = true }
+bp-staking = { workspace = true }
 
 [dev-dependencies]
-similar-asserts = "1.1.0"
+similar-asserts = { workspace = true }
 
 pallet-balances = { workspace = true, features = ["std"] }
 sp-core = { workspace = true, features = ["std"] }

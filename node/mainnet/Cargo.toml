@@ -10,12 +10,11 @@ repository = { workspace = true }
 
 [dependencies]
 # third-party dependencies
-serde_json = "1.0"
-jsonrpc-core = "18.0.0"
-jsonrpsee = { version = "0.16.2", features = ["server"] }
-futures = { version = "0.3" }
-hex-literal = { version = "0.3.1" }
-tokio = { version = "1.13.0", features = ["macros", "sync"] }
+serde_json = { workspace = true }
+jsonrpsee = { workspace = true, features = ["server"] }
+futures = { workspace = true }
+hex-literal = { workspace = true }
+tokio = { workspace = true, features = ["macros", "sync"] }
 
 # substrate client dependencies
 sc-client-api = { workspace = true }
@@ -47,7 +46,7 @@ sp-blockchain = { workspace = true }
 sp-consensus = { workspace = true }
 
 # FRAME dependencies
-pallet-bfc-staking = { path = "../../pallets/bfc-staking" }
+pallet-bfc-staking = { workspace = true }
 pallet-im-online = { workspace = true, features = ["std"] }
 pallet-transaction-payment-rpc = { workspace = true }
 substrate-frame-rpc-system = { workspace = true }
@@ -74,10 +73,10 @@ frame-benchmarking-cli = { workspace = true }
 frame-benchmarking = { workspace = true, features = ["std"] }
 
 # Local Dependencies
-bp-core = { default-features = false, path = "../../primitives/core" }
-bifrost-mainnet-runtime = { path = "../../runtime/mainnet", features = ["std", "evm-tracing"] }
-bifrost-mainnet-constants = { path = "../../runtime/mainnet/constants" }
-bifrost-common-node = { path = "../common" }
+bp-core = { workspace = true }
+bifrost-mainnet-runtime = { workspace = true, features = ["std", "evm-tracing"] }
+bifrost-mainnet-constants = { workspace = true }
+bifrost-common-node = { workspace = true }
 
 [features]
 default = []

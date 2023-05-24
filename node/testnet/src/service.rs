@@ -25,6 +25,7 @@ use sc_network::NetworkService;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::{
 	error::Error as ServiceError, Configuration, RpcHandlers, SpawnTaskHandle, TaskManager,
+	WarpSyncParams,
 };
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -259,7 +260,7 @@ pub fn new_full_base(
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
 			block_announce_validator_builder: None,
-			warp_sync: Some(warp_sync),
+			warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
 		})?;
 
 	if config.offchain_worker.enabled {
@@ -391,24 +392,6 @@ pub fn new_full_base(
 		);
 	}
 
-	// Frontier offchain DB task. Essential.
-	// Maps emulated ethereum data to substrate native data.
-	task_manager.spawn_essential_handle().spawn(
-		"frontier-mapping-sync-worker",
-		Some("frontier"),
-		MappingSyncWorker::new(
-			client.import_notification_stream(),
-			Duration::new(6, 0),
-			client.clone(),
-			backend.clone(),
-			frontier_backend.clone(),
-			3,
-			0,
-			SyncStrategy::Normal,
-		)
-		.for_each(|()| futures::future::ready(())),
-	);
-
 	network_starter.start_network();
 	Ok(NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers })
 }
@@ -476,6 +459,25 @@ pub fn build_rpc_extensions_builder(
 		),
 	);
 
+	// Frontier offchain DB task. Essential.
+	// Maps emulated ethereum data to substrate native data.
+	builder.task_manager.spawn_essential_handle().spawn(
+		"frontier-mapping-sync-worker",
+		Some("frontier"),
+		MappingSyncWorker::new(
+			client.import_notification_stream(),
+			Duration::new(6, 0),
+			client.clone(),
+			backend.clone(),
+			overrides.clone(),
+			frontier_backend.clone(),
+			3,
+			0,
+			SyncStrategy::Normal,
+		)
+		.for_each(|()| futures::future::ready(())),
+	);
+
 	let tracing_requesters: RpcRequesters = {
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
 			spawn_tracing_tasks(
@@ -522,6 +524,7 @@ pub fn build_rpc_extensions_builder(
 				finality_provider: finality_proof_provider.clone(),
 			},
 			max_past_logs: rpc_config.max_past_logs,
+			logs_request_timeout: rpc_config.logs_request_timeout,
 		};
 
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {

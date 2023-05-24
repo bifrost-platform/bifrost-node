@@ -1,6 +1,6 @@
 [package]
 name = "bifrost-node"
-version = "1.2.2"
+version = "1.2.3"
 description = "The node specification for BIFROST Node"
 authors = { workspace = true }
 homepage = { workspace = true}
@@ -17,7 +17,7 @@ name = "bifrost-node"
 
 [dependencies]
 # third-party dependencies
-clap = { version = "4.0.9", features = ["derive"] }
+clap = { workspace = true }
 
 # substrate client dependencies
 sc-cli = { workspace = true }
@@ -29,15 +29,15 @@ frame-benchmarking = { workspace = true, features = ["std"] }
 frame-benchmarking-cli = { workspace = true}
 
 # BIFROST runtimes
-bifrost-dev-runtime = { path = "../../runtime/dev", features = ["std", "evm-tracing"] }
-bifrost-testnet-runtime = { path = "../../runtime/testnet", features = ["std", "evm-tracing"] }
-bifrost-mainnet-runtime = { path = "../../runtime/mainnet", features = ["std", "evm-tracing"] }
+bifrost-dev-runtime = { workspace = true, features = ["std", "evm-tracing"] }
+bifrost-testnet-runtime = { workspace = true, features = ["std", "evm-tracing"] }
+bifrost-mainnet-runtime = { workspace = true, features = ["std", "evm-tracing"] }
 
 # BIFROST node specs
-bifrost-common-node = { path = "../common" }
-bifrost-dev-node = { path = "../dev" }
-bifrost-testnet-node = { path = "../testnet" }
-bifrost-mainnet-node = { path = "../mainnet" }
+bifrost-common-node = { workspace = true }
+bifrost-dev-node = { workspace = true }
+bifrost-testnet-node = { workspace = true }
+bifrost-mainnet-node = { workspace = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }

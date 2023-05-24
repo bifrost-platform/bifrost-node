@@ -9,7 +9,7 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-account = { path = "../account", default-features = false }
+account = { workspace = true }
 
 fp-self-contained = { workspace = true }
 sp-core = { workspace = true }

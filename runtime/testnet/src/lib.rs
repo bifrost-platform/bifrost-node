@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Index, Signature};
-use codec::{Decode, Encode};
+use parity_scale_codec::{Decode, Encode};
 
 pub use bifrost_testnet_constants::{
 	currency::{GWEI, UNITS as BFC, *},
@@ -19,7 +19,10 @@ use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H160, H256, U256};
+use sp_core::{
+	crypto::{ByteArray, KeyTypeId},
+	ConstU64, OpaqueMetadata, H160, H256, U256,
+};
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
@@ -43,11 +46,11 @@ use sp_version::RuntimeVersion;
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
 use pallet_ethereum::{
-	Call::transact, EthereumBlockHashMapping, Transaction as EthereumTransaction,
+	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, Runner,
+	FeeCalculator, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -77,7 +80,7 @@ pub use frame_support::{
 	},
 	ConsensusEngineId, PalletId, StorageValue,
 };
-use frame_system::EnsureRoot;
+use frame_system::{EnsureRoot, EnsureSigned};
 
 mod precompiles;
 pub use precompiles::BifrostPrecompiles;
@@ -232,7 +235,7 @@ impl frame_system::Config for Runtime {
 
 /// Provides a random function that generates low-influence random values
 /// based on the block hashes from the previous 81 blocks.
-impl pallet_randomness_collective_flip::Config for Runtime {}
+impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
 
 parameter_types! {
 	pub const MaxAuthorities: u32 = 1_000;
@@ -258,6 +261,7 @@ impl pallet_grandpa::Config for Runtime {
 	type HandleEquivocation = ();
 	type WeightInfo = ();
 	type MaxAuthorities = MaxAuthorities;
+	type MaxSetIdSessionEntries = ConstU64<0>;
 }
 
 parameter_types! {
@@ -420,9 +424,7 @@ impl pallet_offences::Config for Runtime {
 /// The Authorship module tracks the current author of the block.
 impl pallet_authorship::Config for Runtime {
 	type EventHandler = BfcStaking;
-	type FilterUncle = ();
 	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
-	type UncleGenerations = ConstU32<0>;
 }
 
 /// A stateless module with helpers for dispatch management.
@@ -464,6 +466,7 @@ impl pallet_collective::Config<CouncilInstance> for Runtime {
 	type MaxMembers = CouncilMaxMembers;
 	type DefaultVote = pallet_collective::MoreThanMajorityThenPrimeDefaultVote;
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
 }
 
 /// A type that represents a technical committee member for governance
@@ -479,6 +482,7 @@ impl pallet_collective::Config<TechCommitteeInstance> for Runtime {
 	type MaxMembers = TechCommitteeMaxMembers;
 	type DefaultVote = pallet_collective::MoreThanMajorityThenPrimeDefaultVote;
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
 }
 
 type MoreThanHalfCouncil = EitherOfDiverse<
@@ -570,6 +574,7 @@ impl pallet_democracy::Config for Runtime {
 		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 3, 5>,
 	>;
 	type BlacklistOrigin = EnsureRoot<AccountId>;
+	type SubmitOrigin = EnsureSigned<AccountId>;
 	// Any single technical committee member may veto a coming council proposal, however they can
 	// only do it once and it lasts only for the cooloff period.
 	type VetoOrigin = pallet_collective::EnsureMember<AccountId, TechCommitteeInstance>;
@@ -798,13 +803,6 @@ parameter_types! {
 	pub PrecompilesValue: Precompiles = BifrostPrecompiles::<_>::new();
 }
 
-pub struct IntoAddressMapping;
-impl<T: From<H160>> pallet_evm::AddressMapping<T> for IntoAddressMapping {
-	fn into_account_id(address: H160) -> T {
-		address.into()
-	}
-}
-
 pub struct FindAuthorAccountId<F>(sp_std::marker::PhantomData<F>);
 impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 	fn find_author<'a, I>(digests: I) -> Option<H160>
@@ -813,13 +811,7 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 	{
 		if let Some(author_index) = F::find_author(digests) {
 			let authority_id = Aura::authorities()[author_index as usize].clone();
-
-			let queued_keys = <pallet_session::Pallet<Runtime>>::queued_keys();
-			for key in queued_keys {
-				if key.1.aura == authority_id {
-					return Some(key.0.into())
-				}
-			}
+			return Some(H160::from_slice(&authority_id.to_raw_vec()[4..24]))
 		}
 		None
 	}
@@ -864,7 +856,7 @@ impl pallet_evm::Config for Runtime {
 	type Runner = pallet_evm::runner::stack::Runner<Self>;
 	type CallOrigin = EnsureAddressRoot<AccountId>;
 	type WithdrawOrigin = EnsureAddressNever<AccountId>;
-	type AddressMapping = IntoAddressMapping;
+	type AddressMapping = IdentityAddressMapping;
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
@@ -875,10 +867,15 @@ impl pallet_evm::Config for Runtime {
 	type OnCreate = ();
 }
 
+parameter_types! {
+	pub const PostBlockAndTxnHashes: PostLogContent = PostLogContent::BlockAndTxnHashes;
+}
+
 /// The Ethereum module is responsible for storing block data and provides RPC compatibility.
 impl pallet_ethereum::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type StateRoot = pallet_ethereum::IntermediateStateRoot<Self>;
+	type PostLogContent = PostBlockAndTxnHashes;
 }
 
 parameter_types! {
@@ -916,14 +913,14 @@ construct_runtime!(
 	{
 		// System
 		System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
-		RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet, Storage} = 1,
+		RandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip::{Pallet, Storage} = 1,
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent} = 2,
 
 		// Block
 		Aura: pallet_aura::{Pallet, Storage, Config<T>} = 3,
 
 		// Consensus
-		Authorship: pallet_authorship::{Pallet, Call, Storage} = 4,
+		Authorship: pallet_authorship::{Pallet, Storage} = 4,
 		Session: pallet_session::{Pallet, Call, Storage, Config<T>, Event} = 5,
 		Historical: pallet_session_historical::{Pallet} = 6,
 		Offences: pallet_offences::{Pallet, Storage, Event} = 7,

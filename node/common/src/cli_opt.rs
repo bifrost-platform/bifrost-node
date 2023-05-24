@@ -29,5 +29,6 @@ pub struct RpcConfig {
 	pub eth_statuses_cache: usize,
 	pub fee_history_limit: u64,
 	pub max_past_logs: u32,
+	pub logs_request_timeout: u64,
 	pub tracing_raw_max_memory_usage: usize,
 }

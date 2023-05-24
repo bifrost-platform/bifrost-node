@@ -5,12 +5,9 @@ use fc_rpc::{
 	SchemaV2Override, SchemaV3Override, StorageOverride,
 };
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
-use fp_rpc;
+use fp_rpc::{self, EthereumRuntimeRPCApi};
 use fp_storage::EthereumStorageSchema;
-use sc_client_api::{
-	backend::{Backend, StateBackend},
-	AuxStore, StorageProvider,
-};
+use sc_client_api::{backend::Backend, StorageProvider};
 use sc_consensus_manual_seal::EngineCommand;
 use sc_finality_grandpa::{
 	FinalityProofProvider, GrandpaJustificationStream, SharedAuthoritySet, SharedVoterState,
@@ -21,44 +18,33 @@ use sc_rpc_api::DenyUnsafe;
 use sc_service::TaskManager;
 use sc_transaction_pool::{ChainApi, Pool};
 use sp_api::ProvideRuntimeApi;
-use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use sp_runtime::{
-	generic,
-	traits::{BlakeTwo256, Block as BlockT},
-	OpaqueExtrinsic as UncheckedExtrinsic,
-};
+use sp_blockchain::HeaderBackend;
+use sp_runtime::{generic, traits::Block as BlockT, OpaqueExtrinsic as UncheckedExtrinsic};
 use std::{collections::BTreeMap, sync::Arc};
 
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
 /// Override storage
-pub fn overrides_handle<C, BE>(client: Arc<C>) -> Arc<OverrideHandle<Block>>
+pub fn overrides_handle<B, C, BE>(client: Arc<C>) -> Arc<OverrideHandle<B>>
 where
-	C: ProvideRuntimeApi<Block> + StorageProvider<Block, BE> + AuxStore,
-	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError>,
-	C: Send + Sync + 'static,
-	C::Api: fp_rpc::EthereumRuntimeRPCApi<Block>,
-	BE: Backend<Block> + 'static,
-	BE::State: StateBackend<BlakeTwo256>,
+	B: BlockT,
+	C: ProvideRuntimeApi<B>,
+	C::Api: EthereumRuntimeRPCApi<B>,
+	C: HeaderBackend<B> + StorageProvider<B, BE> + 'static,
+	BE: Backend<B> + 'static,
 {
 	let mut overrides_map = BTreeMap::new();
-
 	overrides_map.insert(
 		EthereumStorageSchema::V1,
-		Box::new(SchemaV1Override::new(client.clone()))
-			as Box<dyn StorageOverride<_> + Send + Sync>,
+		Box::new(SchemaV1Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
 	);
-
 	overrides_map.insert(
 		EthereumStorageSchema::V2,
-		Box::new(SchemaV2Override::new(client.clone()))
-			as Box<dyn StorageOverride<_> + Send + Sync>,
+		Box::new(SchemaV2Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
 	);
-
 	overrides_map.insert(
 		EthereumStorageSchema::V3,
-		Box::new(SchemaV3Override::new(client.clone()))
-			as Box<dyn StorageOverride<_> + Send + Sync>,
+		Box::new(SchemaV3Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
 	);
 
 	Arc::new(OverrideHandle {
@@ -121,6 +107,8 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
+	/// Timeout for eth logs query in seconds. (default 10)
+	pub logs_request_timeout: u64,
 }
 
 /// Mainnet/Testnet client dependencies.
@@ -161,6 +149,8 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
+	/// Timeout for eth logs query in seconds. (default 10)
+	pub logs_request_timeout: u64,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
