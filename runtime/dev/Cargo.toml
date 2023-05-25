@@ -38,7 +38,6 @@ frame-system-benchmarking = { workspace = true, optional = true }
 pallet-aura = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-grandpa = { workspace = true }
-pallet-insecure-randomness-collective-flip = { workspace = true }
 pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
@@ -119,7 +118,6 @@ std = [
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
-	"pallet-insecure-randomness-collective-flip/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",

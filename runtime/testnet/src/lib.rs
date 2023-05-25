@@ -233,10 +233,6 @@ impl frame_system::Config for Runtime {
 	type MaxConsumers = ConstU32<16>;
 }
 
-/// Provides a random function that generates low-influence random values
-/// based on the block hashes from the previous 81 blocks.
-impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
-
 parameter_types! {
 	pub const MaxAuthorities: u32 = 1_000;
 }
@@ -913,7 +909,6 @@ construct_runtime!(
 	{
 		// System
 		System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
-		RandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip::{Pallet, Storage} = 1,
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent} = 2,
 
 		// Block
