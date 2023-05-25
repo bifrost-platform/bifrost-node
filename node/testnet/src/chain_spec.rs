@@ -181,7 +181,7 @@ fn testnet_genesis(
 		ethereum: Default::default(),
 		base_fee: testnet::BaseFeeConfig::new(
 			sp_core::U256::from(1_000 * GWEI * SUPPLY_FACTOR),
-			sp_runtime::Permill::from_parts(125_000),
+			sp_runtime::Permill::zero(),
 		),
 		relay_manager: Default::default(),
 		bfc_staking: testnet::BfcStakingConfig {
