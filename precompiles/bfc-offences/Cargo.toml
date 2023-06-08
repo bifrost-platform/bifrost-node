@@ -9,16 +9,15 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-log = "0.4"
-num_enum = { version = "0.5.3", default-features = false }
+num_enum = { workspace = true }
 
 # BIFROST
-pallet-bfc-offences = { path = "../../pallets/bfc-offences", default-features = false }
-precompile-utils = { path = "../utils", default-features = false }
-bp-staking = { path = "../../primitives/bfc-staking", default-features = false }
+pallet-bfc-offences = { workspace = true }
+precompile-utils = { workspace = true }
+bp-staking = { workspace = true }
 
 # Substrate
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false, features = ["max-encoded-len"] }
+parity-scale-codec = { workspace = true, features = ["max-encoded-len"] }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-core = { workspace = true }
@@ -32,20 +31,20 @@ fp-evm = { workspace = true }
 pallet-evm = { workspace = true }
 
 [dev-dependencies]
-derive_more = "0.99"
-serde = "1.0.100"
-sha3 = "0.10"
+derive_more = { workspace = true }
+serde = { workspace = true }
+sha3 = { workspace = true }
 
 # Substrate
 pallet-balances = { workspace = true }
 pallet-timestamp = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
-scale-info = { version = "2.0", default-features = false, features = ["derive"] }
+scale-info = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
-	"codec/std",
+	"parity-scale-codec/std",
 	"fp-evm/std",
 	"frame-support/std",
 	"frame-system/std",

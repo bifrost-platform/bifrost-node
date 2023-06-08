@@ -149,12 +149,16 @@ export function describeDevNode(
 }
 
 export async function startMultiDevNode() {
-  await startSingleDevNode(9934);
-  return await startSingleDevNode(9933);
+  await startSingleDevNode(9934, true);
+  return await startSingleDevNode(9933, true);
 }
 
-export async function startSingleDevNode(overrideRpcPort?: number | null) {
-  await sleep(1000);
+export async function startSingleDevNode(overrideRpcPort?: number | null, multi: boolean = false,) {
+  if (multi) {
+    await sleep(3000);
+  } else {
+    await sleep(500);
+  }
 
   let { p2pPort, rpcPort, wsPort } = await findAvailablePorts();
   if (overrideRpcPort) {

@@ -278,7 +278,7 @@ pub fn run() -> sc_cli::Result<()> {
 								"Runtime benchmarking wasn't enabled when building the node. \
 							You can enable it with `--features runtime-benchmarks`."
 									.into(),
-							)
+							);
 						}
 
 						cmd.run::<bifrost_dev_runtime::Block, bifrost_dev_node::service::dev::ExecutorDispatch>(config)
@@ -302,12 +302,14 @@ pub fn run() -> sc_cli::Result<()> {
 
 						cmd.run(config, client, db, storage)
 					},
-					BenchmarkCmd::Machine(cmd) =>
-						cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()),
-					_ =>
+					BenchmarkCmd::Machine(cmd) => {
+						cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone())
+					},
+					_ => {
 						return Err("Runtime benchmarking wasn't enabled when building the node. \
 					You can enable it with `--features runtime-benchmarks`."
-							.into()),
+							.into())
+					},
 				}
 			})
 		},
@@ -321,6 +323,7 @@ pub fn run() -> sc_cli::Result<()> {
 				eth_statuses_cache: cli.eth_statuses_cache,
 				fee_history_limit: cli.fee_history_limit,
 				max_past_logs: cli.max_past_logs,
+				logs_request_timeout: cli.logs_request_timeout,
 				tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
 			};
 

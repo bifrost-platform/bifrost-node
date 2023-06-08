@@ -10,8 +10,8 @@ repository = { workspace = true }
 
 [dependencies]
 # Bifrost
-bifrost-common-constants = { default-features = false, path = "../../common/constants" }
-bp-core = { default-features = false, path = "../../../primitives/core" }
+bifrost-common-constants = { workspace = true }
+bp-core = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }

@@ -9,13 +9,13 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-log = "0.4"
-serde = { version = "1.0.101", optional = true }
-impl-serde = { default-features = false, version = "0.3.2" }
+log = { workspace = true }
+serde = { workspace = true, optional = true }
+impl-serde = { workspace = true }
 
 # Substrate
-scale-info = { version = "2.0", default-features = false, features = ["derive"] }
-parity-scale-codec = { version = "3.2.1", default-features = false, features = ["derive"] }
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
@@ -25,10 +25,10 @@ sp-core = { workspace = true }
 sp-staking = { workspace = true }
 
 # Bifrost
-bp-staking = { default-features = false, path = "../../primitives/bfc-staking" }
+bp-staking = { workspace = true }
 
 [dev-dependencies]
-similar-asserts = "1.1.0"
+similar-asserts = { workspace = true }
 
 pallet-balances = { workspace = true, features = ["std"] }
 sp-core = { workspace = true, features = ["std"] }

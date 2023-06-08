@@ -10,9 +10,8 @@ repository = { workspace = true }
 
 [dependencies]
 # third-party dependencies
-jsonrpc-core = "18.0.0"
-futures = { version = "0.3" }
-tokio = { version = "1.13.0", features = ["macros", "sync"] }
+futures = { workspace = true }
+tokio = { workspace = true, features = ["macros", "sync"] }
 
 # substrate client dependencies
 sc-client-api = { workspace = true }
@@ -44,7 +43,7 @@ fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }
 
 # Local Dependencies
-bp-core = { path = "../../primitives/core" }
+bp-core = { workspace = true }
 
 [features]
 default = []

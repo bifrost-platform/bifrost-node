@@ -80,9 +80,11 @@ export const providePolkadotApi = async (port: number, isNotBifrost?: boolean) =
   return isNotBifrost
     ? await ApiPromise.create({
       initWasm: false,
+      noInitWarn: true,
       provider: new WsProvider(`ws://127.0.0.1:${port}`),
     })
     : await ApiPromise.create({
+      noInitWarn: true,
       provider: new WsProvider(`ws://127.0.0.1:${port}`),
     });
 };

@@ -9,7 +9,7 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-bp-core = { default-features = false, path = "../../../primitives/core" }
+bp-core = { workspace = true }
 
 [features]
 default = ["std"]

@@ -41,6 +41,10 @@ pub struct Cli {
 	#[clap(long, default_value = "10000")]
 	pub max_past_logs: u32,
 
+	/// Timeout for eth logs query RPCs in seconds. (default 10)
+	#[clap(long, default_value = "10")]
+	pub logs_request_timeout: u64,
+
 	/// Maximum fee history cache size.
 	#[clap(long, default_value = "2048")]
 	pub fee_history_limit: u64,
