@@ -123,7 +123,7 @@ where
 		let call = CollectiveCall::<Runtime, Instance>::close {
 			proposal_hash: proposal_hash.into(),
 			index: proposal_index,
-			proposal_weight_bound: Weight::from_ref_time(proposal_weight_bound),
+			proposal_weight_bound: Weight::from_parts(proposal_weight_bound),
 			length_bound,
 		};
 

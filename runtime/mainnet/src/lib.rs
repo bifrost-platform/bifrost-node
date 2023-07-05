@@ -786,7 +786,7 @@ impl pallet_bfc_utility::Config for Runtime {
 parameter_types! {
 	pub const BifrostChainId: u64 = 3068; // 0xbfc
 	pub BlockGasLimit: U256 = U256::from(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT.ref_time() / WEIGHT_PER_GAS);
-	pub WeightPerGas: Weight = Weight::from_ref_time(WEIGHT_PER_GAS);
+	pub WeightPerGas: Weight = Weight::from_parts(WEIGHT_PER_GAS, 0);
 	pub PrecompilesValue: Precompiles = BifrostPrecompiles::<_>::new();
 }
 
