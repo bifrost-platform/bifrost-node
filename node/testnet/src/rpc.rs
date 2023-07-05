@@ -60,7 +60,7 @@ where
 	use fc_rpc_trace::{Trace, TraceServer};
 	use fc_rpc_txpool::{TxPool, TxPoolServer};
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
-	use sc_finality_grandpa_rpc::{Grandpa, GrandpaApiServer};
+	use sc_consensus_grandpa_rpc::{Grandpa, GrandpaApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
 
 	let mut io = RpcModule::new(());

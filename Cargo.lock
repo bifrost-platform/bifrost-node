@@ -599,6 +599,7 @@ dependencies = [
  "futures 0.3.28",
  "sc-chain-spec",
  "sc-client-api",
+ "sc-consensus-grandpa",
  "sc-consensus-manual-seal",
  "sc-network",
  "sc-rpc",
@@ -670,6 +671,7 @@ dependencies = [
  "sc-client-api",
  "sc-consensus",
  "sc-consensus-aura",
+ "sc-consensus-grandpa",
  "sc-consensus-manual-seal",
  "sc-executor",
  "sc-network",
@@ -817,6 +819,7 @@ dependencies = [
  "sc-client-api",
  "sc-consensus",
  "sc-consensus-aura",
+ "sc-consensus-grandpa",
  "sc-executor",
  "sc-network",
  "sc-rpc",
@@ -933,6 +936,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "sc-cli",
+ "sc-consensus-grandpa",
  "sc-service",
  "substrate-build-script-utils",
 ]
@@ -982,6 +986,7 @@ dependencies = [
  "sc-client-api",
  "sc-consensus",
  "sc-consensus-aura",
+ "sc-consensus-grandpa",
  "sc-executor",
  "sc-network",
  "sc-rpc",
@@ -8071,6 +8076,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-consensus-grandpa"
+version = "0.10.0-dev"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.42#c210fb8e2e3e3f10a017b898d0933d8052f01d9d"
+dependencies = [
+ "ahash 0.8.3",
+ "array-bytes",
+ "async-trait",
+ "dyn-clone",
+ "finality-grandpa",
+ "fork-tree",
+ "futures 0.3.28",
+ "futures-timer",
+ "log",
+ "parity-scale-codec",
+ "parking_lot 0.12.1",
+ "rand 0.8.5",
+ "sc-block-builder",
+ "sc-chain-spec",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-network",
+ "sc-network-common",
+ "sc-network-gossip",
+ "sc-telemetry",
+ "sc-utils",
+ "serde_json",
+ "sp-api",
+ "sp-application-crypto",
+ "sp-arithmetic",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-consensus-grandpa",
+ "sp-core",
+ "sp-keystore",
+ "sp-runtime",
+ "substrate-prometheus-endpoint",
+ "thiserror",
+]
+
+[[package]]
 name = "sc-consensus-manual-seal"
 version = "0.10.0-dev"
 source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.42#c210fb8e2e3e3f10a017b898d0933d8052f01d9d"
@@ -8317,6 +8362,25 @@ dependencies = [
  "substrate-prometheus-endpoint",
  "thiserror",
  "zeroize",
+]
+
+[[package]]
+name = "sc-network-gossip"
+version = "0.10.0-dev"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.42#c210fb8e2e3e3f10a017b898d0933d8052f01d9d"
+dependencies = [
+ "ahash 0.8.3",
+ "futures 0.3.28",
+ "futures-timer",
+ "libp2p",
+ "log",
+ "lru",
+ "sc-network",
+ "sc-network-common",
+ "sc-peerset",
+ "sp-runtime",
+ "substrate-prometheus-endpoint",
+ "tracing",
 ]
 
 [[package]]

@@ -8,10 +8,10 @@ use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
 use fp_rpc::{self, EthereumRuntimeRPCApi};
 use fp_storage::EthereumStorageSchema;
 use sc_client_api::{backend::Backend, StorageProvider};
-use sc_consensus_manual_seal::EngineCommand;
-use sc_finality_grandpa::{
+use sc_consensus_grandpa::{
 	FinalityProofProvider, GrandpaJustificationStream, SharedAuthoritySet, SharedVoterState,
 };
+use sc_consensus_manual_seal::EngineCommand;
 use sc_network::NetworkService;
 use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;

@@ -228,7 +228,7 @@ pub fn run() -> sc_cli::Result<()> {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_dev_node::service::new_partial(&config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
-						sc_finality_grandpa::revert(client, blocks)?;
+						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
 					});
 					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
@@ -238,7 +238,7 @@ pub fn run() -> sc_cli::Result<()> {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_testnet_node::service::new_partial(&config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
-						sc_finality_grandpa::revert(client, blocks)?;
+						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
 					});
 					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
@@ -248,7 +248,7 @@ pub fn run() -> sc_cli::Result<()> {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_mainnet_node::service::new_partial(&config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
-						sc_finality_grandpa::revert(client, blocks)?;
+						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
 					});
 					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
@@ -258,7 +258,7 @@ pub fn run() -> sc_cli::Result<()> {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_dev_node::service::new_partial(&config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
-						sc_finality_grandpa::revert(client, blocks)?;
+						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
 					});
 					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))

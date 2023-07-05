@@ -96,10 +96,10 @@ pub struct RpcExtensionsBuilder<'a> {
 	pub task_manager: &'a TaskManager,
 	pub spawn_handle: SpawnTaskHandle,
 
-	pub justification_stream: sc_finality_grandpa::GrandpaJustificationStream<Block>,
-	pub shared_voter_state: sc_finality_grandpa::SharedVoterState,
+	pub justification_stream: sc_consensus_grandpa::GrandpaJustificationStream<Block>,
+	pub shared_voter_state: sc_consensus_grandpa::SharedVoterState,
 	pub shared_authority_set:
-		sc_finality_grandpa::SharedAuthoritySet<<Block as BlockT>::Hash, NumberFor<Block>>,
+		sc_consensus_grandpa::SharedAuthoritySet<<Block as BlockT>::Hash, NumberFor<Block>>,
 
 	pub client: Arc<FullClient>,
 	pub backend: Arc<FullBackend>,
@@ -120,13 +120,13 @@ pub fn new_partial(
 		sc_consensus::DefaultImportQueue<Block, FullClient>,
 		sc_transaction_pool::FullPool<Block, FullClient>,
 		(
-			sc_finality_grandpa::GrandpaBlockImport<
+			sc_consensus_grandpa::GrandpaBlockImport<
 				FullBackend,
 				Block,
 				FullClient,
 				FullSelectChain,
 			>,
-			sc_finality_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
+			sc_consensus_grandpa::LinkHalf<Block, FullClient, FullSelectChain>,
 			Arc<fc_db::Backend<Block>>,
 			Option<Telemetry>,
 		),
@@ -176,7 +176,7 @@ pub fn new_partial(
 
 	let frontier_backend = open_frontier_backend(client.clone(), config)?;
 
-	let (grandpa_block_import, grandpa_link) = sc_finality_grandpa::block_import(
+	let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
 		client.clone(),
 		&(client.clone() as Arc<_>),
 		select_chain.clone(),
@@ -236,8 +236,8 @@ pub fn new_full_base(
 		other: (grandpa_block_import, grandpa_link, frontier_backend, mut telemetry),
 	} = new_partial(&config)?;
 
-	let shared_voter_state = sc_finality_grandpa::SharedVoterState::empty();
-	let grandpa_protocol_name = sc_finality_grandpa::protocol_standard_name(
+	let shared_voter_state = sc_consensus_grandpa::SharedVoterState::empty();
+	let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
 		&client.block_hash(0).ok().flatten().expect("Genesis block exists; qed"),
 		&config.chain_spec,
 	);
@@ -245,8 +245,8 @@ pub fn new_full_base(
 	config
 		.network
 		.extra_sets
-		.push(sc_finality_grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone()));
-	let warp_sync = Arc::new(sc_finality_grandpa::warp_proof::NetworkProvider::new(
+		.push(sc_consensus_grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone()));
+	let warp_sync = Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
 		backend.clone(),
 		grandpa_link.shared_authority_set().clone(),
 		Vec::default(),
@@ -363,7 +363,7 @@ pub fn new_full_base(
 	let keystore =
 		if role.is_authority() { Some(keystore_container.sync_keystore()) } else { None };
 
-	let grandpa_config = sc_finality_grandpa::Config {
+	let grandpa_config = sc_consensus_grandpa::Config {
 		gossip_duration: Duration::from_millis(333),
 		justification_period: 512,
 		name: Some(name),
@@ -375,12 +375,12 @@ pub fn new_full_base(
 	};
 
 	if enable_grandpa {
-		let grandpa_params = sc_finality_grandpa::GrandpaParams {
+		let grandpa_params = sc_consensus_grandpa::GrandpaParams {
 			config: grandpa_config,
 			link: grandpa_link,
 			network: network.clone(),
 			telemetry: telemetry.as_ref().map(|x| x.handle()),
-			voting_rule: sc_finality_grandpa::VotingRulesBuilder::default().build(),
+			voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
 			prometheus_registry,
 			shared_voter_state,
 		};
@@ -388,7 +388,7 @@ pub fn new_full_base(
 		task_manager.spawn_essential_handle().spawn_blocking(
 			"grandpa-voter",
 			None,
-			sc_finality_grandpa::run_grandpa_voter(grandpa_params)?,
+			sc_consensus_grandpa::run_grandpa_voter(grandpa_params)?,
 		);
 	}
 
@@ -405,7 +405,7 @@ pub fn build_rpc_extensions_builder(
 	let justification_stream = builder.justification_stream.clone();
 	let shared_authority_set = builder.shared_authority_set.clone();
 
-	let finality_proof_provider = sc_finality_grandpa::FinalityProofProvider::new_for_service(
+	let finality_proof_provider = sc_consensus_grandpa::FinalityProofProvider::new_for_service(
 		builder.backend.clone(),
 		Some(shared_authority_set.clone()),
 	);

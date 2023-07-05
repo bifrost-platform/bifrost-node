@@ -24,6 +24,7 @@ sc-telemetry = { workspace = true }
 sc-transaction-pool = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
 sc-consensus-aura = { workspace = true }
+sc-consensus-grandpa = { workspace = true }
 sc-consensus = { workspace = true }
 sc-network = { workspace = true }
 sc-rpc = { workspace = true }

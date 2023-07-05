@@ -22,6 +22,7 @@ clap = { workspace = true }
 # substrate client dependencies
 sc-cli = { workspace = true }
 sc-service = { workspace = true }
+sc-consensus-grandpa = { workspace = true }
 
 # benchmarking dependencies
 frame-benchmarking = { workspace = true, features = ["std"] }
