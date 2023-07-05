@@ -26,8 +26,6 @@ sc-transaction-pool-api = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
 sc-consensus-aura = { workspace = true }
 sc-consensus = { workspace = true }
-sc-finality-grandpa = { workspace = true }
-sc-finality-grandpa-rpc = { workspace = true }
 sc-network = { workspace = true }
 sc-rpc = { workspace = true }
 sc-rpc-api = { workspace = true }
@@ -40,7 +38,6 @@ sp-runtime = { workspace = true, features = ["std"] }
 sp-api = { workspace = true, features = ["std"] }
 sp-keystore = { workspace = true, features = ["std"] }
 sp-consensus-aura = { workspace = true, features = ["std"] }
-sp-finality-grandpa = { workspace = true, features = ["std"] }
 sp-block-builder = { workspace = true, features = ["std"] }
 sp-timestamp = { workspace = true, features = ["std"] }
 sp-blockchain = { workspace = true }

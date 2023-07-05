@@ -20,8 +20,6 @@ sc-rpc-api = { workspace = true }
 sc-transaction-pool = { workspace = true }
 sc-chain-spec = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
-sc-finality-grandpa = { workspace = true }
-sc-finality-grandpa-rpc = { workspace = true }
 sc-network = { workspace = true }
 sc-service = { workspace = true }
 
