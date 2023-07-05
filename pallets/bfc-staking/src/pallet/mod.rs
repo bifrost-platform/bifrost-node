@@ -32,7 +32,6 @@ pub mod pallet {
 
 	/// Pallet for bfc staking
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(crate) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
