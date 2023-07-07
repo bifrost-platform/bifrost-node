@@ -252,7 +252,7 @@ pub fn new_full_base(
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, tx_handler_controller, network_starter) =
+	let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			client: client.clone(),
@@ -310,6 +310,7 @@ pub fn new_full_base(
 		task_manager: &mut task_manager,
 		system_rpc_tx,
 		tx_handler_controller,
+		sync_service: sync_service.clone(),
 		telemetry: telemetry.as_mut(),
 	})
 	.ok();
@@ -383,6 +384,7 @@ pub fn new_full_base(
 			voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
 			prometheus_registry,
 			shared_voter_state,
+			sync: sync_service.clone(),
 		};
 
 		task_manager.spawn_essential_handle().spawn_blocking(
@@ -433,6 +435,17 @@ pub fn build_rpc_extensions_builder(
 		rpc_config.eth_statuses_cache,
 		prometheus_registry.clone(),
 	));
+
+	// Sinks for pubsub notifications.
+	// Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
+	// The MappingSyncWorker sends through the channel on block import and the subscription emits a
+	// notification to the subscriber on receiving a message through this channel.
+	// This way we avoid race conditions when using native substrate block import notification
+	// stream.
+	let pubsub_notification_sinks: fc_mapping_sync::EthereumBlockNotificationSinks<
+		fc_mapping_sync::EthereumBlockNotification<Block>,
+	> = Default::default();
+	let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
 	// Spawn Frontier FeeHistory cache maintenance task.
 	builder.task_manager.spawn_essential_handle().spawn(
@@ -525,6 +538,7 @@ pub fn build_rpc_extensions_builder(
 			},
 			max_past_logs: rpc_config.max_past_logs,
 			logs_request_timeout: rpc_config.logs_request_timeout,
+			forced_parent_hashes: None,
 		};
 
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
@@ -534,10 +548,11 @@ pub fn build_rpc_extensions_builder(
 					tracing_requesters: tracing_requesters.clone(),
 					trace_filter_max_count: rpc_config.ethapi_trace_max_count,
 				}),
+				pubsub_notification_sinks.clone(),
 			)
 			.map_err(Into::into)
 		} else {
-			create_full(deps, None).map_err(Into::into)
+			create_full(deps, None, pubsub_notification_sinks.clone()).map_err(Into::into)
 		}
 	};
 

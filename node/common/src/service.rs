@@ -21,13 +21,13 @@ pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::P
 pub fn open_frontier_backend<C>(
 	client: Arc<C>,
 	config: &Configuration,
-) -> Result<Arc<fc_db::Backend<Block>>, String>
+) -> Result<Arc<fc_db::kv::Backend<Block>>, String>
 where
 	C: sp_blockchain::HeaderBackend<Block>,
 {
-	Ok(Arc::new(fc_db::Backend::<Block>::new(
+	Ok(Arc::new(fc_db::kv::Backend::<Block>::new(
 		client,
-		&fc_db::DatabaseSettings {
+		&fc_db::kv::DatabaseSettings {
 			source: match config.database {
 				DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
 					path: frontier_database_dir(config, "db"),

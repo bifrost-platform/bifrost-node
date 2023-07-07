@@ -53,7 +53,7 @@ substrate-frame-rpc-system = { workspace = true }
 # Frontier dependencies
 fc-db = { workspace = true }
 fc-rpc-core = { workspace = true }
-fc-mapping-sync = { workspace = true }
+fc-mapping-sync = { workspace = true, features = ["sql"] }
 fc-rpc-txpool = { workspace = true }
 fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }

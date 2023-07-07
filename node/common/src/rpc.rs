@@ -19,6 +19,7 @@ use sc_service::TaskManager;
 use sc_transaction_pool::{ChainApi, Pool};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
+use sp_core::H256;
 use sp_runtime::{generic, traits::Block as BlockT, OpaqueExtrinsic as UncheckedExtrinsic};
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -109,6 +110,8 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	pub max_past_logs: u32,
 	/// Timeout for eth logs query in seconds. (default 10)
 	pub logs_request_timeout: u64,
+	/// Mandated parent hashes for a given block hash.
+	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 }
 
 /// Mainnet/Testnet client dependencies.
@@ -151,13 +154,15 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub max_past_logs: u32,
 	/// Timeout for eth logs query in seconds. (default 10)
 	pub logs_request_timeout: u64,
+	/// Mandated parent hashes for a given block hash.
+	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
 	pub task_manager: &'a TaskManager,
 	pub client: Arc<C>,
 	pub substrate_backend: Arc<BE>,
-	pub frontier_backend: Arc<fc_db::Backend<B>>,
+	pub frontier_backend: fc_db::Backend<B>,
 	pub filter_pool: Option<FilterPool>,
 	pub overrides: Arc<OverrideHandle<B>>,
 	pub fee_history_limit: u64,

@@ -31,6 +31,11 @@ use sc_transaction_pool_api::TransactionPool;
 pub fn create_full<C, P, BE, SC, A>(
 	deps: FullDevDeps<C, P, BE, SC, A>,
 	maybe_tracing_config: Option<TracingConfig>,
+	pubsub_notification_sinks: Arc<
+		fc_mapping_sync::EthereumBlockNotificationSinks<
+			fc_mapping_sync::EthereumBlockNotification<Block>,
+		>,
+	>,
 ) -> Result<RpcModule<()>, sc_service::Error>
 where
 	BE: Backend<Block> + Send + Sync + 'static,
@@ -86,6 +91,7 @@ where
 		command_sink,
 		max_past_logs,
 		logs_request_timeout,
+		forced_parent_hashes,
 	} = deps;
 
 	let GrandpaDeps {
@@ -116,6 +122,7 @@ where
 		EthFilter::new(
 			client.clone(),
 			frontier_backend.clone(),
+			fc_rpc::TxPool::new(client.clone(), graph.clone()),
 			filter_pool,
 			500_usize, // max stored filters
 			max_past_logs,
@@ -144,6 +151,7 @@ where
 			network.clone(),
 			Arc::clone(&subscription_executor),
 			Arc::clone(&overrides),
+			pubsub_notification_sinks.clone(),
 		)
 		.into_rpc(),
 	)
@@ -184,6 +192,7 @@ where
 			fee_history_cache,
 			fee_history_limit,
 			10,
+			forced_parent_hashes,
 		)
 		.into_rpc(),
 	)
