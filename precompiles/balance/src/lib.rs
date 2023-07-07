@@ -4,7 +4,7 @@
 use frame_support::dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo};
 
 use fp_evm::PrecompileHandle;
-use precompile_utils::{substrate::RuntimeHelper, EvmData, EvmResult};
+use precompile_utils::{substrate::RuntimeHelper, EvmResult};
 
 use sp_core::{H160, U256};
 use sp_std::marker::PhantomData;
@@ -18,7 +18,7 @@ where
 	Runtime: pallet_balances::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
-	<Runtime as pallet_balances::Config>::Balance: Into<U256> + EvmData,
+	<Runtime as pallet_balances::Config>::Balance: Into<U256>,
 	Runtime::AccountId: Into<H160>,
 {
 	// Storage getters

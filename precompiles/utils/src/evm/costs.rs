@@ -1,6 +1,3 @@
-//! Cost calculations.
-//! TODO: PR EVM to make those cost calculations public.
-
 use crate::EvmResult;
 use fp_evm::{ExitError, PrecompileFailure};
 use sp_core::U256;

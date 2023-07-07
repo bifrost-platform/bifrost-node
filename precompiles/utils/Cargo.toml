@@ -32,7 +32,7 @@ sp-std = { workspace = true }
 sp-core = { workspace = true }
 
 # Frontier
-evm = { workspace = true }
+evm = { workspace = true, features = ["with-codec"] }
 fp-evm = { workspace = true }
 pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
@@ -45,6 +45,7 @@ hex-literal = { workspace = true }
 [features]
 default = ["std"]
 std = [
+	"environmental/std",
 	"parity-scale-codec/std",
 	"fp-evm/std",
 	"frame-support/std",
