@@ -13,6 +13,7 @@ use sc_consensus_grandpa::{
 };
 use sc_consensus_manual_seal::EngineCommand;
 use sc_network::NetworkService;
+use sc_network_sync::SyncingService;
 use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::TaskManager;
@@ -93,7 +94,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	/// List of optional RPC extensions.
 	pub ethapi_cmd: Vec<EthApiCmd>,
 	/// Frontier backend.
-	pub frontier_backend: Arc<fc_db::Backend<Block>>,
+	pub frontier_backend: Arc<dyn fc_db::BackendReader<Block> + Send + Sync>,
 	/// Backend.
 	pub backend: Arc<BE>,
 	/// Maximum fee history cache size.
@@ -112,6 +113,8 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	pub logs_request_timeout: u64,
 	/// Mandated parent hashes for a given block hash.
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
+	/// Chain syncing service
+	pub sync_service: Arc<SyncingService<Block>>,
 }
 
 /// Mainnet/Testnet client dependencies.
@@ -139,7 +142,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	/// List of optional RPC extensions.
 	pub ethapi_cmd: Vec<EthApiCmd>,
 	/// Frontier backend.
-	pub frontier_backend: Arc<fc_db::Backend<Block>>,
+	pub frontier_backend: Arc<dyn fc_db::BackendReader<Block> + Send + Sync>,
 	/// Backend.
 	pub backend: Arc<BE>,
 	/// Maximum fee history cache size.
@@ -156,6 +159,8 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub logs_request_timeout: u64,
 	/// Mandated parent hashes for a given block hash.
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
+	/// Chain syncing service
+	pub sync_service: Arc<SyncingService<Block>>,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {

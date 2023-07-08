@@ -25,8 +25,10 @@ sc-transaction-pool = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
 sc-consensus-aura = { workspace = true }
 sc-consensus-grandpa = { workspace = true }
+sc-consensus-grandpa-rpc = { workspace = true }
 sc-consensus = { workspace = true }
 sc-network = { workspace = true }
+sc-network-sync = { workspace = true }
 sc-rpc = { workspace = true }
 sc-rpc-api = { workspace = true }
 sc-chain-spec = { workspace = true }
@@ -38,6 +40,7 @@ sp-runtime = { workspace = true, features = ["std"] }
 sp-api = { workspace = true, features = ["std"] }
 sp-keystore = { workspace = true, features = ["std"] }
 sp-consensus-aura = { workspace = true, features = ["std"] }
+sp-consensus-grandpa = { workspace = true, features = ["std"] }
 sp-block-builder = { workspace = true, features = ["std"] }
 sp-timestamp = { workspace = true, features = ["std"] }
 sp-blockchain = { workspace = true }
@@ -50,7 +53,7 @@ pallet-transaction-payment-rpc = { workspace = true }
 substrate-frame-rpc-system = { workspace = true }
 
 # Frontier dependencies
-fc-db = { workspace = true }
+fc-db = { workspace = true, features = ["rocksdb"] }
 fc-rpc-core = { workspace = true }
 fc-mapping-sync = { workspace = true, features = ["sql"] }
 fc-rpc-txpool = { workspace = true }

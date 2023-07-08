@@ -10,6 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 # third-party dependencies
+clap = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["macros", "sync"] }
 
@@ -22,6 +23,7 @@ sc-chain-spec = { workspace = true }
 sc-consensus-grandpa = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
 sc-network = { workspace = true }
+sc-network-sync = { workspace = true }
 sc-service = { workspace = true }
 
 # substrate primitives dependencies

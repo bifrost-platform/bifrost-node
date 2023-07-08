@@ -37,7 +37,7 @@ pub mod prelude {
 					BoundedString,
 					BoundedVec,
 					// Allow usage of Codec methods while not exporting the name directly.
-					Codec as _,
+					// Codec as _,
 					Convert,
 					UnboundedBytes,
 					UnboundedString,

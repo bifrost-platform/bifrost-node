@@ -1,4 +1,4 @@
-use bifrost_common_node::cli_opt::EthApi;
+use bifrost_common_node::cli_opt::{BackendType, EthApi};
 use sc_cli::RunCmd;
 
 #[derive(Debug, clap::Parser)]
@@ -53,6 +53,27 @@ pub struct Cli {
 	/// Bound the size of memory, stack and storage data.
 	#[clap(long, default_value = "20000000")]
 	pub tracing_raw_max_memory_usage: usize,
+
+	/// Sets the frontier backend type (KeyValue or Sql)
+	#[arg(long, value_enum, ignore_case = true, default_value_t = BackendType::default())]
+	pub frontier_backend_type: BackendType,
+
+	// Sets the SQL backend's pool size.
+	#[arg(long, default_value = "100")]
+	pub frontier_sql_backend_pool_size: u32,
+
+	/// Sets the SQL backend's query timeout in number of VM ops.
+	#[arg(long, default_value = "10000000")]
+	pub frontier_sql_backend_num_ops_timeout: u32,
+
+	/// Sets the SQL backend's auxiliary thread limit.
+	#[arg(long, default_value = "4")]
+	pub frontier_sql_backend_thread_count: u32,
+
+	/// Sets the SQL backend's query timeout in number of VM ops.
+	/// Default value is 200MB.
+	#[arg(long, default_value = "209715200")]
+	pub frontier_sql_backend_cache_size: u64,
 }
 
 #[derive(Debug, clap::Subcommand)]

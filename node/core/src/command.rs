@@ -1,6 +1,6 @@
 use crate::cli::{Cli, Subcommand};
 
-use bifrost_common_node::cli_opt::RpcConfig;
+use bifrost_common_node::cli_opt::{BackendType, BackendTypeConfig, RpcConfig};
 
 use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
@@ -95,6 +95,28 @@ impl SubstrateCli for Cli {
 pub fn run() -> sc_cli::Result<()> {
 	let cli = Cli::from_args();
 
+	let rpc_config = RpcConfig {
+		ethapi: cli.ethapi.clone(),
+		ethapi_max_permits: cli.ethapi_max_permits,
+		ethapi_trace_max_count: cli.ethapi_trace_max_count,
+		ethapi_trace_cache_duration: cli.ethapi_trace_cache_duration,
+		eth_log_block_cache: cli.eth_log_block_cache,
+		eth_statuses_cache: cli.eth_statuses_cache,
+		fee_history_limit: cli.fee_history_limit,
+		max_past_logs: cli.max_past_logs,
+		logs_request_timeout: cli.logs_request_timeout,
+		tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
+		frontier_backend_type: match cli.frontier_backend_type {
+			BackendType::KeyValue => BackendTypeConfig::KeyValue,
+			BackendType::Sql => BackendTypeConfig::Sql {
+				pool_size: cli.frontier_sql_backend_pool_size,
+				num_ops_timeout: cli.frontier_sql_backend_num_ops_timeout,
+				thread_count: cli.frontier_sql_backend_thread_count,
+				cache_size: cli.frontier_sql_backend_cache_size,
+			},
+		},
+	};
+
 	match &cli.subcommand {
 		Some(Subcommand::Key(cmd)) => cmd.run(&cli),
 		Some(Subcommand::BuildSpec(cmd)) => {
@@ -108,25 +130,25 @@ pub fn run() -> sc_cli::Result<()> {
 			if chain_spec.is_dev() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else if chain_spec.is_testnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_testnet_node::service::new_partial(&config)?;
+						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else if chain_spec.is_mainnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_mainnet_node::service::new_partial(&config)?;
+						bifrost_mainnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			}
@@ -138,19 +160,19 @@ pub fn run() -> sc_cli::Result<()> {
 			if chain_spec.is_dev() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.database), task_manager))
 				})
 			} else if chain_spec.is_testnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_testnet_node::service::new_partial(&config)?;
+						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.database), task_manager))
 				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.database), task_manager))
 				})
 			}
@@ -162,25 +184,25 @@ pub fn run() -> sc_cli::Result<()> {
 			if chain_spec.is_dev() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.chain_spec), task_manager))
 				})
 			} else if chain_spec.is_testnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_testnet_node::service::new_partial(&config)?;
+						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.chain_spec), task_manager))
 				})
 			} else if chain_spec.is_mainnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_mainnet_node::service::new_partial(&config)?;
+						bifrost_mainnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.chain_spec), task_manager))
 				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.chain_spec), task_manager))
 				})
 			}
@@ -192,25 +214,25 @@ pub fn run() -> sc_cli::Result<()> {
 			if chain_spec.is_dev() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else if chain_spec.is_testnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_testnet_node::service::new_partial(&config)?;
+						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else if chain_spec.is_mainnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_mainnet_node::service::new_partial(&config)?;
+						bifrost_mainnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			}
@@ -226,7 +248,7 @@ pub fn run() -> sc_cli::Result<()> {
 			if chain_spec.is_dev() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
 						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
@@ -236,7 +258,7 @@ pub fn run() -> sc_cli::Result<()> {
 			} else if chain_spec.is_testnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
-						bifrost_testnet_node::service::new_partial(&config)?;
+						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
 						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
@@ -246,7 +268,7 @@ pub fn run() -> sc_cli::Result<()> {
 			} else if chain_spec.is_mainnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
-						bifrost_mainnet_node::service::new_partial(&config)?;
+						bifrost_mainnet_node::service::new_partial(&config, &rpc_config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
 						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
@@ -256,7 +278,7 @@ pub fn run() -> sc_cli::Result<()> {
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
-						bifrost_dev_node::service::new_partial(&config)?;
+						bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 					let aux_revert = Box::new(|client, _, blocks| {
 						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
@@ -285,7 +307,7 @@ pub fn run() -> sc_cli::Result<()> {
 					},
 					BenchmarkCmd::Block(cmd) => {
 						let PartialComponents { client, .. } =
-							bifrost_dev_node::service::new_partial(&config)?;
+							bifrost_dev_node::service::new_partial(&config, &rpc_config)?;
 						cmd.run(client)
 					},
 					#[cfg(not(feature = "runtime-benchmarks"))]
@@ -312,19 +334,6 @@ pub fn run() -> sc_cli::Result<()> {
 			})
 		},
 		None => {
-			let rpc_config = RpcConfig {
-				ethapi: cli.ethapi.clone(),
-				ethapi_max_permits: cli.ethapi_max_permits,
-				ethapi_trace_max_count: cli.ethapi_trace_max_count,
-				ethapi_trace_cache_duration: cli.ethapi_trace_cache_duration,
-				eth_log_block_cache: cli.eth_log_block_cache,
-				eth_statuses_cache: cli.eth_statuses_cache,
-				fee_history_limit: cli.fee_history_limit,
-				max_past_logs: cli.max_past_logs,
-				logs_request_timeout: cli.logs_request_timeout,
-				tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
-			};
-
 			let runner = cli.create_runner(&cli.run)?;
 			let chain_spec = &runner.config().chain_spec;
 

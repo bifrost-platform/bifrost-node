@@ -11,7 +11,7 @@ use std::sync::Arc;
 use bifrost_common_node::{cli_opt::EthApi as EthApiCmd, rpc::TracingConfig};
 use bifrost_dev_runtime::{opaque::Block, AccountId, Balance, Index};
 
-use sp_api::ProvideRuntimeApi;
+use sp_api::{CallApiAt, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{
 	Backend as BlockchainBackend, Error as BlockChainError, HeaderBackend, HeaderMetadata,
@@ -45,6 +45,7 @@ where
 	C: BlockchainEvents<Block>,
 	C: StorageProvider<Block, BE>,
 	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
+	C: CallApiAt<Block>,
 	C: AuxStore,
 	C: StorageProvider<Block, BE>,
 	C: Send + Sync + 'static,
@@ -92,6 +93,7 @@ where
 		max_past_logs,
 		logs_request_timeout,
 		forced_parent_hashes,
+		sync_service,
 	} = deps;
 
 	let GrandpaDeps {
@@ -148,7 +150,7 @@ where
 		EthPubSub::new(
 			Arc::clone(&pool),
 			Arc::clone(&client),
-			network.clone(),
+			sync_service.clone(),
 			Arc::clone(&subscription_executor),
 			Arc::clone(&overrides),
 			pubsub_notification_sinks.clone(),
@@ -183,7 +185,7 @@ where
 			Arc::clone(&pool),
 			graph.clone(),
 			convert_transaction,
-			Arc::clone(&network),
+			Arc::clone(&sync_service),
 			signers,
 			Arc::clone(&overrides),
 			Arc::clone(&frontier_backend),
