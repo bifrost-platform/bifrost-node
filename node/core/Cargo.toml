@@ -1,9 +1,9 @@
 [package]
 name = "bifrost-node"
-version = "1.2.3"
-description = "The node specification for Bifrost Node"
+version = "1.2.4"
+description = "The node specification for BIFROST Node"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -26,12 +26,18 @@ sc-consensus-grandpa = { workspace = true }
 
 # benchmarking dependencies
 frame-benchmarking = { workspace = true, features = ["std"] }
-frame-benchmarking-cli = { workspace = true}
+frame-benchmarking-cli = { workspace = true }
 
 # Bifrost runtimes
 bifrost-dev-runtime = { workspace = true, features = ["std", "evm-tracing"] }
-bifrost-testnet-runtime = { workspace = true, features = ["std", "evm-tracing"] }
-bifrost-mainnet-runtime = { workspace = true, features = ["std", "evm-tracing"] }
+bifrost-testnet-runtime = { workspace = true, features = [
+	"std",
+	"evm-tracing",
+] }
+bifrost-mainnet-runtime = { workspace = true, features = [
+	"std",
+	"evm-tracing",
+] }
 
 # Bifrost node specs
 bifrost-common-node = { workspace = true }

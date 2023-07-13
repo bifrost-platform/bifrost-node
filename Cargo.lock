@@ -943,7 +943,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-node"
-version = "1.2.3"
+version = "1.2.4"
 dependencies = [
  "bifrost-common-node",
  "bifrost-dev-node",
