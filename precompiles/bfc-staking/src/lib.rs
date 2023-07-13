@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
@@ -130,7 +129,7 @@ where
 		unique_candidates.dedup();
 		let current_len = unique_candidates.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		Ok(Self::compare_selected_candidates(
@@ -168,7 +167,7 @@ where
 		unique_candidates.dedup();
 		let current_len = unique_candidates.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		Ok(Self::compare_selected_candidates(
@@ -208,17 +207,17 @@ where
 
 			// out of round index
 			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			'outer: for selected_candidates in previous_selected_candidates {
 				if round_index == selected_candidates.0 {
 					for selected_candidate in selected_candidates.1 {
 						if candidate == selected_candidate {
 							is_previous_selected_candidate = true;
-							break 'outer
+							break 'outer;
 						}
 					}
-					break
+					break;
 				}
 			}
 		}
@@ -250,7 +249,7 @@ where
 		unique_candidates.dedup();
 		let current_len = unique_candidates.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 		let mut is_previous_selected_candidates: bool = false;
 
@@ -263,7 +262,7 @@ where
 				let tail_selected = &previous_selected_candidates[cached_len - 1];
 
 				if round_index < head_selected.0 || round_index > tail_selected.0 {
-					return Err(RevertReason::read_out_of_bounds("round_index").into())
+					return Err(RevertReason::read_out_of_bounds("round_index").into());
 				}
 				'outer: for selected_candidates in previous_selected_candidates {
 					if round_index == selected_candidates.0 {
@@ -274,11 +273,11 @@ where
 							.collect();
 						for candidate in candidates {
 							if !mutated_candidates.contains(&candidate) {
-								break 'outer
+								break 'outer;
 							}
 						}
 						is_previous_selected_candidates = true;
-						break
+						break;
 					}
 				}
 			}
@@ -410,12 +409,12 @@ where
 			let tail_majority = &previous_majority[cached_len - 1];
 
 			if round_index < head_majority.0 || round_index > tail_majority.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			for majority in previous_majority {
 				if round_index == majority.0 {
 					result = majority.1;
-					break
+					break;
 				}
 			}
 		}
@@ -478,7 +477,7 @@ where
 		if let Some(stake) = <StakingOf<Runtime>>::total_at_stake(round_index) {
 			total.set_stake(stake);
 		} else {
-			return Err(RevertReason::read_out_of_bounds("round_index").into())
+			return Err(RevertReason::read_out_of_bounds("round_index").into());
 		}
 
 		Ok(total.into())
@@ -543,18 +542,18 @@ where
 			.collect::<Vec<Runtime::AccountId>>();
 		let amounts = Self::u256_array_to_amount_array(amounts)?;
 		if candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty candidates vector received").into())
+			return Err(RevertReason::custom("Empty candidates vector received").into());
 		}
 		if amounts.len() < 1 {
-			return Err(RevertReason::custom("Empty amounts vector received").into())
+			return Err(RevertReason::custom("Empty amounts vector received").into());
 		}
 		if candidates.len() != amounts.len() {
-			return Err(RevertReason::custom("Request vectors length does not match").into())
+			return Err(RevertReason::custom("Request vectors length does not match").into());
 		}
 
 		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
 		if selected_candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty selected candidates").into())
+			return Err(RevertReason::custom("Empty selected candidates").into());
 		}
 
 		let total_stake = <StakingOf<Runtime>>::total();
@@ -735,13 +734,13 @@ where
 
 			// out of round index
 			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			for candidates in previous_selected_candidates {
 				if round_index == candidates.0 {
 					result =
 						candidates.1.into_iter().map(|address| Address(address.into())).collect();
-					break
+					break;
 				}
 			}
 		}
@@ -1470,7 +1469,7 @@ where
 					for selected_candidate in &selected_candidates {
 						if !candidates.contains(&selected_candidate) {
 							result = false;
-							break
+							break;
 						}
 					}
 				}
@@ -1478,7 +1477,7 @@ where
 				for candidate in &candidates {
 					if !selected_candidates.contains(&candidate) {
 						result = false;
-						break
+						break;
 					}
 				}
 			}

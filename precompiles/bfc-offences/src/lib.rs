@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use pallet_evm::AddressMapping;
 
@@ -98,7 +97,7 @@ where
 		unique_validators.dedup();
 		let current_len = unique_validators.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate validator address received").into())
+			return Err(RevertReason::custom("Duplicate validator address received").into());
 		}
 
 		let mut validator_offences = ValidatorOffences::<Runtime>::default();

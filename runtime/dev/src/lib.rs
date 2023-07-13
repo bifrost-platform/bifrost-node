@@ -809,7 +809,7 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 			let queued_keys = <pallet_session::Pallet<Runtime>>::queued_keys();
 			for key in queued_keys {
 				if key.1.aura == authority_id {
-					return Some(key.0.into())
+					return Some(key.0.into());
 				}
 			}
 		}

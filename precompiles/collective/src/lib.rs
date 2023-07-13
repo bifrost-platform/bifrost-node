@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
@@ -64,7 +63,7 @@ where
 
 			Ok(())
 		} else {
-			return Err(RevertReason::custom("Failed to decode proposal").into())
+			return Err(RevertReason::custom("Failed to decode proposal").into());
 		}
 	}
 
@@ -86,7 +85,7 @@ where
 
 			Ok(())
 		} else {
-			return Err(RevertReason::custom("Failed to decode proposal").into())
+			return Err(RevertReason::custom("Failed to decode proposal").into());
 		}
 	}
 

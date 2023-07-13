@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
@@ -105,7 +104,7 @@ where
 			let state = voting_of.1;
 
 			match state {
-				Voting::Direct { votes, .. } =>
+				Voting::Direct { votes, .. } => {
 					for direct_vote in votes {
 						if direct_vote.0 == ref_index {
 							let account_vote = direct_vote.1;
@@ -120,9 +119,10 @@ where
 								},
 								AccountVote::Split { .. } => (),
 							};
-							break
+							break;
 						}
-					},
+					}
+				},
 				Voting::Delegating { .. } => (),
 			};
 		}
@@ -403,7 +403,7 @@ where
 		if !<<Runtime as pallet_democracy::Config>::Preimages as QueryPreimage>::is_requested(
 			&proposal_hash.into(),
 		) {
-			return Err(revert("not imminent preimage (preimage not requested)"))
+			return Err(revert("not imminent preimage (preimage not requested)"));
 		};
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
