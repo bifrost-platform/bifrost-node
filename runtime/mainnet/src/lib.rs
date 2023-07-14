@@ -144,7 +144,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2013,
+	spec_version: 2014,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -519,7 +519,7 @@ parameter_types! {
 	pub const FastTrackVotingPeriod: BlockNumber = 30 * MINUTES;
 	pub const EnactmentPeriod: BlockNumber = 2 * DAYS;
 	pub const CooloffPeriod: BlockNumber = 7 * DAYS;
-	pub const MinimumDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
+	pub const MinimumDeposit: Balance = 20_000 * SUPPLY_FACTOR * BFC;
 	pub const MaxVotes: u32 = 1_000;
 	pub const MaxProposals: u32 = 1_000;
 	pub const MaxDeposits: u32 = 1_000;
