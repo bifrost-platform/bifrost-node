@@ -18,6 +18,8 @@ services:
       - alertmanager
     image: prom/prometheus:v2.32.0
     restart: unless-stopped
+    ports:
+      - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
@@ -48,9 +50,8 @@ services:
       - grafana-data:/var/lib/grafana
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
 
-
 volumes:
-  mysql-data: { }
-  grafana-data: { }
-  alertmanager-data: { }
-  prometheus-data: { }
+  mysql-data: {}
+  grafana-data: {}
+  alertmanager-data: {}
+  prometheus-data: {}

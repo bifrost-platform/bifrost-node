@@ -3,7 +3,7 @@ global:
   evaluation_interval: 3s
 
 rule_files:
-  - 'rules.yml'
+  - "rules.yml"
 
 alerting:
   alertmanagers:
@@ -15,16 +15,16 @@ scrape_configs:
   - job_name: "prometheus"
     scrape_interval: 3s
     static_configs:
-      - targets: [ "localhost:9090" ]
-  - job_name: "substrate_node"
+      - targets: ["localhost:9090"]
+  - job_name: "bifrost_node"
     scrape_interval: 3s
     static_configs:
-      - targets: [ "host.docker.internal:9615" ]
+      - targets: ["host.docker.internal:9615"]
   - job_name: "node_exporter"
     scrape_interval: 3s
     static_configs:
-      - targets: [ "node-exporter:9100" ]
-#  - job_name: "relayer"
-#    scrape_interval: 3s
-#    static_configs:
-#      - targets: [ "host.docker.internal:8000" ]
+      - targets: ["node-exporter:9100"]
+  # - job_name: "bifrost_relayer"
+  #   scrape_interval: 3s
+  #   static_configs:
+  #     - targets: ["host.docker.internal:8000"]
