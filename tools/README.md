@@ -1,6 +1,6 @@
-# Tools for BIFROST Network
+# Tools for Bifrost Network
 
-This repository contains a set of tools designed for BIFROST network.
+This repository contains a set of tools designed for Bifrost network.
 
 It is written in typescript, using `yargs` as interactive CLI tool.
 
@@ -61,7 +61,7 @@ This command will query historical extrinsics that matches the requested paramet
 |from        |The account address who submitted the extrinsic.  |0x81143D1d29B101B84FE87BCB2f684534b20EBaAd  |X|
 |start       |The starting block number where query will start.  |5047917  |O|
 |end         |The ending block number where the query will end. The default value will be the highest block of the connected provider.  |5048007  |X|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.thebifrost.io/rpc`  |O|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
 |pallet      |The name of the pallet where the extrinsic locates.  |bfcStaking  |O|
 |extrinsic   |The name of the extrinsic to query.  |nominate  |O|
 
@@ -71,7 +71,7 @@ npm run query_extrinsics -- \
   --from 0x81143D1d29B101B84FE87BCB2f684534b20EBaAd \
   --start 5047917 \
   --end 5048007 \
-  --provider https://public-01.testnet.thebifrost.io/rpc \
+  --provider https://public-01.testnet.bifrostnetwork.com/rpc \
   --pallet bfcStaking \
   --extrinsic nominate
 ```
@@ -90,7 +90,7 @@ This command will query historical events that matches the requested parameters.
 |----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
 |start       |The starting block number where query will start.  |5047917  |O|
 |end         |The ending block number where the query will end. The default value will be the highest block of the connected provider.  |5048007  |X|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.thebifrost.io/rpc`  |O|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
 |pallet      |The name of the pallet where the event locates.  |bfcStaking  |O|
 |event   |The name of the event to query.  |Nomination  |O|
 
@@ -99,7 +99,7 @@ This command will query historical events that matches the requested parameters.
 npm run query_events -- \
   --start 5047917 \
   --end 5048007 \
-  --provider https://public-01.testnet.thebifrost.io/rpc \
+  --provider https://public-01.testnet.bifrostnetwork.com/rpc \
   --pallet bfcStaking \
   --event Nomination
 ```
@@ -118,14 +118,14 @@ This command will query the detail information of the extrinsic that matches the
 |----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
 |block       |The block number where the extrinsic is included.  |5047917  |O|
 |index       |The index of the extrinsic.  |1  |O|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.thebifrost.io/rpc`  |O|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
 
 **Example Request**
 ```
 npm run query_extrinsic -- \
   --block 5047917 \
   --index 1 \
-  --provider https://public-01.testnet.thebifrost.io/rpc
+  --provider https://public-01.testnet.bifrostnetwork.com/rpc
 ```
 
 **Example Response**

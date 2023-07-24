@@ -1,7 +1,7 @@
 [package]
 name = "bifrost-testnet-node"
 version = "1.0.0"
-description = "The node specification for BIFROST Node testnet"
+description = "The node specification for Bifrost Node testnet"
 authors = { workspace = true }
 homepage = { workspace = true}
 edition = { workspace = true }

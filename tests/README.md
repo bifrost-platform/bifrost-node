@@ -1,6 +1,6 @@
-# Functional testing for BIFROST Network
+# Functional testing for Bifrost Network
 
-This folder contains a set of functional tests designed for BIFROST Network.
+This folder contains a set of functional tests designed for Bifrost Network.
 
 It is written in typescript, using Mocha/Chai as Test framework.
 
@@ -79,7 +79,7 @@ all containers.
 npm run purge_containers
 ```
 
-# Debugging a BIFROST Node
+# Debugging a Bifrost Node
 
 The repository contains a pre-configured debugger configuration for VSCode with
 the **CodeLLDB**
@@ -88,9 +88,9 @@ the **CodeLLDB**
 Before debugging, you need to build the node with debug symbols with command
 `RUSTFLAGS=-g cargo build --release` (available as a VSCode task). Then go in
 the **Debug** tab in
-the left bar of VSCode and make sure **Launch BIFROST Node (Linux)** is selected
+the left bar of VSCode and make sure **Launch Bifrost Node (Linux)** is selected
 in the top
-dropdown. **Build & Launch BIFROST Node (Linux)** will trigger the build before
+dropdown. **Build & Launch Bifrost Node (Linux)** will trigger the build before
 launching the node.
 
 To launch the debug session click on the green "play" arrow next to the

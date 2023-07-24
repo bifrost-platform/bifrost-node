@@ -38,7 +38,7 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 
 impl SubstrateCli for Cli {
 	fn impl_name() -> String {
-		"BIFROST Network".into()
+		"Bifrost Network".into()
 	}
 
 	fn impl_version() -> String {
@@ -278,7 +278,7 @@ pub fn run() -> sc_cli::Result<()> {
 								"Runtime benchmarking wasn't enabled when building the node. \
 							You can enable it with `--features runtime-benchmarks`."
 									.into(),
-							);
+							)
 						}
 
 						cmd.run::<bifrost_dev_runtime::Block, bifrost_dev_node::service::dev::ExecutorDispatch>(config)
@@ -302,14 +302,12 @@ pub fn run() -> sc_cli::Result<()> {
 
 						cmd.run(config, client, db, storage)
 					},
-					BenchmarkCmd::Machine(cmd) => {
-						cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone())
-					},
-					_ => {
+					BenchmarkCmd::Machine(cmd) =>
+						cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone()),
+					_ =>
 						return Err("Runtime benchmarking wasn't enabled when building the node. \
 					You can enable it with `--features runtime-benchmarks`."
-							.into())
-					},
+							.into()),
 				}
 			})
 		},

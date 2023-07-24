@@ -30,7 +30,7 @@ panic = "unwind"
 
 [workspace.package]
 authors = ["bifrost-platform"]
-homepage = "https://thebifrost.io"
+homepage = "https://www.bifrostnetwork.com"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/bifrost-platform/bifrost-node"

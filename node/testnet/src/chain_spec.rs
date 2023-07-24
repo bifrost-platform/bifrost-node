@@ -66,7 +66,7 @@ pub fn testnet_config() -> Result<ChainSpec, String> {
 
 	Ok(ChainSpec::from_genesis(
 		// Name
-		"BIFROST Testnet",
+		"Bifrost Testnet",
 		// ID
 		"testnet",
 		ChainType::Live,
