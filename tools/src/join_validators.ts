@@ -95,7 +95,7 @@ async function join_validators() {
   const controller = keyring.addFromUri(argv.controllerPrivate);
   const stash = keyring.addFromUri(argv.stashPrivate);
   const provider = new HttpProvider(LOCAL_NODE_ENDPOINT);
-  const api = await ApiPromise.create({ provider });
+  const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   const AMOUNT_FACTOR = 10 ** 18;
   const selfBond = new BigNumber(argv.bond).multipliedBy(AMOUNT_FACTOR);
