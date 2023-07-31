@@ -19,10 +19,7 @@ use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{
-	crypto::{ByteArray, KeyTypeId},
-	ConstU64, OpaqueMetadata, H160, H256, U256,
-};
+use sp_core::{crypto::KeyTypeId, ConstU64, OpaqueMetadata, H160, H256, U256};
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
@@ -801,7 +798,12 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 	{
 		if let Some(author_index) = F::find_author(digests) {
 			let authority_id = Aura::authorities()[author_index as usize].clone();
-			return Some(H160::from_slice(&authority_id.to_raw_vec()[4..24]))
+			let queued_keys = <pallet_session::Pallet<Runtime>>::queued_keys();
+			for key in queued_keys {
+				if key.1.aura == authority_id {
+					return Some(key.0.into())
+				}
+			}
 		}
 		None
 	}
