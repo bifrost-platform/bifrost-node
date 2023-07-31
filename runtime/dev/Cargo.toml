@@ -1,7 +1,7 @@
 [package]
 name = "bifrost-dev-runtime"
 version = "1.0.0"
-description = "The substrate runtime for BIFROST Node development"
+description = "The substrate runtime for Bifrost Node development"
 authors = { workspace = true }
 homepage = { workspace = true}
 edition = { workspace = true }
@@ -21,7 +21,7 @@ rlp = { workspace = true, optional = true }
 sha3 = { workspace = true, optional = true }
 num_enum = { workspace = true }
 
-# BIFROST
+# Bifrost
 bifrost-common-runtime = { workspace = true }
 bifrost-dev-constants = { workspace = true }
 bp-core = { workspace = true }

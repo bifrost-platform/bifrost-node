@@ -47,7 +47,7 @@ async function query_extrinsic() {
   }
 
   const provider = new HttpProvider(argv.provider);
-  const api = await ApiPromise.create({ provider });
+  const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   const blockHash = await api.rpc.chain.getBlockHash(argv.block);
   const signedBlock = await api.rpc.chain.getBlock(blockHash);

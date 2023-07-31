@@ -11,7 +11,7 @@ repository = { workspace = true }
 [dependencies]
 num_enum = { workspace = true }
 
-# BIFROST
+# Bifrost
 precompile-utils = { workspace = true }
 
 # Substrate

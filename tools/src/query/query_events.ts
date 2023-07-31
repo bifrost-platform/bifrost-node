@@ -62,7 +62,7 @@ async function query_events() {
   }
 
   const provider = new HttpProvider(argv.provider);
-  const api = await ApiPromise.create({ provider });
+  const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   let endHeader;
   let endNumber;

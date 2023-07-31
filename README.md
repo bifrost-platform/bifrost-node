@@ -1,13 +1,13 @@
-# ![BIFROST Network](media/bifrost_header.jpeg)
+# ![Bifrost Network](media/bifrost_header.jpeg)
 
-The BIFROST Network is a fast and scalable EVM-compatible blockchain that
+The Bifrost Network is a fast and scalable EVM-compatible blockchain that
 provides an all-in-one environment for developers to build multichain DApps.
 
 ## Getting Started
 
-Learn to use the BIFROST network with our [technical docs](https://docs.bifrostnetwork.com/bifrost-network).
+Learn to use the Bifrost network with our [technical docs](https://docs.bifrostnetwork.com/bifrost-network).
 
-### BIFROST Network Testnet (ChainID: 49088)
+### Bifrost Network Testnet (ChainID: 49088)
 |Public Endpoints (rpc/ws)|
 |------|
 |https://public-01.testnet.bifrostnetwork.com/rpc|
@@ -15,7 +15,7 @@ Learn to use the BIFROST network with our [technical docs](https://docs.bifrostn
 |wss://public-01.testnet.bifrostnetwork.com/wss|
 |wss://public-02.testnet.bifrostnetwork.com/wss|
 
-### BIFROST Network Mainnet (ChainID: 3068)
+### Bifrost Network Mainnet (ChainID: 3068)
 |Public Endpoints (rpc/ws)|
 |------|
 |https://public-01.mainnet.bifrostnetwork.com/rpc|

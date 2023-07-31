@@ -63,7 +63,7 @@ async function set_session_keys() {
   const keyring = new Keyring({ type: 'ethereum' });
   const controller = keyring.addFromUri(argv.controllerPrivate);
   const provider = new HttpProvider(LOCAL_NODE_ENDPOINT);
-  const api = await ApiPromise.create({ provider });
+  const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   try {
     const sessionKey = (await axios.post(

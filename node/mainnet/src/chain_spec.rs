@@ -66,7 +66,7 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 
 	Ok(ChainSpec::from_genesis(
 		// Name
-		"BIFROST Mainnet",
+		"Bifrost Mainnet",
 		// ID
 		"mainnet",
 		ChainType::Live,

@@ -12,7 +12,7 @@ repository = { workspace = true }
 num_enum = { workspace = true }
 rustc-hex = { workspace = true }
 
-# BIFROST
+# Bifrost
 pallet-bfc-staking = { workspace = true }
 bp-staking = { workspace = true }
 precompile-utils = { workspace = true }

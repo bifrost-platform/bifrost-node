@@ -60,7 +60,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 
 	Ok(ChainSpec::from_genesis(
 		// Name
-		"BIFROST Development",
+		"Bifrost Development",
 		// ID
 		"dev",
 		ChainType::Development,

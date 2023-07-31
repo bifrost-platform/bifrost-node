@@ -1,5 +1,5 @@
 {
-  "name": "BIFROST Testnet",
+  "name": "Bifrost Testnet",
   "id": "testnet",
   "chainType": "Live",
   "bootNodes": [
