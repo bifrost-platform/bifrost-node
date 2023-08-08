@@ -8,7 +8,8 @@
     "create_accounts": "ts-node src/create_accounts.ts",
     "query_extrinsics": "ts-node src/query/query_extrinsics.ts",
     "query_extrinsic": "ts-node src/query/query_extrinsic.ts",
-    "query_events": "ts-node src/query/query_events.ts"
+    "query_events": "ts-node src/query/query_events.ts",
+    "transfer": "ts-node src/transfer.ts"
   },
   "repository": {
     "type": "git",
