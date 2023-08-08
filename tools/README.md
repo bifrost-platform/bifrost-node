@@ -184,3 +184,30 @@ npm run query_extrinsic -- \
            Data:
                {"weight":{"refTime":"1,283,734,000","proofSize":"0"},"class":"Normal","paysFee":"Yes"}
 ```
+
+## 3. Simple Transactions
+
+### 1.1. Simple Transfer
+This command will transfer the given value to the receiver.
+
+**Query Parameters**
+|Name      |Description                                     |Example                                                         |Required                                                         |
+|----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
+|fromPrivate        |The private key of the sender.  |0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133  |O|
+|to       |The address of the receiver.  |0x81143D1d29B101B84FE87BCB2f684534b20EBaAd  |O|
+|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
+|value      |The amount that will be transferred in wei units.  |1000000000000000000  |O|
+
+**Example Request**
+```
+npm run transfer -- \
+  --fromPrivate 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133 \
+  --to 0x81143D1d29B101B84FE87BCB2f684534b20EBaAd \
+  --provider https://public-01.testnet.bifrostnetwork.com/rpc \   
+  --value 1000000000000000000
+```
+
+**Example Response**
+```
+🎁 Successfully transferred → 0xc186e8606d1d3fa77fe71976da916a7ed67c9014147741f0b25a9e5d09057755
+```
