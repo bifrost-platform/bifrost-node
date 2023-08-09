@@ -779,8 +779,8 @@ pub mod pallet {
 			}
 			// Set max selected node candidates to maximum config
 			<MaxTotalSelected<T>>::put(
-				T::DefaultMaxSelectedFullCandidates::get() +
-					T::DefaultMaxSelectedBasicCandidates::get(),
+				T::DefaultMaxSelectedFullCandidates::get()
+					+ T::DefaultMaxSelectedBasicCandidates::get(),
 			);
 			// Set max selected full node candidates to maximum config
 			<MaxFullSelected<T>>::put(T::DefaultMaxSelectedFullCandidates::get());

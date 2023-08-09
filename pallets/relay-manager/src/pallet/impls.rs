@@ -198,7 +198,7 @@ impl<T: Config> Pallet<T> {
 	/// Verifies if the given account is a (candidate) relayer
 	pub fn is_relayer(relayer: &T::AccountId) -> bool {
 		if <RelayerState<T>>::get(relayer).is_some() {
-			return true
+			return true;
 		}
 		false
 	}
@@ -217,7 +217,7 @@ impl<T: Config> Pallet<T> {
 	fn compute_majority() -> u32 {
 		let selected_relayers = <SelectedRelayers<T>>::get();
 		let half = (selected_relayers.len() as u32) / 2;
-		return half + 1
+		return half + 1;
 	}
 
 	/// Verifies the existance of the given relayer and controller account. If it is both not bonded
@@ -236,7 +236,7 @@ impl<T: Config> Pallet<T> {
 		let session_index = T::ValidatorSet::session_index();
 		if !<ReceivedHeartbeats<T>>::get(session_index, relayer) {
 			<ReceivedHeartbeats<T>>::insert(session_index, relayer, true);
-			return true
+			return true;
 		}
 		false
 	}
@@ -344,8 +344,8 @@ impl<T: Config> Pallet<T> {
 			Self::replace_relayer_pool(&old, &new, controller.clone());
 			// replace selected relayers
 			Self::replace_selected_relayers(&old, &new);
-			return true
+			return true;
 		}
-		return false
+		return false;
 	}
 }

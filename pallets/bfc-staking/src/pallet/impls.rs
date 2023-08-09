@@ -63,9 +63,9 @@ impl<T: Config> Pallet<T> {
 		let round = <Round<T>>::get();
 		let controller_sets = <DelayedControllerSets<T>>::get(round.current_round_index);
 		if controller_sets.is_empty() {
-			return false
+			return false;
 		}
-		return controller_sets.into_iter().any(|c| c.old == controller)
+		return controller_sets.into_iter().any(|c| c.old == controller);
 	}
 
 	/// Verifies if the given account has already requested for commission rate update
@@ -73,9 +73,9 @@ impl<T: Config> Pallet<T> {
 		let round = <Round<T>>::get();
 		let commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
 		if commission_sets.is_empty() {
-			return false
+			return false;
 		}
-		return commission_sets.into_iter().any(|c| c.who == *who)
+		return commission_sets.into_iter().any(|c| c.who == *who);
 	}
 
 	/// Adds a new controller set request. The state reflection will be applied in the next round.
@@ -249,7 +249,7 @@ impl<T: Config> Pallet<T> {
 	pub fn compute_majority() -> u32 {
 		let selected_candidates = <SelectedCandidates<T>>::get();
 		let half = (selected_candidates.len() as u32) / 2;
-		return half + 1
+		return half + 1;
 	}
 
 	/// Remove nomination from candidate state
@@ -280,12 +280,12 @@ impl<T: Config> Pallet<T> {
 		// payout is now - delay rounds ago => now - delay > 0 else return early
 		let delay = T::RewardPaymentDelay::get();
 		if now <= delay {
-			return
+			return;
 		}
 		let round_to_payout = now - delay;
 		let total_points = <Points<T>>::get(round_to_payout);
 		if total_points.is_zero() {
-			return
+			return;
 		}
 		// total staked amount for the given round
 		let total_staked = <Staked<T>>::take(round_to_payout);
@@ -378,7 +378,7 @@ impl<T: Config> Pallet<T> {
 
 		// don't underflow uint
 		if now < delay {
-			return Weight::from_parts(0u64, 0u64)
+			return Weight::from_parts(0u64, 0u64);
 		}
 		let round_to_payout = now - delay;
 
@@ -393,7 +393,7 @@ impl<T: Config> Pallet<T> {
 			// weight consumed by pay_one_validator_reward
 			result.1
 		} else {
-			return Weight::from_parts(0u64, 0u64)
+			return Weight::from_parts(0u64, 0u64);
 		}
 	}
 
@@ -497,7 +497,7 @@ impl<T: Config> Pallet<T> {
 	) -> (Option<(T::AccountId, BalanceOf<T>)>, Weight) {
 		let total_points = <Points<T>>::get(round_to_payout);
 		if total_points.is_zero() {
-			return (None, Weight::from_parts(0u64, 0u64))
+			return (None, Weight::from_parts(0u64, 0u64));
 		}
 
 		if let Some((validator, pts)) = <AwardedPts<T>>::iter_prefix(round_to_payout).drain().next()
@@ -576,14 +576,16 @@ impl<T: Config> Pallet<T> {
 			if let Some(state) = <CandidateInfo<T>>::get(&candidate.owner) {
 				let bond = Bond { owner: candidate.owner.clone(), amount: state.voting_power };
 				match state.tier {
-					TierType::Full =>
+					TierType::Full => {
 						if state.bond >= T::MinFullCandidateStk::get() {
 							full_candidates.push(bond);
-						},
-					_ =>
+						}
+					},
+					_ => {
 						if state.bond >= T::MinBasicCandidateStk::get() {
 							basic_candidates.push(bond);
-						},
+						}
+					},
 				}
 			}
 		}
@@ -1135,7 +1137,7 @@ where
 				// prevent offence handling if the validator is already kicked out (due to session
 				// update delay)
 				if candidate_state.is_kicked_out() {
-					continue
+					continue;
 				}
 				let offender_slash = *slash_fraction * candidate_state.bond;
 				let offence = Offence::new(

@@ -269,7 +269,7 @@ impl<T: EvmData, S: Get<u32>> EvmData for BoundedVec<T, S> {
 			.map_err(|_| RevertReason::value_is_too_large("length"))?;
 
 		if array_size > S::get() as usize {
-			return Err(RevertReason::value_is_too_large("length").into())
+			return Err(RevertReason::value_is_too_large("length").into());
 		}
 
 		let mut array = vec![];

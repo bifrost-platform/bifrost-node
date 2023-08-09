@@ -84,9 +84,10 @@ impl sp_runtime::traits::Verify for EthereumSignature {
 		let mut m = [0u8; 32];
 		m.copy_from_slice(Keccak256::digest(msg.get()).as_slice());
 		match sp_io::crypto::secp256k1_ecdsa_recover(self.0.as_ref(), &m) {
-			Ok(pubkey) =>
-				AccountId20(H160::from(H256::from_slice(Keccak256::digest(&pubkey).as_slice())).0) ==
-					*signer,
+			Ok(pubkey) => {
+				AccountId20(H160::from(H256::from_slice(Keccak256::digest(&pubkey).as_slice())).0)
+					== *signer
+			},
 			Err(sp_io::EcdsaVerifyError::BadRS) => {
 				log::error!(target: "evm", "Error recovering: Incorrect value of R or S");
 				false

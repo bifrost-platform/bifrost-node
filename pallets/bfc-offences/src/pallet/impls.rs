@@ -16,9 +16,9 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 	) -> (bool, BalanceOf<T>) {
 		// offence check only if activated
 		if IsOffenceActive::<T>::get() {
-			return Self::handle_offence(who, stash, tier, offence)
+			return Self::handle_offence(who, stash, tier, offence);
 		}
-		return (false, BalanceOf::<T>::zero())
+		return (false, BalanceOf::<T>::zero());
 	}
 
 	fn handle_offence(
@@ -39,7 +39,7 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 					offence.self_bond,
 				);
 				ValidatorOffences::<T>::remove(who);
-				return (true, slash_amount)
+				return (true, slash_amount);
 			}
 
 			// add a new offence and increase offence count to this validator
@@ -50,7 +50,7 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 		} else {
 			// add the initial offence to this validator
 			ValidatorOffences::<T>::insert(who, ValidatorOffenceInfo::new(offence));
-			return (false, slash_amount)
+			return (false, slash_amount);
 		}
 	}
 
@@ -75,8 +75,8 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 
 	fn refresh_offences(session_index: SessionIndex) {
 		for offences in ValidatorOffences::<T>::iter() {
-			if (session_index - offences.1.latest_offence_session_index) >
-				OffenceExpirationInSessions::<T>::get()
+			if (session_index - offences.1.latest_offence_session_index)
+				> OffenceExpirationInSessions::<T>::get()
 			{
 				ValidatorOffences::<T>::remove(&offences.0);
 			}
@@ -88,6 +88,6 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 		return match tier {
 			TierType::Full => count > FullMaximumOffenceCount::<T>::get(),
 			_ => count > BasicMaximumOffenceCount::<T>::get(),
-		}
+		};
 	}
 }

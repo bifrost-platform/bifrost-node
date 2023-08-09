@@ -45,7 +45,7 @@ impl<'a> EvmDataReader<'a> {
 		T: num_enum::TryFromPrimitive<Primitive = u32>,
 	{
 		if input.len() < 4 {
-			return Err(RevertReason::read_out_of_bounds("selector").into())
+			return Err(RevertReason::read_out_of_bounds("selector").into());
 		}
 
 		let mut buffer = [0u8; 4];
@@ -65,7 +65,7 @@ impl<'a> EvmDataReader<'a> {
 	/// Read selector as u32
 	pub fn read_u32_selector(input: &'a [u8]) -> MayRevert<u32> {
 		if input.len() < 4 {
-			return Err(RevertReason::read_out_of_bounds("selector").into())
+			return Err(RevertReason::read_out_of_bounds("selector").into());
 		}
 
 		let mut buffer = [0u8; 4];
@@ -77,7 +77,7 @@ impl<'a> EvmDataReader<'a> {
 	/// Create a new input parser from a selector-initial input.
 	pub fn new_skip_selector(input: &'a [u8]) -> MayRevert<Self> {
 		if input.len() < 4 {
-			return Err(RevertReason::read_out_of_bounds("selector").into())
+			return Err(RevertReason::read_out_of_bounds("selector").into());
 		}
 
 		Ok(Self::new(&input[4..]))
@@ -121,7 +121,7 @@ impl<'a> EvmDataReader<'a> {
 			.map_err(|_| RevertReason::value_is_too_large("pointer"))?;
 
 		if offset >= self.input.len() {
-			return Err(RevertReason::PointerToOutofBound.into())
+			return Err(RevertReason::PointerToOutofBound.into());
 		}
 
 		Ok(Self { input: &self.input[offset..], cursor: 0 })
