@@ -326,6 +326,7 @@ impl pallet_transaction_payment::Config for Runtime {
 impl pallet_sudo::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type RuntimeCall = RuntimeCall;
+	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -809,7 +810,7 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 			let queued_keys = <pallet_session::Pallet<Runtime>>::queued_keys();
 			for key in queued_keys {
 				if key.1.aura == authority_id {
-					return Some(key.0.into())
+					return Some(key.0.into());
 				}
 			}
 		}

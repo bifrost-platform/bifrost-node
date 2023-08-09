@@ -4,7 +4,7 @@ use sc_client_api::{
 	backend::{Backend, StateBackend},
 	AuxStore, StorageProvider,
 };
-use sc_service::{BasePath, Configuration};
+use sc_service::Configuration;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::BlakeTwo256;
@@ -14,14 +14,7 @@ use crate::cli_opt::{BackendTypeConfig, RpcConfig};
 
 /// Configure frontier database.
 pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {
-	let config_dir = config
-		.base_path
-		.as_ref()
-		.map(|base_path| base_path.config_dir(config.chain_spec.id()))
-		.unwrap_or_else(|| {
-			BasePath::from_project("", "", "bifrost").config_dir(config.chain_spec.id())
-		});
-	config_dir.join("frontier").join(path)
+	config.base_path.config_dir(config.chain_spec.id()).join("frontier").join(path)
 }
 
 // TODO This is copied from frontier. It should be imported instead after
@@ -48,17 +41,19 @@ where
 						path: frontier_database_dir(config, "db"),
 						cache_size: 0,
 					},
-					DatabaseSource::ParityDb { .. } =>
-						DatabaseSource::ParityDb { path: frontier_database_dir(config, "paritydb") },
+					DatabaseSource::ParityDb { .. } => {
+						DatabaseSource::ParityDb { path: frontier_database_dir(config, "paritydb") }
+					},
 					DatabaseSource::Auto { .. } => DatabaseSource::Auto {
 						rocksdb_path: frontier_database_dir(config, "db"),
 						paritydb_path: frontier_database_dir(config, "paritydb"),
 						cache_size: 0,
 					},
-					_ =>
+					_ => {
 						return Err(
 							"Supported db sources: `rocksdb` | `paritydb` | `auto`".to_string()
-						),
+						)
+					},
 				},
 			},
 		)?),
