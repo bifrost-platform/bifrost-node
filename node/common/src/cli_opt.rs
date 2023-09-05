@@ -20,7 +20,7 @@ impl FromStr for EthApi {
 	}
 }
 
-/// Avalailable frontier backend types.
+/// Available frontier backend types.
 #[derive(Debug, Copy, Clone, Default, clap::ValueEnum)]
 pub enum BackendType {
 	/// Either RocksDb or ParityDb as per inherited from the global backend settings.
