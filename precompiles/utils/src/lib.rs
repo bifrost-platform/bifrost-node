@@ -1,63 +1,57 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![feature(assert_matches)]
 
 extern crate alloc;
 
-pub mod costs;
-pub mod handle;
-pub mod logs;
-pub mod modifier;
+// Allows to use inside this crate `solidity::Codec` derive macro,which depends on
+// `precompile_utils` being in the list of imported crates.
+extern crate self as precompile_utils;
+
+pub mod evm;
 pub mod precompile_set;
-pub mod revert;
 pub mod substrate;
 
-use crate::alloc::{borrow::ToOwned, vec::Vec};
-use fp_evm::{ExitRevert, ExitSucceed, PrecompileFailure, PrecompileOutput};
+pub mod solidity;
 
-pub mod data;
-
-pub use data::{EvmData, EvmDataReader, EvmDataWriter};
 pub use fp_evm::Precompile;
-pub use precompile_utils_macro::{
-	generate_function_selector, keccak256, precompile, precompile_name_from_address,
-};
-
-/// Generated a `PrecompileFailure::Revert` with proper encoding for the output.
-/// If the revert needs improved formatting such as backtraces, `Revert` type should
-/// be used instead.
-#[must_use]
-pub fn revert(output: impl AsRef<[u8]>) -> PrecompileFailure {
-	PrecompileFailure::Revert { exit_status: ExitRevert::Reverted, output: encoded_revert(output) }
-}
-
-pub fn encoded_revert(output: impl AsRef<[u8]>) -> Vec<u8> {
-	EvmDataWriter::new_with_selector(revert::RevertSelector::Generic)
-		.write::<data::UnboundedBytes>(output.as_ref().to_owned().into())
-		.build()
-}
-
-#[must_use]
-pub fn succeed(output: impl AsRef<[u8]>) -> PrecompileOutput {
-	PrecompileOutput { exit_status: ExitSucceed::Returned, output: output.as_ref().to_owned() }
-}
+use fp_evm::PrecompileFailure;
+pub use precompile_utils_macro::{keccak256, precompile, precompile_name_from_address};
 
 /// Alias for Result returning an EVM precompile error.
 pub type EvmResult<T = ()> = Result<T, PrecompileFailure>;
 
 pub mod prelude {
-	pub use crate::{
-		data::{
-			Address, BoundedBytes, BoundedString, BoundedVec, EvmData, EvmDataReader,
-			EvmDataWriter, SolidityConvert, UnboundedBytes, UnboundedString,
+	pub use {
+		crate::{
+			evm::{
+				handle::PrecompileHandleExt,
+				logs::{log0, log1, log2, log3, log4, LogExt},
+			},
+			precompile_set::DiscriminantResult,
+			solidity::{
+				// We export solidity itself to encourage using `solidity::Codec` to avoid
+				// confusion with parity_scale_codec,
+				self,
+				codec::{
+					Address,
+					BoundedBytes,
+					BoundedString,
+					BoundedVec,
+					// Allow usage of Codec methods while not exporting the name directly.
+					// Codec as _,
+					Convert,
+					UnboundedBytes,
+					UnboundedString,
+				},
+				revert::{
+					revert, BacktraceExt, InjectBacktrace, MayRevert, Revert, RevertExt,
+					RevertReason,
+				},
+			},
+			substrate::{RuntimeHelper, TryDispatchError},
+			EvmResult,
 		},
-		handle::PrecompileHandleExt,
-		logs::{log0, log1, log2, log3, log4, LogExt},
-		modifier::{check_function_modifier, FunctionModifier},
-		read_args, read_struct, revert,
-		revert::{BacktraceExt, InjectBacktrace, MayRevert, Revert, RevertExt, RevertReason},
-		substrate::{RuntimeHelper, TryDispatchError},
-		succeed, EvmResult,
+		alloc::string::String,
+		pallet_evm::{PrecompileHandle, PrecompileOutput},
+		precompile_utils_macro::{keccak256, precompile},
 	};
-	pub use pallet_evm::{PrecompileHandle, PrecompileOutput};
-	pub use precompile_utils_macro::{generate_function_selector, keccak256, precompile};
 }

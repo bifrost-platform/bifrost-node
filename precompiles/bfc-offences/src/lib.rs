@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use pallet_evm::AddressMapping;
 
@@ -7,7 +6,7 @@ use precompile_utils::prelude::*;
 
 use bp_staking::TierType;
 use fp_evm::PrecompileHandle;
-use sp_core::{H160, H256, U256};
+use sp_core::{H160, H256};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
 mod types;
@@ -30,12 +29,8 @@ where
 	#[precompile::public("maximumOffenceCount(uint256)")]
 	#[precompile::public("maximum_offence_count(uint256)")]
 	#[precompile::view]
-	fn maximum_offence_count(
-		handle: &mut impl PrecompileHandle,
-		tier: SolidityConvert<U256, u32>,
-	) -> EvmResult<Vec<u32>> {
+	fn maximum_offence_count(handle: &mut impl PrecompileHandle, tier: u32) -> EvmResult<Vec<u32>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let tier: u32 = tier.converted();
 		let tier = match tier {
 			2 => TierType::Full,
 			1 => TierType::Basic,
@@ -102,7 +97,7 @@ where
 		unique_validators.dedup();
 		let current_len = unique_validators.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate validator address received").into())
+			return Err(RevertReason::custom("Duplicate validator address received").into());
 		}
 
 		let mut validator_offences = ValidatorOffences::<Runtime>::default();

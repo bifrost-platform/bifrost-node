@@ -17,12 +17,12 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn community_proposal() -> Weight {
-		Weight::from_ref_time(18_178_000)
+		Weight::from_parts(18_178_000, 0)
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
 	fn mint_native() -> Weight {
-		Weight::from_ref_time(18_178_000)
+		Weight::from_parts(18_178_000, 0)
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
@@ -31,12 +31,12 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 // For backwards compatibility and tests
 impl WeightInfo for () {
 	fn community_proposal() -> Weight {
-		Weight::from_ref_time(18_178_000)
+		Weight::from_parts(18_178_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
 	fn mint_native() -> Weight {
-		Weight::from_ref_time(18_178_000)
+		Weight::from_parts(18_178_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}

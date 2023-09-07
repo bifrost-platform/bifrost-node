@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
@@ -35,8 +34,8 @@ where
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<StakingCall<Runtime>>,
-	BalanceOf<Runtime>: TryFrom<U256> + Into<U256> + EvmData,
-	BlockNumberOf<Runtime>: Into<U256> + EvmData,
+	BalanceOf<Runtime>: TryFrom<U256> + Into<U256>,
+	BlockNumberOf<Runtime>: Into<U256>,
 {
 	// Role Verifiers
 
@@ -63,10 +62,9 @@ where
 	fn is_candidate(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 	) -> EvmResult<bool> {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
-		let tier: u32 = tier.converted();
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let is_candidate = StakingOf::<Runtime>::is_candidate(
@@ -90,10 +88,9 @@ where
 	fn is_selected_candidate(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 	) -> EvmResult<bool> {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
-		let tier: u32 = tier.converted();
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let is_selected_candidate = StakingOf::<Runtime>::is_selected_candidate(
@@ -118,10 +115,9 @@ where
 	fn is_selected_candidates(
 		handle: &mut impl PrecompileHandle,
 		candidates: Vec<Address>,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let tier: u32 = tier.converted();
 		let mut unique_candidates = candidates
 			.clone()
 			.into_iter()
@@ -133,7 +129,7 @@ where
 		unique_candidates.dedup();
 		let current_len = unique_candidates.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		Ok(Self::compare_selected_candidates(
@@ -157,10 +153,9 @@ where
 	fn is_complete_selected_candidates(
 		handle: &mut impl PrecompileHandle,
 		candidates: Vec<Address>,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let tier: u32 = tier.converted();
 		let mut unique_candidates = candidates
 			.clone()
 			.into_iter()
@@ -172,7 +167,7 @@ where
 		unique_candidates.dedup();
 		let current_len = unique_candidates.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		Ok(Self::compare_selected_candidates(
@@ -196,11 +191,10 @@ where
 	#[precompile::view]
 	fn is_previous_selected_candidate(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		candidate: Address,
 	) -> EvmResult<bool> {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
-		let round_index: RoundIndex = round_index.converted();
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let mut is_previous_selected_candidate: bool = false;
@@ -213,17 +207,17 @@ where
 
 			// out of round index
 			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			'outer: for selected_candidates in previous_selected_candidates {
 				if round_index == selected_candidates.0 {
 					for selected_candidate in selected_candidates.1 {
 						if candidate == selected_candidate {
 							is_previous_selected_candidate = true;
-							break 'outer
+							break 'outer;
 						}
 					}
-					break
+					break;
 				}
 			}
 		}
@@ -240,11 +234,10 @@ where
 	#[precompile::view]
 	fn is_previous_selected_candidates(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		candidates: Vec<Address>,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index: RoundIndex = round_index.converted();
 		let mut unique_candidates = candidates
 			.clone()
 			.into_iter()
@@ -256,7 +249,7 @@ where
 		unique_candidates.dedup();
 		let current_len = unique_candidates.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 		let mut is_previous_selected_candidates: bool = false;
 
@@ -269,7 +262,7 @@ where
 				let tail_selected = &previous_selected_candidates[cached_len - 1];
 
 				if round_index < head_selected.0 || round_index > tail_selected.0 {
-					return Err(RevertReason::read_out_of_bounds("round_index").into())
+					return Err(RevertReason::read_out_of_bounds("round_index").into());
 				}
 				'outer: for selected_candidates in previous_selected_candidates {
 					if round_index == selected_candidates.0 {
@@ -280,11 +273,11 @@ where
 							.collect();
 						for candidate in candidates {
 							if !mutated_candidates.contains(&candidate) {
-								break 'outer
+								break 'outer;
 							}
 						}
 						is_previous_selected_candidates = true;
-						break
+						break;
 					}
 				}
 			}
@@ -404,10 +397,9 @@ where
 	#[precompile::view]
 	fn previous_majority(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 	) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index: RoundIndex = round_index.converted();
 		let mut result: u32 = 0;
 		let previous_majority = <StakingOf<Runtime>>::cached_majority();
 
@@ -417,12 +409,12 @@ where
 			let tail_majority = &previous_majority[cached_len - 1];
 
 			if round_index < head_majority.0 || round_index > tail_majority.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			for majority in previous_majority {
 				if round_index == majority.0 {
 					result = majority.1;
-					break
+					break;
 				}
 			}
 		}
@@ -435,12 +427,8 @@ where
 	/// @return: The total points awarded to all validators in the round
 	#[precompile::public("points(uint256)")]
 	#[precompile::view]
-	fn points(
-		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
-	) -> EvmResult<u32> {
+	fn points(handle: &mut impl PrecompileHandle, round_index: RoundIndex) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index: RoundIndex = round_index.converted();
 		let points: u32 = StakingOf::<Runtime>::points(round_index);
 
 		Ok(points)
@@ -454,11 +442,10 @@ where
 	#[precompile::view]
 	fn validator_points(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		validator: Address,
 	) -> EvmResult<u32> {
 		let validator = Runtime::AddressMapping::into_account_id(validator.0);
-		let round_index: RoundIndex = round_index.converted();
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let points = <StakingOf<Runtime>>::awarded_pts(round_index, &validator);
@@ -470,9 +457,11 @@ where
 	/// @return: The total amount of awarded tokens
 	#[precompile::public("rewards()")]
 	#[precompile::view]
-	fn rewards(handle: &mut impl PrecompileHandle) -> EvmResult<BalanceOf<Runtime>> {
+	fn rewards(handle: &mut impl PrecompileHandle) -> EvmResult<u128> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let rewards = <StakingOf<Runtime>>::awarded_tokens();
+		let rewards = <StakingOf<Runtime>>::awarded_tokens()
+			.try_into()
+			.map_err(|_| revert("Amount is too large for provided balance type"))?;
 
 		Ok(rewards)
 	}
@@ -482,17 +471,13 @@ where
 	/// @return: The total locked information
 	#[precompile::public("total(uint256)")]
 	#[precompile::view]
-	fn total(
-		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
-	) -> EvmResult<EvmTotalOf> {
+	fn total(handle: &mut impl PrecompileHandle, round_index: RoundIndex) -> EvmResult<EvmTotalOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index: RoundIndex = round_index.converted();
 		let mut total = TotalStake::<Runtime>::default();
 		if let Some(stake) = <StakingOf<Runtime>>::total_at_stake(round_index) {
 			total.set_stake(stake);
 		} else {
-			return Err(RevertReason::read_out_of_bounds("round_index").into())
+			return Err(RevertReason::read_out_of_bounds("round_index").into());
 		}
 
 		Ok(total.into())
@@ -548,7 +533,7 @@ where
 		handle: &mut impl PrecompileHandle,
 		candidates: Vec<Address>,
 		amounts: Vec<U256>,
-	) -> EvmResult<Vec<BalanceOf<Runtime>>> {
+	) -> EvmResult<Vec<u128>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let candidates = candidates
 			.clone()
@@ -557,18 +542,18 @@ where
 			.collect::<Vec<Runtime::AccountId>>();
 		let amounts = Self::u256_array_to_amount_array(amounts)?;
 		if candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty candidates vector received").into())
+			return Err(RevertReason::custom("Empty candidates vector received").into());
 		}
 		if amounts.len() < 1 {
-			return Err(RevertReason::custom("Empty amounts vector received").into())
+			return Err(RevertReason::custom("Empty amounts vector received").into());
 		}
 		if candidates.len() != amounts.len() {
-			return Err(RevertReason::custom("Request vectors length does not match").into())
+			return Err(RevertReason::custom("Request vectors length does not match").into());
 		}
 
 		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
 		if selected_candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty selected candidates").into())
+			return Err(RevertReason::custom("Empty selected candidates").into());
 		}
 
 		let total_stake = <StakingOf<Runtime>>::total();
@@ -579,7 +564,7 @@ where
 
 		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
 
-		let mut estimated_yearly_return: Vec<BalanceOf<Runtime>> = vec![];
+		let mut estimated_yearly_return: Vec<u128> = vec![];
 		for (idx, candidate) in candidates.iter().enumerate() {
 			if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
 				let validator_issuance = state.commission * round_issuance;
@@ -587,8 +572,11 @@ where
 				let amount_due = total_reward_amount - commission;
 
 				let nominator_stake_pct = Perbill::from_rational(amounts[idx], state.voting_power);
-				estimated_yearly_return
-					.push((nominator_stake_pct * amount_due) * rounds_per_year.into());
+				estimated_yearly_return.push(
+					((nominator_stake_pct * amount_due) * rounds_per_year.into())
+						.try_into()
+						.map_err(|_| revert("Amount is too large for provided balance type"))?,
+				);
 			}
 		}
 
@@ -600,11 +588,13 @@ where
 	#[precompile::public("minNomination()")]
 	#[precompile::public("min_nomination()")]
 	#[precompile::view]
-	fn min_nomination(handle: &mut impl PrecompileHandle) -> EvmResult<BalanceOf<Runtime>> {
+	fn min_nomination(handle: &mut impl PrecompileHandle) -> EvmResult<u128> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let min_nomination = <<Runtime as pallet_bfc_staking::Config>::MinNomination as Get<
+		let min_nomination: u128 = <<Runtime as pallet_bfc_staking::Config>::MinNomination as Get<
 			BalanceOf<Runtime>,
-		>>::get();
+		>>::get()
+		.try_into()
+		.map_err(|_| revert("Amount is too large for provided balance type"))?;
 
 		Ok(min_nomination)
 	}
@@ -706,10 +696,9 @@ where
 	#[precompile::view]
 	fn selected_candidates(
 		handle: &mut impl PrecompileHandle,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 	) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let tier: u32 = tier.converted();
 
 		let raw_selected_candidates = match tier {
 			2 => StakingOf::<Runtime>::selected_full_candidates().into_inner(),
@@ -732,10 +721,9 @@ where
 	#[precompile::view]
 	fn previous_selected_candidates(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 	) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index: RoundIndex = round_index.converted();
 		let mut result: Vec<Address> = vec![];
 		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
 
@@ -746,13 +734,13 @@ where
 
 			// out of round index
 			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			for candidates in previous_selected_candidates {
 				if round_index == candidates.0 {
 					result =
 						candidates.1.into_iter().map(|address| Address(address.into())).collect();
-					break
+					break;
 				}
 			}
 		}
@@ -818,9 +806,8 @@ where
 	#[precompile::view]
 	fn candidate_states(
 		handle: &mut impl PrecompileHandle,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 	) -> EvmResult<EvmCandidateStatesOf> {
-		let tier: u32 = tier.converted();
 		let tier = match tier {
 			2 => TierType::Full,
 			1 => TierType::Basic,
@@ -860,10 +847,9 @@ where
 	#[precompile::view]
 	fn candidate_states_by_selection(
 		handle: &mut impl PrecompileHandle,
-		tier: SolidityConvert<U256, u32>,
+		tier: u32,
 		is_selected: bool,
 	) -> EvmResult<EvmCandidateStatesOf> {
-		let tier: u32 = tier.converted();
 		let tier = match tier {
 			2 => TierType::Full,
 			1 => TierType::Basic,
@@ -1178,9 +1164,8 @@ where
 	#[precompile::public("schedule_leave_candidates(uint256)")]
 	fn schedule_leave_candidates(
 		handle: &mut impl PrecompileHandle,
-		candidate_count: SolidityConvert<U256, u32>,
+		candidate_count: u32,
 	) -> EvmResult {
-		let candidate_count: u32 = candidate_count.converted();
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_leave_candidates { candidate_count };
 
@@ -1206,9 +1191,8 @@ where
 	#[precompile::public("execute_leave_candidates(uint256)")]
 	fn execute_leave_candidates(
 		handle: &mut impl PrecompileHandle,
-		candidate_nomination_count: SolidityConvert<U256, u32>,
+		candidate_nomination_count: u32,
 	) -> EvmResult {
-		let candidate_nomination_count: u32 = candidate_nomination_count.converted();
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
 
@@ -1232,9 +1216,8 @@ where
 	#[precompile::public("cancel_leave_candidates(uint256)")]
 	fn cancel_leave_candidates(
 		handle: &mut impl PrecompileHandle,
-		candidate_count: SolidityConvert<U256, u32>,
+		candidate_count: u32,
 	) -> EvmResult {
-		let candidate_count: u32 = candidate_count.converted();
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_leave_candidates { candidate_count };
 
@@ -1256,11 +1239,7 @@ where
 
 	#[precompile::public("setValidatorCommission(uint256)")]
 	#[precompile::public("set_validator_commission(uint256)")]
-	fn set_validator_commission(
-		handle: &mut impl PrecompileHandle,
-		new: SolidityConvert<U256, u32>,
-	) -> EvmResult {
-		let new: u32 = new.converted();
+	fn set_validator_commission(handle: &mut impl PrecompileHandle, new: u32) -> EvmResult {
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call =
 			StakingCall::<Runtime>::set_validator_commission { new: Perbill::from_parts(new) };
@@ -1285,11 +1264,7 @@ where
 
 	#[precompile::public("setCandidateRewardDst(uint256)")]
 	#[precompile::public("set_candidate_reward_dst(uint256)")]
-	fn set_candidate_reward_dst(
-		handle: &mut impl PrecompileHandle,
-		reward_dst: SolidityConvert<U256, u8>,
-	) -> EvmResult {
-		let reward_dst: u8 = reward_dst.converted();
+	fn set_candidate_reward_dst(handle: &mut impl PrecompileHandle, reward_dst: u8) -> EvmResult {
 		let new_reward_dst = match reward_dst {
 			0 => RewardDestination::Staked,
 			1 => RewardDestination::Account,
@@ -1311,11 +1286,9 @@ where
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
 		amount: U256,
-		candidate_nomination_count: SolidityConvert<U256, u32>,
-		nomination_count: SolidityConvert<U256, u32>,
+		candidate_nomination_count: u32,
+		nomination_count: u32,
 	) -> EvmResult {
-		let candidate_nomination_count: u32 = candidate_nomination_count.converted();
-		let nomination_count: u32 = nomination_count.converted();
 		let amount = Self::u256_to_amount(amount).in_field("amount")?;
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
@@ -1399,9 +1372,8 @@ where
 	#[precompile::public("execute_leave_nominators(uint256)")]
 	fn execute_leave_nominators(
 		handle: &mut impl PrecompileHandle,
-		nomination_count: SolidityConvert<U256, u32>,
+		nomination_count: u32,
 	) -> EvmResult {
-		let nomination_count: u32 = nomination_count.converted();
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_leave_nominators { nomination_count };
 
@@ -1455,11 +1427,7 @@ where
 
 	#[precompile::public("setNominatorRewardDst(uint256)")]
 	#[precompile::public("set_nominator_reward_dst(uint256)")]
-	fn set_nominator_reward_dst(
-		handle: &mut impl PrecompileHandle,
-		reward_dst: SolidityConvert<U256, u8>,
-	) -> EvmResult {
-		let reward_dst: u8 = reward_dst.converted();
+	fn set_nominator_reward_dst(handle: &mut impl PrecompileHandle, reward_dst: u8) -> EvmResult {
 		let new_reward_dst = match reward_dst {
 			0 => RewardDestination::Staked,
 			1 => RewardDestination::Account,
@@ -1501,7 +1469,7 @@ where
 					for selected_candidate in &selected_candidates {
 						if !candidates.contains(&selected_candidate) {
 							result = false;
-							break
+							break;
 						}
 					}
 				}
@@ -1509,7 +1477,7 @@ where
 				for candidate in &candidates {
 					if !selected_candidates.contains(&candidate) {
 						result = false;
-						break
+						break;
 					}
 				}
 			}

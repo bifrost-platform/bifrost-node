@@ -32,7 +32,6 @@ pub mod pallet {
 
 	/// Pallet for bfc staking
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(crate) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
@@ -780,8 +779,8 @@ pub mod pallet {
 			}
 			// Set max selected node candidates to maximum config
 			<MaxTotalSelected<T>>::put(
-				T::DefaultMaxSelectedFullCandidates::get() +
-					T::DefaultMaxSelectedBasicCandidates::get(),
+				T::DefaultMaxSelectedFullCandidates::get()
+					+ T::DefaultMaxSelectedBasicCandidates::get(),
 			);
 			// Set max selected full node candidates to maximum config
 			<MaxFullSelected<T>>::put(T::DefaultMaxSelectedFullCandidates::get());

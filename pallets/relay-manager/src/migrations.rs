@@ -12,8 +12,8 @@ pub mod v3 {
 
 	pub fn pre_migrate<T: Config>() -> Result<(), &'static str> {
 		frame_support::ensure!(
-			StorageVersion::<T>::get() == Releases::V1_0_0 ||
-				StorageVersion::<T>::get() == Releases::V2_0_0,
+			StorageVersion::<T>::get() == Releases::V1_0_0
+				|| StorageVersion::<T>::get() == Releases::V2_0_0,
 			"Storage version must match to v1.0.0 or v2.0.0",
 		);
 		log::info!("relay-manager storage migration passes pre-migrate checks ✅");

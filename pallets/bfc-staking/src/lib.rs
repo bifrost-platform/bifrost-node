@@ -432,7 +432,7 @@ impl<
 			if self.nominations[self.nominations.len() - 1].amount == nomination.amount {
 				self.nominations.push(nomination);
 				// early return
-				return
+				return;
 			}
 		}
 		// else binary search insertion
@@ -446,7 +446,7 @@ impl<
 						new_index += 1;
 					} else {
 						self.nominations.insert(new_index, nomination);
-						return
+						return;
 					}
 				}
 				self.nominations.push(nomination)
@@ -467,8 +467,9 @@ impl<
 	/// Return the capacity status for bottom nominations
 	pub fn bottom_capacity<T: Config>(&self) -> CapacityStatus {
 		match &self.nominations {
-			x if x.len() as u32 >= T::MaxBottomNominationsPerCandidate::get() =>
-				CapacityStatus::Full,
+			x if x.len() as u32 >= T::MaxBottomNominationsPerCandidate::get() => {
+				CapacityStatus::Full
+			},
 			x if x.is_empty() => CapacityStatus::Empty,
 			_ => CapacityStatus::Partial,
 		}
@@ -496,7 +497,7 @@ impl<
 				self.nominations[i] = new;
 				self.total = self.total.saturating_sub(value);
 
-				return true
+				return true;
 			}
 		}
 		false
@@ -967,8 +968,8 @@ impl<
 			.expect("CandidateInfo existence => BottomNominations existence");
 		// if bottom is full, kick the lowest bottom (which is expected to be lower than input
 		// as per check)
-		let increase_nomination_count = if bottom_nominations.nominations.len() as u32 ==
-			T::MaxBottomNominationsPerCandidate::get()
+		let increase_nomination_count = if bottom_nominations.nominations.len() as u32
+			== T::MaxBottomNominationsPerCandidate::get()
 		{
 			let lowest_bottom_to_be_kicked = bottom_nominations
 				.nominations
@@ -1341,8 +1342,8 @@ impl<
 		let bond_after_less_than_highest_bottom =
 			bond.saturating_sub(less).into() < self.highest_bottom_nomination_amount;
 		// The top nominations is full and the bottom nominations has at least one nomination
-		let full_top_and_nonempty_bottom = matches!(self.top_capacity, CapacityStatus::Full) &&
-			!matches!(self.bottom_capacity, CapacityStatus::Empty);
+		let full_top_and_nonempty_bottom = matches!(self.top_capacity, CapacityStatus::Full)
+			&& !matches!(self.bottom_capacity, CapacityStatus::Empty);
 		let mut top_nominations =
 			<TopNominations<T>>::get(candidate).ok_or(Error::<T>::CandidateDNE)?;
 		let in_top_after = if bond_after_less_than_highest_bottom && full_top_and_nonempty_bottom {
@@ -1481,18 +1482,18 @@ pub struct Nominator<AccountId, Balance> {
 // Temporary manual implementation for migration testing purposes
 impl<A: PartialEq, B: PartialEq> PartialEq for Nominator<A, B> {
 	fn eq(&self, other: &Self) -> bool {
-		let must_be_true = self.id == other.id &&
-			self.total == other.total &&
-			self.requests == other.requests &&
-			self.status == other.status;
+		let must_be_true = self.id == other.id
+			&& self.total == other.total
+			&& self.requests == other.requests
+			&& self.status == other.status;
 		if !must_be_true {
-			return false
+			return false;
 		}
 		for (Bond { owner: o1, amount: a1 }, Bond { owner: o2, amount: a2 }) in
 			self.nominations.0.iter().zip(other.nominations.0.iter())
 		{
 			if o1 != o2 || a1 != a2 {
-				return false
+				return false;
 			}
 		}
 		true
@@ -1539,7 +1540,7 @@ impl<
 	pub fn is_revoking(&self, candidate: &AccountId) -> bool {
 		if let Some(request) = self.requests().get(candidate) {
 			if request.action == NominationChange::Revoke {
-				return true
+				return true;
 			}
 		}
 		false
@@ -1596,7 +1597,7 @@ impl<
 		for x in &mut self.awarded_tokens_per_candidate.0 {
 			if &x.owner == validator {
 				x.amount += tokens;
-				break
+				break;
 			}
 		}
 		self.awarded_tokens += tokens;
@@ -1737,7 +1738,7 @@ impl<
 					amount: balance_amt,
 					in_top,
 				});
-				return Ok(())
+				return Ok(());
 			}
 		}
 		Err(Error::<T>::NominationDNE.into())
@@ -1909,7 +1910,7 @@ impl<
 						} else {
 							// must rm entire nomination if x.amount <= less or cancel request
 							Err(Error::<T>::NominationBelowMin.into())
-						}
+						};
 					}
 				}
 				Err(Error::<T>::NominationDNE.into())

@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
@@ -43,9 +42,9 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<DemocracyCall<Runtime>>,
 	Runtime::RuntimeCall: From<PreimageCall<Runtime>>,
-	BalanceOf<Runtime>: TryFrom<U256> + Into<U256> + EvmData,
-	BlockNumberOf<Runtime>: Into<U256> + EvmData,
-	HashOf<Runtime>: Into<H256> + From<H256> + EvmData,
+	BalanceOf<Runtime>: TryFrom<U256> + Into<U256>,
+	BlockNumberOf<Runtime>: Into<U256>,
+	HashOf<Runtime>: Into<H256> + From<H256>,
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
 	Runtime::BlockNumber: Into<U256>,
@@ -67,10 +66,9 @@ where
 	#[precompile::view]
 	fn deposit_of(
 		handle: &mut impl PrecompileHandle,
-		prop_index: SolidityConvert<U256, u32>,
+		prop_index: u32,
 	) -> EvmResult<(U256, U256, Vec<Address>)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let prop_index: u32 = prop_index.converted();
 
 		let zero = 0u32;
 		let mut total_deposit: U256 = zero.into();
@@ -91,12 +89,8 @@ where
 	#[precompile::public("votingOf(uint256)")]
 	#[precompile::public("voting_of(uint256)")]
 	#[precompile::view]
-	fn voting_of(
-		handle: &mut impl PrecompileHandle,
-		ref_index: SolidityConvert<U256, u32>,
-	) -> EvmResult<EvmVotingOf> {
+	fn voting_of(handle: &mut impl PrecompileHandle, ref_index: u32) -> EvmResult<EvmVotingOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let ref_index: u32 = ref_index.converted();
 		let mut referenda_votes = ReferendaVotes::<Runtime>::default(ref_index);
 
 		let _ref_status = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
@@ -110,7 +104,7 @@ where
 			let state = voting_of.1;
 
 			match state {
-				Voting::Direct { votes, .. } =>
+				Voting::Direct { votes, .. } => {
 					for direct_vote in votes {
 						if direct_vote.0 == ref_index {
 							let account_vote = direct_vote.1;
@@ -125,9 +119,10 @@ where
 								},
 								AccountVote::Split { .. } => (),
 							};
-							break
+							break;
 						}
-					},
+					}
+				},
 				Voting::Delegating { .. } => (),
 			};
 		}
@@ -198,10 +193,9 @@ where
 	#[precompile::view]
 	fn ongoing_referendum_info(
 		handle: &mut impl PrecompileHandle,
-		ref_index: SolidityConvert<U256, u32>,
+		ref_index: u32,
 	) -> EvmResult<(U256, H256, u8, U256, U256, U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let ref_index: u32 = ref_index.converted();
 		let ref_status = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
 			Some(ReferendumInfo::Ongoing(ref_status)) => ref_status,
 			Some(ReferendumInfo::Finished { .. }) => Err(revert("Referendum is finished"))?,
@@ -230,10 +224,9 @@ where
 	#[precompile::view]
 	fn finished_referendum_info(
 		handle: &mut impl PrecompileHandle,
-		ref_index: SolidityConvert<U256, u32>,
+		ref_index: u32,
 	) -> EvmResult<(bool, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let ref_index: u32 = ref_index.converted();
 		let (approved, end) = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
 			Some(ReferendumInfo::Ongoing(_)) => Err(revert("Referendum is ongoing"))?,
 			Some(ReferendumInfo::Finished { approved, end }) => (approved, end),
@@ -275,12 +268,10 @@ where
 	#[precompile::public("second(uint256,uint256)")]
 	fn second(
 		handle: &mut impl PrecompileHandle,
-		prop_index: SolidityConvert<U256, u32>,
-		seconds_upper_bound: SolidityConvert<U256, u32>,
+		prop_index: u32,
+		_seconds_upper_bound: u32,
 	) -> EvmResult {
 		handle.record_log_costs_manual(2, 32)?;
-		let prop_index = prop_index.converted();
-		let _seconds_upper_bound = seconds_upper_bound.converted();
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::second { proposal: prop_index };
@@ -293,20 +284,18 @@ where
 	#[precompile::public("vote(uint256,bool,uint256,uint256)")]
 	fn vote(
 		handle: &mut impl PrecompileHandle,
-		ref_index: SolidityConvert<U256, u32>,
+		ref_index: u32,
 		aye: bool,
 		vote_amount: U256,
-		conviction: SolidityConvert<U256, u8>,
+		conviction: u8,
 	) -> EvmResult {
 		handle.record_log_costs_manual(2, 32 * 4)?;
-		let ref_index = ref_index.converted();
 		let vote_amount_balance = Self::u256_to_amount(vote_amount).in_field("voteAmount")?;
 
-		let conviction_enum: Conviction =
-			conviction.clone().converted().try_into().map_err(|_| {
-				RevertReason::custom("Must be an integer between 0 and 6 included")
-					.in_field("conviction")
-			})?;
+		let conviction_enum: Conviction = conviction.clone().try_into().map_err(|_| {
+			RevertReason::custom("Must be an integer between 0 and 6 included")
+				.in_field("conviction")
+		})?;
 
 		let vote = AccountVote::Standard {
 			vote: Vote { aye, conviction: conviction_enum },
@@ -323,12 +312,7 @@ where
 
 	#[precompile::public("removeVote(uint256)")]
 	#[precompile::public("remove_vote(uint256)")]
-	fn remove_vote(
-		handle: &mut impl PrecompileHandle,
-		ref_index: SolidityConvert<U256, u32>,
-	) -> EvmResult {
-		let ref_index: u32 = ref_index.converted();
-
+	fn remove_vote(handle: &mut impl PrecompileHandle, ref_index: u32) -> EvmResult {
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::remove_vote { index: ref_index };
 
@@ -341,13 +325,13 @@ where
 	fn delegate(
 		handle: &mut impl PrecompileHandle,
 		representative: Address,
-		conviction: SolidityConvert<U256, u8>,
+		conviction: u8,
 		amount: U256,
 	) -> EvmResult {
 		handle.record_log_costs_manual(2, 32)?;
 		let amount = Self::u256_to_amount(amount).in_field("amount")?;
 
-		let conviction: Conviction = conviction.converted().try_into().map_err(|_| {
+		let conviction: Conviction = conviction.try_into().map_err(|_| {
 			RevertReason::custom("Must be an integer between 0 and 6 included")
 				.in_field("conviction")
 		})?;
@@ -419,7 +403,7 @@ where
 		if !<<Runtime as pallet_democracy::Config>::Preimages as QueryPreimage>::is_requested(
 			&proposal_hash.into(),
 		) {
-			return Err(revert("not imminent preimage (preimage not requested)"))
+			return Err(revert("not imminent preimage (preimage not requested)"));
 		};
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);

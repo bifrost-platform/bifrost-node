@@ -11,7 +11,7 @@ use std::sync::Arc;
 use bifrost_common_node::{cli_opt::EthApi as EthApiCmd, rpc::TracingConfig};
 use bifrost_dev_runtime::{opaque::Block, AccountId, Balance, Index};
 
-use sp_api::ProvideRuntimeApi;
+use sp_api::{CallApiAt, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{
 	Backend as BlockchainBackend, Error as BlockChainError, HeaderBackend, HeaderMetadata,
@@ -31,6 +31,11 @@ use sc_transaction_pool_api::TransactionPool;
 pub fn create_full<C, P, BE, SC, A>(
 	deps: FullDevDeps<C, P, BE, SC, A>,
 	maybe_tracing_config: Option<TracingConfig>,
+	pubsub_notification_sinks: Arc<
+		fc_mapping_sync::EthereumBlockNotificationSinks<
+			fc_mapping_sync::EthereumBlockNotification<Block>,
+		>,
+	>,
 ) -> Result<RpcModule<()>, sc_service::Error>
 where
 	BE: Backend<Block> + Send + Sync + 'static,
@@ -40,6 +45,7 @@ where
 	C: BlockchainEvents<Block>,
 	C: StorageProvider<Block, BE>,
 	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
+	C: CallApiAt<Block>,
 	C: AuxStore,
 	C: StorageProvider<Block, BE>,
 	C: Send + Sync + 'static,
@@ -61,7 +67,7 @@ where
 	use fc_rpc_trace::{Trace, TraceServer};
 	use fc_rpc_txpool::{TxPool, TxPoolServer};
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
-	use sc_finality_grandpa_rpc::{Grandpa, GrandpaApiServer};
+	use sc_consensus_grandpa_rpc::{Grandpa, GrandpaApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
 
 	let mut io = RpcModule::new(());
@@ -86,6 +92,8 @@ where
 		command_sink,
 		max_past_logs,
 		logs_request_timeout,
+		forced_parent_hashes,
+		sync_service,
 	} = deps;
 
 	let GrandpaDeps {
@@ -116,6 +124,7 @@ where
 		EthFilter::new(
 			client.clone(),
 			frontier_backend.clone(),
+			fc_rpc::TxPool::new(client.clone(), graph.clone()),
 			filter_pool,
 			500_usize, // max stored filters
 			max_past_logs,
@@ -141,9 +150,10 @@ where
 		EthPubSub::new(
 			Arc::clone(&pool),
 			Arc::clone(&client),
-			network.clone(),
+			sync_service.clone(),
 			Arc::clone(&subscription_executor),
 			Arc::clone(&overrides),
+			pubsub_notification_sinks.clone(),
 		)
 		.into_rpc(),
 	)
@@ -175,7 +185,7 @@ where
 			Arc::clone(&pool),
 			graph.clone(),
 			convert_transaction,
-			Arc::clone(&network),
+			Arc::clone(&sync_service),
 			signers,
 			Arc::clone(&overrides),
 			Arc::clone(&frontier_backend),
@@ -184,6 +194,7 @@ where
 			fee_history_cache,
 			fee_history_limit,
 			10,
+			forced_parent_hashes,
 		)
 		.into_rpc(),
 	)

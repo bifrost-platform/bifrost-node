@@ -32,12 +32,12 @@ impl Precompile {
 		}
 
 		// Check constraint of PrecompileSet.
-		if precompile.tagged_as_precompile_set &&
-			precompile.precompile_set_discriminant_fn.is_none()
+		if precompile.tagged_as_precompile_set
+			&& precompile.precompile_set_discriminant_fn.is_none()
 		{
 			let msg = "A PrecompileSet must have exactly one function tagged with \
 			`#[precompile::discriminant]`";
-			return Err(syn::Error::new(Span::call_site(), msg))
+			return Err(syn::Error::new(Span::call_site(), msg));
 		}
 
 		Ok(precompile)
@@ -57,12 +57,12 @@ impl Precompile {
 					if types.len() != self.generics.params.len() {
 						let msg = "The amount of types should match the amount of type parameters \
 						of the impl block";
-						return Err(syn::Error::new(span, msg))
+						return Err(syn::Error::new(span, msg));
 					}
 
 					if self.test_concrete_types.is_some() {
 						let msg = "Only one set of types can be provided to generate tests";
-						return Err(syn::Error::new(span, msg))
+						return Err(syn::Error::new(span, msg));
 					}
 
 					self.test_concrete_types = Some(types);
@@ -82,7 +82,7 @@ impl Precompile {
 			_ => {
 				let msg = "The type in the impl block must be a path, like `Precompile` or
 				`example::Precompile`";
-				return Err(syn::Error::new(impl_.self_ty.span(), msg))
+				return Err(syn::Error::new(impl_.self_ty.span(), msg));
 			},
 		};
 
@@ -101,7 +101,7 @@ impl Precompile {
 
 		// If there are no attributes it is a private function and we ignore it.
 		if attrs.is_empty() {
-			return Ok(())
+			return Ok(());
 		}
 
 		// A method cannot have modifiers if it isn't a fallback and/or doesn't have a selector.
@@ -122,10 +122,10 @@ impl Precompile {
 			if attrs.len() != 1 {
 				let msg = "The discriminant attribute must be the only precompile attribute of \
 				a function";
-				return Err(syn::Error::new(span, msg))
+				return Err(syn::Error::new(span, msg));
 			}
 
-			return self.parse_discriminant_fn(span, method)
+			return self.parse_discriminant_fn(span, method);
 		}
 
 		if let Some(attr::MethodAttr::PreCheck(span)) = attrs.first() {
@@ -134,10 +134,10 @@ impl Precompile {
 			if attrs.len() != 1 {
 				let msg = "The pre_check attribute must be the only precompile attribute of \
 				a function";
-				return Err(syn::Error::new(span, msg))
+				return Err(syn::Error::new(span, msg));
 			}
 
-			return self.parse_pre_check_fn(span, method)
+			return self.parse_pre_check_fn(span, method);
 		}
 
 		// We iterate over all attributes of the method.
@@ -146,17 +146,17 @@ impl Precompile {
 				attr::MethodAttr::Discriminant(span) => {
 					let msg = "The discriminant attribute must be the only precompile \
 					attribute of the function";
-					return Err(syn::Error::new(span, msg))
+					return Err(syn::Error::new(span, msg));
 				},
 				attr::MethodAttr::PreCheck(span) => {
 					let msg = "The pre_check attribute must be the only precompile \
 					attribute of the function";
-					return Err(syn::Error::new(span, msg))
+					return Err(syn::Error::new(span, msg));
 				},
 				attr::MethodAttr::Fallback(span) => {
 					if self.fallback_to_variant.is_some() {
 						let msg = "A precompile can only have 1 fallback function";
-						return Err(syn::Error::new(span, msg))
+						return Err(syn::Error::new(span, msg));
 					}
 
 					self.fallback_to_variant = Some(method_name.clone());
@@ -167,7 +167,7 @@ impl Precompile {
 					if modifier != Modifier::NonPayable {
 						let msg =
 							"A precompile method can have at most one modifier (payable, view)";
-						return Err(syn::Error::new(span, msg))
+						return Err(syn::Error::new(span, msg));
 					}
 
 					modifier = Modifier::Payable;
@@ -176,7 +176,7 @@ impl Precompile {
 					if modifier != Modifier::NonPayable {
 						let msg =
 							"A precompile method can have at most one modifier (payable, view)";
-						return Err(syn::Error::new(span, msg))
+						return Err(syn::Error::new(span, msg));
 					}
 
 					modifier = Modifier::View;
@@ -199,13 +199,13 @@ impl Precompile {
 			let msg =
 				"A precompile method cannot have modifiers without being a fallback or having\
 			a `public` attribute";
-			return Err(syn::Error::new(method.span(), msg))
+			return Err(syn::Error::new(method.span(), msg));
 		}
 
 		// We forbid type parameters.
 		if let Some(param) = method.sig.generics.params.first() {
 			let msg = "Exposed precompile methods cannot have type parameters";
-			return Err(syn::Error::new(param.span(), msg))
+			return Err(syn::Error::new(param.span(), msg));
 		}
 
 		// Fallback method cannot have custom parameters.
@@ -218,7 +218,7 @@ impl Precompile {
 					"Fallback methods cannot take any parameter outside of the PrecompileHandle"
 				};
 
-				return Err(syn::Error::new(input.span(), msg))
+				return Err(syn::Error::new(input.span(), msg));
 			}
 		}
 
@@ -241,7 +241,7 @@ impl Precompile {
 					// seems to only be possible in the first position which is checked in
 					// `check_initial_parameters`.
 					let msg = "Exposed precompile methods cannot have a `self` parameter";
-					return Err(syn::Error::new(input.span(), msg))
+					return Err(syn::Error::new(input.span(), msg));
 				},
 			};
 
@@ -249,7 +249,7 @@ impl Precompile {
 			let ident = match input.pat.as_ref() {
 				syn::Pat::Ident(pat) => {
 					if pat.by_ref.is_some() || pat.subpat.is_some() {
-						return Err(syn::Error::new(pat.span(), msg))
+						return Err(syn::Error::new(pat.span(), msg));
 					}
 
 					pat.ident.clone()
@@ -257,6 +257,7 @@ impl Precompile {
 				_ => return Err(syn::Error::new(input.pat.span(), msg)),
 			};
 			let ty = input.ty.as_ref().clone();
+			self.check_type_parameter_usage(&ty)?;
 
 			arguments.push(Argument { ident, ty })
 		}
@@ -267,7 +268,7 @@ impl Precompile {
 			_ => {
 				let msg = "A precompile method must have a return type of `EvmResult<_>` (exposed \
 				by `precompile_utils`)";
-				return Err(syn::Error::new(method.sig.span(), msg))
+				return Err(syn::Error::new(method.sig.span(), msg));
 			},
 		};
 
@@ -283,7 +284,7 @@ impl Precompile {
 			},
 		) {
 			let msg = "Duplicate method name";
-			return Err(syn::Error::new(method_name.span(), msg))
+			return Err(syn::Error::new(method_name.span(), msg));
 		}
 
 		Ok(())
@@ -302,7 +303,7 @@ impl Precompile {
 				None => {
 					let msg = "PrecompileSet methods must have at least 2 parameters (the \
 					precompile instance discriminant and the PrecompileHandle)";
-					return Err(syn::Error::new(method_span, msg))
+					return Err(syn::Error::new(method_span, msg));
 				},
 			};
 
@@ -310,7 +311,7 @@ impl Precompile {
 				syn::FnArg::Typed(a) => a,
 				_ => {
 					let msg = "self is not allowed in precompile methods";
-					return Err(syn::Error::new(input.span(), msg))
+					return Err(syn::Error::new(input.span(), msg));
 				},
 			};
 
@@ -331,7 +332,7 @@ impl Precompile {
 						"Precompile methods must have at least 1 parameter (the PrecompileHandle)"
 					};
 
-					return Err(syn::Error::new(method_span, msg))
+					return Err(syn::Error::new(method_span, msg));
 				},
 			};
 
@@ -339,7 +340,7 @@ impl Precompile {
 				syn::FnArg::Typed(a) => a,
 				_ => {
 					let msg = "self is not allowed in precompile methods";
-					return Err(syn::Error::new(input.span(), msg))
+					return Err(syn::Error::new(input.span(), msg));
 				},
 			};
 
@@ -347,7 +348,7 @@ impl Precompile {
 
 			if !is_same_type(&input_type, &syn::parse_quote! {&mut impl PrecompileHandle}) {
 				let msg = "This parameter must have type `&mut impl PrecompileHandle`";
-				return Err(syn::Error::new(input_type.span(), msg))
+				return Err(syn::Error::new(input_type.span(), msg));
 			}
 		}
 
@@ -362,7 +363,7 @@ impl Precompile {
 					"All discriminants must have the same type (found {} before)",
 					known_type.to_token_stream()
 				);
-				return Err(syn::Error::new(ty.span(), msg))
+				return Err(syn::Error::new(ty.span(), msg));
 			}
 		} else {
 			self.precompile_set_discriminant_type = Some(ty.clone());
@@ -380,23 +381,23 @@ impl Precompile {
 		if !self.tagged_as_precompile_set {
 			let msg = "The impl block must be tagged with `#[precompile::precompile_set]` for
 			the discriminant attribute to be used";
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 
 		if self.precompile_set_discriminant_fn.is_some() {
 			let msg = "A PrecompileSet can only have 1 discriminant function";
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 
 		let span = method.sig.span();
 
-		if method.sig.inputs.len() != 1 {
-			let msg = "The discriminant function must only take the code address (H160) as \
-			parameter.";
-			return Err(syn::Error::new(span, msg))
+		if method.sig.inputs.len() != 2 {
+			let msg = "The discriminant function must only take code address (H160) and \
+			remaining gas (u64) as parameters.";
+			return Err(syn::Error::new(span, msg));
 		}
 
-		let msg = "The discriminant function must return an Option<_> (no type alias)";
+		let msg = "The discriminant function must return an DiscriminantResult<_> (no type alias)";
 
 		let return_type = match &method.sig.output {
 			syn::ReturnType::Type(_, t) => t.as_ref(),
@@ -409,34 +410,34 @@ impl Precompile {
 		};
 
 		if return_path.qself.is_some() {
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 
 		let return_path = &return_path.path;
 
 		if return_path.leading_colon.is_some() || return_path.segments.len() != 1 {
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 
 		let return_segment = &return_path.segments[0];
 
-		if return_segment.ident.to_string() != "Option" {
-			return Err(syn::Error::new(return_segment.ident.span(), msg))
+		if return_segment.ident.to_string() != "DiscriminantResult" {
+			return Err(syn::Error::new(return_segment.ident.span(), msg));
 		}
 
-		let option_arguments = match &return_segment.arguments {
+		let result_arguments = match &return_segment.arguments {
 			syn::PathArguments::AngleBracketed(args) => args,
 			_ => return Err(syn::Error::new(return_segment.ident.span(), msg)),
 		};
 
-		if option_arguments.args.len() != 1 {
-			let msg = "Option type should only have 1 type argument";
-			return Err(syn::Error::new(option_arguments.args.span(), msg))
+		if result_arguments.args.len() != 1 {
+			let msg = "DiscriminantResult type should only have 1 type argument";
+			return Err(syn::Error::new(result_arguments.args.span(), msg));
 		}
 
-		let discriminant_type: &syn::Type = match &option_arguments.args[0] {
+		let discriminant_type: &syn::Type = match &result_arguments.args[0] {
 			syn::GenericArgument::Type(t) => t,
-			_ => return Err(syn::Error::new(option_arguments.args.span(), msg)),
+			_ => return Err(syn::Error::new(result_arguments.args.span(), msg)),
 		};
 
 		self.try_register_discriminant_type(&discriminant_type)?;
@@ -450,7 +451,7 @@ impl Precompile {
 	fn parse_pre_check_fn(&mut self, span: Span, method: &syn::ImplItemMethod) -> syn::Result<()> {
 		if self.pre_check.is_some() {
 			let msg = "A Precompile can only have 1 pre_check function";
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 
 		let span = method.sig.span();
@@ -468,7 +469,7 @@ impl Precompile {
 				PrecompileHandle)"
 			};
 
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 
 		self.pre_check = Some(method.sig.ident.clone());
@@ -488,7 +489,7 @@ impl Precompile {
 		let split: Vec<_> = signature.splitn(2, "(").collect();
 		if split.len() != 2 {
 			let msg = "Selector must have form \"foo(arg1,arg2,...)\"";
-			return Err(syn::Error::new(signature_lit.span(), msg))
+			return Err(syn::Error::new(signature_lit.span(), msg));
 		}
 
 		let local_args_type = format!("({}", split[1]); // add back initial parenthesis
@@ -498,7 +499,7 @@ impl Precompile {
 		if let Some(ref args_type) = solidity_arguments_type {
 			if args_type != &local_args_type {
 				let msg = "Method cannot have selectors with different types.";
-				return Err(syn::Error::new(signature_lit.span(), msg))
+				return Err(syn::Error::new(signature_lit.span(), msg));
 			}
 		} else {
 			*solidity_arguments_type = Some(local_args_type);
@@ -510,10 +511,79 @@ impl Precompile {
 
 		if let Some(previous) = self.selector_to_variant.insert(selector, method_name.clone()) {
 			let msg = format!("Selector collision with method {}", previous.to_string());
-			return Err(syn::Error::new(signature_lit.span(), msg))
+			return Err(syn::Error::new(signature_lit.span(), msg));
 		}
 
 		Ok(selector)
+	}
+
+	/// Check that the provided type doesn't depend on one of the type parameters of the
+	/// precompile. Check is skipped if `test_concrete_types` attribute is used.
+	fn check_type_parameter_usage(&self, ty: &syn::Type) -> syn::Result<()> {
+		if self.test_concrete_types.is_some() {
+			return Ok(());
+		}
+
+		const ERR_MESSAGE: &'static str =
+			"impl type parameter is used in functions arguments. Arguments should not have a type
+depending on a type parameter, unless it is a length bound for BoundedBytes,
+BoundedString or alike, which doesn't affect the Solidity type.
+
+In that case, you must add a #[precompile::test_concrete_types(...)] attribute on the impl
+block to provide concrete types that will be used to run the automatically generated tests
+ensuring the Solidity function signatures are correct.";
+
+		match ty {
+			syn::Type::Array(syn::TypeArray { elem, .. })
+			| syn::Type::Group(syn::TypeGroup { elem, .. })
+			| syn::Type::Paren(syn::TypeParen { elem, .. })
+			| syn::Type::Reference(syn::TypeReference { elem, .. })
+			| syn::Type::Ptr(syn::TypePtr { elem, .. })
+			| syn::Type::Slice(syn::TypeSlice { elem, .. }) => self.check_type_parameter_usage(&elem)?,
+
+			syn::Type::Path(syn::TypePath { path: syn::Path { segments, .. }, .. }) => {
+				let impl_params: Vec<_> = self
+					.generics
+					.params
+					.iter()
+					.filter_map(|param| match param {
+						syn::GenericParam::Type(syn::TypeParam { ident, .. }) => Some(ident),
+						_ => None,
+					})
+					.collect();
+
+				for segment in segments {
+					if impl_params.contains(&&segment.ident) {
+						return Err(syn::Error::new(segment.ident.span(), ERR_MESSAGE));
+					}
+
+					if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+						let types = args.args.iter().filter_map(|arg| match arg {
+							syn::GenericArgument::Type(ty)
+							| syn::GenericArgument::Binding(syn::Binding { ty, .. }) => Some(ty),
+							_ => None,
+						});
+
+						for ty in types {
+							self.check_type_parameter_usage(&ty)?;
+						}
+					}
+				}
+			},
+			syn::Type::Tuple(tuple) => {
+				for ty in tuple.elems.iter() {
+					self.check_type_parameter_usage(ty)?;
+				}
+			},
+			// BareFn => very unlikely this appear as parameter
+			// ImplTrait => will cause other errors, it must be a concrete type
+			// TypeInfer => it must be explicit concrete types since it ends up in enum fields
+			// Macro => Cannot check easily
+			// Never => Function will not be callable.
+			ty => println!("Skipping type parameter check for non supported kind of type: {ty:?}"),
+		}
+
+		Ok(())
 	}
 }
 

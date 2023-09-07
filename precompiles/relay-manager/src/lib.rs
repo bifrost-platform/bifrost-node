@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(test, feature(assert_matches))]
 
 use frame_support::dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo};
 
@@ -75,14 +74,14 @@ where
 		unique_relayers.dedup();
 		let current_len = unique_relayers.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		let mut is_relayers = true;
 		for relayer in unique_relayers {
 			if !RelayManagerOf::<Runtime>::is_relayer(&relayer) {
 				is_relayers = false;
-				break
+				break;
 			}
 		}
 
@@ -109,14 +108,14 @@ where
 		unique_relayers.dedup();
 		let current_len = unique_relayers.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		let mut is_relayers = true;
 		for relayer in unique_relayers {
 			if !RelayManagerOf::<Runtime>::is_selected_relayer(&relayer, is_initial) {
 				is_relayers = false;
-				break
+				break;
 			}
 		}
 
@@ -143,7 +142,7 @@ where
 		unique_relayers.dedup();
 		let current_len = unique_relayers.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		let mut is_relayers = true;
@@ -154,7 +153,7 @@ where
 			for relayer in unique_relayers {
 				if !RelayManagerOf::<Runtime>::is_selected_relayer(&relayer, is_initial) {
 					is_relayers = false;
-					break
+					break;
 				}
 			}
 		}
@@ -167,11 +166,10 @@ where
 	#[precompile::view]
 	fn is_previous_selected_relayer(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		relayer: Address,
 		is_initial: bool,
 	) -> EvmResult<bool> {
-		let round_index = round_index.converted();
 		let relayer = Runtime::AddressMapping::into_account_id(relayer.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
@@ -188,17 +186,17 @@ where
 
 			// out of round index
 			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			'outer: for selected_relayers in previous_selected_relayers {
 				if round_index == selected_relayers.0 {
 					for selected_relayer in selected_relayers.1 {
 						if relayer == selected_relayer {
 							result = true;
-							break 'outer
+							break 'outer;
 						}
 					}
-					break
+					break;
 				}
 			}
 		}
@@ -211,12 +209,11 @@ where
 	#[precompile::view]
 	fn is_previous_selected_relayers(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		relayers: Vec<Address>,
 		is_initial: bool,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index = round_index.converted();
 		let mut unique_relayers = relayers
 			.clone()
 			.into_iter()
@@ -228,7 +225,7 @@ where
 		unique_relayers.dedup();
 		let current_len = unique_relayers.len();
 		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into())
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
 		}
 
 		let mut result: bool = false;
@@ -244,7 +241,7 @@ where
 				let tail_selected = &previous_selected_relayers[cached_len - 1];
 
 				if round_index < head_selected.0 || round_index > tail_selected.0 {
-					return Err(RevertReason::read_out_of_bounds("round_index").into())
+					return Err(RevertReason::read_out_of_bounds("round_index").into());
 				}
 				'outer: for selected_relayers in previous_selected_relayers {
 					if round_index == selected_relayers.0 {
@@ -255,11 +252,11 @@ where
 							.collect();
 						for relayer in relayers {
 							if !mutated_relayers.contains(&relayer) {
-								break 'outer
+								break 'outer;
 							}
 						}
 						result = true;
-						break
+						break;
 					}
 				}
 			}
@@ -311,11 +308,10 @@ where
 	#[precompile::view]
 	fn previous_selected_relayers(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		is_initial: bool,
 	) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index = round_index.converted();
 		let previous_selected_relayers = match is_initial {
 			true => RelayManagerOf::<Runtime>::cached_initial_selected_relayers(),
 			false => RelayManagerOf::<Runtime>::cached_selected_relayers(),
@@ -329,13 +325,13 @@ where
 
 			// out of round index
 			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			for relayers in previous_selected_relayers {
 				if round_index == relayers.0 {
 					result =
 						relayers.1.into_iter().map(|address| Address(address.into())).collect();
-					break
+					break;
 				}
 			}
 		}
@@ -378,11 +374,10 @@ where
 	#[precompile::view]
 	fn previous_majority(
 		handle: &mut impl PrecompileHandle,
-		round_index: SolidityConvert<U256, RoundIndex>,
+		round_index: RoundIndex,
 		is_initial: bool,
 	) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_index = round_index.converted();
 		let cached_majority = match is_initial {
 			true => RelayManagerOf::<Runtime>::cached_initial_majority(),
 			false => RelayManagerOf::<Runtime>::cached_majority(),
@@ -395,12 +390,12 @@ where
 			let tail_majority = &cached_majority[cached_len - 1];
 
 			if round_index < head_majority.0 || round_index > tail_majority.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into())
+				return Err(RevertReason::read_out_of_bounds("round_index").into());
 			}
 			for majority in cached_majority {
 				if round_index == majority.0 {
 					result = majority.1;
-					break
+					break;
 				}
 			}
 		}
@@ -475,12 +470,11 @@ where
 	#[precompile::public("heartbeat_v2(uint256,bytes32)")]
 	fn heartbeat_v2(
 		handle: &mut impl PrecompileHandle,
-		impl_version: SolidityConvert<U256, u32>,
+		impl_version: u32,
 		spec_version: H256,
 	) -> EvmResult {
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
-		let impl_version: u32 = impl_version.converted();
 		let call = RelayManagerCall::<Runtime>::heartbeat_v2 {
 			impl_version,
 			spec_version: spec_version.into(),

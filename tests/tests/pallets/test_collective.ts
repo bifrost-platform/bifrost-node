@@ -191,7 +191,7 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     };
     const proposalXt = context.polkadotApi.tx.democracy.externalProposeMajority(request);
     proposalHash = ((proposalXt as SubmittableExtrinsic)?.method.hash || '').toHex();
-    const proposalWeight = (await proposalXt.paymentInfo(alith)).weight;
+    // const proposalWeight = (await proposalXt.paymentInfo(alith)).weight;
     const proposalLengthV2 = proposalXt.length;
 
     await context.polkadotApi.tx.council
@@ -218,7 +218,15 @@ describeDevNode('pallet_collective - council proposal interaction', (context) =>
     await context.createBlock();
 
     await context.polkadotApi.tx.council
-      .close(proposalHash, proposalIndex, proposalWeight.toJSON(), proposalLengthV2)
+      .close(
+        proposalHash,
+        proposalIndex,
+        {
+          refTime: 800_000_000,
+          proofSize: 64 * 1024,
+        } as any,
+        proposalLengthV2,
+      )
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -296,7 +304,6 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
   it('should successfully cancel public proposal', async function () {
     // propose cancellation of a public proposal - democracy.externalProposeMajority
     const cancelProposal = context.polkadotApi.tx.democracy.cancelProposal(0);
-    const proposalWeight = (await cancelProposal.paymentInfo(alith)).weight;
     const proposalLength = cancelProposal.length;
 
     await context.polkadotApi.tx.technicalCommittee
@@ -321,7 +328,15 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
 
     // close when threshold reached
     await context.polkadotApi.tx.technicalCommittee
-      .close(cancelProposalHash, cancelProposalIndex, proposalWeight.toJSON(), proposalLength)
+      .close(
+        cancelProposalHash,
+        cancelProposalIndex,
+        {
+          refTime: 800_000_000,
+          proofSize: 64 * 1024,
+        } as any,
+        proposalLength,
+      )
       .signAndSend(alith);
     const block = await context.createBlock();
 
@@ -364,7 +379,6 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
       }
     };
     const externalProposal = context.polkadotApi.tx.democracy.externalProposeMajority(request);
-    const proposalWeight = (await externalProposal.paymentInfo(alith)).weight;
     const proposalLengthV2 = externalProposal.length;
 
     await context.polkadotApi.tx.council
@@ -389,7 +403,15 @@ describeDevNode('pallet_collective - proposal cancellation', (context) => {
 
     // close when threshold reached
     await context.polkadotApi.tx.council
-      .close(externalProposalHash, externalProposalIndex, proposalWeight.toJSON(), proposalLengthV2)
+      .close(
+        externalProposalHash,
+        externalProposalIndex,
+        {
+          refTime: 800_000_000,
+          proofSize: 64 * 1024,
+        } as any,
+        proposalLengthV2,
+      )
       .signAndSend(alith);
     const block = await context.createBlock();
 

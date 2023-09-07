@@ -102,7 +102,7 @@ export function describeDevNode(
       context.createEthers = async () => provideEthersApi(init.rpcPort);
 
       context.createPolkadotApi = async () => {
-        const apiPromise = await providePolkadotApi(init.wsPort);
+        const apiPromise = await providePolkadotApi(init.rpcPort);
         // We keep track of the polkadotApis to close them at the end of the test
         context._polkadotApis.push(apiPromise);
         await apiPromise.isReady;
@@ -171,7 +171,6 @@ export async function startSingleDevNode(overrideRpcPort?: number | null, multi:
     `--sealing`,
     `--port=${p2pPort}`,
     `--rpc-port=${rpcPort}`,
-    `--ws-port=${wsPort}`,
     `--ethapi=debug,trace,txpool`
   ];
   console.debug(`starting dev node: --port=${p2pPort} --rpc-port=${rpcPort} --ws-port=${wsPort}`);

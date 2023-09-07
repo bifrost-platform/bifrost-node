@@ -1,5 +1,3 @@
-#![doc = include_str!("../../docs/precompile_macro.md")]
-
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
@@ -90,7 +88,7 @@ struct Variant {
 	/// A unit test will be generated to check that this selector matches
 	/// the Rust arguments.
 	///
-	/// > EvmData trait allows to generate this string at runtime only. Thus
+	/// > solidity::Codec trait allows to generate this string at runtime only. Thus
 	/// > it is required to write it manually in the selector attribute, and
 	/// > a unit test is generated to check it matches.
 	solidity_arguments_type: String,
