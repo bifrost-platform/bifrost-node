@@ -47,7 +47,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,

@@ -47,7 +47,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -140,7 +140,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 302,
+	spec_version: 303,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
