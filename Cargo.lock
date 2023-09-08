@@ -2726,7 +2726,7 @@ dependencies = [
 [[package]]
 name = "evm-tracer"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "evm",
@@ -2795,7 +2795,7 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 [[package]]
 name = "fc-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "async-trait",
  "fp-consensus",
@@ -2811,7 +2811,7 @@ dependencies = [
 [[package]]
 name = "fc-db"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "async-trait",
  "ethereum",
@@ -2841,7 +2841,7 @@ dependencies = [
 [[package]]
 name = "fc-evm-tracing"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "fp-rpc-debug",
@@ -2856,7 +2856,7 @@ dependencies = [
 [[package]]
 name = "fc-mapping-sync"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "fc-db",
  "fc-storage",
@@ -2879,7 +2879,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2929,7 +2929,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core"
 version = "1.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2942,7 +2942,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -2957,7 +2957,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -2971,7 +2971,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2984,7 +2984,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-types"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "serde",
@@ -2994,7 +2994,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3024,7 +3024,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3060,7 +3060,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "fc-rpc",
@@ -3083,7 +3083,7 @@ dependencies = [
 [[package]]
 name = "fc-storage"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3262,7 +3262,7 @@ dependencies = [
 [[package]]
 name = "fp-account"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "hex",
  "impl-serde 0.4.0",
@@ -3281,7 +3281,7 @@ dependencies = [
 [[package]]
 name = "fp-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -3293,7 +3293,7 @@ dependencies = [
 [[package]]
 name = "fp-ethereum"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3307,7 +3307,7 @@ dependencies = [
 [[package]]
 name = "fp-evm"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "evm",
  "frame-support",
@@ -3322,7 +3322,7 @@ dependencies = [
 [[package]]
 name = "fp-ext"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum-types",
  "fp-rpc-evm-tracing-events",
@@ -3335,7 +3335,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3352,7 +3352,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "environmental",
  "ethereum",
@@ -3371,7 +3371,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-evm-tracing-events"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "environmental",
  "ethereum",
@@ -3386,7 +3386,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -3400,7 +3400,7 @@ dependencies = [
 [[package]]
 name = "fp-self-contained"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -3412,7 +3412,7 @@ dependencies = [
 [[package]]
 name = "fp-storage"
 version = "2.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -6067,7 +6067,7 @@ dependencies = [
 [[package]]
 name = "pallet-base-fee"
 version = "1.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "fp-evm",
  "frame-support",
@@ -6184,7 +6184,7 @@ dependencies = [
 [[package]]
 name = "pallet-ethereum"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -6207,7 +6207,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm"
 version = "6.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "environmental",
  "evm",
@@ -6231,7 +6231,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-blake2"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "fp-evm",
 ]
@@ -6239,7 +6239,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-bn128"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "fp-evm",
  "sp-core",
@@ -6249,7 +6249,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-modexp"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "fp-evm",
  "num",
@@ -6258,7 +6258,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-simple"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=hotfix/debug-trace-parsing-error#89b70ad77dafa59a68b8b09e13d5111a4c1756a9"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#5a542e4cbe0a0e623d7f7f4a6c1a3bc235e83d91"
 dependencies = [
  "fp-evm",
  "ripemd",
