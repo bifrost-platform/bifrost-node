@@ -3,7 +3,7 @@ name = "bifrost-common-node"
 version = "1.0.0"
 description = "The common code shared between node specifications for Bifrost Node"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -25,6 +25,7 @@ sc-consensus-manual-seal = { workspace = true }
 sc-network = { workspace = true }
 sc-network-sync = { workspace = true }
 sc-service = { workspace = true }
+substrate-prometheus-endpoint = { workspace = true }
 
 # substrate primitives dependencies
 sp-core = { workspace = true, features = ["std"] }

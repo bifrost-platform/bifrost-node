@@ -38,11 +38,15 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 [workspace.dependencies]
 # General
 substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
-parity-scale-codec = { version = "3.2.2", default-features = false, features = [ "derive" ] }
-scale-info = { version = "2.0", default-features = false, features = [ "derive" ] }
+parity-scale-codec = { version = "3.2.2", default-features = false, features = [
+	"derive",
+] }
+scale-info = { version = "2.0", default-features = false, features = [
+	"derive",
+] }
 evm = { git = "https://github.com/rust-blockchain/evm", rev = "b7b82c7e1fc57b7449d6dfa6826600de37cc1e65", default-features = false }
 environmental = { version = "1.1.2", default-features = false }
-clap = { version = "4.0.9", features = [ "derive" ] }
+clap = { version = "4.0.9", features = ["derive"] }
 hex = { version = "0.4.3", default-features = false }
 rlp = { version = "0.5", default-features = false }
 sha3 = { version = "0.10", default-features = false }
@@ -125,6 +129,7 @@ sc-service = { git = "https://github.com/bifrost-platform/bifrost-substrate", br
 sc-executor = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.43" }
 sc-telemetry = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.43" }
 sc-basic-authorship = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.43" }
+substrate-prometheus-endpoint = { git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.43" }
 
 # Substrate Primitive
 sp-io = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-substrate", branch = "bifrost-polkadot-v0.9.43" }

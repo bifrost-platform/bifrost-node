@@ -9,6 +9,8 @@ use fc_rpc_debug::{DebugHandler, DebugRequester};
 use fc_rpc_trace::{CacheRequester as TraceFilterCacheRequester, CacheTask};
 use fp_rpc::EthereumRuntimeRPCApi;
 use sc_client_api::{backend::Backend, BlockOf, BlockchainEvents, StateBackend, StorageProvider};
+use substrate_prometheus_endpoint::Registry as PrometheusRegistry;
+use tokio::sync::Semaphore;
 
 use sp_api::{BlockT, HeaderT, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
@@ -17,7 +19,6 @@ use sp_core::H256;
 use sp_runtime::traits::BlakeTwo256;
 
 use std::{sync::Arc, time::Duration};
-use tokio::sync::Semaphore;
 
 #[derive(Clone)]
 pub struct RpcRequesters {
@@ -25,9 +26,10 @@ pub struct RpcRequesters {
 	pub trace: Option<TraceFilterCacheRequester>,
 }
 
-// Spawn the tasks that are required to run a BIFROST tracing node.
+// Spawn the tasks that are required to run a Bifrost tracing node.
 pub fn spawn_tracing_tasks<B, C, BE>(
 	rpc_config: &RpcConfig,
+	prometheus: Option<PrometheusRegistry>,
 	params: SpawnTasksParams<B, C, BE>,
 ) -> RpcRequesters
 where
@@ -53,6 +55,7 @@ where
 				Duration::from_secs(rpc_config.ethapi_trace_cache_duration),
 				Arc::clone(&permit_pool),
 				Arc::clone(&params.overrides),
+				prometheus,
 			);
 			(Some(trace_filter_task), Some(trace_filter_requester))
 		} else {

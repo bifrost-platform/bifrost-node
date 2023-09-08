@@ -709,6 +709,7 @@ pub fn build_rpc_extensions_builder(
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
 			spawn_tracing_tasks(
 				&rpc_config,
+				prometheus_registry.clone(),
 				SpawnTasksParams {
 					task_manager: &builder.task_manager,
 					client: client.clone(),
