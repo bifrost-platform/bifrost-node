@@ -461,7 +461,7 @@ checksum = "bc00ceb34980c03614e35a3a4e218276a0a824e911d07651cd0d858a51e8c0f0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -562,9 +562,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.21.3"
+version = "0.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "414dcefbc63d77c526a76b3afcf6fbb9b5e2791c19c3aa2297733208750c6e53"
+checksum = "9ba43ea6f343b788c8764558649e08df62f86c6ef251fdaeb1ffd010a9ae50a2"
 
 [[package]]
 name = "base64ct"
@@ -1132,7 +1132,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -1180,24 +1180,24 @@ dependencies = [
 
 [[package]]
 name = "blake2b_simd"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c2f0dc9a68c6317d884f97cc36cf5a3d20ba14ce404227df55e1af708ab04bc"
+checksum = "23285ad32269793932e830392f2fe2f83e26488fd3ec778883a93c8323735780"
 dependencies = [
  "arrayref",
  "arrayvec 0.7.4",
- "constant_time_eq 0.2.6",
+ "constant_time_eq 0.3.0",
 ]
 
 [[package]]
 name = "blake2s_simd"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6637f448b9e61dfadbdcbae9a885fadee1f3eaffb1f8d3c1965d3ade8bdfd44f"
+checksum = "94230421e395b9920d23df13ea5d77a20e1725331f90fbbf6df6040b33f756ae"
 dependencies = [
  "arrayref",
  "arrayvec 0.7.4",
- "constant_time_eq 0.2.6",
+ "constant_time_eq 0.3.0",
 ]
 
 [[package]]
@@ -1597,7 +1597,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -1665,12 +1665,6 @@ name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
-
-[[package]]
-name = "constant_time_eq"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21a53c0a4d288377e7415b53dcfc3c04da5cdc2cc95c8d5ac178b58f0b861ad6"
 
 [[package]]
 name = "constant_time_eq"
@@ -2038,7 +2032,7 @@ checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2065,7 +2059,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "scratch",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2082,7 +2076,7 @@ checksum = "2fa16a70dd58129e4dfffdff535fb1bce66673f7bbeec4a5a1765a504e1ccd84"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2341,7 +2335,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2565,7 +2559,7 @@ checksum = "5e9a1f9f7d83e59740248a6e14ecf93929ade55027844dfcea78beafccc15745"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2726,7 +2720,7 @@ dependencies = [
 [[package]]
 name = "evm-tracer"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "evm",
@@ -2795,7 +2789,7 @@ checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 [[package]]
 name = "fc-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "async-trait",
  "fp-consensus",
@@ -2811,7 +2805,7 @@ dependencies = [
 [[package]]
 name = "fc-db"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "async-trait",
  "ethereum",
@@ -2841,7 +2835,7 @@ dependencies = [
 [[package]]
 name = "fc-evm-tracing"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "fp-rpc-debug",
@@ -2856,7 +2850,7 @@ dependencies = [
 [[package]]
 name = "fc-mapping-sync"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "fc-db",
  "fc-storage",
@@ -2879,7 +2873,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2929,7 +2923,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core"
 version = "1.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2942,7 +2936,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -2957,7 +2951,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -2971,7 +2965,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -2984,7 +2978,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-types"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "serde",
@@ -2994,7 +2988,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3024,7 +3018,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3060,7 +3054,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "fc-rpc",
@@ -3083,7 +3077,7 @@ dependencies = [
 [[package]]
 name = "fc-storage"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3245,7 +3239,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 [[package]]
 name = "fork-tree"
 version = "3.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -3262,7 +3256,7 @@ dependencies = [
 [[package]]
 name = "fp-account"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "hex",
  "impl-serde 0.4.0",
@@ -3281,7 +3275,7 @@ dependencies = [
 [[package]]
 name = "fp-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -3293,7 +3287,7 @@ dependencies = [
 [[package]]
 name = "fp-ethereum"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3307,7 +3301,7 @@ dependencies = [
 [[package]]
 name = "fp-evm"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "evm",
  "frame-support",
@@ -3322,7 +3316,7 @@ dependencies = [
 [[package]]
 name = "fp-ext"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum-types",
  "fp-rpc-evm-tracing-events",
@@ -3335,7 +3329,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3352,7 +3346,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "environmental",
  "ethereum",
@@ -3370,7 +3364,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-evm-tracing-events"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "environmental",
  "ethereum",
@@ -3385,7 +3379,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -3399,7 +3393,7 @@ dependencies = [
 [[package]]
 name = "fp-self-contained"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -3411,7 +3405,7 @@ dependencies = [
 [[package]]
 name = "fp-storage"
 version = "2.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -3426,7 +3420,7 @@ checksum = "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
 [[package]]
 name = "frame-benchmarking"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-support-procedural",
@@ -3451,7 +3445,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking-cli"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "Inflector",
  "array-bytes",
@@ -3498,7 +3492,7 @@ dependencies = [
 [[package]]
 name = "frame-executive"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -3526,7 +3520,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "bitflags 1.3.2",
  "environmental",
@@ -3560,7 +3554,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -3570,35 +3564,35 @@ dependencies = [
  "proc-macro-warning",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "3.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "frame-system"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "cfg-if",
  "frame-support",
@@ -3617,7 +3611,7 @@ dependencies = [
 [[package]]
 name = "frame-system-benchmarking"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -3632,7 +3626,7 @@ dependencies = [
 [[package]]
 name = "frame-system-rpc-runtime-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -3660,7 +3654,7 @@ version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eeb4ed9e12f43b7fa0baae3f9cdda28352770132ef2e09a23760c29cae8bd47"
 dependencies = [
- "rustix 0.38.11",
+ "rustix 0.38.13",
  "windows-sys 0.48.0",
 ]
 
@@ -3759,7 +3753,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -4474,7 +4468,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb0889898416213fab133e1d33a0e5858a48177452750691bde3666d0fdbaf8b"
 dependencies = [
  "hermit-abi 0.3.2",
- "rustix 0.38.11",
+ "rustix 0.38.13",
  "windows-sys 0.48.0",
 ]
 
@@ -5257,9 +5251,9 @@ checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.4.5"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57bcfdad1b858c2db7c38303a6d2ad4dfaf5eb53dfeb0910128b2c26d6158503"
+checksum = "1a9bad9f94746442c783ca431b22403b519cd7fbeed0533fdd6328b2f2212128"
 
 [[package]]
 name = "lock_api"
@@ -5892,7 +5886,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -5975,7 +5969,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -6021,7 +6015,7 @@ dependencies = [
 [[package]]
 name = "pallet-aura"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -6037,7 +6031,7 @@ dependencies = [
 [[package]]
 name = "pallet-authorship"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -6051,7 +6045,7 @@ dependencies = [
 [[package]]
 name = "pallet-balances"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6066,7 +6060,7 @@ dependencies = [
 [[package]]
 name = "pallet-base-fee"
 version = "1.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "fp-evm",
  "frame-support",
@@ -6148,7 +6142,7 @@ dependencies = [
 [[package]]
 name = "pallet-collective"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6165,7 +6159,7 @@ dependencies = [
 [[package]]
 name = "pallet-democracy"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6183,7 +6177,7 @@ dependencies = [
 [[package]]
 name = "pallet-ethereum"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -6206,7 +6200,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm"
 version = "6.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "environmental",
  "evm",
@@ -6230,7 +6224,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-blake2"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "fp-evm",
 ]
@@ -6238,7 +6232,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-bn128"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "fp-evm",
  "sp-core",
@@ -6248,7 +6242,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-modexp"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "fp-evm",
  "num",
@@ -6257,7 +6251,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-simple"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43#e2b452d6b829dcd9cfc06d557a8648924cc3b833"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-v0.9.43-boost#c494b935ca1df336219409ab6bd633799f67c41e"
 dependencies = [
  "fp-evm",
  "ripemd",
@@ -6267,7 +6261,7 @@ dependencies = [
 [[package]]
 name = "pallet-grandpa"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6290,7 +6284,7 @@ dependencies = [
 [[package]]
 name = "pallet-identity"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "enumflags2",
  "frame-benchmarking",
@@ -6306,7 +6300,7 @@ dependencies = [
 [[package]]
 name = "pallet-im-online"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6326,7 +6320,7 @@ dependencies = [
 [[package]]
 name = "pallet-membership"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6343,7 +6337,7 @@ dependencies = [
 [[package]]
 name = "pallet-offences"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -6360,7 +6354,7 @@ dependencies = [
 [[package]]
 name = "pallet-preimage"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6399,7 +6393,7 @@ dependencies = [
 [[package]]
 name = "pallet-scheduler"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6416,7 +6410,7 @@ dependencies = [
 [[package]]
 name = "pallet-session"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -6437,7 +6431,7 @@ dependencies = [
 [[package]]
 name = "pallet-sudo"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6452,7 +6446,7 @@ dependencies = [
 [[package]]
 name = "pallet-timestamp"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6470,7 +6464,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -6486,7 +6480,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "jsonrpsee",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -6502,7 +6496,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc-runtime-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
@@ -6514,7 +6508,7 @@ dependencies = [
 [[package]]
 name = "pallet-treasury"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6531,7 +6525,7 @@ dependencies = [
 [[package]]
 name = "pallet-utility"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -6748,7 +6742,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -6789,7 +6783,7 @@ checksum = "4359fd9c9171ec6e8c62926d6faaf553a8dc3f64e1507e76da7911b4f6a04405"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -7147,7 +7141,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae005bd773ab59b4725093fd7df83fd7892f7d8eafb48dbd7de6e024e4215f9d"
 dependencies = [
  "proc-macro2",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -7206,7 +7200,7 @@ checksum = "0e99670bafb56b9a106419397343bdbc8b8742c3cc449fec6345f86173f47cd4"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -7252,7 +7246,7 @@ checksum = "440f724eba9f6996b75d63681b0a92b06947f1457076d503a4d2e2c8f56442b8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -7569,7 +7563,7 @@ checksum = "7f7473c2cfcf90008193dd0e3e16599455cb601a9fce322b5bb55de799664925"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -7842,14 +7836,14 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.11"
+version = "0.38.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0c3dde1fc030af041adc40e79c0e7fbcf431dd24870053d187d7c66e4b87453"
+checksum = "d7db8590df6dfcd144d22afd1b83b36c21a18d7cbc1dc4bb5295a8712e9eb662"
 dependencies = [
  "bitflags 2.4.0",
  "errno",
  "libc",
- "linux-raw-sys 0.4.5",
+ "linux-raw-sys 0.4.7",
  "windows-sys 0.48.0",
 ]
 
@@ -7896,7 +7890,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d3987094b1d07b653b7dfdc3f70ce9a1da9c51ac18c1b06b662e4f9a0e9f4b2"
 dependencies = [
- "base64 0.21.3",
+ "base64 0.21.4",
 ]
 
 [[package]]
@@ -7943,7 +7937,7 @@ dependencies = [
 [[package]]
 name = "sc-allocator"
 version = "4.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "log",
  "sp-core",
@@ -7954,7 +7948,7 @@ dependencies = [
 [[package]]
 name = "sc-basic-authorship"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "futures 0.3.28",
  "futures-timer",
@@ -7977,7 +7971,7 @@ dependencies = [
 [[package]]
 name = "sc-block-builder"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "sc-client-api",
@@ -7992,7 +7986,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "memmap2",
  "sc-chain-spec-derive",
@@ -8011,18 +8005,18 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec-derive"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sc-cli"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "chrono",
@@ -8062,7 +8056,7 @@ dependencies = [
 [[package]]
 name = "sc-client-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "fnv",
  "futures 0.3.28",
@@ -8089,7 +8083,7 @@ dependencies = [
 [[package]]
 name = "sc-client-db"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "hash-db 0.16.0",
  "kvdb",
@@ -8115,7 +8109,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures 0.3.28",
@@ -8140,7 +8134,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-aura"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures 0.3.28",
@@ -8169,7 +8163,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-babe"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "fork-tree",
@@ -8205,7 +8199,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-epochs"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "fork-tree",
  "parity-scale-codec",
@@ -8218,7 +8212,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "ahash 0.8.3",
  "array-bytes",
@@ -8258,7 +8252,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa-rpc"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "finality-grandpa",
  "futures 0.3.28",
@@ -8278,7 +8272,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-manual-seal"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -8313,7 +8307,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-slots"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures 0.3.28",
@@ -8336,7 +8330,7 @@ dependencies = [
 [[package]]
 name = "sc-executor"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "lru 0.8.1",
  "parity-scale-codec",
@@ -8358,7 +8352,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-common"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "sc-allocator",
  "sp-maybe-compressed-blob",
@@ -8370,7 +8364,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-wasmtime"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "anyhow",
  "cfg-if",
@@ -8388,7 +8382,7 @@ dependencies = [
 [[package]]
 name = "sc-informant"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "ansi_term",
  "futures 0.3.28",
@@ -8404,7 +8398,7 @@ dependencies = [
 [[package]]
 name = "sc-keystore"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "parking_lot 0.12.1",
@@ -8418,7 +8412,7 @@ dependencies = [
 [[package]]
 name = "sc-network"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -8463,7 +8457,7 @@ dependencies = [
 [[package]]
 name = "sc-network-bitswap"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-channel",
  "cid",
@@ -8484,7 +8478,7 @@ dependencies = [
 [[package]]
 name = "sc-network-common"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "async-trait",
@@ -8512,7 +8506,7 @@ dependencies = [
 [[package]]
 name = "sc-network-gossip"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "ahash 0.8.3",
  "futures 0.3.28",
@@ -8531,7 +8525,7 @@ dependencies = [
 [[package]]
 name = "sc-network-light"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -8554,7 +8548,7 @@ dependencies = [
 [[package]]
 name = "sc-network-sync"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -8589,7 +8583,7 @@ dependencies = [
 [[package]]
 name = "sc-network-transactions"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "futures 0.3.28",
@@ -8609,7 +8603,7 @@ dependencies = [
 [[package]]
 name = "sc-offchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "bytes",
@@ -8640,7 +8634,7 @@ dependencies = [
 [[package]]
 name = "sc-peerset"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "futures 0.3.28",
  "libp2p-identity",
@@ -8656,7 +8650,7 @@ dependencies = [
 [[package]]
 name = "sc-proposer-metrics"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "log",
  "substrate-prometheus-endpoint",
@@ -8665,7 +8659,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "futures 0.3.28",
  "jsonrpsee",
@@ -8696,7 +8690,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-api"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "jsonrpsee",
  "parity-scale-codec",
@@ -8715,7 +8709,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-server"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "http",
  "jsonrpsee",
@@ -8730,7 +8724,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-spec-v2"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "futures 0.3.28",
@@ -8756,7 +8750,7 @@ dependencies = [
 [[package]]
 name = "sc-service"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "directories",
@@ -8822,7 +8816,7 @@ dependencies = [
 [[package]]
 name = "sc-state-db"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -8833,7 +8827,7 @@ dependencies = [
 [[package]]
 name = "sc-storage-monitor"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "clap",
  "fs4",
@@ -8849,7 +8843,7 @@ dependencies = [
 [[package]]
 name = "sc-sysinfo"
 version = "6.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "futures 0.3.28",
  "libc",
@@ -8868,7 +8862,7 @@ dependencies = [
 [[package]]
 name = "sc-telemetry"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "chrono",
  "futures 0.3.28",
@@ -8887,7 +8881,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "ansi_term",
  "atty",
@@ -8918,18 +8912,18 @@ dependencies = [
 [[package]]
 name = "sc-tracing-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sc-transaction-pool"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures 0.3.28",
@@ -8956,7 +8950,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures 0.3.28",
@@ -8970,7 +8964,7 @@ dependencies = [
 [[package]]
 name = "sc-utils"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-channel",
  "futures 0.3.28",
@@ -9209,14 +9203,14 @@ checksum = "4eca7ac642d82aa35b60049a6eccb4be6be75e599bd2e9adb5f875a737654af2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "serde_json"
-version = "1.0.105"
+version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "693151e1ac27563d6dbcec9dee9fbd5da8539b20fa14ad3752b2e6d363ace360"
+checksum = "2cc66a619ed80bf7a0f6b17dd063a84b88f6dea1813737cf469aef1d081142c2"
 dependencies = [
  "itoa",
  "ryu",
@@ -9469,7 +9463,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "hash-db 0.16.0",
  "log",
@@ -9489,7 +9483,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "Inflector",
  "blake2",
@@ -9497,13 +9491,13 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sp-application-crypto"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9516,7 +9510,7 @@ dependencies = [
 [[package]]
 name = "sp-arithmetic"
 version = "6.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "integer-sqrt",
  "num-traits",
@@ -9530,7 +9524,7 @@ dependencies = [
 [[package]]
 name = "sp-block-builder"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -9542,7 +9536,7 @@ dependencies = [
 [[package]]
 name = "sp-blockchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "futures 0.3.28",
  "log",
@@ -9560,7 +9554,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures 0.3.28",
@@ -9575,7 +9569,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-aura"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9593,7 +9587,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-babe"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9614,7 +9608,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-grandpa"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "finality-grandpa",
  "log",
@@ -9632,7 +9626,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-slots"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9644,7 +9638,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "array-bytes",
  "bitflags 1.3.2",
@@ -9688,7 +9682,7 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -9702,18 +9696,18 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing-proc-macro"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "proc-macro2",
  "quote",
  "sp-core-hashing",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sp-database"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "kvdb",
  "parking_lot 0.12.1",
@@ -9722,17 +9716,17 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sp-externalities"
 version = "0.13.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -9743,7 +9737,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -9758,7 +9752,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "bytes",
  "ed25519 1.5.3",
@@ -9784,7 +9778,7 @@ dependencies = [
 [[package]]
 name = "sp-keyring"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "lazy_static",
  "sp-core",
@@ -9795,7 +9789,7 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.13.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "futures 0.3.28",
  "parity-scale-codec",
@@ -9809,7 +9803,7 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "4.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "thiserror",
  "zstd 0.12.4",
@@ -9818,7 +9812,7 @@ dependencies = [
 [[package]]
 name = "sp-metadata-ir"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-metadata",
  "parity-scale-codec",
@@ -9829,7 +9823,7 @@ dependencies = [
 [[package]]
 name = "sp-offchain"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "sp-api",
  "sp-core",
@@ -9839,7 +9833,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -9849,7 +9843,7 @@ dependencies = [
 [[package]]
 name = "sp-rpc"
 version = "6.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -9859,7 +9853,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "either",
  "hash256-std-hasher",
@@ -9881,7 +9875,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -9899,19 +9893,19 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "6.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "Inflector",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sp-session"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9925,7 +9919,7 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9938,7 +9932,7 @@ dependencies = [
 [[package]]
 name = "sp-state-machine"
 version = "0.13.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "hash-db 0.16.0",
  "log",
@@ -9958,7 +9952,7 @@ dependencies = [
 [[package]]
 name = "sp-statement-store"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -9976,12 +9970,12 @@ dependencies = [
 [[package]]
 name = "sp-std"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 
 [[package]]
 name = "sp-storage"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "impl-serde 0.4.0",
  "parity-scale-codec",
@@ -9994,7 +9988,7 @@ dependencies = [
 [[package]]
 name = "sp-timestamp"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "futures-timer",
@@ -10009,7 +10003,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "6.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "sp-std",
@@ -10021,7 +10015,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-pool"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "sp-api",
  "sp-runtime",
@@ -10030,7 +10024,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-storage-proof"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "async-trait",
  "log",
@@ -10046,7 +10040,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "ahash 0.8.3",
  "hash-db 0.16.0",
@@ -10069,7 +10063,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "impl-serde 0.4.0",
  "parity-scale-codec",
@@ -10086,18 +10080,18 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
 name = "sp-wasm-interface"
 version = "7.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -10111,7 +10105,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "4.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -10410,7 +10404,7 @@ dependencies = [
 [[package]]
 name = "substrate-build-script-utils"
 version = "3.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "platforms 2.0.0",
 ]
@@ -10428,7 +10422,7 @@ dependencies = [
 [[package]]
 name = "substrate-frame-rpc-system"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "frame-system-rpc-runtime-api",
  "futures 0.3.28",
@@ -10447,7 +10441,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.10.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "hyper",
  "log",
@@ -10459,7 +10453,7 @@ dependencies = [
 [[package]]
 name = "substrate-wasm-builder"
 version = "5.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43#ebe009c20231a8f1bd11a256190fbbcb4523f471"
+source = "git+https://github.com/bifrost-platform/bifrost-substrate?branch=bifrost-polkadot-v0.9.43-boost#86edc7ee161a646eb05450c55b05fdc81979903b"
 dependencies = [
  "ansi_term",
  "build-helper",
@@ -10501,9 +10495,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.31"
+version = "2.0.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "718fa2415bcb8d8bd775917a1bf12a7931b6dfa890753378538118181e0cb398"
+checksum = "239814284fd6f1a4ffe4ca893952cdd93c224b6a1571c9a9eadd670295c0c9e2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10564,7 +10558,7 @@ dependencies = [
  "cfg-if",
  "fastrand 2.0.0",
  "redox_syscall 0.3.5",
- "rustix 0.38.11",
+ "rustix 0.38.13",
  "windows-sys 0.48.0",
 ]
 
@@ -10600,7 +10594,7 @@ checksum = "49922ecae66cc8a249b77e68d1d0623c1b2c514f0060c27cdc68bd62a1219d35"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -10746,7 +10740,7 @@ checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -10892,7 +10886,7 @@ checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -11313,7 +11307,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
  "wasm-bindgen-shared",
 ]
 
@@ -11347,7 +11341,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -11509,7 +11503,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c86437fa68626fe896e5afc69234bb2b5894949083586535f200385adfd71213"
 dependencies = [
  "anyhow",
- "base64 0.21.3",
+ "base64 0.21.4",
  "bincode",
  "directories-next",
  "file-per-thread-logger",
@@ -11916,7 +11910,7 @@ dependencies = [
  "either",
  "home",
  "once_cell",
- "rustix 0.38.11",
+ "rustix 0.38.13",
 ]
 
 [[package]]
@@ -12278,7 +12272,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.31",
+ "syn 2.0.32",
 ]
 
 [[package]]
