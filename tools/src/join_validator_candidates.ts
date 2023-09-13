@@ -147,5 +147,5 @@ async function join_validator_candidates() {
 
 join_validator_candidates().catch((error) => {
   console.error(error);
-  process.exit(0);
+  process.exit(1);
 });

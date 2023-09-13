@@ -108,5 +108,5 @@ async function set_session_keys() {
 
 set_session_keys().catch((error) => {
   console.error(error);
-  process.exit(0);
+  process.exit(1);
 });
