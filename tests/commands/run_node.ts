@@ -1,31 +1,54 @@
+import shell from 'shelljs';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
 /**
  * run a new boot node
  */
 async function runNode() {
-  const yargs = require('yargs/yargs');
-  const { hideBin } = require('yargs/helpers');
-
-  const shell = require('shelljs');
-
-  const argv = yargs(hideBin(process.argv))
+  const argv = await yargs(hideBin(process.argv))
     .usage('Usage: npm run run_node [args]')
     .version('1.0.0')
     .options({
       index: {
-        type: 'number', describe: 'Node index to execute (The genesis node is 1)', default: 1,
+        type: 'number',
+        describe: 'Node index to execute (The genesis node is 0)',
+        default: 0,
       },
+      port: {
+        type: 'number',
+        describe: 'The P2P port used for networking. The default port is 30333.',
+        default: 30333,
+      },
+      rpcPort: {
+        type: 'number',
+        describe: 'The RPC port used for Http and WebSocket connections. The default port is 9944.',
+        default: 9944,
+      }
     }).help().argv;
 
-  let port: number = 30333;
-  let wsPort: number = 9945;
-  let rpcPort: number = 9933;
-
   if (isNaN(Number(argv.index))) {
-    console.error('please pass a numeric node index');
+    console.error('⚠️  Please enter a numeric node index.');
     return;
   }
-  if (Number(argv.index) < 1) {
-    console.error('please pass a positive numeric node index');
+  if (Number(argv.index) < 0) {
+    console.error('⚠️  Please pass a positive numeric node index.');
+    return;
+  }
+  if (isNaN(Number(argv.port))) {
+    console.error('⚠️  Please enter a numeric port.');
+    return;
+  }
+  if (Number(argv.port) < 1) {
+    console.error('⚠️  Please pass a positive numeric port.');
+    return;
+  }
+  if (isNaN(Number(argv.rpcPort))) {
+    console.error('⚠️  Please enter a numeric RPC port.');
+    return;
+  }
+  if (Number(argv.rpcPort) < 1) {
+    console.error('⚠️  Please pass a positive numeric RPC port.');
     return;
   }
   console.log(`[*] passed node index = ${argv.index}`);
@@ -38,18 +61,18 @@ async function runNode() {
   console.log('[*] build chain spec');
 
   // main boot node
-  if (argv.index === 1) {
+  if (argv.index === 0) {
     // set_main_node.sh
     shell.exec(`scripts/set_main_node.sh ${basePath}`);
     console.log('[*] set boot node');
   }
 
-  port += argv.index;
-  wsPort += argv.index;
-  rpcPort += argv.index;
-
   // run_boot_node.sh
-  shell.exec(`scripts/run_boot_node.sh ${argv.index} ${port} ${wsPort} ${rpcPort} ${basePath}`);
+  shell.exec(`scripts/run_boot_node.sh ${argv.index} ${argv.port} ${argv.rpcPort} ${basePath}`);
   console.log('[*] boot node initialized');
 }
-runNode();
+
+runNode().catch(error => {
+  console.error(error);
+  process.exit(1);
+});
