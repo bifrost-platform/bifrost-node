@@ -1,11 +1,11 @@
-import Web3 from 'web3';
+import { Web3 } from 'web3';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
+import { ApiPromise, WsProvider } from '@polkadot/api';
 
 async function query_extrinsic() {
-  const yargs = require('yargs/yargs');
-  const { hideBin } = require('yargs/helpers');
-  const { ApiPromise, HttpProvider } = require('@polkadot/api');
-
-  const argv = yargs(hideBin(process.argv))
+  const argv = await yargs(hideBin(process.argv))
     .usage('Usage: npm run query_extrinsic [args]')
     .version('1.0.0')
     .options({
@@ -19,48 +19,51 @@ async function query_extrinsic() {
       },
       provider: {
         type: 'string',
-        describe: 'The provider URL.',
-        default: 'http://127.0.0.1:9933'
+        describe: 'The provider endpoint. WebSocket provider is required.',
+        default: 'ws://127.0.0.1:9944'
       },
     }).help().argv;
 
   if (!argv.block) {
-    console.error('Please enter a valid `block` number');
+    console.error('⚠️  Please enter a valid `block` number');
     return;
   }
-
   if (!argv.index) {
-    console.error('Please enter a valid `index` number');
+    console.error('⚠️  Please enter a valid `index` number');
+    return;
+  }
+  if (!argv.provider || !argv.provider.startsWith('ws')) {
+    console.error('⚠️  Please enter a valid provider. WebSocket provider is required.');
     return;
   }
 
-  const web3 = new Web3(argv.provider);
+  const web3 = new Web3(new Web3.providers.WebsocketProvider(argv.provider));
   try {
     const isSyncing = await web3.eth.isSyncing();
     if (isSyncing !== false) {
-      console.error('Node is not completely synced yet');
-      process.exit(-1);
+      console.error('⚠️  Node is not completely synced yet');
+      process.exit(1);
     }
   } catch (e) {
-    console.error('Node endpoint is not reachable');
-    process.exit(-1);
+    console.error('⚠️  Node endpoint is not reachable');
+    process.exit(1);
   }
 
-  const provider = new HttpProvider(argv.provider);
+  const provider = new WsProvider(argv.provider);
   const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   const blockHash = await api.rpc.chain.getBlockHash(argv.block);
   const signedBlock = await api.rpc.chain.getBlock(blockHash);
 
   if (signedBlock.block.extrinsics.length - 1 < argv.index) {
-    console.error(`The given extrinsic index does not exist in block #${argv.block}`);
-    return;
+    console.error(`⚠️  The given extrinsic index does not exist in block #${argv.block}`);
+    process.exit(1);
   }
 
-  const rawXt = signedBlock.block.extrinsics[argv.index];
-  const xt = rawXt.toHuman();
+  const xt = signedBlock.block.extrinsics[argv.index];
 
-  const rawEvents = await api.query.system.events.at(blockHash);
+  const atSubstrate = await api.at(blockHash);
+  const rawEvents: any = await atSubstrate.query.system.events();
   const events = rawEvents.toHuman();
 
   let matchedEvents = [];
@@ -70,7 +73,7 @@ async function query_extrinsic() {
     }
   }
 
-  console.log(`🔖 Extrinsic #${argv.block}-${argv.index} hash(${rawXt.hash.toHex()})`);
+  console.log(`🔖 Extrinsic #${argv.block}-${argv.index} hash(${xt.hash.toHex()})`);
   console.log(`     Pallet: ${xt.method.section}`);
   console.log(`     Extrinsic: ${xt.method.method}`);
 
@@ -90,13 +93,12 @@ async function query_extrinsic() {
     console.log(`           Pallet: ${event.event.section}`);
     console.log(`           Event: ${event.event.method}`);
     console.log(`           Data:`);
-    for (const data of event.event.data) {
-      console.log(`               ${JSON.stringify(data)}`);
-    }
+    console.log(`               ${JSON.stringify(event.event.data)}`);
   }
+  process.exit(0);
 }
 
 query_extrinsic().catch((error) => {
   console.error(error);
-  process.exit(0);
+  process.exit(1);
 });
