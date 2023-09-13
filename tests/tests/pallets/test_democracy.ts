@@ -299,18 +299,8 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const rawReferendumInfo: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const referendumInfo = rawReferendumInfo.unwrap().toJSON();
 
-    expect(referendumInfo.ongoing.tally.ayes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
-        32,
-      ),
-    );
-    expect(referendumInfo.ongoing.tally.turnout).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.ayes)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed());
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.turnout)).equal(AMOUNT_FACTOR);
 
     const rawLocks: any = await context.polkadotApi.query.balances.locks(baltathar.address);
     const locks = rawLocks.toHuman();
@@ -319,12 +309,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
 
     const rawVotingOf: any = await context.polkadotApi.query.democracy.votingOf(baltathar.address);
     const votingOf = rawVotingOf.toJSON();
-    expect(votingOf.direct.votes[0][1].standard.balance).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(votingOf.direct.votes[0][1].standard.balance)).equal(AMOUNT_FACTOR);
   });
 
   it('should successfully vote for a nay', async function () {
@@ -347,24 +332,9 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const rawReferendumInfo: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const referendumInfo = rawReferendumInfo.unwrap().toJSON();
 
-    expect(referendumInfo.ongoing.tally.ayes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
-        32,
-      ),
-    );
-    expect(referendumInfo.ongoing.tally.nays).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
-        32,
-      ),
-    );
-    expect(referendumInfo.ongoing.tally.turnout).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.ayes)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed());
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.nays)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed());
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.turnout)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed());
 
     const rawLocks: any = await context.polkadotApi.query.balances.locks(charleth.address);
     const locks = rawLocks.toHuman();
@@ -393,27 +363,12 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const referendumInfo = rawReferendumInfo.unwrap().toJSON();
 
     // the previous vote is replaced
-    expect(referendumInfo.ongoing.tally.ayes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(6).toFixed()),
-        32,
-      ),
-    );
-    expect(referendumInfo.ongoing.tally.turnout).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed()),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.ayes)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(6).toFixed());
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.turnout)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(2).toFixed());
 
     const rawVotingOf: any = await context.polkadotApi.query.democracy.votingOf(baltathar.address);
     const votingOf = rawVotingOf.toJSON();
-    expect(votingOf.direct.votes[0][1].standard.balance).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(votingOf.direct.votes[0][1].standard.balance)).equal(AMOUNT_FACTOR);
   });
 
   it('should successfully bake inapproved referendum', async function () {
@@ -488,12 +443,7 @@ describeDevNode('pallet_democracy - referendum interactions', (context) => {
     const rawVotingOf: any = await context.polkadotApi.query.democracy.votingOf(charleth.address);
     const votingOf = rawVotingOf.toJSON();
     expect(votingOf.direct.prior[0]).equal(voteLockEndsAt);
-    expect(votingOf.direct.prior[1]).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(votingOf.direct.prior[1])).equal(AMOUNT_FACTOR);
   });
 
   it('should successfully unlock locked balance for loser', async function () {
@@ -587,29 +537,14 @@ describeDevNode('pallet_democracy - delegation', (context) => {
 
     const rawFrom: any = await context.polkadotApi.query.democracy.votingOf(charleth.address);
     const from = rawFrom.toJSON();
-    expect(from.delegating.balance).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(from.delegating.balance)).equal(AMOUNT_FACTOR);
     expect(from.delegating.target).equal(baltathar.address);
     expect(from.delegating.conviction).equal('Locked6x');
 
     const rawTo: any = await context.polkadotApi.query.democracy.votingOf(baltathar.address);
     const to = rawTo.toJSON();
-    expect(to.direct.delegations.votes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(conviction).toFixed()),
-        32,
-      ),
-    );
-    expect(to.direct.delegations.capital).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(to.direct.delegations.votes)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(conviction).toFixed());
+    expect(context.web3.utils.hexToNumberString(to.direct.delegations.capital)).equal(AMOUNT_FACTOR);
   });
 
   it('should successfully vote with delegation', async function () {
@@ -637,18 +572,8 @@ describeDevNode('pallet_democracy - delegation', (context) => {
     const rawReferendumInfo: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const referendumInfo = rawReferendumInfo.unwrap().toJSON();
 
-    expect(referendumInfo.ongoing.tally.ayes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(ayes.toFixed()),
-        32,
-      ),
-    );
-    expect(referendumInfo.ongoing.tally.turnout).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(turnout.toFixed()),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.ayes)).equal(ayes.toFixed());
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.turnout)).equal(turnout.toFixed());
 
     const rawLocksForVoter: any = await context.polkadotApi.query.balances.locks(baltathar.address);
     const locksForVoter = rawLocksForVoter.toHuman();
@@ -671,18 +596,8 @@ describeDevNode('pallet_democracy - delegation', (context) => {
 
     const rawReferendumInfo: any = await context.polkadotApi.query.democracy.referendumInfoOf(0);
     const referendumInfo = rawReferendumInfo.unwrap().toJSON();
-    expect(referendumInfo.ongoing.tally.ayes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
-    expect(referendumInfo.ongoing.tally.turnout).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.ayes)).equal(AMOUNT_FACTOR);
+    expect(context.web3.utils.hexToNumberString(referendumInfo.ongoing.tally.turnout)).equal(AMOUNT_FACTOR);
   });
 
   it('should successfully change delegation target', async function () {
@@ -696,12 +611,7 @@ describeDevNode('pallet_democracy - delegation', (context) => {
 
     const rawFrom: any = await context.polkadotApi.query.democracy.votingOf(charleth.address);
     const from = rawFrom.toJSON();
-    expect(from.delegating.balance).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(from.delegating.balance)).equal(AMOUNT_FACTOR);
     expect(from.delegating.target).equal(alith.address);
     expect(from.delegating.conviction).equal('Locked6x');
 
@@ -712,18 +622,8 @@ describeDevNode('pallet_democracy - delegation', (context) => {
 
     const rawToAfter: any = await context.polkadotApi.query.democracy.votingOf(alith.address);
     const toAfter = rawToAfter.toJSON();
-    expect(toAfter.direct.delegations.votes).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(new BigNumber(AMOUNT_FACTOR).multipliedBy(conviction).toFixed()),
-        32,
-      ),
-    );
-    expect(toAfter.direct.delegations.capital).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(AMOUNT_FACTOR),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(toAfter.direct.delegations.votes)).equal(new BigNumber(AMOUNT_FACTOR).multipliedBy(conviction).toFixed());
+    expect(context.web3.utils.hexToNumberString(toAfter.direct.delegations.capital)).equal(AMOUNT_FACTOR);
   });
 
   it('should fail due to delegation from an account who already voted', async function () {

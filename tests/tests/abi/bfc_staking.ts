@@ -1,6 +1,4 @@
-import { AbiItem } from 'web3-utils';
-
-export const BFC_STAKING_ABI: AbiItem[] = [
+export const BFC_STAKING_ABI = [
   {
     "inputs": [],
     "name": "cancel_candidate_bond_less",

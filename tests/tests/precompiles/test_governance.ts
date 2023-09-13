@@ -42,7 +42,7 @@ describeDevNode('precompile_governance - precompile actions', (context) => {
     );
     const decoded_public_prop_count = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      public_prop_count.result,
+      public_prop_count,
     )[0];
     expect(Number(decoded_public_prop_count)).equal(0);
   });

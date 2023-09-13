@@ -94,7 +94,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_is_candidate = context.web3.eth.abi.decodeParameters(
       ['bool'],
-      is_candidate.result,
+      is_candidate,
     )[0];
     expect(decoded_is_candidate).equal(true);
 
@@ -108,7 +108,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_is_selected_candidate = context.web3.eth.abi.decodeParameters(
       ['bool'],
-      is_selected_candidate.result,
+      is_selected_candidate,
     )[0];
     expect(decoded_is_selected_candidate).equal(true);
 
@@ -122,7 +122,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_is_previous_selected_candidate = context.web3.eth.abi.decodeParameters(
       ['bool'],
-      is_previous_selected_candidate.result,
+      is_previous_selected_candidate,
     )[0];
     expect(decoded_is_previous_selected_candidate).equal(true);
   });
@@ -136,9 +136,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'round_info',
       [],
     );
-    const decoded_round_info = context.web3.eth.abi.decodeParameters(
+    const decoded_round_info: any = context.web3.eth.abi.decodeParameters(
       ['tuple(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)'],
-      round_info.result,
+      round_info,
     )[0];
     expect(Number(decoded_round_info[0])).equal(1);
 
@@ -152,7 +152,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_latest_round = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      latest_round.result,
+      latest_round,
     )[0];
     expect(Number(decoded_latest_round)).equal(1);
 
@@ -166,7 +166,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_majority = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      majority.result,
+      majority,
     )[0];
     expect(Number(decoded_majority)).equal(1);
 
@@ -180,7 +180,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_previous_majority = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      previous_majority.result,
+      previous_majority,
     )[0];
     expect(Number(decoded_previous_majority)).equal(1);
 
@@ -195,7 +195,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_points = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      points.result,
+      points,
     )[0];
     expect(Number(decoded_points)).greaterThan(1);
 
@@ -209,7 +209,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_validator_points = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      validator_points.result,
+      validator_points,
     )[0];
     expect(Number(decoded_validator_points)).greaterThan(1);
 
@@ -224,7 +224,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_rewards = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      rewards.result,
+      rewards,
     )[0];
     expect(Number(decoded_rewards)).greaterThan(1);
 
@@ -236,11 +236,11 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'total',
       ['0x2'],
     );
-    const decoded_total = context.web3.eth.abi.decodeParameters(
+    const decoded_total: any = context.web3.eth.abi.decodeParameters(
       [
         'tuple(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)',
       ],
-      total.result,
+      total,
     )[0];
     expect(Number(decoded_total[0])).greaterThan(1);
 
@@ -254,12 +254,12 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_inflation_config = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256', 'uint256'],
-      inflation_config.result,
+      inflation_config,
     );
     expect(Number(decoded_inflation_config.__length__)).equal(3);
-    expect(decoded_inflation_config[0]).equal(new BigNumber(7).multipliedBy(10 ** 7).toFixed());
-    expect(decoded_inflation_config[1]).equal(new BigNumber(13).multipliedBy(10 ** 7).toFixed());
-    expect(decoded_inflation_config[2]).equal(new BigNumber(15).multipliedBy(10 ** 7).toFixed());
+    expect(String(decoded_inflation_config[0])).equal(new BigNumber(7).multipliedBy(10 ** 7).toFixed());
+    expect(String(decoded_inflation_config[1])).equal(new BigNumber(13).multipliedBy(10 ** 7).toFixed());
+    expect(String(decoded_inflation_config[2])).equal(new BigNumber(15).multipliedBy(10 ** 7).toFixed());
 
     const inflation_rate = await callPrecompile(
       context,
@@ -271,9 +271,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_inflation_rate = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      inflation_rate.result,
+      inflation_rate,
     );
-    expect(decoded_inflation_rate[0]).equal(new BigNumber(13).multipliedBy(10 ** 7).toFixed());
+    expect(String(decoded_inflation_rate[0])).equal(new BigNumber(13).multipliedBy(10 ** 7).toFixed());
 
     const min_nomination = await callPrecompile(
       context,
@@ -285,9 +285,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_min_nomination = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      min_nomination.result,
+      min_nomination,
     );
-    expect(decoded_min_nomination[0]).equal(new BigNumber(1).multipliedBy(10 ** 18).toFixed());
+    expect(String(decoded_min_nomination[0])).equal(new BigNumber(1).multipliedBy(10 ** 18).toFixed());
 
     const max_nominations_per_nominator = await callPrecompile(
       context,
@@ -299,7 +299,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_max_nominations_per_nominator = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      max_nominations_per_nominator.result,
+      max_nominations_per_nominator,
     );
     expect(Number(decoded_max_nominations_per_nominator[0])).equal(3);
 
@@ -313,7 +313,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_max_nominations_per_candidate = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256'],
-      max_nominations_per_candidate.result,
+      max_nominations_per_candidate,
     );
     expect(decoded_max_nominations_per_candidate.__length__).equal(2);
     expect(Number(decoded_max_nominations_per_candidate[0])).equal(10);
@@ -329,7 +329,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_candidate_bond_less_delay = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256'],
-      candidate_bond_less_delay.result,
+      candidate_bond_less_delay,
     );
     expect(decoded_candidate_bond_less_delay.__length__).equal(2);
     expect(Number(decoded_candidate_bond_less_delay[0])).equal(1);
@@ -345,7 +345,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_nominator_bond_less_delay = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256', 'uint256'],
-      nominator_bond_less_delay.result,
+      nominator_bond_less_delay,
     );
     expect(decoded_nominator_bond_less_delay.__length__).equal(3);
     expect(Number(decoded_nominator_bond_less_delay[0])).equal(1);
@@ -364,7 +364,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_candidate_count = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      candidate_count.result,
+      candidate_count,
     );
     expect(Number(decoded_candidate_count[0])).equal(1);
 
@@ -376,9 +376,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'selected_candidates',
       ['0x0'],
     );
-    const decoded_selected_candidates = context.web3.eth.abi.decodeParameters(
+    const decoded_selected_candidates: any = context.web3.eth.abi.decodeParameters(
       ['address[]'],
-      selected_candidates.result,
+      selected_candidates,
     )[0];
     expect(decoded_selected_candidates.length).equal(1);
     expect(decoded_selected_candidates[0]).equal(alith.public);
@@ -391,9 +391,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'previous_selected_candidates',
       ['0x2'],
     );
-    const decoded_previous_selected_candidates = context.web3.eth.abi.decodeParameters(
+    const decoded_previous_selected_candidates: any = context.web3.eth.abi.decodeParameters(
       ['address[]'],
-      previous_selected_candidates.result,
+      previous_selected_candidates,
     )[0];
     expect(decoded_previous_selected_candidates.length).equal(1);
     expect(decoded_previous_selected_candidates[0]).equal(alith.public);
@@ -406,9 +406,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'candidate_pool',
       [],
     );
-    const decoded_candidate_pool = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_pool: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'uint256[]'],
-      candidate_pool.result,
+      candidate_pool,
     );
     expect(decoded_candidate_pool[0].length).equal(1);
     expect(decoded_candidate_pool[1].length).equal(1);
@@ -422,11 +422,11 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'candidate_state',
       [alith.public],
     );
-    const decoded_candidate_state = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_state: any = context.web3.eth.abi.decodeParameters(
       [
         'tuple(address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256)',
       ],
-      candidate_state.result,
+      candidate_state,
     )[0];
     expect(decoded_candidate_state[0]).equal(alith.public);
 
@@ -438,7 +438,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'candidate_states',
       ['0x0'],
     );
-    const decoded_candidate_states = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_states: any = context.web3.eth.abi.decodeParameters(
       [
         'address[]',
         'address[]',
@@ -461,7 +461,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'uint256[]',
         'uint256[]',
       ],
-      candidate_states.result,
+      candidate_states,
     );
     expect(decoded_candidate_states[0][0]).equal(alith.public);
 
@@ -473,7 +473,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'candidate_states_by_selection',
       ['0x0', '0x1'],
     );
-    const decoded_candidate_states_by_selection = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_states_by_selection: any = context.web3.eth.abi.decodeParameters(
       [
         'address[]',
         'address[]',
@@ -496,7 +496,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'uint256[]',
         'uint256[]',
       ],
-      candidate_states_by_selection.result,
+      candidate_states_by_selection,
     );
     expect(decoded_candidate_states_by_selection[0][0]).equal(alith.public);
 
@@ -508,11 +508,11 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       'candidate_request',
       [alith.public],
     );
-    const decoded_candidate_request = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_request: any = context.web3.eth.abi.decodeParameters(
       [
         'tuple(address,uint256,uint256)',
       ],
-      candidate_request.result,
+      candidate_request,
     )[0];
     expect(decoded_candidate_request[0]).equal(alith.public);
 
@@ -531,7 +531,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'address[]',
         'uint256[]',
       ],
-      candidate_top_nominations.result,
+      candidate_top_nominations,
     );
     expect(decoded_candidate_top_nominations[0]).equal(alith.public);
 
@@ -550,7 +550,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'address[]',
         'uint256[]',
       ],
-      candidate_bottom_nominations.result,
+      candidate_bottom_nominations,
     );
     expect(decoded_candidate_bottom_nominations[0]).equal(alith.public);
 
@@ -566,7 +566,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       [
         'uint256',
       ],
-      candidate_nomination_count.result,
+      candidate_nomination_count,
     )[0];
     expect(Number(decoded_candidate_nomination_count)).equal(0);
   });
@@ -594,7 +594,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'uint256',
         'uint256[]',
       ],
-      nominator_state.result,
+      nominator_state,
     );
     expect(decoded_nominator_state[0]).equal(alith.public);
 
@@ -616,7 +616,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'uint256[]',
         'uint256[]',
       ],
-      nominator_requests.result,
+      nominator_requests,
     );
     expect(decoded_nominator_requests[0]).equal(alith.public);
 
@@ -630,7 +630,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
     );
     const decoded_nominator_nomination_count = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      nominator_nomination_count.result,
+      nominator_nomination_count,
     )[0];
     expect(Number(decoded_nominator_nomination_count)).equal(0);
   });
@@ -656,8 +656,8 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       [baltathar.public, baltatharRelayer.public, numberToHex(stake.toFixed()), numberToHex(1)],
     );
 
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(true);
+    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0]);
+    expect(Boolean(receipt.status)).equal(true);
 
     const candidate_pool = await callPrecompile(
       context,
@@ -667,9 +667,9 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       'candidate_pool',
       [],
     );
-    const decoded_candidate_pool = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_pool: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'uint256[]'],
-      candidate_pool.result,
+      candidate_pool,
     );
     expect(decoded_candidate_pool[0].length).equal(2);
     expect(decoded_candidate_pool[1].length).equal(2);
@@ -689,8 +689,8 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       [numberToHex(more.toFixed())],
     );
 
-    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0].result);
-    expect(receipt.status).equal(true);
+    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0]);
+    expect(Boolean(receipt.status)).equal(true);
 
     const candidate_state = await callPrecompile(
       context,
@@ -700,11 +700,11 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       'candidate_state',
       [baltathar.public],
     );
-    const decoded_candidate_state = context.web3.eth.abi.decodeParameters(
+    const decoded_candidate_state: any = context.web3.eth.abi.decodeParameters(
       [
         'tuple(address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256,uint256,uint256,uint256,uint256,uint256)',
       ],
-      candidate_state.result,
+      candidate_state,
     )[0];
     expect(new BigNumber(decoded_candidate_state[2]).toFixed()).equal(new BigNumber(more).multipliedBy(2).toFixed());
   });
@@ -714,8 +714,9 @@ describeDevNode('precompile_bfc_staking - precompile gas estimation', (context) 
   const alithStash: { public: string, private: string } = TEST_STASHES[0];
 
   it('should successfully estimate dispatch functions', async function () {
-    const bfc_staking = new context.web3.eth.Contract(BFC_STAKING_ABI, PRECOMPILE_ADDRESS);
-    const gas = await bfc_staking.methods.candidate_bond_more(new BigNumber(100).multipliedBy(10 ** 18).toFixed()).estimateGas({ from: alithStash.public });
-    expect(gas).greaterThan(0);
+    const bfc_staking: any = new context.web3.eth.Contract(BFC_STAKING_ABI, PRECOMPILE_ADDRESS);
+    const data = new BigNumber(100).multipliedBy(10 ** 18).toFixed();
+    const gas = await bfc_staking.methods.candidate_bond_more(data).estimateGas({ from: alithStash.public });
+    expect(Number(gas)).greaterThan(0);
   });
 });
