@@ -9,8 +9,7 @@
     "rewind_node": "ts-node commands/rewind_node.ts",
     "purge_chains": "ts-node commands/purge_chains.ts",
     "purge_containers": "ts-node commands/purge_containers.ts",
-    "benchmark": "NODE_OPTIONS='--no-warnings' ts-node benchmark/index.ts",
-    "max_gas_limit": "ts-node benchmark/max_gas_limit.ts"
+    "benchmark": "NODE_OPTIONS='--no-warnings' ts-node benchmark/index.ts"
   },
   "repository": {
     "type": "git",

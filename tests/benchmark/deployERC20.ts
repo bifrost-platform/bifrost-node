@@ -6,12 +6,13 @@ export const erc20abi = JSON.parse(ERC20ABI);
 export default async function deployERC20(pk: string) {
   const deployTx = (new web3.eth.Contract(erc20abi)).deploy({
     data: ERC20BYTECODE,
-    arguments: [1, 1]
+    arguments: [],
   });
 
   const signedTx = (await web3.eth.accounts.signTransaction({
     data: deployTx.encodeABI(),
-    gas: 3000000
+    gas: 3000000,
+    gasPrice: 1000000000000,
   }, pk)).rawTransaction;
 
   if (signedTx) {
