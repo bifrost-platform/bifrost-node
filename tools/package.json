@@ -25,9 +25,9 @@
     "yargs": "17.7.2"
   },
   "devDependencies": {
-    "@types/gauge": "^5.0.0",
+    "@types/gauge": "5.0.0",
     "@types/node": "20.2.1",
-    "@types/yargs": "^17.0.24",
+    "@types/yargs": "17.0.24",
     "ts-node": "10.9.1",
     "ts-node-register": "1.0.0",
     "typescript": "5.0.4"
