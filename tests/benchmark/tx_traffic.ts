@@ -14,7 +14,7 @@ export async function singleTransfer(quantity: number, pk: string, value: string
       gas: 21000,
       value,
       nonce
-    }, pk)).rawTransaction
+    }, pk)).rawTransaction;
     await sendRequests(signedTx);
     nonce += 1;
   }

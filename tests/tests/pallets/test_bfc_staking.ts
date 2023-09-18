@@ -24,7 +24,6 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
   const alithStash = keyring.addFromUri(TEST_STASHES[0].private);
 
-
   it('should successfully replace controller account', async function () {
     await context.polkadotApi.tx.bfcStaking
       .setController(newAlith.address)

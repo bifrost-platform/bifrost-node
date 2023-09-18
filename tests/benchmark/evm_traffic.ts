@@ -23,15 +23,5 @@ export default async function evmTraffic(reqCount: number, pk: string, contractA
     }
   }
 
-  const transferResults = await Promise.all(transferReqs);
-
-  const blockNums: Array<number> = [];
-  transferResults.forEach(res => {
-    const insertedNum = res.result.blockNumber;
-    if (!blockNums.includes(Number(insertedNum))) {
-      blockNums.push(Number(insertedNum));
-    }
-  });
-
-  return blockNums;
+  await Promise.all(transferReqs);
 }

@@ -4,6 +4,7 @@
   "author": "bifrost-platform",
   "scripts": {
     "test": "mocha -r ts-node/register tests/**/**/*.ts --exit",
+    "test_runtime": "mocha -r ts-node/register runtime/**/**/*.ts --exit",
     "run_node": "ts-node commands/run_node.ts",
     "set_node": "ts-node commands/set_node.ts",
     "rewind_node": "ts-node commands/rewind_node.ts",
