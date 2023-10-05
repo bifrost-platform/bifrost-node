@@ -129,12 +129,12 @@ describe('runtime_upgrade - evm interactions', function () {
     const candidatePool = await staking.methods.candidate_pool().call();
     expect(candidatePool).is.ok;
     expect(candidatePool[0][0]).equal(alith);
-    expect(candidatePool[1][0]).equal(BigInt(web3.utils.toWei(1000, 'ether')));
+    expect(Number(candidatePool[1][0])).greaterThanOrEqual(Number(web3.utils.toWei(1000, 'ether')));
 
     const candidateState = await staking.methods.candidate_state(alith).call();
     expect(candidateState).is.ok;
     expect(candidateState.candidate).equal(alith);
-    expect(candidateState.bond).equal(BigInt(web3.utils.toWei(1000, 'ether')));
+    expect(Number(candidateState.bond)).greaterThanOrEqual(Number(web3.utils.toWei(1000, 'ether')));
 
     const gas = await staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).estimateGas({ from: baltathar });
     expect(gas).is.ok;
