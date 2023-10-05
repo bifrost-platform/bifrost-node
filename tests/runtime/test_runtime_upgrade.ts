@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { describe } from 'mocha';
-import Web3 from 'web3';
+import Web3, { Contract, TransactionReceiptAPI } from 'web3';
 
 import { ApiPromise, HttpProvider } from '@polkadot/api';
 
@@ -19,6 +19,54 @@ const baltathar = web3.eth.accounts.wallet.add(baltatharPk)[1].address;
 
 let erc20Address: string | undefined;
 
+const deployDemo = async (deployTx: any): Promise<TransactionReceiptAPI | undefined> => {
+  const signedTx = (await web3.eth.accounts.signTransaction({
+    from: alith,
+    data: deployTx.encodeABI(),
+    gasPrice: web3.utils.toWei(1000, 'gwei'),
+    gas: 3000000
+  }, alithPk)).rawTransaction;
+
+  // send transaction
+  const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
+  expect(txHash).is.ok;
+
+  await sleep(3000);
+  const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
+  expect(receipt).is.ok;
+  expect(receipt?.status).equal('0x1');
+  expect(receipt?.contractAddress).is.ok;
+
+  return receipt;
+};
+
+const sendTransaction = async (signedTx: string): Promise<string> => {
+  const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
+  expect(txHash).is.ok;
+
+  // get transaction receipt
+  await sleep(3000);
+  const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
+  expect(receipt).is.ok;
+  expect(receipt!.status).equal('0x1');
+
+  return txHash;
+};
+
+const createErc20Transfer = async (): Promise<string> => {
+  const erc20: Contract<any> = new web3.eth.Contract(ERC20_ABI, erc20Address);
+  const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
+  expect(gas).is.ok;
+
+  return (await web3.eth.accounts.signTransaction({
+    from: alith,
+    to: erc20Address,
+    gas,
+    gasPrice: web3.utils.toWei(1000, 'gwei'),
+    data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI()
+  }, alithPk)).rawTransaction;
+};
+
 describe('runtime_upgrade - evm interactions', function () {
   this.timeout(20000);
 
@@ -28,18 +76,11 @@ describe('runtime_upgrade - evm interactions', function () {
       to: '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac',
       gasPrice: web3.utils.toWei(1000, 'gwei'),
       value: web3.utils.toWei(1, 'ether'),
-      gas: 21000,
+      gas: 21000
     }, alithPk)).rawTransaction;
 
     // send transaction
-    const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
-    expect(txHash).is.ok;
-
-    // get transaction receipt
-    await sleep(3000);
-    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    expect(receipt).is.ok;
-    expect(receipt!.status).equal('0x1');
+    await sendTransaction(signedTx);
   });
 
   it('should successfully send transaction - eip1559', async function () {
@@ -49,44 +90,21 @@ describe('runtime_upgrade - evm interactions', function () {
       maxFeePerGas: web3.utils.toWei(1200, 'gwei'),
       maxPriorityFeePerGas: web3.utils.toWei(1.5, 'gwei'),
       value: web3.utils.toWei(1, 'ether'),
-      gas: 21000,
+      gas: 21000
     }, alithPk)).rawTransaction;
 
     // send transaction
-    const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
-    expect(txHash).is.ok;
-
-    // get transaction receipt
-    await sleep(3000);
-    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    expect(receipt).is.ok;
-    expect(receipt!.status).equal('0x1');
+    await sendTransaction(signedTx);
   });
 
   it('should successfully deploy a smart contract', async function () {
     const deployTx = ((new web3.eth.Contract(DEMO_ABI) as any).deploy({
-      data: DEMO_BYTE_CODE,
+      data: DEMO_BYTE_CODE
     }));
-
-    const signedTx = (await web3.eth.accounts.signTransaction({
-      from: alith,
-      data: deployTx.encodeABI(),
-      gasPrice: web3.utils.toWei(1000, 'gwei'),
-      gas: 3000000,
-    }, alithPk)).rawTransaction;
-
-    // send transaction
-    const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
-    expect(txHash).is.ok;
-
-    await sleep(3000);
-    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    expect(receipt).is.ok;
-    expect(receipt?.status).equal('0x1');
-    expect(receipt?.contractAddress).is.ok;
+    const receipt = await deployDemo(deployTx);
 
     // estimate contract methods
-    const contract: any = new web3.eth.Contract(DEMO_ABI, receipt?.contractAddress);
+    const contract: Contract<any> = new web3.eth.Contract(DEMO_ABI, receipt?.contractAddress);
     const gas = await contract.methods.store(1).estimateGas({ from: alith });
     expect(gas).is.ok;
 
@@ -96,16 +114,10 @@ describe('runtime_upgrade - evm interactions', function () {
       to: receipt?.contractAddress,
       gas,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
-      data: contract.methods.store(1).encodeABI(),
+      data: contract.methods.store(1).encodeABI()
     }, alithPk)).rawTransaction;
 
-    const txHash_2 = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx_2] });
-    expect(txHash_2).is.ok;
-
-    await sleep(3000);
-    const receipt_2 = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash_2] });
-    expect(receipt_2).is.ok;
-    expect(receipt_2!.status).equal('0x1');
+    await sendTransaction(signedTx_2);
 
     // call contract methods
     const response = await contract.methods.retrieve().call();
@@ -113,7 +125,7 @@ describe('runtime_upgrade - evm interactions', function () {
   });
 
   it('should successfully interact with a precompiled contract', async function () {
-    const staking: any = new web3.eth.Contract(STAKING_ABI, STAKING_ADDRESS);
+    const staking: Contract<any> = new web3.eth.Contract(STAKING_ABI, STAKING_ADDRESS);
     const candidatePool = await staking.methods.candidate_pool().call();
     expect(candidatePool).is.ok;
     expect(candidatePool[0][0]).equal(alith);
@@ -132,16 +144,10 @@ describe('runtime_upgrade - evm interactions', function () {
       to: STAKING_ADDRESS,
       gas,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
-      data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI(),
+      data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI()
     }, baltatharPk)).rawTransaction;
 
-    const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
-    expect(txHash).is.ok;
-
-    await sleep(3000);
-    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    expect(receipt).is.ok;
-    expect(receipt!.status).equal('0x1');
+    await sendTransaction(signedTx);
   });
 });
 
@@ -157,44 +163,14 @@ describe('runtime_upgrade - ethapi', function () {
     expect(balance).is.ok;
 
     const deployTx = (new web3.eth.Contract(ERC20_ABI) as any).deploy({
-      data: ERC20_BYTE_CODE,
+      data: ERC20_BYTE_CODE
     });
-    const signedTx = (await web3.eth.accounts.signTransaction({
-      from: alith,
-      data: deployTx.encodeABI(),
-      gasPrice: web3.utils.toWei(1000, 'gwei'),
-      gas: 3000000,
-    }, alithPk)).rawTransaction;
-
-    const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
-    expect(txHash).is.ok;
-
-    await sleep(3000);
-    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    expect(receipt).is.ok;
-    expect(receipt?.status).equal('0x1');
-    expect(receipt?.contractAddress).is.ok;
+    const receipt = await deployDemo(deployTx);
 
     erc20Address = receipt?.contractAddress;
-    const erc20 = new web3.eth.Contract(ERC20_ABI, erc20Address) as any;
-    const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
-    expect(gas).is.ok;
+    const signedTx_2 = await createErc20Transfer();
 
-    const signedTx_2 = (await web3.eth.accounts.signTransaction({
-      from: alith,
-      to: erc20Address,
-      gas,
-      gasPrice: web3.utils.toWei(1000, 'gwei'),
-      data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI(),
-    }, alithPk)).rawTransaction;
-
-    const txHash_2 = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx_2] });
-    expect(txHash_2).is.ok;
-
-    await sleep(3000);
-    const receipt_2 = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash_2] });
-    expect(receipt_2).is.ok;
-    expect(receipt_2!.status).equal('0x1');
+    await sendTransaction(signedTx_2);
 
     const logs = await web3.requestManager.send({
       method: 'eth_getLogs', params: [
@@ -202,8 +178,8 @@ describe('runtime_upgrade - ethapi', function () {
           address: receipt?.contractAddress,
           topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'],
           fromBlock: 1,
-          toBlock: 100,
-        },
+          toBlock: 100
+        }
       ]
     });
     expect(logs).is.ok;
@@ -230,27 +206,14 @@ describe('runtime_upgrade - ethapi', function () {
   });
 
   it('should successfully request debug namespace methods', async function () {
-    const erc20 = new web3.eth.Contract(ERC20_ABI, erc20Address) as any;
-    const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
-    expect(gas).is.ok;
+    const signedTx = await createErc20Transfer();
 
-    const signedTx = (await web3.eth.accounts.signTransaction({
-      from: alith,
-      to: erc20Address,
-      gas,
-      gasPrice: web3.utils.toWei(1000, 'gwei'),
-      data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI(),
-    }, alithPk)).rawTransaction;
+    const txHash = await sendTransaction(signedTx);
 
-    const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
-    expect(txHash).is.ok;
-
-    await sleep(3000);
-    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    expect(receipt).is.ok;
-    expect(receipt!.status).equal('0x1');
-
-    const debug = await web3.requestManager.send({ method: 'debug_traceTransaction', params: [txHash, { tracer: 'callTracer' }] });
+    const debug = await web3.requestManager.send({
+      method: 'debug_traceTransaction',
+      params: [txHash, { tracer: 'callTracer' }]
+    });
     expect(debug).is.ok;
     expect(debug.type).equal('CALL');
     const debug_2 = await web3.requestManager.send({ method: 'debug_traceTransaction', params: [txHash] });
@@ -278,7 +241,7 @@ describe('runtime_upgrade - pallet interactions', function () {
     api = await ApiPromise.create({ provider: new HttpProvider('http://localhost:9944'), noInitWarn: true });
   });
 
-  it('should have correct validator informations', async function () {
+  it('should have correct validator information', async function () {
     const rawCandidateState: any = await api.query.bfcStaking.candidateInfo(alith);
     const candidateState = rawCandidateState.unwrap().toJSON();
     expect(candidateState).is.ok;
@@ -291,7 +254,7 @@ describe('runtime_upgrade - pallet interactions', function () {
     expect(selectedCandidates).is.not.empty;
   });
 
-  it('should have correct relayer informations', async function () {
+  it('should have correct relayer information', async function () {
     const rawRelayerPool: any = await api.query.relayManager.relayerPool();
     const relayerPool = rawRelayerPool.toJSON();
     expect(relayerPool).is.not.empty;

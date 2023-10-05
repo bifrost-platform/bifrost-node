@@ -1,7 +1,7 @@
 import { signer, web3 } from './index';
 
 export async function sendRequests(signedTx: string) {
-  await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] })
+  await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
 }
 
 export async function singleTransfer(quantity: number, pk: string, value: string) {
@@ -15,13 +15,15 @@ export async function singleTransfer(quantity: number, pk: string, value: string
       value,
       nonce
     }, pk)).rawTransaction;
-    await sendRequests(signedTx);
-    nonce += 1;
+    if (signedTx) {
+      nonce += 1;
+      await sendRequests(signedTx);
+    }
   }
 }
 
 export async function batchTransfer(quantity: number, pk: string, value: string) {
-  const batch = [];
+  const batch: Promise<void>[] = [];
   let nonce = Number(await web3.eth.getTransactionCount(signer));
 
   for (let i = 0; i < quantity; i++) {
@@ -31,10 +33,12 @@ export async function batchTransfer(quantity: number, pk: string, value: string)
       gasPrice: web3.utils.toWei(1000, 'gwei'),
       gas: 21000,
       value,
-      nonce,
+      nonce
     }, pk)).rawTransaction;
-    nonce += 1;
-    batch.push(sendRequests(signedTx));
+    if (signedTx) {
+      nonce += 1;
+      batch.push(sendRequests(signedTx));
+    }
   }
   await Promise.all(batch);
 }

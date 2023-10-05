@@ -14,34 +14,34 @@ export let signer: string;
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
-    .usage('Usage: npm run benchmark -- <command> [args]')
-    .version('1.0.0')
-    .options({
-      provider: {
-        type: 'string',
-        describe: 'The provider endpoint. Http and WebSocket is both allowed.',
-        default: 'http://127.0.0.1:9944',
-      },
-      pk: {
-        type: 'string',
-        describe: 'The private key of the sender (with 0x prefix)',
-      },
-      quantity: {
-        type: 'number',
-        describe: 'The total number of transactions to be sent.',
-        default: 1,
-      },
-      isEvm: {
-        type: 'boolean',
-        describe: 'The flag that represents whether the transactions will be sent in an EVM form. If set to false, it will be sent as a Substrate form.',
-        default: false,
-      },
-      isBatch: {
-        type: 'boolean',
-        describe: 'The flag that represents whether the transactions will be sent in a batch form. If set to false, it will be sent individually.',
-        default: false,
-      },
-    }).help().argv;
+      .usage('Usage: npm run benchmark -- <command> [args]')
+      .version('1.0.0')
+      .options({
+        provider: {
+          type: 'string',
+          describe: 'The provider endpoint. Http and WebSocket is both allowed.',
+          default: 'http://127.0.0.1:9944'
+        },
+        pk: {
+          type: 'string',
+          describe: 'The private key of the sender (with 0x prefix)'
+        },
+        quantity: {
+          type: 'number',
+          describe: 'The total number of transactions to be sent.',
+          default: 1
+        },
+        isEvm: {
+          type: 'boolean',
+          describe: 'The flag that represents whether the transactions will be sent in an EVM form. If set to false, it will be sent as a Substrate form.',
+          default: false
+        },
+        isBatch: {
+          type: 'boolean',
+          describe: 'The flag that represents whether the transactions will be sent in a batch form. If set to false, it will be sent individually.',
+          default: false
+        }
+      }).help().argv;
 
   if (!argv.pk) {
     console.error('⚠️  Please enter a valid sender private key.');
@@ -104,12 +104,12 @@ async function main() {
       for (let idx = 0; idx < argv.quantity; idx++) {
         if (idx % 2 === 0) {
           await api.tx.balances
-            .transferKeepAlive('0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac', amount)
-            .signAndSend(account, { nonce: -1 });
+              .transferKeepAlive('0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac', amount)
+              .signAndSend(account, { nonce: -1 });
         } else {
           await api.tx.balances
-            .transfer('0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac', amount)
-            .signAndSend(account, { nonce: -1 });
+              .transfer('0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac', amount)
+              .signAndSend(account, { nonce: -1 });
         }
       }
     }
