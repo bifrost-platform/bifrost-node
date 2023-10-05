@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { describe } from 'mocha';
-import Web3, { Contract, TransactionReceiptAPI } from 'web3';
+import Web3, { TransactionReceiptAPI } from 'web3';
 
 import { ApiPromise, HttpProvider } from '@polkadot/api';
 
@@ -31,7 +31,7 @@ const deployDemo = async (deployTx: any): Promise<TransactionReceiptAPI | undefi
   const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
   expect(txHash).is.ok;
 
-  await sleep(3000);
+  await sleep(3500);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt?.status).equal('0x1');
@@ -45,7 +45,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
   expect(txHash).is.ok;
 
   // get transaction receipt
-  await sleep(3000);
+  await sleep(3500);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt!.status).equal('0x1');
@@ -54,7 +54,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
 };
 
 const createErc20Transfer = async (): Promise<string> => {
-  const erc20: Contract<any> = new web3.eth.Contract(ERC20_ABI, erc20Address);
+  const erc20: any = new web3.eth.Contract(ERC20_ABI, erc20Address);
   const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
   expect(gas).is.ok;
 
@@ -104,7 +104,7 @@ describe('runtime_upgrade - evm interactions', function () {
     const receipt = await deployDemo(deployTx);
 
     // estimate contract methods
-    const contract: Contract<any> = new web3.eth.Contract(DEMO_ABI, receipt?.contractAddress);
+    const contract: any = new web3.eth.Contract(DEMO_ABI, receipt?.contractAddress);
     const gas = await contract.methods.store(1).estimateGas({ from: alith });
     expect(gas).is.ok;
 
@@ -125,7 +125,7 @@ describe('runtime_upgrade - evm interactions', function () {
   });
 
   it('should successfully interact with a precompiled contract', async function () {
-    const staking: Contract<any> = new web3.eth.Contract(STAKING_ABI, STAKING_ADDRESS);
+    const staking: any = new web3.eth.Contract(STAKING_ABI, STAKING_ADDRESS);
     const candidatePool = await staking.methods.candidate_pool().call();
     expect(candidatePool).is.ok;
     expect(candidatePool[0][0]).equal(alith);
