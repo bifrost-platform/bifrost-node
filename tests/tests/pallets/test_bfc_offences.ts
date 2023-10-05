@@ -204,14 +204,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
     expect(validatorOffences.offences.length).equal(1);
     expect(validatorOffences.offences[0].roundIndex).equal(rawCurrentRound.currentRoundIndex.toNumber());
     expect(validatorOffences.offences[0].sessionIndex).equal(rawCurrentRound.currentSessionIndex.toNumber());
-    expect(validatorOffences.offences[0].totalSlash).equal(context.web3.utils.padLeft(
-      context.web3.utils.toHex(new BigNumber(5).multipliedBy(10 ** 18).toFixed()),
-      32,
-    ));
-    expect(validatorOffences.offences[0].offenderSlash).equal(context.web3.utils.padLeft(
-      context.web3.utils.toHex(new BigNumber(5).multipliedBy(10 ** 18).toFixed()),
-      32,
-    ));
+    expect(context.web3.utils.hexToNumberString(validatorOffences.offences[0].totalSlash)).equal(new BigNumber(5).multipliedBy(10 ** 18).toFixed());
+    expect(context.web3.utils.hexToNumberString(validatorOffences.offences[0].offenderSlash)).equal(new BigNumber(5).multipliedBy(10 ** 18).toFixed());
     expect(validatorOffences.offences[0].nominatorsSlash).equal(0);
     expect(validatorOffences.offences[0].slashFraction.toString()).equal(new BigNumber(0.5).multipliedBy(10 ** 7).toFixed());
   });
@@ -225,7 +219,7 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
 
     const rawTreauryId: any = await context.polkadotApi.query.treasury.treasuryId();
     const treasuryId = rawTreauryId.toJSON();
-    const potBalanceBefore = new BigNumber(await context.web3.eth.getBalance(treasuryId));
+    const potBalanceBefore = new BigNumber((await context.web3.eth.getBalance(treasuryId)).toString());
 
     let offenceLength = 1;
     for (let i = 1; i <= FULL_MAXIMUM_OFFENCE_COUNT; i++) {
@@ -304,7 +298,7 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
         // check treasury pot
         const rawTreauryId: any = await context.polkadotApi.query.treasury.treasuryId();
         const treasuryId = rawTreauryId.toJSON();
-        const potBalance = new BigNumber(await context.web3.eth.getBalance(treasuryId));
+        const potBalance = new BigNumber((await context.web3.eth.getBalance(treasuryId)).toString());
         expect(potBalance.toFixed()).equal(new BigNumber(25).multipliedBy(10 ** 18).plus(potBalanceBefore).toFixed());
 
         // check stash account's reserved balance
@@ -358,14 +352,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
         expect(validatorOffences.offences.length).equal(offenceLength);
         expect(validatorOffences.offences[i].roundIndex).equal(rawCurrentRound.currentRoundIndex.toNumber());
         expect(validatorOffences.offences[i].sessionIndex).equal(rawCurrentRound.currentSessionIndex.toNumber());
-        expect(validatorOffences.offences[i].totalSlash).equal(context.web3.utils.padLeft(
-          context.web3.utils.toHex(new BigNumber(5).multipliedBy(10 ** 18).toFixed()),
-          32,
-        ));
-        expect(validatorOffences.offences[i].offenderSlash).equal(context.web3.utils.padLeft(
-          context.web3.utils.toHex(new BigNumber(5).multipliedBy(10 ** 18).toFixed()),
-          32,
-        ));
+        expect(context.web3.utils.hexToNumberString(validatorOffences.offences[i].totalSlash)).equal(new BigNumber(5).multipliedBy(10 ** 18).toFixed());
+        expect(context.web3.utils.hexToNumberString(validatorOffences.offences[i].offenderSlash)).equal(new BigNumber(5).multipliedBy(10 ** 18).toFixed());
         expect(validatorOffences.offences[i].nominatorsSlash).equal(0);
         expect(validatorOffences.offences[i].slashFraction.toString()).equal(new BigNumber(0.5).multipliedBy(10 ** 7).toFixed());
       }
@@ -692,14 +680,8 @@ describeDevNode('pallet_bfc_offences - update bond less pending request #1', (co
         expect(validatorOffences.offences.length).equal(offenceLength);
         expect(validatorOffences.offences[i].roundIndex).equal(rawCurrentRound.currentRoundIndex.toNumber());
         expect(validatorOffences.offences[i].sessionIndex).equal(rawCurrentRound.currentSessionIndex.toNumber());
-        expect(validatorOffences.offences[i].totalSlash).equal(context.web3.utils.padLeft(
-          context.web3.utils.toHex(new BigNumber(5).multipliedBy(10 ** 18).toFixed()),
-          32,
-        ));
-        expect(validatorOffences.offences[i].offenderSlash).equal(context.web3.utils.padLeft(
-          context.web3.utils.toHex(new BigNumber(5).multipliedBy(10 ** 18).toFixed()),
-          32,
-        ));
+        expect(context.web3.utils.hexToNumberString(validatorOffences.offences[i].totalSlash)).equal(new BigNumber(5).multipliedBy(10 ** 18).toFixed(),);
+        expect(context.web3.utils.hexToNumberString(validatorOffences.offences[i].offenderSlash)).equal(new BigNumber(5).multipliedBy(10 ** 18).toFixed());
         expect(validatorOffences.offences[i].nominatorsSlash).equal(0);
         expect(validatorOffences.offences[i].slashFraction.toString()).equal(new BigNumber(0.5).multipliedBy(10 ** 7).toFixed());
       }
@@ -881,14 +863,8 @@ describeDevNode('pallet_bfc_offences - update bond less pending request #2', (co
         expect(validatorOffences.offences.length).equal(offenceLength);
         expect(validatorOffences.offences[i].roundIndex).equal(rawCurrentRound.currentRoundIndex.toNumber());
         expect(validatorOffences.offences[i].sessionIndex).equal(rawCurrentRound.currentSessionIndex.toNumber());
-        expect(validatorOffences.offences[i].totalSlash).equal(context.web3.utils.padLeft(
-          context.web3.utils.toHex(new BigNumber(2.5).multipliedBy(10 ** 18).toFixed()),
-          32,
-        ));
-        expect(validatorOffences.offences[i].offenderSlash).equal(context.web3.utils.padLeft(
-          context.web3.utils.toHex(new BigNumber(2.5).multipliedBy(10 ** 18).toFixed()),
-          32,
-        ));
+        expect(context.web3.utils.hexToNumberString(validatorOffences.offences[i].totalSlash)).equal(new BigNumber(2.5).multipliedBy(10 ** 18).toFixed());
+        expect(context.web3.utils.hexToNumberString(validatorOffences.offences[i].offenderSlash)).equal(new BigNumber(2.5).multipliedBy(10 ** 18).toFixed());
         expect(validatorOffences.offences[i].nominatorsSlash).equal(0);
         expect(validatorOffences.offences[i].slashFraction.toString()).equal(new BigNumber(0.5).multipliedBy(10 ** 7).toFixed());
       }

@@ -1,12 +1,13 @@
-import Web3 from 'web3';
+import Gauge from 'gauge';
+import { Web3 } from 'web3';
+import { isAddress } from 'web3-validator';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
+import { ApiPromise, WsProvider } from '@polkadot/api';
 
 async function query_extrinsics() {
-  const Gauge = require('gauge');
-  const yargs = require('yargs/yargs');
-  const { hideBin } = require('yargs/helpers');
-  const { ApiPromise, HttpProvider } = require('@polkadot/api');
-
-  const argv = yargs(hideBin(process.argv))
+  const argv = await yargs(hideBin(process.argv))
     .usage('Usage: npm run query_extrinsics [args]')
     .version('1.0.0')
     .options({
@@ -32,46 +33,50 @@ async function query_extrinsics() {
       },
       provider: {
         type: 'string',
-        describe: 'The provider URL.',
-        default: 'http://127.0.0.1:9933'
+        describe: 'The provider endpoint. WebSocket provider is required.',
+        default: 'ws://127.0.0.1:9944'
       },
     }).help().argv;
 
-  if (argv.from && !Web3.utils.isAddress(argv.from)) {
-    console.error('Please enter a valid `from` address');
+  if (argv.from && !isAddress(argv.from)) {
+    console.error('⚠️  Please enter a valid `from` address');
     return;
   }
   let from = argv.from;
 
   if (!argv.start) {
-    console.error('Please enter a valid `start` block number');
+    console.error('⚠️  Please enter a valid `start` block number');
     return;
   }
 
   if (!argv.pallet) {
-    console.error('Please enter a valid `pallet` name');
+    console.error('⚠️  Please enter a valid `pallet` name');
     return;
   }
   if (!argv.extrinsic) {
-    console.error('Please enter a valid `extrinsic` name');
+    console.error('⚠️  Please enter a valid `extrinsic` name');
+    return;
+  }
+  if (!argv.provider || !argv.provider.startsWith('ws')) {
+    console.error('⚠️  Please enter a valid provider. WebSocket provider is required.');
     return;
   }
   let pallet = argv.pallet.toLowerCase();
   let extrinsic = argv.extrinsic.toLowerCase();
 
-  const web3 = new Web3(argv.provider);
+  const web3 = new Web3(new Web3.providers.WebsocketProvider(argv.provider));
   try {
     const isSyncing = await web3.eth.isSyncing();
     if (isSyncing !== false) {
-      console.error('Node is not completely synced yet');
-      process.exit(-1);
+      console.error('⚠️  Node is not completely synced yet');
+      process.exit(1);
     }
   } catch (e) {
-    console.error('Node endpoint is not reachable');
-    process.exit(-1);
+    console.error('⚠️  Node endpoint is not reachable');
+    process.exit(1);
   }
 
-  const provider = new HttpProvider(argv.provider);
+  const provider = new WsProvider(argv.provider);
   const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   let endHeader;
@@ -81,10 +86,10 @@ async function query_extrinsics() {
     endNumber = argv.end;
   } else {
     endHeader = await api.rpc.chain.getHeader();
-    endNumber = endHeader.number;
+    endNumber = endHeader.number.toNumber();
   }
   if (endNumber < startNumber) {
-    console.error('The requested `start` block number is higher than `end` block. Must be `start` < `end`.');
+    console.error('⚠️  The requested `start` block number is higher than `end` block. Must be `start` < `end`.');
     return;
   }
 
@@ -99,22 +104,21 @@ async function query_extrinsics() {
     const signedBlock = await api.rpc.chain.getBlock(blockHash);
 
     let matchedExtrinsics = [];
-    for (const [index, rawXt] of signedBlock.block.extrinsics.entries()) {
-      const xt = rawXt.toHuman();
+    for (const [index, xt] of signedBlock.block.extrinsics.entries()) {
       const method = xt.method.method.toLowerCase();
       const section = xt.method.section.toLowerCase();
 
       if (from && xt.signer) {
         from = from.toLowerCase();
-        const signer = xt.signer.toLowerCase();
+        const signer = xt.signer.toString().toLowerCase()
         if (signer === from && section === pallet && method === extrinsic) {
-          matchedExtrinsics.push({ index, hash: rawXt.hash.toHex() });
+          matchedExtrinsics.push({ index, hash: xt.hash.toHex() });
         }
         continue;
       }
 
       if (section === pallet && method === extrinsic) {
-        matchedExtrinsics.push(rawXt.hash.toHex());
+        matchedExtrinsics.push({ index, hash: xt.hash.toHex() });
       }
     }
 
@@ -130,7 +134,7 @@ async function query_extrinsics() {
 
   if (!results.length) {
     console.log('✨ Matching extrinsics not found.');
-    return;
+    process.exit(0);
   }
 
   for (const result of results) {
@@ -140,9 +144,11 @@ async function query_extrinsics() {
     }
     console.log();
   }
+
+  process.exit(0);
 }
 
 query_extrinsics().catch((error) => {
   console.error(error);
-  process.exit(0);
+  process.exit(1);
 });

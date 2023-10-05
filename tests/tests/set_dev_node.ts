@@ -2,8 +2,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { ethers } from 'ethers';
 import tcpPortUsed from 'tcp-port-used';
 import { setTimeout } from 'timers/promises';
-import { HttpProvider } from 'web3-core';
-import { JsonRpcResponse } from 'web3-core-helpers';
+import { HttpProvider } from 'web3';
 
 import { ApiPromise } from '@polkadot/api';
 
@@ -16,7 +15,6 @@ import {
 import { sleep } from './utils';
 
 import type { BlockHash } from '@polkadot/types/interfaces/chain/types';
-
 const BINARY_PATH = '../target/release/bifrost-node';
 
 export interface IBlockCreation {
@@ -31,7 +29,7 @@ export interface INodeContext {
   createPolkadotApi: () => Promise<ApiPromise>;
 
   createBlock: (options?: IBlockCreation) => Promise<{
-    txResults: JsonRpcResponse[];
+    txResults: any[];
     block: {
       duration: number;
       hash: BlockHash;
@@ -96,7 +94,7 @@ export function describeDevNode(
           protocol == 'ws'
             ? await provideWeb3Api(init.wsPort, 'ws')
             : await provideWeb3Api(init.rpcPort, 'http');
-        context._web3Providers.push((provider as any)._provider);
+        context._web3Providers.push((provider as any).provider);
         return provider;
       };
       context.createEthers = async () => provideEthersApi(init.rpcPort);
@@ -135,7 +133,7 @@ export function describeDevNode(
     });
 
     after(async function () {
-      await Promise.all(context._web3Providers.map((p) => p.disconnect()));
+      // await Promise.all(context._web3Providers.map((p) => p.disconnect()));
       await Promise.all(context._polkadotApis.map((p) => p.disconnect()));
 
       if (node) {

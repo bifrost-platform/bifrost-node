@@ -25,7 +25,7 @@ describeDevNode('precompile_balances - precompile view functions', (context) => 
     );
     const decoded_total_issuance = context.web3.eth.abi.decodeParameters(
       ['uint256'],
-      total_issuance.result,
+      total_issuance,
     )[0];
     expect(Number(decoded_total_issuance)).greaterThan(0);
   });
