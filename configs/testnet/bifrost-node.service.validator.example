@@ -1,0 +1,23 @@
+[Unit]
+Description="Bifrost-node systemd service"
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=BIFROST_SERVICE
+SyslogIdentifier=bifrost-node
+SyslogFacility=local7
+KillSignal=SIGHUP
+ExecStart=/var/lib/bifrost-data/bifrost-node \
+    --base-path /var/lib/bifrost-data \
+    --chain /var/lib/bifrost-data/bifrost-testnet.json \
+    --port 30333 \
+    --validator \
+    --state-pruning archive \
+    --trie-cache-size 0 \
+    --runtime-cache-size 64 \
+    --name "YOUR_NODE_NAME"
+
+[Install]
+WantedBy=multi-user.target
