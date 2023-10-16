@@ -5,14 +5,15 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
+Restart=always
+RestartSec=30
 User=BIFROST_SERVICE
 SyslogIdentifier=bifrost-node
 SyslogFacility=local7
 KillSignal=SIGHUP
 ExecStart=/var/lib/bifrost-data/bifrost-node \
     --base-path /var/lib/bifrost-data \
-    --chain /var/lib/bifrost-data/bifrost-testnet.json \
-    --port 30333 \
+    --chain /var/lib/bifrost-data/bifrost-mainnet.json \
     --validator \
     --state-pruning archive \
     --trie-cache-size 0 \
