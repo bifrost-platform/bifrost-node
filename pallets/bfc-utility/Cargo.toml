@@ -3,7 +3,7 @@ name = "pallet-bfc-utility"
 version = "1.0.0"
 description = "bfc utility pallet for management of the network community"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -25,7 +25,7 @@ sp-core = { workspace = true }
 [dev-dependencies]
 similar-asserts = { workspace = true }
 
-pallet-balances = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
 sp-core = { workspace = true, features = ["std"] }
 sp-io = { workspace = true, features = ["std"] }
 

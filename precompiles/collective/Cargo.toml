@@ -3,7 +3,7 @@ name = "precompile-collective"
 version = "1.0.0"
 description = "A Precompile to make Substrate's collective related pallets accessible to pallet-evm"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -36,7 +36,7 @@ serde = { workspace = true }
 sha3 = { workspace = true }
 
 # Substrate
-pallet-balances = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
 pallet-timestamp = { workspace = true, features = ["std"] }
 pallet-scheduler = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
