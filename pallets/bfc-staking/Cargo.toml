@@ -3,7 +3,7 @@ name = "pallet-bfc-staking"
 version = "1.0.0"
 description = "bfc staking pallet for validator selection and reward distribution"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -34,7 +34,7 @@ bp-staking = { workspace = true }
 [dev-dependencies]
 similar-asserts = { workspace = true }
 
-pallet-balances = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
 sp-core = { workspace = true, features = ["std"] }
 sp-io = { workspace = true, features = ["std"] }
 

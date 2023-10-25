@@ -5,7 +5,7 @@ mod pallet;
 pub mod weights;
 
 use frame_support::traits::Currency;
-pub use pallet::{pallet::*, *};
+pub use pallet::{pallet::*};
 use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};

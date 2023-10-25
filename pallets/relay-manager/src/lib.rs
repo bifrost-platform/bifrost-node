@@ -4,7 +4,7 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
-pub use pallet::{pallet::*, *};
+pub use pallet::{pallet::*};
 use weights::WeightInfo;
 
 use frame_support::traits::{ValidatorSet, ValidatorSetWithIdentification};
