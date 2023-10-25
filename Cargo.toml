@@ -1,30 +1,30 @@
 [workspace]
 resolver = "2"
 members = [
-    "node/core",
-    "node/common",
-    "node/dev",
-    "node/testnet",
-    "node/mainnet",
-    "runtime/common",
-    "runtime/dev",
-    "runtime/testnet",
-    "runtime/mainnet",
-    "pallets/bfc-staking",
-    "pallets/bfc-utility",
-    "pallets/bfc-offences",
-    "pallets/relay-manager",
-    "precompiles/utils",
-    "precompiles/utils/macro",
-    "precompiles/bfc-staking",
-    "precompiles/bfc-offences",
-    "precompiles/relay-manager",
-    "precompiles/governance",
-    "precompiles/collective",
-    "precompiles/balance",
-    "primitives/account",
-    "primitives/core",
-    "primitives/bfc-staking",
+	"node/core",
+	"node/common",
+	"node/dev",
+	"node/testnet",
+	"node/mainnet",
+	"runtime/common",
+	"runtime/dev",
+	"runtime/testnet",
+	"runtime/mainnet",
+	"pallets/bfc-staking",
+	"pallets/bfc-utility",
+	"pallets/bfc-offences",
+	"pallets/relay-manager",
+	"precompiles/utils",
+	"precompiles/utils/macro",
+	"precompiles/bfc-staking",
+	"precompiles/bfc-offences",
+	"precompiles/relay-manager",
+	"precompiles/governance",
+	"precompiles/collective",
+	"precompiles/balance",
+	"primitives/account",
+	"primitives/core",
+	"primitives/bfc-staking",
 ]
 [profile.release]
 panic = "unwind"
@@ -39,8 +39,12 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 [workspace.dependencies]
 # General
 substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
-parity-scale-codec = { version = "3.2.2", default-features = false, features = ["derive"] }
-scale-info = { version = "2.0", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "3.2.2", default-features = false, features = [
+	"derive",
+] }
+scale-info = { version = "2.0", default-features = false, features = [
+	"derive",
+] }
 evm = { git = "https://github.com/rust-blockchain/evm", rev = "b7b82c7e1fc57b7449d6dfa6826600de37cc1e65", default-features = false }
 environmental = { version = "1.1.2", default-features = false }
 clap = { version = "4.0.9", features = ["derive"] }
