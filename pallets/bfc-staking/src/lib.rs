@@ -39,7 +39,7 @@ mod set;
 pub mod weights;
 
 pub use inflation::{InflationInfo, Range};
-pub use pallet::{pallet::*, *};
+pub use pallet::{pallet::*};
 pub use set::OrderedSet;
 use weights::WeightInfo;
 
