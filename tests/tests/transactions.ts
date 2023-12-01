@@ -143,7 +143,7 @@ export const createTransaction = async (
     rawTransaction = tx.rawTransaction;
   } else {
     const signer = new ethers.Wallet(privateKey, context.ethers);
-    const chainId = await context.web3.eth.getChainId();
+    const chainId = Number(await context.web3.eth.getChainId());
     if (isEip2930) {
       data = {
         from,

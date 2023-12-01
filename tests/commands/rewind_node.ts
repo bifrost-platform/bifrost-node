@@ -1,6 +1,6 @@
-async function rewindNode() {
-  const shell = require('shelljs');
+import shell from 'shelljs';
 
+async function rewindNode() {
   // --index
   // --to
   // --base-path

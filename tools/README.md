@@ -29,12 +29,12 @@ npm run set_session_keys -- \
   --controllerPrivate 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133
 ```
 
-### 1.3. Self bond your initial stake and join as a Validator
+### 1.3. Self bond your initial stake and join as a validator candidate
 
 **Full Node**
 
 ```
-npm run join_validators -- \
+npm run join_validator_candidates -- \
   --controllerPrivate 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133 \
   --stashPrivate 0x234871e7f7520af0cfc9f8547057b283c628be93a90b393aa19be1279ee52b4a \
   --relayerPrivate 0xcc01ee486e8717dc3911ede9293b767e29ce66f5c987da45887cb61822700117 \
@@ -44,7 +44,7 @@ npm run join_validators -- \
 **Basic Node**
 
 ```
-npm run join_validators -- \
+npm run join_validator_candidates -- \
   --controllerPrivate 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133 \
   --stashPrivate 0x234871e7f7520af0cfc9f8547057b283c628be93a90b393aa19be1279ee52b4a \
   --bond 1000
@@ -61,7 +61,7 @@ This command will query historical extrinsics that matches the requested paramet
 |from        |The account address who submitted the extrinsic.  |0x81143D1d29B101B84FE87BCB2f684534b20EBaAd  |X|
 |start       |The starting block number where query will start.  |5047917  |O|
 |end         |The ending block number where the query will end. The default value will be the highest block of the connected provider.  |5048007  |X|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
+|provider    |The provider endpoint. The default value will be `ws://localhost:9944`  |`wss://public-01.testnet.bifrostnetwork.com/wss`  |O|
 |pallet      |The name of the pallet where the extrinsic locates.  |bfcStaking  |O|
 |extrinsic   |The name of the extrinsic to query.  |nominate  |O|
 
@@ -71,7 +71,7 @@ npm run query_extrinsics -- \
   --from 0x81143D1d29B101B84FE87BCB2f684534b20EBaAd \
   --start 5047917 \
   --end 5048007 \
-  --provider https://public-01.testnet.bifrostnetwork.com/rpc \
+  --provider wss://public-01.testnet.bifrostnetwork.com/wss \
   --pallet bfcStaking \
   --extrinsic nominate
 ```
@@ -90,7 +90,7 @@ This command will query historical events that matches the requested parameters.
 |----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
 |start       |The starting block number where query will start.  |5047917  |O|
 |end         |The ending block number where the query will end. The default value will be the highest block of the connected provider.  |5048007  |X|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
+|provider    |The provider endpoint. The default value will be `ws://localhost:9944`  |`wss://public-01.testnet.bifrostnetwork.com/wss`  |O|
 |pallet      |The name of the pallet where the event locates.  |bfcStaking  |O|
 |event   |The name of the event to query.  |Nomination  |O|
 
@@ -99,7 +99,7 @@ This command will query historical events that matches the requested parameters.
 npm run query_events -- \
   --start 5047917 \
   --end 5048007 \
-  --provider https://public-01.testnet.bifrostnetwork.com/rpc \
+  --provider wss://public-01.testnet.bifrostnetwork.com/wss \
   --pallet bfcStaking \
   --event Nomination
 ```
@@ -118,14 +118,14 @@ This command will query the detail information of the extrinsic that matches the
 |----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
 |block       |The block number where the extrinsic is included.  |5047917  |O|
 |index       |The index of the extrinsic.  |1  |O|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
+|provider    |The provider endpoint. The default value will be `ws://localhost:9944`  |`wss://public-01.testnet.bifrostnetwork.com/wss`  |O|
 
 **Example Request**
 ```
 npm run query_extrinsic -- \
   --block 5047917 \
   --index 1 \
-  --provider https://public-01.testnet.bifrostnetwork.com/rpc
+  --provider wss://public-01.testnet.bifrostnetwork.com/wss
 ```
 
 **Example Response**
@@ -195,7 +195,7 @@ This command will transfer the given value to the receiver.
 |----------|--------------------------------------------|--------------------------------------------------------------------|------------------------------------------------------|
 |fromPrivate        |The private key of the sender.  |0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133  |O|
 |to       |The address of the receiver.  |0x81143D1d29B101B84FE87BCB2f684534b20EBaAd  |O|
-|provider    |The provider URL. The default value will be `http://localhost:9933`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
+|provider    |The provider endpoint. The default value will be `http://localhost:9944`  |`https://public-01.testnet.bifrostnetwork.com/rpc`  |O|
 |value      |The amount that will be transferred in wei units.  |1000000000000000000  |O|
 
 **Example Request**

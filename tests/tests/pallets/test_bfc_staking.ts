@@ -24,7 +24,6 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
   const alithStash = keyring.addFromUri(TEST_STASHES[0].private);
 
-
   it('should successfully replace controller account', async function () {
     await context.polkadotApi.tx.bfcStaking
       .setController(newAlith.address)
@@ -1374,12 +1373,7 @@ describeDevNode('pallet_bfc_staking - candidate stake management', (context) => 
 
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(baltathar.address);
     const candidateState = rawCandidateState.unwrap().toJSON();
-    expect(candidateState.request.amount).equal(
-      context.web3.utils.padLeft(
-        context.web3.utils.toHex(stake.toFixed()),
-        32,
-      ),
-    );
+    expect(context.web3.utils.hexToNumberString(candidateState.request.amount)).equal(stake.toFixed());
   });
 
   it('should fail due to pending schedule existance', async function () {
@@ -1683,7 +1677,7 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
     await context.createBlock();
 
     // 2. jump to executable round
-    const balanceBefore = new BigNumber(await context.web3.eth.getBalance(baltatharStash.address));
+    const balanceBefore = new BigNumber((await context.web3.eth.getBalance(baltatharStash.address)).toString());
 
     const rawCandidateStateBefore: any = await context.polkadotApi.query.bfcStaking.candidateInfo(baltathar.address);
     const candidateStateBefore = rawCandidateStateBefore.unwrap();
@@ -1724,7 +1718,7 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
     expect(isCandidateFound).equal(false);
 
     // 6. check balance - self-bond must be unreserved
-    const balanceAfter = new BigNumber(await context.web3.eth.getBalance(baltatharStash.address));
+    const balanceAfter = new BigNumber((await context.web3.eth.getBalance(baltatharStash.address)).toString());
     expect(balanceAfter.isGreaterThan(balanceBefore)).equal(true);
 
     // 7. jump to next round
@@ -2099,7 +2093,7 @@ describeDevNode('pallet_bfc_staking - revoke nomination', (context) => {
   it('should successfully execute scheduled revoke nomination', async function () {
     this.timeout(20000);
 
-    const balanceBefore = new BigNumber(await context.web3.eth.getBalance(charleth.address));
+    const balanceBefore = new BigNumber((await context.web3.eth.getBalance(charleth.address)).toString());
 
     const rawNominatorStateBefore: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
     const nominatorStateBefore = rawNominatorStateBefore.unwrap();
@@ -2131,7 +2125,7 @@ describeDevNode('pallet_bfc_staking - revoke nomination', (context) => {
     const nominatorStateAfter = rawNominatorStateAfter.toHuman();
     expect(nominatorStateAfter).to.be.null;
 
-    const balanceAfter = new BigNumber(await context.web3.eth.getBalance(charleth.address));
+    const balanceAfter = new BigNumber((await context.web3.eth.getBalance(charleth.address)).toString());
     expect(balanceAfter.isGreaterThan(balanceBefore)).equal(true);
   });
 });
@@ -2221,7 +2215,7 @@ describeDevNode('pallet_bfc_staking - leave nominators', (context) => {
   it('should successfully execute scheduled leave nominators', async function () {
     this.timeout(20000);
 
-    const balanceBefore = new BigNumber(await context.web3.eth.getBalance(charleth.address));
+    const balanceBefore = new BigNumber((await context.web3.eth.getBalance(charleth.address)).toString());
 
     const rawNominatorStateBefore: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
     const nominatorStateBefore = rawNominatorStateBefore.unwrap();
@@ -2239,7 +2233,7 @@ describeDevNode('pallet_bfc_staking - leave nominators', (context) => {
     const nominatorStateAfter = rawNominatorStateAfter.toHuman();
     expect(nominatorStateAfter).to.be.null;
 
-    const balanceAfter = new BigNumber(await context.web3.eth.getBalance(charleth.address));
+    const balanceAfter = new BigNumber((await context.web3.eth.getBalance(charleth.address)).toString());
     expect(balanceAfter.isGreaterThan(balanceBefore)).equal(true);
   });
 });
