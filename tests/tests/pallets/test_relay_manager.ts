@@ -228,14 +228,8 @@ describeDevNode('pallet_relay_manager - relayer heartbeat', (context) => {
     expect(validatorOffences.offences.length).equal(1);
     expect(validatorOffences.offences[0].roundIndex).equal(rawCurrentRound.currentRoundIndex.toNumber());
     expect(validatorOffences.offences[0].sessionIndex).equal(rawCurrentRound.currentSessionIndex.toNumber());
-    expect(validatorOffences.offences[0].totalSlash).equal(context.web3.utils.padLeft(
-      context.web3.utils.toHex(new BigNumber(10).multipliedBy(10 ** 18).toFixed()),
-      32,
-    ));
-    expect(validatorOffences.offences[0].offenderSlash).equal(context.web3.utils.padLeft(
-      context.web3.utils.toHex(new BigNumber(10).multipliedBy(10 ** 18).toFixed()),
-      32,
-    ));
+    expect(context.web3.utils.hexToNumberString(validatorOffences.offences[0].totalSlash)).equal(new BigNumber(10).multipliedBy(10 ** 18).toFixed());
+    expect(context.web3.utils.hexToNumberString(validatorOffences.offences[0].offenderSlash)).equal(new BigNumber(10).multipliedBy(10 ** 18).toFixed());
     expect(validatorOffences.offences[0].nominatorsSlash).equal(0);
     expect(validatorOffences.offences[0].slashFraction.toString()).equal(new BigNumber(1).multipliedBy(10 ** 7).toFixed());
   });

@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+
 import { customWeb3Request } from '../providers';
 import { describeDevNode } from '../set_dev_node';
 
@@ -16,12 +17,12 @@ describeDevNode('Web3Api Information', (context) => {
     const data = context.web3.utils.stringToHex('hello');
     const nodeHash = await customWeb3Request(context.web3, 'web3_sha3', [data]);
     const localHash = context.web3.utils.sha3('hello');
-    expect(nodeHash.result).to.be.equal(localHash);
+    expect(nodeHash).to.be.equal(localHash);
   });
 
   it('should report peer count in hex', async function () {
     const result = await customWeb3Request(context.web3, 'net_peerCount', []);
-    expect(result.result).to.be.equal('0x0');
-    expect(typeof result.result).to.be.equal('string');
+    expect(result).to.be.equal('0x0');
+    expect(typeof result).to.be.equal('string');
   });
 });

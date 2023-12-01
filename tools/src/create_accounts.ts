@@ -1,11 +1,9 @@
-const Web3 = require('web3');
+import { create as web3AccountCreate } from 'web3-eth-accounts';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 
 async function create_accounts() {
-  const web3 = new Web3();
-  const yargs = require('yargs/yargs');
-  const { hideBin } = require('yargs/helpers');
-
-  const argv = yargs(hideBin(process.argv))
+  const argv = await yargs(hideBin(process.argv))
     .usage('Usage: npm run create_accounts [args]')
     .version('1.0.0')
     .options({
@@ -16,8 +14,8 @@ async function create_accounts() {
       },
     }).help().argv;
 
-  const controller = web3.eth.accounts.create();
-  const stash = web3.eth.accounts.create();
+  const controller = web3AccountCreate();
+  const stash = web3AccountCreate();
 
   console.log(`👤 Controller:`);
   console.log(`    address: ${controller.address}`);
@@ -27,7 +25,7 @@ async function create_accounts() {
   console.log(`    privateKey: ${stash.privateKey}`);
 
   if (argv.full) {
-    const relayer = web3.eth.accounts.create();
+    const relayer = web3AccountCreate();
     console.log('👤 Relayer:');
     console.log(`    address: ${relayer.address}`);
     console.log(`    privateKey: ${relayer.privateKey}`);

@@ -24,9 +24,9 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
       'maximum_offence_count',
       ['0x0'],
     );
-    const decoded_maximum_offence_count = context.web3.eth.abi.decodeParameters(
+    const decoded_maximum_offence_count: any = context.web3.eth.abi.decodeParameters(
       ['uint256[]'],
-      maximum_offence_count.result,
+      maximum_offence_count,
     )[0];
     expect(Number(decoded_maximum_offence_count[0])).equal(5);
     expect(Number(decoded_maximum_offence_count[1])).equal(3);
@@ -39,9 +39,9 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
       'validator_offence',
       [alith.public],
     );
-    const decoded_validator_offence = context.web3.eth.abi.decodeParameters(
+    const decoded_validator_offence: any = context.web3.eth.abi.decodeParameters(
       ['tuple(address,uint256,uint256,uint256)'],
-      validator_offence.result,
+      validator_offence,
     )[0];
     expect(decoded_validator_offence[0]).equal(alith.public);
 
@@ -55,9 +55,9 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
         context.web3.eth.abi.encodeParameter('address[]', [alith.public])
       ],
     );
-    const decoded_validator_offences = context.web3.eth.abi.decodeParameters(
+    const decoded_validator_offences: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'uint256[]', 'uint256[]', 'uint256[]'],
-      validator_offences.result,
+      validator_offences,
     );
     expect(decoded_validator_offences[0][0]).equal(alith.public);
   });

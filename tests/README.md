@@ -33,28 +33,28 @@ npm run test
 Run genesis validator node
 
 ```
-npm run run_node -- --index 1
+npm run run_node -- --index 0
 ```
 
 Run validator nodes (increase node index to add more nodes to the network)
 
 ```
-npm run run_node -- --index 2
+npm run run_node -- --index 1
 ```
 
 Set full validator nodes
 ```
 npm run set_node -- \
-  --index 2 \
-  --provider http://127.0.0.1 \
+  --index 1 \
+  --provider ws://127.0.0.1:9944 \
   --full
 ```
 
 Set basic validator nodes
 ```
 npm run set_node -- \
-  --index 2 \
-  --provider http://127.0.0.1 \
+  --index 1 \
+  --provider ws://127.0.0.1:9944 \
 ```
 
 Remove all persisted data

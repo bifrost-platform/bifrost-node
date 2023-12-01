@@ -1,51 +1,44 @@
-import { fromAccount, web3 } from './index';
+import { signer, web3 } from './index';
 
 export async function sendRequests(signedTx: string) {
-  const _startTime = (new Date()).getTime();
-  const result = await web3.eth.sendSignedTransaction(signedTx);
-  const _endTime = (new Date()).getTime();
-  return { delay: (_endTime - _startTime), result };
+  await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
 }
 
-export async function singleTransfer(nonce: number, pk: string) {
-  const signedTx = (await web3.eth.accounts.signTransaction({
-    to: '0xc62a8D60ec60A17E73813Fe289aE711A57356109',
-    value: 1000000000000000,
-    gas: 30000,
-    nonce
-  }, pk)).rawTransaction;
-  if (signedTx) {
-    const receipt = await sendRequests(signedTx);
-    console.log(`transaction sent: ${receipt.result.transactionHash} - ${nonce}`);
-  }
-}
-
-export async function batchTransfer(reqCount: number, pk: string) {
-  let nonce = await web3.eth.getTransactionCount(fromAccount.address);
-  const transferReqs = [];
-
-  for (let i = 0; i < reqCount; i++) {
+export async function singleTransfer(quantity: number, pk: string, value: string) {
+  let nonce = Number(await web3.eth.getTransactionCount(signer));
+  for (let i = 0; i < quantity; i++) {
     const signedTx = (await web3.eth.accounts.signTransaction({
-      to: '0xc62a8D60ec60A17E73813Fe289aE711A57356109',
-      value: 1000000000000000,
-      gas: 30000,
+      from: signer,
+      to: '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac',
+      gasPrice: web3.utils.toWei(1000, 'gwei'),
+      gas: 21000,
+      value,
       nonce
     }, pk)).rawTransaction;
-    nonce += 1;
     if (signedTx) {
-      transferReqs.push(sendRequests(signedTx));
+      nonce += 1;
+      await sendRequests(signedTx);
     }
   }
+}
 
-  const transferResults = await Promise.all(transferReqs);
+export async function batchTransfer(quantity: number, pk: string, value: string) {
+  const batch: Promise<void>[] = [];
+  let nonce = Number(await web3.eth.getTransactionCount(signer));
 
-  const blockNums: Array<number> = [];
-  transferResults.forEach(res => {
-    const insertedBlockNum = res.result.blockNumber;
-    if (!(blockNums.includes(insertedBlockNum))) {
-      blockNums.push(insertedBlockNum);
+  for (let i = 0; i < quantity; i++) {
+    const signedTx = (await web3.eth.accounts.signTransaction({
+      from: signer,
+      to: '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac',
+      gasPrice: web3.utils.toWei(1000, 'gwei'),
+      gas: 21000,
+      value,
+      nonce
+    }, pk)).rawTransaction;
+    if (signedTx) {
+      nonce += 1;
+      batch.push(sendRequests(signedTx));
     }
-  });
-
-  return blockNums;
+  }
+  await Promise.all(batch);
 }

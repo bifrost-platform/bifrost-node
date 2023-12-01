@@ -1,4 +1,6 @@
-export const BFC_STAKING_ABI = [
+export const STAKING_ADDRESS = '0x0000000000000000000000000000000000000400';
+
+export const STAKING_ABI = [
   {
     "inputs": [],
     "name": "cancel_candidate_bond_less",
@@ -81,31 +83,24 @@ export const BFC_STAKING_ABI = [
     "name": "candidate_bottom_nominations",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "candidate",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "total",
-            "type": "uint256"
-          },
-          {
-            "internalType": "address[]",
-            "name": "nominators",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "nominations",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.candidate_nominations",
+        "internalType": "address",
         "name": "",
-        "type": "tuple"
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -148,21 +143,14 @@ export const BFC_STAKING_ABI = [
     "name": "candidate_pool",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address[]",
-            "name": "candidates",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "bonds",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.candidate_pool_meta_data",
+        "internalType": "address[]",
         "name": "",
-        "type": "tuple"
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -336,111 +324,104 @@ export const BFC_STAKING_ABI = [
     "name": "candidate_states",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address[]",
-            "name": "candidates",
-            "type": "address[]"
-          },
-          {
-            "internalType": "address[]",
-            "name": "stashes",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "bonds",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "initial_bonds",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "nominations_counts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "voting_powers",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "lowest_top_nomination_amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "highest_bottom_nomination_amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "lowest_bottom_nomination_amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "top_capacities",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "bottom_capacities",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "status",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "bool[]",
-            "name": "is_selected",
-            "type": "bool[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "commissions",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "last_blocks",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "blocks_produced",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "productivity",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "reward_dst",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "awarded_tokens",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "tiers",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.candidates_meta_data",
+        "internalType": "address[]",
         "name": "",
-        "type": "tuple"
+        "type": "address[]"
+      },
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "",
+        "type": "bool[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -462,111 +443,104 @@ export const BFC_STAKING_ABI = [
     "name": "candidate_states_by_selection",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address[]",
-            "name": "candidates",
-            "type": "address[]"
-          },
-          {
-            "internalType": "address[]",
-            "name": "stashes",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "bonds",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "initial_bonds",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "nominations_counts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "voting_powers",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "lowest_top_nomination_amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "highest_bottom_nomination_amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "lowest_bottom_nomination_amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "top_capacities",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "bottom_capacities",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "status",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "bool[]",
-            "name": "is_selected",
-            "type": "bool[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "commissions",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "last_blocks",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "blocks_produced",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "productivity",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "reward_dst",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "awarded_tokens",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "tiers",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.candidates_meta_data",
+        "internalType": "address[]",
         "name": "",
-        "type": "tuple"
+        "type": "address[]"
+      },
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "bool[]",
+        "name": "",
+        "type": "bool[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -583,31 +557,24 @@ export const BFC_STAKING_ABI = [
     "name": "candidate_top_nominations",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "candidate",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "total",
-            "type": "uint256"
-          },
-          {
-            "internalType": "address[]",
-            "name": "nominators",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "nominations",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.candidate_nominations",
+        "internalType": "address",
         "name": "",
-        "type": "tuple"
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -1093,46 +1060,39 @@ export const BFC_STAKING_ABI = [
     "name": "nominator_requests",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "nominator",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "revocations_count",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "less_total",
-            "type": "uint256"
-          },
-          {
-            "internalType": "address[]",
-            "name": "candidates",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "amounts",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "when_executables",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "actions",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.nominator_requests_data",
+        "internalType": "address",
         "name": "",
-        "type": "tuple"
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -1149,66 +1109,59 @@ export const BFC_STAKING_ABI = [
     "name": "nominator_state",
     "outputs": [
       {
-        "components": [
-          {
-            "internalType": "address",
-            "name": "nominator",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "total",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "status",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "request_revocations_count",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "request_less_total",
-            "type": "uint256"
-          },
-          {
-            "internalType": "address[]",
-            "name": "candidates",
-            "type": "address[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "nominations",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "initial_nominations",
-            "type": "uint256[]"
-          },
-          {
-            "internalType": "uint256",
-            "name": "reward_dst",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "awarded_tokens",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256[]",
-            "name": "awarded_tokens_per_candidate",
-            "type": "uint256[]"
-          }
-        ],
-        "internalType": "struct BfcStaking.nominator_meta_data",
+        "internalType": "address",
         "name": "",
-        "type": "tuple"
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
       }
     ],
     "stateMutability": "view",
@@ -1609,4 +1562,4 @@ export const BFC_STAKING_ABI = [
     "stateMutability": "view",
     "type": "function"
   }
-]
+];

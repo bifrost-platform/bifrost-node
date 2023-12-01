@@ -1,12 +1,12 @@
-import Web3 from 'web3';
+import Gauge from 'gauge';
+import { Web3 } from 'web3';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+
+import { ApiPromise, WsProvider } from '@polkadot/api';
 
 async function query_events() {
-  const Gauge = require('gauge');
-  const yargs = require('yargs/yargs');
-  const { hideBin } = require('yargs/helpers');
-  const { ApiPromise, HttpProvider } = require('@polkadot/api');
-
-  const argv = yargs(hideBin(process.argv))
+  const argv = await yargs(hideBin(process.argv))
     .usage('Usage: npm run query_events [args]')
     .version('1.0.0')
     .options({
@@ -28,40 +28,43 @@ async function query_events() {
       },
       provider: {
         type: 'string',
-        describe: 'The provider URL.',
-        default: 'http://127.0.0.1:9933'
+        describe: 'The provider endpoint. WebSocket provider is required.',
+        default: 'ws://127.0.0.1:9944'
       },
     }).help().argv;
 
   if (!argv.start) {
-    console.error('Please enter a valid `start` block number');
+    console.error('⚠️  Please enter a valid `start` block number');
     return;
   }
-
   if (!argv.pallet) {
-    console.error('Please enter a valid `pallet` name');
+    console.error('⚠️  Please enter a valid `pallet` name');
     return;
   }
   if (!argv.event) {
-    console.error('Please enter a valid `event` name');
+    console.error('⚠️  Please enter a valid `event` name');
+    return;
+  }
+  if (!argv.provider || !argv.provider.startsWith('ws')) {
+    console.error('⚠️  Please enter a valid provider. WebSocket provider is required.');
     return;
   }
   let pallet = argv.pallet.toLowerCase();
   let event = argv.event.toLowerCase();
 
-  const web3 = new Web3(argv.provider);
+  const web3 = new Web3(new Web3.providers.WebsocketProvider(argv.provider));
   try {
     const isSyncing = await web3.eth.isSyncing();
     if (isSyncing !== false) {
-      console.error('Node is not completely synced yet');
-      process.exit(-1);
+      console.error('⚠️  Node is not completely synced yet');
+      process.exit(1);
     }
   } catch (e) {
-    console.error('Node endpoint is not reachable');
-    process.exit(-1);
+    console.error('⚠️  Node endpoint is not reachable');
+    process.exit(1);
   }
 
-  const provider = new HttpProvider(argv.provider);
+  const provider = new WsProvider(argv.provider);
   const api = await ApiPromise.create({ provider, noInitWarn: true });
 
   let endHeader;
@@ -71,11 +74,11 @@ async function query_events() {
     endNumber = argv.end;
   } else {
     endHeader = await api.rpc.chain.getHeader();
-    endNumber = endHeader.number;
+    endNumber = endHeader.number.toNumber();
   }
   if (endNumber < startNumber) {
-    console.error('The requested `start` block number is higher than `end` block. Must be `start` < `end`.');
-    return;
+    console.error('⚠️  The requested `start` block number is higher than `end` block. Must be `start` < `end`.');
+    process.exit(1);
   }
 
   const gauge = new Gauge();
@@ -86,7 +89,8 @@ async function query_events() {
 
   while (startNumber <= endNumber) {
     const blockHash = await api.rpc.chain.getBlockHash(startNumber);
-    const rawEvents = await api.query.system.events.at(blockHash);
+    const atSubstrate = await api.at(blockHash);
+    const rawEvents: any = await atSubstrate.query.system.events();
     const events = rawEvents.toHuman();
 
     let matchedEvents = [];
@@ -113,7 +117,7 @@ async function query_events() {
 
   if (!results.length) {
     console.log('✨ Matching events not found.');
-    return;
+    process.exit(0);
   }
 
   for (const result of results) {
@@ -123,9 +127,10 @@ async function query_events() {
     }
     console.log();
   }
+  process.exit(0);
 }
 
 query_events().catch((error) => {
   console.error(error);
-  process.exit(0);
+  process.exit(1);
 });
