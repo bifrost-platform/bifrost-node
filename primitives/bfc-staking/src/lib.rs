@@ -3,6 +3,7 @@ pub mod traits;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
+use frame_support::pallet_prelude::MaxEncodedLen;
 use sp_runtime::{traits::Zero, Perbill, RuntimeDebug};
 use sp_staking::SessionIndex;
 
@@ -12,7 +13,19 @@ pub type RoundIndex = u32;
 /// The maximum authorities allowed
 pub const MAX_AUTHORITIES: u32 = 1_000;
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Encode, Decode, Clone, Copy, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Encode,
+	Decode,
+	Clone,
+	Copy,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
 /// The tier type of a validator node.
 pub enum TierType {
 	/// The validator node must operate cross-chain functionality with a running relayer

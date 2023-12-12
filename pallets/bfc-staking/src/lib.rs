@@ -39,7 +39,7 @@ mod set;
 pub mod weights;
 
 pub use inflation::{InflationInfo, Range};
-pub use pallet::{pallet::*};
+pub use pallet::pallet::*;
 pub use set::OrderedSet;
 use weights::WeightInfo;
 
@@ -79,7 +79,7 @@ macro_rules! log {
 	};
 }
 
-#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the Staking storage. This value
 /// is used by the `on_runtime_upgrade` logic to determine whether we run storage migration logic.
 enum Releases {
@@ -94,7 +94,9 @@ impl Default for Releases {
 	}
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
 /// The candidates or the nominators bonded amount to the network
 pub struct Bond<AccountId, Balance> {
 	/// The controller account used to reserve their staked balance
@@ -116,7 +118,19 @@ impl<A: Decode, B: Default> Default for Bond<A, B> {
 	}
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Copy,
+	Clone,
+	Encode,
+	Decode,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
 /// The activity status of the validator
 pub enum ValidatorStatus {
 	/// Committed to be online and producing valid blocks (not equivocating)
@@ -162,7 +176,7 @@ impl<T: Config> Convert<T::AccountId, Option<ValidatorSnapshot<T::AccountId, Bal
 	}
 }
 
-#[derive(Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// Total staked information of the current chain state
 pub struct TotalSnapshot<Balance> {
 	/// The total self-bond of all validator candidates
@@ -314,7 +328,19 @@ impl<
 }
 
 /// Reward destination options.
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Copy,
+	Clone,
+	Encode,
+	Decode,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
 pub enum RewardDestination {
 	/// Pay into the bonded account, increasing the amount at stake accordingly.
 	Staked,
@@ -328,7 +354,7 @@ impl Default for RewardDestination {
 	}
 }
 
-#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// Info needed to make delayed controller sets after round end
 pub struct DelayedControllerSet<AccountId> {
 	/// The bonded stash account
@@ -345,7 +371,7 @@ impl<AccountId: PartialEq + Clone> DelayedControllerSet<AccountId> {
 	}
 }
 
-#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// Info needed to maked delayed commission sets after round end
 pub struct DelayedCommissionSet<AccountId> {
 	/// The bonded controller account
@@ -362,7 +388,7 @@ impl<AccountId: PartialEq + Clone> DelayedCommissionSet<AccountId> {
 	}
 }
 
-#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// Info needed to make delayed payments to stakers after round end
 pub struct DelayedPayout<Balance> {
 	/// Total round reward (result of compute_issuance() at round end)
@@ -373,7 +399,19 @@ pub struct DelayedPayout<Balance> {
 	pub validator_commission: Perbill,
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
 /// Request scheduled to change the candidate self-bond
 pub struct CandidateBondLessRequest<Balance> {
 	/// The requested less amount
@@ -504,7 +542,9 @@ impl<
 	}
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
 /// Capacity status for top or bottom nominations
 pub enum CapacityStatus {
 	/// Reached capacity
@@ -515,7 +555,9 @@ pub enum CapacityStatus {
 	Partial,
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
 /// Productivity status for active validators
 pub enum ProductivityStatus {
 	/// Successfully produced a block
@@ -526,7 +568,9 @@ pub enum ProductivityStatus {
 	Ready,
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	Eq, PartialEq, Ord, PartialOrd, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
 /// All candidate info except the top and bottom nominations
 pub struct CandidateMetadata<AccountId, Balance, BlockNumber> {
 	/// This candidate's stash account (public key)
@@ -2057,7 +2101,7 @@ impl<
 	}
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Copy, Clone, PartialEq, Eq, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// The current round index and transition information
 pub struct RoundInfo<BlockNumber> {
 	/// Current round index

@@ -4,8 +4,8 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
-use frame_support::traits::Currency;
-pub use pallet::{pallet::*};
+use frame_support::{pallet_prelude::MaxEncodedLen, traits::Currency};
+pub use pallet::pallet::*;
 use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};
@@ -21,7 +21,7 @@ pub type BalanceOf<T> =
 /// The type that indicates the index of a general proposal
 pub type PropIndex = u32;
 
-#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the BFC Utility storage. This
 /// value is used by the `on_runtime_upgrade` logic to determine whether we run storage migration
 /// logic.

@@ -4,7 +4,8 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
-pub use pallet::{pallet::*};
+use frame_support::pallet_prelude::MaxEncodedLen;
+pub use pallet::pallet::*;
 use weights::WeightInfo;
 
 use frame_support::traits::{ValidatorSet, ValidatorSetWithIdentification};
@@ -32,7 +33,7 @@ pub type IdentificationTuple<T> = (
 	>>::Identification,
 );
 
-#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the Relay Manager storage. This
 /// value is used by the `on_runtime_upgrade` logic to determine whether we run storage migration
 /// logic.
@@ -48,7 +49,7 @@ impl Default for Releases {
 	}
 }
 
-#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// An enum that represents the current state of a relayer
 pub enum RelayerStatus {
 	/// It is well behaved and sent a heartbeat for the current session
@@ -59,7 +60,7 @@ pub enum RelayerStatus {
 	KickedOut,
 }
 
-#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// The bonded controller and its owned relayer address
 pub struct Relayer<AccountId> {
 	/// This relayer's address
@@ -68,7 +69,7 @@ pub struct Relayer<AccountId> {
 	pub controller: AccountId,
 }
 
-#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// The current state of a specific relayer
 pub struct RelayerMetadata<AccountId, Hash> {
 	/// This relayer's bonded controller address

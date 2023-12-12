@@ -31,7 +31,6 @@ pub mod pallet {
 
 	/// Pallet for bfc staking
 	#[pallet::pallet]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet.
@@ -500,6 +499,7 @@ pub mod pallet {
 	pub type ProductivityPerBlock<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn nominator_state)]
 	/// Get nominator state associated with an account if account is nominating else None
 	pub(crate) type NominatorState<T: Config> = StorageMap<
@@ -527,6 +527,7 @@ pub mod pallet {
 	pub type BondedStash<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, T::AccountId>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn top_nominations)]
 	/// Top nominations for validator candidate
 	pub(crate) type TopNominations<T: Config> = StorageMap<
@@ -538,6 +539,7 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn bottom_nominations)]
 	/// Bottom nominations for validator candidate
 	pub(crate) type BottomNominations<T: Config> = StorageMap<
@@ -567,6 +569,7 @@ pub mod pallet {
 		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_candidates)]
 	/// The cached active validator set selected from previous rounds
 	pub type CachedSelectedCandidates<T: Config> =
@@ -578,6 +581,7 @@ pub mod pallet {
 	pub type Majority<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active validator set selected from previous rounds
 	pub type CachedMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
@@ -597,6 +601,7 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn at_stake)]
 	/// Snapshot of validator nomination stake at the start of the round
 	pub type AtStake<T: Config> = StorageDoubleMap<

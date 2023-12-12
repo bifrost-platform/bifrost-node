@@ -18,7 +18,6 @@ pub mod pallet {
 
 	/// Pallet for bfc offences
 	#[pallet::pallet]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet
@@ -77,6 +76,7 @@ pub mod pallet {
 	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn validator_offences)]
 	/// The current offence state of a specific validator
 	pub type ValidatorOffences<T: Config> =
