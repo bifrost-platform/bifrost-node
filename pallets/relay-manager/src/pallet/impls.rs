@@ -263,6 +263,7 @@ impl<T: Config> Pallet<T> {
 	fn add_to_selected_relayers(relayer: T::AccountId) {
 		let mut selected_relayers = <SelectedRelayers<T>>::get();
 		selected_relayers.try_push(relayer).expect("SelectedRelayers out of bound");
+		selected_relayers.sort();
 		<SelectedRelayers<T>>::put(selected_relayers);
 	}
 

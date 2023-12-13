@@ -552,26 +552,26 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_candidates)]
-	/// The active validator set (full and basic) selected for the current round
+	/// The active validator set (full and basic) selected for the current round. This storage is sorted by address.
 	pub type SelectedCandidates<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_full_candidates)]
-	/// The active full validator set selected for the current round
+	/// The active full validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedFullCandidates<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_basic_candidates)]
-	/// The active basic validator set selected for the current round
+	/// The active basic validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedBasicCandidates<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_candidates)]
-	/// The cached active validator set selected from previous rounds
+	/// The cached active validator set selected from previous rounds. This storage is sorted by address.
 	pub type CachedSelectedCandidates<T: Config> =
 		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
 
@@ -593,7 +593,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn candidate_pool)]
-	/// The pool of validator candidates, each with their total voting power
+	/// The pool of validator candidates, each with their total voting power. This storage is sorted by amount.
 	pub(crate) type CandidatePool<T: Config> = StorageValue<
 		_,
 		BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
