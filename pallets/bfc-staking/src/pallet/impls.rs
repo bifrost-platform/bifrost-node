@@ -2,8 +2,8 @@ use super::pallet::*;
 
 use crate::{
 	inflation::Range, weights::WeightInfo, BalanceOf, Bond, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, ProductivityStatus, RewardDestination, RoundIndex,
-	TierType, TotalSnapshot, ValidatorSnapshot, ValidatorSnapshotOf,
+	DelayedControllerSet, DelayedPayout, ProductivityStatus, RewardDestination, RewardPoint,
+	RoundIndex, TierType, TotalSnapshot, ValidatorSnapshot, ValidatorSnapshotOf,
 };
 
 use pallet_session::ShouldEndSession;
@@ -182,6 +182,7 @@ impl<T: Config> Pallet<T> {
 		selected_candidates
 			.try_push(candidate.clone())
 			.expect("SelectedCandidates out of bound");
+		selected_candidates.sort();
 		<SelectedCandidates<T>>::put(selected_candidates);
 		match tier {
 			TierType::Full => {
@@ -189,6 +190,7 @@ impl<T: Config> Pallet<T> {
 				selected_full_candidates
 					.try_push(candidate.clone())
 					.expect("SelectedFullCandidates out of bound");
+				selected_full_candidates.sort();
 				<SelectedFullCandidates<T>>::put(selected_full_candidates);
 			},
 			_ => {
@@ -196,6 +198,7 @@ impl<T: Config> Pallet<T> {
 				selected_basic_candidates
 					.try_push(candidate.clone())
 					.expect("SelectedBasicCandidates out of bound");
+				selected_basic_candidates.sort();
 				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
 			},
 		};
@@ -744,7 +747,7 @@ impl<T: Config> Pallet<T> {
 
 		let score_plus_5 = <AwardedPts<T>>::get(round_index, &author) + 5;
 		<AwardedPts<T>>::insert(round_index, author, score_plus_5);
-		<Points<T>>::mutate(round_index, |x| *x += 5);
+		<Points<T>>::mutate(round_index, |x: &mut RewardPoint| *x += 5);
 	}
 
 	/// Reset every `per round` related parameters of every candidates
