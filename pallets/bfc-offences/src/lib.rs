@@ -4,13 +4,13 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
-pub use pallet::{pallet::*};
+pub use pallet::pallet::*;
 use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use frame_support::traits::Currency;
+use frame_support::{pallet_prelude::MaxEncodedLen, traits::Currency};
 
 use bp_staking::{Offence, RoundIndex};
 use sp_runtime::{traits::Zero, Perbill, RuntimeDebug};
@@ -27,7 +27,7 @@ pub type NegativeImbalanceOf<T> = <<T as Config>::Currency as Currency<
 	<T as frame_system::Config>::AccountId,
 >>::NegativeImbalance;
 
-#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value that represents the current storage version of this pallet.
 ///
 /// This value is used by the `on_runtime_upgrade` logic to determine whether we run storage

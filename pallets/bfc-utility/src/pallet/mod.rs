@@ -17,7 +17,6 @@ pub mod pallet {
 
 	/// Pallet for bfc utility
 	#[pallet::pallet]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet
@@ -53,6 +52,7 @@ pub mod pallet {
 	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	/// Storage for accepted proposals. Proposal passed by governance will be stored here.
 	pub type AcceptedProposals<T: Config> = StorageValue<_, Vec<Proposal>, ValueQuery>;
 

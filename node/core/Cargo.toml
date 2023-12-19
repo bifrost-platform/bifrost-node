@@ -1,6 +1,6 @@
 [package]
 name = "bifrost-node"
-version = "1.2.4"
+version = "1.2.5"
 description = "The node specification for Bifrost Node"
 authors = { workspace = true }
 homepage = { workspace = true }

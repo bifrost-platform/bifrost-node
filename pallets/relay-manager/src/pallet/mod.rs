@@ -18,7 +18,6 @@ pub mod pallet {
 
 	/// Pallet for relay manager
 	#[pallet::pallet]
-	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	/// Configuration trait of this pallet
@@ -127,25 +126,27 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_relayers)]
-	/// The active relayer set selected for the current round
+	/// The active relayer set selected for the current round. This storage is sorted by address.
 	pub type SelectedRelayers<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn initial_selected_relayers)]
-	/// The active relayer set selected at the beginning of the current round
+	/// The active relayer set selected at the beginning of the current round. This storage is sorted by address.
 	pub type InitialSelectedRelayers<T: Config> =
 		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_relayers)]
-	/// The cached active relayer set selected from previous rounds
+	/// The cached active relayer set selected from previous rounds. This storage is sorted by address.
 	pub type CachedSelectedRelayers<T: Config> =
 		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_selected_relayers)]
-	/// The cached active relayer set selected from the beginning of each previous rounds
+	/// The cached active relayer set selected from the beginning of each previous rounds. This storage is sorted by address.
 	pub type CachedInitialSelectedRelayers<T: Config> =
 		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
 
@@ -160,11 +161,13 @@ pub mod pallet {
 	pub type InitialMajority<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active relayer set selected from previous rounds
 	pub type CachedMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_majority)]
 	/// The cached majority based on the active relayer set selected from the beginning of each
 	/// previous rounds

@@ -98,7 +98,7 @@ pub fn round_issuance_range<T: Config>(round_inflation: Range<Perbill>) -> Range
 }
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Eq, PartialEq, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// The information about the staking inflation for this network
 pub struct InflationInfo<Balance> {
 	/// Staking expectations
