@@ -7,6 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Index, Signature};
+use frame_support::traits::tokens::{PayFromAccount, UnityAssetBalanceConversion};
 use parity_scale_codec::{Decode, Encode};
 
 pub use bifrost_testnet_constants::{
@@ -19,7 +20,7 @@ use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{crypto::KeyTypeId, ConstU64, OpaqueMetadata, H160, H256, U256};
+use sp_core::{crypto::KeyTypeId, ConstBool, ConstU64, OpaqueMetadata, H160, H256, U256};
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
@@ -60,7 +61,6 @@ use pallet_transaction_payment::CurrencyAdapter;
 pub use frame_support::{
 	construct_runtime,
 	dispatch::{DispatchClass, GetDispatchInfo},
-	log,
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{
@@ -608,6 +608,7 @@ parameter_types! {
 	pub const SpendPeriod: BlockNumber = 1 * DAYS;
 	pub const TreasuryPalletId: PalletId = PalletId(*b"py/trsry");
 	pub const MaxApprovals: u32 = 50;
+	pub TreasuryAccount: AccountId = Treasury::account_id();
 }
 
 /// A module that manages funds stored in a certain vault
@@ -634,6 +635,14 @@ impl pallet_treasury::Config for Runtime {
 	type SpendFunds = ();
 	type MaxApprovals = MaxApprovals;
 	type SpendOrigin = NeverEnsureOrigin<Balance>;
+	type AssetKind = ();
+	type Beneficiary = AccountId;
+	type BeneficiaryLookup = IdentityLookup<AccountId>;
+	type Paymaster = PayFromAccount<Balances, TreasuryAccount>;
+	type BalanceConverter = UnityAssetBalanceConversion;
+	type PayoutPeriod = ConstU32<0>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = BenchmarkHelper;
 }
 
 parameter_types! {
