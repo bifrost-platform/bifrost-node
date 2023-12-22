@@ -121,7 +121,8 @@ pub mod pallet {
 		pub default_basic_maximum_offence_count: OffenceCount,
 		pub is_offence_active: bool,
 		pub is_slash_active: bool,
-		_phantom_data: PhantomData<T>,
+		#[serde(skip)]
+		pub _config: PhantomData<T>,
 	}
 
 	#[cfg(feature = "std")]
@@ -134,7 +135,7 @@ pub mod pallet {
 				default_basic_maximum_offence_count: T::DefaultBasicMaximumOffenceCount::get(),
 				is_offence_active: T::IsOffenceActive::get(),
 				is_slash_active: T::IsSlashActive::get(),
-				_phantom_data: PhantomData::default(),
+				_config: Default::default(),
 			}
 		}
 	}

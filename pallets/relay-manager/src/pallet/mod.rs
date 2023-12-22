@@ -224,7 +224,8 @@ pub mod pallet {
 		pub storage_cache_lifetime: u32,
 		pub is_heartbeat_offence_active: bool,
 		pub heartbeat_slash_fraction: Perbill,
-		_phantom_data: PhantomData<T>,
+		#[serde(skip)]
+		pub _config: PhantomData<T>,
 	}
 
 	#[cfg(feature = "std")]
@@ -234,7 +235,7 @@ pub mod pallet {
 				storage_cache_lifetime: T::StorageCacheLifetimeInRounds::get(),
 				is_heartbeat_offence_active: T::IsHeartbeatOffenceActive::get(),
 				heartbeat_slash_fraction: T::DefaultHeartbeatSlashFraction::get(),
-				_phantom_data: PhantomData::default(),
+				_config: Default::default(),
 			}
 		}
 	}

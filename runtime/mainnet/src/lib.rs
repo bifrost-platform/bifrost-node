@@ -529,7 +529,6 @@ parameter_types! {
 	pub const MaxProposals: u32 = 1_000;
 	pub const MaxDeposits: u32 = 1_000;
 	pub const MaxBlacklisted: u32 = 1_000;
-	pub const PreimageByteDeposit: Balance = STORAGE_BYTE_FEE;
 	pub const InstantAllowed: bool = true;
 }
 
@@ -929,7 +928,7 @@ impl pallet_base_fee::Config for Runtime {
 construct_runtime!(
 	pub struct Runtime {
 		// System
-		System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
+		System: frame_system::{Pallet, Call, Storage, Config<T>, Event<T>} = 0,
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent} = 2,
 
 		// Block
@@ -941,25 +940,25 @@ construct_runtime!(
 		Historical: pallet_session_historical::{Pallet} = 6,
 		Offences: pallet_offences::{Pallet, Storage, Event} = 7,
 		ImOnline: pallet_im_online::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event<T>} = 8,
-		Grandpa: pallet_grandpa::{Pallet, Call, Storage, ValidateUnsigned, Config, Event} = 9,
+		Grandpa: pallet_grandpa::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event} = 9,
 
 		// Monetary
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 10,
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config, Event<T>} = 11,
+		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config<T>, Event<T>} = 11,
 
 		// Staking
-		RelayManager: pallet_relay_manager::{Pallet, Call, Storage, Config, Event<T>} = 20,
+		RelayManager: pallet_relay_manager::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
 		BfcStaking: pallet_bfc_staking::{Pallet, Call, Storage, Config<T>, Event<T>} = 21,
-		BfcUtility: pallet_bfc_utility::{Pallet, Call, Storage, Config, Event<T>} = 22,
-		BfcOffences: pallet_bfc_offences::{Pallet, Call, Storage, Config, Event<T>} = 23,
+		BfcUtility: pallet_bfc_utility::{Pallet, Call, Storage, Config<T>, Event<T>} = 22,
+		BfcOffences: pallet_bfc_offences::{Pallet, Call, Storage, Config<T>, Event<T>} = 23,
 
 		// Utility
 		Utility: pallet_utility::{Pallet, Call, Event} = 30,
 		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>} = 31,
 
 		// Ethereum
-		EVM: pallet_evm::{Pallet, Config, Call, Storage, Event<T>} = 40,
-		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin, Config} = 41,
+		EVM: pallet_evm::{Pallet, Config<T>, Call, Storage, Event<T>} = 40,
+		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin, Config<T>} = 41,
 		BaseFee: pallet_base_fee::{Pallet, Call, Storage, Config<T>, Event} = 42,
 
 		// Governance
@@ -969,7 +968,7 @@ construct_runtime!(
 		TechnicalCommittee: pallet_collective::<Instance2>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 53,
 		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
 		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
-		Treasury: pallet_treasury::{Pallet, Call, Storage, Config, Event<T>} = 56,
+		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
 		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>} = 57,
 
 		// Temporary
