@@ -79,6 +79,10 @@ macro_rules! log {
 	};
 }
 
+/// Used for release versioning upto v3_0_0.
+///
+/// Obsolete from v4. Keeping around to make encoding/decoding of old migration code easier.
+
 #[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the Staking storage. This value
 /// is used by the `on_runtime_upgrade` logic to determine whether we run storage migration logic.
@@ -372,7 +376,7 @@ impl<AccountId: PartialEq + Clone> DelayedControllerSet<AccountId> {
 }
 
 #[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-/// Info needed to maked delayed commission sets after round end
+/// Info needed to made delayed commission sets after round end
 pub struct DelayedCommissionSet<AccountId> {
 	/// The bonded controller account
 	pub who: AccountId,
@@ -1271,8 +1275,7 @@ impl<
 		let mut bottom_nominations =
 			<BottomNominations<T>>::get(candidate).ok_or(Error::<T>::CandidateDNE)?;
 		let mut nomination_option: Option<Bond<T::AccountId, BalanceOf<T>>> = None;
-		let in_top_after = if (bond.saturating_add(more)).into() > self.lowest_top_nomination_amount
-		{
+		let in_top_after = if bond.saturating_add(more).into() > self.lowest_top_nomination_amount {
 			// bump it from bottom
 			bottom_nominations.nominations = bottom_nominations
 				.nominations

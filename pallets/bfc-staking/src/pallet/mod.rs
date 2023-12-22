@@ -1,10 +1,10 @@
 mod impls;
 
 use crate::{
-	BalanceOf, BlockNumberOf, Bond, CandidateMetadata, DelayedCommissionSet, DelayedControllerSet,
-	DelayedPayout, InflationInfo, NominationChange, NominationRequest, Nominations, Nominator,
-	NominatorAdded, Range, Releases, RewardDestination, RewardPoint, RoundIndex, RoundInfo,
-	TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	migrations, BalanceOf, BlockNumberOf, Bond, CandidateMetadata, DelayedCommissionSet,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
+	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
+	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -14,7 +14,7 @@ use bp_staking::{
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::*,
-	traits::{Currency, Get, ReservableCurrency},
+	traits::{Currency, Get, ReservableCurrency, StorageVersion, OnRuntimeUpgrade},
 	Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
@@ -29,8 +29,12 @@ use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 pub mod pallet {
 	use super::*;
 
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+
 	/// Pallet for bfc staking
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet.
@@ -100,10 +104,10 @@ pub mod pallet {
 		/// The default commission rate for a basic validator
 		#[pallet::constant]
 		type DefaultBasicValidatorCommission: Get<Perbill>;
-		/// The maxmimum commission rate available for a full validator
+		/// The maximum commission rate available for a full validator
 		#[pallet::constant]
 		type MaxFullValidatorCommission: Get<Perbill>;
-		/// The maxmimum commission rate available for a basic validator
+		/// The maximum commission rate available for a basic validator
 		#[pallet::constant]
 		type MaxBasicValidatorCommission: Get<Perbill>;
 		/// Minimum stake required for any full node candidate to be in `SelectedCandidates` for the
@@ -435,10 +439,6 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	/// Storage version of the pallet.
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::getter(fn session)]
 	/// Current session index of current round
 	pub type Session<T> = StorageValue<_, SessionIndex, ValueQuery>;
@@ -698,6 +698,10 @@ pub mod pallet {
 			weight += Self::handle_delayed_payouts(round.current_round_index);
 			weight
 		}
+
+		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
+		}
 	}
 
 	#[pallet::genesis_config]
@@ -720,7 +724,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V3_0_0);
+			// StorageVersion::<T>::put(Releases::V3_0_0);
 			<InflationConfig<T>>::put(self.inflation_config.clone());
 			// Set validator commission to default config
 			<DefaultFullValidatorCommission<T>>::put(T::DefaultFullValidatorCommission::get());
