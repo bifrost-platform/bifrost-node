@@ -237,6 +237,7 @@ impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
+	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 }
 
 /// Provides the GRANDPA block finality gadget.
