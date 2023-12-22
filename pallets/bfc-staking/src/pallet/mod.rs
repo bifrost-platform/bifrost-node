@@ -252,7 +252,7 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Started a new round.
 		NewRound {
-			starting_block: T::BlockNumber,
+			starting_block: BlockNumberFor<T>,
 			round: RoundIndex,
 			selected_validators_number: u32,
 			total_balance: BalanceOf<T>,
@@ -412,7 +412,7 @@ pub mod pallet {
 		/// Set blocks per round.
 		BlocksPerRoundSet {
 			current_round: RoundIndex,
-			first_block: T::BlockNumber,
+			first_block: BlockNumberFor<T>,
 			old: u32,
 			new: u32,
 			new_per_round_inflation_min: Perbill,
@@ -449,7 +449,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn round)]
 	/// Current round index and next round scheduled transition
-	pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<T::BlockNumber>, ValueQuery>;
+	pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<BlockNumberFor<T>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn storage_cache_lifetime)]
@@ -684,7 +684,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(n: T::BlockNumber) -> Weight {
+		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			let mut weight = T::WeightInfo::base_on_initialize();
 
 			<Round<T>>::mutate(|round| {
@@ -807,7 +807,7 @@ pub mod pallet {
 			<CachedMajority<T>>::put(BTreeMap::from([(1u32, initial_majority)]));
 			T::RelayManager::refresh_majority(1u32);
 			// Start Round 1 at Block 0
-			let round: RoundInfo<T::BlockNumber> = RoundInfo::new(
+			let round: RoundInfo<BlockNumberFor<T>> = RoundInfo::new(
 				1u32,
 				0u32,
 				0u32,
@@ -838,7 +838,7 @@ pub mod pallet {
 			<Staked<T>>::insert(1u32, <Total<T>>::get());
 			<TotalAtStake<T>>::insert(1u32, TotalSnapshot::default());
 			<Pallet<T>>::deposit_event(Event::NewRound {
-				starting_block: T::BlockNumber::zero(),
+				starting_block: BlockNumberFor::<T>::zero(),
 				round: 1u32,
 				selected_validators_number: v_count,
 				total_balance: total_staked,
@@ -1135,7 +1135,7 @@ pub mod pallet {
 			);
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
-				now - first < T::BlockNumber::from(new as u8),
+				now - first < BlockNumberFor<T>::from(new),
 				Error::<T>::RoundLengthMustBeLongerThanCreatedBlocks,
 			);
 			ensure!(
