@@ -6,8 +6,12 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Index, Signature};
-use frame_support::traits::tokens::{PayFromAccount, UnityAssetBalanceConversion};
+pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
+use frame_support::traits::{
+	fungible::HoldConsideration,
+	tokens::{PayFromAccount, UnityAssetBalanceConversion},
+	LinearStoragePrice,
+};
 use parity_scale_codec::{Decode, Encode};
 
 pub use bifrost_testnet_constants::{
@@ -589,8 +593,9 @@ impl pallet_democracy::Config for Runtime {
 }
 
 parameter_types! {
-	pub const BaseDeposit: Balance = 5 * SUPPLY_FACTOR * BFC;
-	pub const ByteDeposit: Balance = STORAGE_BYTE_FEE;
+	pub const PreimageBaseDeposit: Balance = 5 * SUPPLY_FACTOR * BFC;
+	pub const PreimageByteDeposit: Balance = STORAGE_BYTE_FEE;
+	pub const PreimageHoldReason: RuntimeHoldReason = RuntimeHoldReason::Preimage(pallet_preimage::HoldReason::Preimage);
 }
 
 impl pallet_preimage::Config for Runtime {
@@ -598,8 +603,12 @@ impl pallet_preimage::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type ManagerOrigin = EnsureRoot<AccountId>;
-	type BaseDeposit = BaseDeposit;
-	type ByteDeposit = ByteDeposit;
+	type Consideration = HoldConsideration<
+		AccountId,
+		Balances,
+		PreimageHoldReason,
+		LinearStoragePrice<PreimageBaseDeposit, PreimageByteDeposit, Balance>,
+	>;
 }
 
 parameter_types! {
