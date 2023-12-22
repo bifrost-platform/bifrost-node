@@ -515,7 +515,7 @@ pub mod pallet {
 		_,
 		Twox64Concat,
 		T::AccountId,
-		CandidateMetadata<T::AccountId, BalanceOf<T>, BlockNumberOf<T>>,
+		CandidateMetadata<T::AccountId, BalanceOf<T>, BlockNumberFor<T>>,
 		OptionQuery,
 	>;
 
@@ -1135,7 +1135,7 @@ pub mod pallet {
 			);
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
-				now - first < BlockNumberFor<T>::from(new),
+				now - first < BlockNumberFor::<T>::from(new),
 				Error::<T>::RoundLengthMustBeLongerThanCreatedBlocks,
 			);
 			ensure!(

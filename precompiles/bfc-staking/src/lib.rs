@@ -7,7 +7,9 @@ use frame_support::{
 	BoundedBTreeSet,
 };
 
-use pallet_bfc_staking::{Call as StakingCall, NominationChange, RewardDestination};
+use pallet_bfc_staking::{
+	BlockNumberFor, Call as StakingCall, NominationChange, RewardDestination,
+};
 use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
@@ -22,9 +24,9 @@ use sp_std::{
 
 mod types;
 use types::{
-	BalanceOf, BlockNumberOf, CandidateState, CandidateStates, EvmCandidatePoolOf,
-	EvmCandidateStateOf, EvmCandidateStatesOf, EvmNominatorRequestsOf, EvmNominatorStateOf,
-	EvmRoundInfoOf, EvmTotalOf, NominatorState, StakingOf, TotalStake,
+	BalanceOf, CandidateState, CandidateStates, EvmCandidatePoolOf, EvmCandidateStateOf,
+	EvmCandidateStatesOf, EvmNominatorRequestsOf, EvmNominatorStateOf, EvmRoundInfoOf, EvmTotalOf,
+	NominatorState, StakingOf, TotalStake,
 };
 
 /// A precompile to wrap the functionality from pallet_bfc_staking.
@@ -39,7 +41,7 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<StakingCall<Runtime>>,
 	BalanceOf<Runtime>: TryFrom<U256> + Into<U256>,
-	BlockNumberOf<Runtime>: Into<U256>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	// Role Verifiers
 

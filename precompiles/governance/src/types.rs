@@ -1,4 +1,5 @@
 use frame_support::traits::Currency;
+use frame_system::pallet_prelude::BlockNumberFor;
 
 use pallet_democracy::Conviction;
 
@@ -13,8 +14,6 @@ pub type GetEncodedProposalSizeLimit = ConstU32<ENCODED_PROPOSAL_SIZE_LIMIT>;
 pub type BalanceOf<Runtime> = <<Runtime as pallet_democracy::Config>::Currency as Currency<
 	<Runtime as frame_system::Config>::AccountId,
 >>::Balance;
-
-pub type BlockNumberOf<Runtime> = <Runtime as frame_system::Config>::BlockNumber;
 
 pub type HashOf<Runtime> = <Runtime as frame_system::Config>::Hash;
 
@@ -91,7 +90,7 @@ pub struct AccountVotes<Runtime: pallet_democracy::Config> {
 	/// The delegated raw amount of votes received for this account (conviction not applied)
 	pub delegated_raw_votes: BalanceOf<Runtime>,
 	/// The block number that expires the locked balance
-	pub lock_expired_at: BlockNumberOf<Runtime>,
+	pub lock_expired_at: BlockNumberFor<Runtime>,
 	/// The balance locked to the network
 	pub lock_balance: BalanceOf<Runtime>,
 }
@@ -148,7 +147,7 @@ where
 
 	pub fn set_expiration(
 		&mut self,
-		lock_expired_at: BlockNumberOf<Runtime>,
+		lock_expired_at: BlockNumberFor<Runtime>,
 		lock_balance: BalanceOf<Runtime>,
 	) {
 		self.lock_expired_at = lock_expired_at;
@@ -160,7 +159,7 @@ impl<Runtime> From<AccountVotes<Runtime>> for EvmAccountVotes
 where
 	Runtime: pallet_democracy::Config,
 	BalanceOf<Runtime>: Into<U256>,
-	BlockNumberOf<Runtime>: Into<U256>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	fn from(votes: AccountVotes<Runtime>) -> Self {
 		(

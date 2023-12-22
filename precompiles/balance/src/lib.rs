@@ -1,11 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo};
+use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
 use fp_evm::PrecompileHandle;
 use precompile_utils::{substrate::RuntimeHelper, EvmResult};
 
 use sp_core::{H160, U256};
+use sp_runtime::traits::Dispatchable;
 use sp_std::marker::PhantomData;
 
 /// A precompile to wrap the functionality from pallet_balances
