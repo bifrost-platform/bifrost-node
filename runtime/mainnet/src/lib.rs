@@ -244,6 +244,7 @@ impl pallet_grandpa::Config for Runtime {
 	type EquivocationReportSystem = ();
 	type WeightInfo = ();
 	type MaxAuthorities = MaxAuthorities;
+	type MaxNominators = ConstU32<150>;
 	type MaxSetIdSessionEntries = ConstU64<0>;
 }
 
