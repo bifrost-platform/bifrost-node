@@ -276,6 +276,8 @@ impl pallet_balances::Config for Runtime {
 	type MaxFreezes = ();
 	type HoldIdentifier = ();
 	type MaxHolds = ();
+	type RuntimeHoldReason = ();
+	type RuntimeFreezeReason = ();
 }
 
 pub struct DealWithFees<R>(sp_std::marker::PhantomData<R>);
