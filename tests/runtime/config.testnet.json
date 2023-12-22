@@ -1,0 +1,7 @@
+{
+  "nodeEndpoint": "https://private.testnet.thebifrost.io/rpc",
+  "testerPk": "0x551bc2c70de4d7db6506b3599071876f99143227f48fddd19c7f9ca4db2f41eb",
+  "tester": "0x81143D1d29B101B84FE87BCB2f684534b20EBaAd",
+  "tester2": "0xEc27264491E0B8DcD6D9b7155A7951BFA13236FD",
+  "validator": "0x45A96ACA1Cd759306B05B05b40B082254E77699b"
+}
