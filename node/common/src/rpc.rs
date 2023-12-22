@@ -94,7 +94,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	/// List of optional RPC extensions.
 	pub ethapi_cmd: Vec<EthApiCmd>,
 	/// Frontier backend.
-	pub frontier_backend: Arc<dyn fc_db::BackendReader<Block> + Send + Sync>,
+	pub frontier_backend: Arc<dyn fc_api::Backend<Block> + Send + Sync>,
 	/// Backend.
 	pub backend: Arc<BE>,
 	/// Maximum fee history cache size.
@@ -142,7 +142,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	/// List of optional RPC extensions.
 	pub ethapi_cmd: Vec<EthApiCmd>,
 	/// Frontier backend.
-	pub frontier_backend: Arc<dyn fc_db::BackendReader<Block> + Send + Sync>,
+	pub frontier_backend: Arc<dyn fc_api::Backend<Block> + Send + Sync>,
 	/// Backend.
 	pub backend: Arc<BE>,
 	/// Maximum fee history cache size.

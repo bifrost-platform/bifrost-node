@@ -191,6 +191,7 @@ fc-rpc-core = { default-features = false, git = "https://github.com/bifrost-plat
 fc-rpc-debug = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v1.3.0" }
 fc-rpc-trace = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v1.3.0" }
 fc-rpc-txpool = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v1.3.0" }
+fc-api = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v1.3.0" }
 
 # Frontier Primitive
 fp-self-contained = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-v1.3.0" }

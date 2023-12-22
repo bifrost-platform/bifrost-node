@@ -699,6 +699,7 @@ version = "1.0.0"
 dependencies = [
  "bp-core",
  "clap",
+ "fc-api",
  "fc-db",
  "fc-rpc",
  "fc-rpc-core",

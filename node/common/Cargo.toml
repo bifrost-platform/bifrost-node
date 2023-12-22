@@ -36,6 +36,7 @@ sp-block-builder = { workspace = true, features = ["std"] }
 
 # Frontier dependencies
 fc-db = { workspace = true }
+fc-api = { workspace = true }
 fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate"] }
 fc-rpc-core = { workspace = true }
 fp-rpc-debug = { workspace = true }
