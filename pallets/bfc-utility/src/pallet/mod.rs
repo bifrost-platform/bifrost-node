@@ -67,19 +67,22 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
-	pub struct GenesisConfig {}
+	pub struct GenesisConfig<T> {
+		pub proposal_index: PropIndex,
+		_phantom_data: PhantomData<T>,
+	}
 
 	#[cfg(feature = "std")]
-	impl Default for GenesisConfig {
+	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self {}
+			Self { proposal_index: 0, _phantom_data: PhantomData::default() }
 		}
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			ProposalIndex::<T>::put(0);
+			ProposalIndex::<T>::put(self.proposal_index);
 		}
 	}
 

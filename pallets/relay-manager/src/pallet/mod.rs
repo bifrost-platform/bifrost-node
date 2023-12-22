@@ -186,7 +186,8 @@ pub mod pallet {
 	#[pallet::getter(fn cached_initial_majority)]
 	/// The cached majority based on the active relayer set selected from the beginning of each
 	/// previous rounds
-	pub type CachedInitialMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
+	pub type CachedInitialMajority<T: Config> =
+		StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn received_heartbeats)]
@@ -219,21 +220,31 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
-	pub struct GenesisConfig {}
+	pub struct GenesisConfig<T> {
+		pub storage_cache_lifetime: u32,
+		pub is_heartbeat_offence_active: bool,
+		pub heartbeat_slash_fraction: Perbill,
+		_phantom_data: PhantomData<T>,
+	}
 
 	#[cfg(feature = "std")]
-	impl Default for GenesisConfig {
+	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self {}
+			Self {
+				storage_cache_lifetime: T::StorageCacheLifetimeInRounds::get(),
+				is_heartbeat_offence_active: T::IsHeartbeatOffenceActive::get(),
+				heartbeat_slash_fraction: T::DefaultHeartbeatSlashFraction::get(),
+				_phantom_data: PhantomData::default(),
+			}
 		}
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			StorageCacheLifetime::<T>::put(T::StorageCacheLifetimeInRounds::get());
-			IsHeartbeatOffenceActive::<T>::put(T::IsHeartbeatOffenceActive::get());
-			HeartbeatSlashFraction::<T>::put(T::DefaultHeartbeatSlashFraction::get());
+			StorageCacheLifetime::<T>::put(self.storage_cache_lifetime);
+			IsHeartbeatOffenceActive::<T>::put(self.is_heartbeat_offence_active);
+			HeartbeatSlashFraction::<T>::put(self.heartbeat_slash_fraction);
 		}
 	}
 

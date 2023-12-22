@@ -115,23 +115,38 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
-	pub struct GenesisConfig {}
+	pub struct GenesisConfig<T> {
+		pub default_offence_expiration_in_sessions: SessionIndex,
+		pub default_full_maximum_offence_count: OffenceCount,
+		pub default_basic_maximum_offence_count: OffenceCount,
+		pub is_offence_active: bool,
+		pub is_slash_active: bool,
+		_phantom_data: PhantomData<T>,
+	}
 
 	#[cfg(feature = "std")]
-	impl Default for GenesisConfig {
+	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self {}
+			Self {
+				default_offence_expiration_in_sessions: T::DefaultOffenceExpirationInSessions::get(
+				),
+				default_full_maximum_offence_count: T::DefaultFullMaximumOffenceCount::get(),
+				default_basic_maximum_offence_count: T::DefaultBasicMaximumOffenceCount::get(),
+				is_offence_active: T::IsOffenceActive::get(),
+				is_slash_active: T::IsSlashActive::get(),
+				_phantom_data: PhantomData::default(),
+			}
 		}
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			OffenceExpirationInSessions::<T>::put(T::DefaultOffenceExpirationInSessions::get());
-			FullMaximumOffenceCount::<T>::put(T::DefaultFullMaximumOffenceCount::get());
-			BasicMaximumOffenceCount::<T>::put(T::DefaultBasicMaximumOffenceCount::get());
-			IsOffenceActive::<T>::put(T::IsOffenceActive::get());
-			IsSlashActive::<T>::put(T::IsSlashActive::get());
+			OffenceExpirationInSessions::<T>::put(self.default_offence_expiration_in_sessions);
+			FullMaximumOffenceCount::<T>::put(self.default_full_maximum_offence_count);
+			BasicMaximumOffenceCount::<T>::put(self.default_basic_maximum_offence_count);
+			IsOffenceActive::<T>::put(self.is_offence_active);
+			IsSlashActive::<T>::put(self.is_slash_active);
 		}
 	}
 
