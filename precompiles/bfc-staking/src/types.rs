@@ -483,11 +483,11 @@ where
 	}
 
 	pub fn set_state(&mut self, state: Nominator<Runtime::AccountId, BalanceOf<Runtime>>) {
-		for nomination in state.nominations.0 {
-			self.candidates.push(Address(nomination.owner.into()));
-			self.nominations.push(nomination.amount);
-		}
-		for nomination in state.initial_nominations.0 {
+		state.nominations.iter().for_each(|(owner, amount)| {
+			self.candidates.push(Address(owner.clone().into()));
+			self.nominations.push(*amount);
+		});
+		for nomination in state.initial_nominations {
 			self.initial_nominations.push(nomination.amount);
 		}
 
@@ -505,9 +505,10 @@ where
 			RewardDestination::Account => 1u32.into(),
 		};
 
-		for awarded_token in state.awarded_tokens_per_candidate.0 {
-			self.awarded_tokens_per_candidate.push(awarded_token.amount);
-		}
+		state.awarded_tokens_per_candidate.iter().for_each(|(_, amount)| {
+			self.awarded_tokens_per_candidate.push(*amount);
+		});
+
 		self.awarded_tokens = state.awarded_tokens;
 	}
 

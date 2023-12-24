@@ -1075,7 +1075,7 @@ where
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let result = if let Some(state) = <StakingOf<Runtime>>::nominator_state(&nominator) {
-			let nominator_nomination_count: u32 = state.nominations.0.len() as u32;
+			let nominator_nomination_count: u32 = state.nominations.len() as u32;
 			nominator_nomination_count
 		} else {
 			0u32

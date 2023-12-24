@@ -1157,7 +1157,7 @@ pub mod pallet {
 			);
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
-				now - first < T::BlockNumber::from(new),
+				now - first < T::BlockNumber::from(new as u8),
 				Error::<T>::RoundLengthMustBeLongerThanCreatedBlocks,
 			);
 			ensure!(
@@ -1646,11 +1646,11 @@ pub mod pallet {
 				// nomination after first
 				ensure!(amount >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
 				ensure!(
-					nomination_count >= state.nominations.0.len() as u32,
+					nomination_count >= state.nominations.len() as u32,
 					Error::<T>::TooLowNominationCountToNominate
 				);
 				ensure!(
-					(state.nominations.0.len() as u32) < T::MaxNominationsPerNominator::get(),
+					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
 				ensure!(
@@ -1723,11 +1723,11 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.can_execute_leave::<T>(nomination_count)?;
-			for bond in state.nominations.0 {
+			for bond in state.nominations {
 				if let Err(error) = Self::nominator_leaves_candidate(
-					bond.owner.clone(),
+					bond.0.clone(),
 					nominator.clone(),
-					bond.amount,
+					bond.1,
 				) {
 					log::warn!(
 						"STORAGE CORRUPTED \nNominator leaving validator failed with error: {:?}",

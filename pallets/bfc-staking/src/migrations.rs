@@ -11,11 +11,60 @@ pub mod v4 {
 	#[storage_alias]
 	pub type StorageVersion<T: Config> = StorageValue<Pallet<T>, Releases, ValueQuery>;
 
+	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+	/// Nominator state
+	pub struct OrderedSetNominator<AccountId, Balance> {
+		pub id: AccountId,
+		pub nominations: OrderedSet<Bond<AccountId, Balance>>,
+		pub initial_nominations: OrderedSet<Bond<AccountId, Balance>>,
+		pub total: Balance,
+		pub requests: PendingNominationRequests<AccountId, Balance>,
+		pub status: NominatorStatus,
+		pub reward_dst: RewardDestination,
+		pub awarded_tokens: Balance,
+		pub awarded_tokens_per_candidate: OrderedSet<Bond<AccountId, Balance>>,
+	}
+
 	pub struct MigrateToV4<T>(PhantomData<T>);
 
 	impl<T: Config> OnRuntimeUpgrade for MigrateToV4<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
+
+			NominatorState::<T>::translate(
+				|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
+					let nominations: BTreeMap<_, _> = old
+						.nominations
+						.0
+						.clone()
+						.iter()
+						.map(|bond| (bond.owner.clone(), bond.amount))
+						.collect();
+
+					let initial_nominations: BTreeSet<_> =
+						old.initial_nominations.0.clone().into_iter().collect();
+
+					let awarded_tokens_per_candidate: BTreeMap<_, _> = old
+						.awarded_tokens_per_candidate
+						.0
+						.clone()
+						.iter()
+						.map(|bond| (bond.owner.clone(), bond.amount))
+						.collect();
+
+					Some(Nominator {
+						id: old.id,
+						nominations,
+						initial_nominations,
+						total: old.total,
+						requests: old.requests,
+						status: old.status,
+						reward_dst: old.reward_dst,
+						awarded_tokens: old.awarded_tokens,
+						awarded_tokens_per_candidate,
+					})
+				},
+			);
 
 			let current = Pallet::<T>::current_storage_version();
 			let onchain = StorageVersion::<T>::get();
@@ -112,25 +161,25 @@ pub mod v2 {
 	}
 
 	pub fn migrate<T: Config>() -> Weight {
-		NominatorState::<T>::translate(|_key, old: OldNominator<T::AccountId, BalanceOf<T>>| {
-			let nominations = old.nominations.0.clone();
-			let mut awarded_tokens_per_candidate = OrderedSet::new();
-			for nomination in nominations {
-				awarded_tokens_per_candidate
-					.insert(Bond { owner: nomination.owner.clone(), amount: Zero::zero() });
-			}
-			Some(Nominator {
-				id: old.id,
-				nominations: old.nominations,
-				initial_nominations: old.initial_nominations,
-				total: old.total,
-				requests: old.requests,
-				status: old.status,
-				reward_dst: old.reward_dst,
-				awarded_tokens: old.awarded_tokens,
-				awarded_tokens_per_candidate,
-			})
-		});
+		// NominatorState::<T>::translate(|_key, old: OldNominator<T::AccountId, BalanceOf<T>>| {
+		// 	let nominations = old.nominations.0.clone();
+		// 	let mut awarded_tokens_per_candidate = OrderedSet::new();
+		// 	for nomination in nominations {
+		// 		awarded_tokens_per_candidate
+		// 			.insert(Bond { owner: nomination.owner.clone(), amount: Zero::zero() });
+		// 	}
+		// 	Some(Nominator {
+		// 		id: old.id,
+		// 		nominations: old.nominations,
+		// 		initial_nominations: old.initial_nominations,
+		// 		total: old.total,
+		// 		requests: old.requests,
+		// 		status: old.status,
+		// 		reward_dst: old.reward_dst,
+		// 		awarded_tokens: old.awarded_tokens,
+		// 		awarded_tokens_per_candidate,
+		// 	})
+		// });
 		// StorageVersion::<T>::put(Releases::V2_0_0);
 
 		crate::log!(info, "bfc-staking migration passes Releases::V2_0_0 migrate checks ✅");
