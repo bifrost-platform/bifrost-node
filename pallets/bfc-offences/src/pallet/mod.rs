@@ -1,13 +1,13 @@
 mod impls;
 
 use crate::{
-	BalanceOf, NegativeImbalanceOf, OffenceCount, Releases, ValidatorOffenceInfo, WeightInfo,
+	migrations, BalanceOf, NegativeImbalanceOf, OffenceCount, ValidatorOffenceInfo, WeightInfo,
 };
 
 use bp_staking::TierType;
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, OnUnbalanced, ReservableCurrency},
+	traits::{Currency, OnRuntimeUpgrade, OnUnbalanced, ReservableCurrency, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 use sp_staking::SessionIndex;
@@ -16,8 +16,12 @@ use sp_staking::SessionIndex;
 pub mod pallet {
 	use super::*;
 
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+
 	/// Pallet for bfc offences
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet
@@ -72,10 +76,6 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	/// Storage version of the pallet
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn validator_offences)]
 	/// The current offence state of a specific validator
@@ -107,6 +107,13 @@ pub mod pallet {
 	/// The current activation of validator slashing
 	pub type IsSlashActive<T: Config> = StorageValue<_, bool, ValueQuery>;
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+			migrations::v3::MigrateToV3::<T>::on_runtime_upgrade()
+		}
+	}
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig {}
 
@@ -120,7 +127,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V2_0_0);
+			// StorageVersion::<T>::put(Releases::V2_0_0);
 			OffenceExpirationInSessions::<T>::put(T::DefaultOffenceExpirationInSessions::get());
 			FullMaximumOffenceCount::<T>::put(T::DefaultFullMaximumOffenceCount::get());
 			BasicMaximumOffenceCount::<T>::put(T::DefaultBasicMaximumOffenceCount::get());

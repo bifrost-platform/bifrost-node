@@ -1,10 +1,14 @@
 mod impls;
 
 use crate::{
-	IdentificationTuple, Relayer, RelayerMetadata, Releases, UnresponsivenessOffence, WeightInfo,
+	migrations, IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence, WeightInfo,
 };
 
-use frame_support::{pallet_prelude::*, traits::ValidatorSetWithIdentification, Twox64Concat};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion, ValidatorSetWithIdentification},
+	Twox64Concat,
+};
 use frame_system::pallet_prelude::*;
 
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
@@ -16,8 +20,12 @@ use sp_std::prelude::*;
 pub mod pallet {
 	use super::*;
 
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+
 	/// Pallet for relay manager
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	/// Configuration trait of this pallet
@@ -86,10 +94,6 @@ pub mod pallet {
 		/// Set the slash fraction for heartbeat offences
 		HeartbeatSlashFractionSet { old: Perbill, new: Perbill },
 	}
-
-	#[pallet::storage]
-	/// Storage version of the pallet.
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn storage_cache_lifetime)]
@@ -196,6 +200,13 @@ pub mod pallet {
 	/// The slash fraction for heartbeat offences
 	pub type HeartbeatSlashFraction<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
+		}
+	}
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig {}
 
@@ -209,7 +220,6 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V3_0_0);
 			StorageCacheLifetime::<T>::put(T::StorageCacheLifetimeInRounds::get());
 			IsHeartbeatOffenceActive::<T>::put(T::IsHeartbeatOffenceActive::get());
 			HeartbeatSlashFraction::<T>::put(T::DefaultHeartbeatSlashFraction::get());

@@ -1,8 +1,8 @@
-use crate::{BalanceOf, PropIndex, Proposal, Releases, WeightInfo};
+use crate::{migrations, BalanceOf, PropIndex, Proposal, WeightInfo};
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, Imbalance, ReservableCurrency},
+	traits::{Currency, Imbalance, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -12,11 +12,14 @@ use sp_std::prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-
 	use super::*;
+
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	/// Pallet for bfc utility
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet
@@ -48,10 +51,6 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	/// Storage version of this pallet.
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::unbounded]
 	/// Storage for accepted proposals. Proposal passed by governance will be stored here.
 	pub type AcceptedProposals<T: Config> = StorageValue<_, Vec<Proposal>, ValueQuery>;
@@ -59,6 +58,13 @@ pub mod pallet {
 	#[pallet::storage]
 	/// Storage for proposal index. Whenever proposal is accepted, index will be increased.
 	pub type ProposalIndex<T: Config> = StorageValue<_, PropIndex, ValueQuery>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+			migrations::v3::MigrateToV3::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig {}
@@ -73,7 +79,6 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V2_0_0);
 			ProposalIndex::<T>::put(0);
 		}
 	}

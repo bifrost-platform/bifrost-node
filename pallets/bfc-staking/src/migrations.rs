@@ -24,10 +24,10 @@ pub mod v4 {
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
 
-				log!(info, "v4 applied successfully");
+				log!(info, "bfc-staking storage migration passes v4 update ✅");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 2));
 			} else {
-				log!(warn, "Skipping v4, should be removed");
+				log!(warn, "Skipping bfc-staking migration v4, should be removed");
 				weight = weight.saturating_add(T::DbWeight::get().reads(1));
 			}
 

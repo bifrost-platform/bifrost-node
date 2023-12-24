@@ -33,6 +33,22 @@ pub type IdentificationTuple<T> = (
 	>>::Identification,
 );
 
+pub(crate) const LOG_TARGET: &'static str = "runtime::relay-manager";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
+
+/// Used for release versioning upto v3_0_0.
+///
+/// Obsolete from v4. Keeping around to make encoding/decoding of old migration code easier.
 #[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the Relay Manager storage. This
 /// value is used by the `on_runtime_upgrade` logic to determine whether we run storage migration

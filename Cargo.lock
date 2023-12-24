@@ -5687,6 +5687,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "impl-serde 0.3.2",
+ "log",
  "pallet-balances",
  "parity-scale-codec",
  "scale-info",
