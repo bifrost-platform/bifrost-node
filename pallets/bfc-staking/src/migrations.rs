@@ -31,8 +31,10 @@ pub mod v4 {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
-			NominatorState::<T>::translate(
+			<NominatorState<T>>::translate(
 				|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
+					weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
 					let nominations: BTreeMap<_, _> = old
 						.nominations
 						.0
