@@ -20,12 +20,13 @@ use sp_staking::{
 	offence::{DisableStrategy, OffenceDetails, OnOffenceHandler},
 	SessionIndex,
 };
-use sp_std::{vec, vec::Vec};
+use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use frame_support::{
 	pallet_prelude::*,
 	traits::{Currency, EstimateNextSessionRotation, Get, Imbalance, ReservableCurrency},
 	weights::Weight,
+	BoundedBTreeSet,
 };
 
 impl<T: Config> Pallet<T> {
@@ -49,11 +50,11 @@ impl<T: Config> Pallet<T> {
 	/// Verifies if the given account is a selected candidate for the current round
 	pub fn is_selected_candidate(acc: &T::AccountId, tier: TierType) -> bool {
 		let mut is_selected_candidate = false;
-		match <SelectedCandidates<T>>::get().binary_search(acc) {
-			Ok(_) => {
+		match <SelectedCandidates<T>>::get().contains(acc) {
+			true => {
 				is_selected_candidate = Self::is_candidate(acc, tier);
 			},
-			Err(_) => (),
+			false => (),
 		};
 		is_selected_candidate
 	}
@@ -196,25 +197,22 @@ impl<T: Config> Pallet<T> {
 	fn add_to_selected_candidates(candidate: T::AccountId, tier: TierType) {
 		let mut selected_candidates = <SelectedCandidates<T>>::get();
 		selected_candidates
-			.try_push(candidate.clone())
+			.try_insert(candidate.clone())
 			.expect("SelectedCandidates out of bound");
-		selected_candidates.sort();
 		<SelectedCandidates<T>>::put(selected_candidates);
 		match tier {
 			TierType::Full => {
 				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
 				selected_full_candidates
-					.try_push(candidate.clone())
+					.try_insert(candidate.clone())
 					.expect("SelectedFullCandidates out of bound");
-				selected_full_candidates.sort();
 				<SelectedFullCandidates<T>>::put(selected_full_candidates);
 			},
 			_ => {
 				let mut selected_basic_candidates = <SelectedBasicCandidates<T>>::get();
 				selected_basic_candidates
-					.try_push(candidate.clone())
+					.try_insert(candidate.clone())
 					.expect("SelectedBasicCandidates out of bound");
-				selected_basic_candidates.sort();
 				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
 			},
 		};
@@ -223,19 +221,19 @@ impl<T: Config> Pallet<T> {
 	/// Removes the given `candidate` from the `SelectedCandidates`. Depends on the given `tier`
 	/// whether it's removed from the `SelectedFullCandidates` or `SelectedBasicCandidates`.
 	fn remove_from_selected_candidates(candidate: &T::AccountId, tier: TierType) {
-		let mut selected_candidates = <SelectedCandidates<T>>::get();
-		selected_candidates.retain(|c| c != candidate);
-		<SelectedCandidates<T>>::put(selected_candidates);
+		<SelectedCandidates<T>>::mutate(|selected_candidates| {
+			selected_candidates.remove(candidate);
+		});
 		match tier {
 			TierType::Full => {
-				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
-				selected_full_candidates.retain(|c| c != candidate);
-				<SelectedFullCandidates<T>>::put(selected_full_candidates);
+				<SelectedFullCandidates<T>>::mutate(|selected_full_candidates| {
+					selected_full_candidates.remove(candidate);
+				});
 			},
 			_ => {
-				let mut selected_basic_candidates = <SelectedBasicCandidates<T>>::get();
-				selected_basic_candidates.retain(|c| c != candidate);
-				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
+				<SelectedBasicCandidates<T>>::mutate(|selected_basic_candidates| {
+					selected_basic_candidates.remove(candidate);
+				});
 			},
 		};
 	}
@@ -722,25 +720,34 @@ impl<T: Config> Pallet<T> {
 		nomination_count += full_snapshot.1 + basic_snapshot.1;
 		total += full_snapshot.2 + basic_snapshot.2;
 
-		let mut validators = [full_validators.clone(), basic_validators.clone()].concat();
-		validators.sort();
+		let validators = [full_validators.clone(), basic_validators.clone()]
+			.concat()
+			.into_iter()
+			.collect::<BTreeSet<T::AccountId>>();
 
 		// reset active validator set
 		<SelectedCandidates<T>>::put(
-			BoundedVec::try_from(validators.clone()).expect("SelectedCandidates out of bound"),
+			BoundedBTreeSet::try_from(
+				validators.clone().into_iter().collect::<BTreeSet<T::AccountId>>(),
+			)
+			.expect("SelectedCandidates out of bound"),
 		);
 		<SelectedFullCandidates<T>>::put(
-			BoundedVec::try_from(full_validators.clone())
-				.expect("SelectedFullCandidates out of bound"),
+			BoundedBTreeSet::try_from(
+				full_validators.clone().into_iter().collect::<BTreeSet<T::AccountId>>(),
+			)
+			.expect("SelectedFullCandidates out of bound"),
 		);
 		<SelectedBasicCandidates<T>>::put(
-			BoundedVec::try_from(basic_validators.clone())
-				.expect("SelectedBasicCandidates out of bound"),
+			BoundedBTreeSet::try_from(
+				basic_validators.into_iter().collect::<BTreeSet<T::AccountId>>(),
+			)
+			.expect("SelectedBasicCandidates out of bound"),
 		);
 		Self::refresh_cached_selected_candidates(now, validators.clone());
 
 		// refresh active relayer set
-		T::RelayManager::refresh_selected_relayers(now, full_validators.clone());
+		T::RelayManager::refresh_selected_relayers(now, full_validators);
 
 		// active validators count
 		// total nominators count (top + bottom) of active validators
@@ -779,7 +786,7 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Refresh the `CachedSelectedCandidates` adding the new selected candidates
-	pub fn refresh_cached_selected_candidates(now: RoundIndex, validators: Vec<T::AccountId>) {
+	pub fn refresh_cached_selected_candidates(now: RoundIndex, validators: BTreeSet<T::AccountId>) {
 		let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
 		if <StorageCacheLifetime<T>>::get() <= cached_selected_candidates.len() as u32 {
 			cached_selected_candidates.remove(0);
@@ -1073,10 +1080,10 @@ where
 			} else {
 				// This would brick the chain in the next session
 				log::error!("💥 empty validator set received");
-				Some(validators.into_inner())
+				Some(validators.into_iter().collect())
 			}
 		} else {
-			Some(validators.into_inner())
+			Some(validators.into_iter().collect())
 		}
 	}
 

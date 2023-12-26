@@ -2,15 +2,14 @@ use super::*;
 
 pub mod v4 {
 	use super::*;
-	use frame_support::storage_alias;
-	use frame_support::traits::OnRuntimeUpgrade;
+	use bp_staking::MAX_AUTHORITIES;
+	use frame_support::{storage_alias, traits::OnRuntimeUpgrade, BoundedBTreeSet};
 
 	#[cfg(feature = "try-runtime")]
 	use sp_runtime::TryRuntimeError;
 
 	#[storage_alias]
 	pub type StorageVersion<T: Config> = StorageValue<Pallet<T>, Releases, ValueQuery>;
-
 	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 	/// Nominator state
 	pub struct OrderedSetNominator<AccountId, Balance> {
@@ -30,6 +29,49 @@ pub mod v4 {
 	impl<T: Config> OnRuntimeUpgrade for MigrateToV4<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
+
+			let vec_to_bset = |old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
+				let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
+					.expect("")
+					.into_iter()
+					.collect::<BTreeSet<T::AccountId>>()
+					.try_into()
+					.expect("");
+				Some(new)
+			};
+			<SelectedCandidates<T>>::translate::<
+				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+				_,
+			>(vec_to_bset)
+			.expect("");
+			<SelectedFullCandidates<T>>::translate::<
+				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+				_,
+			>(vec_to_bset)
+			.expect("");
+			<SelectedBasicCandidates<T>>::translate::<
+				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+				_,
+			>(vec_to_bset)
+			.expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(3, 3));
+
+			<CachedSelectedCandidates<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
+				|old| {
+					Some(
+						old.expect("")
+							.into_iter()
+							.map(|(round_index, candidates)| {
+								let bset =
+									candidates.into_iter().collect::<BTreeSet<T::AccountId>>();
+								(round_index, bset)
+							})
+							.collect(),
+					)
+				},
+			)
+			.expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
 			<NominatorState<T>>::translate(
 				|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
@@ -70,11 +112,9 @@ pub mod v4 {
 
 			let current = Pallet::<T>::current_storage_version();
 			let onchain = StorageVersion::<T>::get();
-
 			if current == 4 && onchain == Releases::V3_0_0 {
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
-
 				log!(info, "bfc-staking storage migration passes v4 update ✅");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 2));
 			} else {

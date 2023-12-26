@@ -15,7 +15,7 @@ use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::*,
 	traits::{Currency, Get, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
-	Twox64Concat,
+	BoundedBTreeSet, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
 use sp_runtime::{
@@ -23,7 +23,10 @@ use sp_runtime::{
 	Perbill,
 };
 use sp_staking::SessionIndex;
-use sp_std::{collections::btree_map::BTreeMap, prelude::*};
+use sp_std::{
+	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+	prelude::*,
+};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -562,26 +565,26 @@ pub mod pallet {
 	#[pallet::getter(fn selected_candidates)]
 	/// The active validator set (full and basic) selected for the current round. This storage is sorted by address.
 	pub type SelectedCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_full_candidates)]
 	/// The active full validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedFullCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_basic_candidates)]
 	/// The active basic validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedBasicCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_candidates)]
 	/// The cached active validator set selected from previous rounds. This storage is sorted by address.
 	pub type CachedSelectedCandidates<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
+		StorageValue<_, Vec<(RoundIndex, BTreeSet<T::AccountId>)>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn majority)]
@@ -1499,7 +1502,7 @@ pub mod pallet {
 			ensure!(state.is_active(), Error::<T>::AlreadyOffline);
 			ensure!(Self::remove_from_candidate_pool(&controller), Error::<T>::AlreadyOffline,);
 			let mut selected_candidates = SelectedCandidates::<T>::get();
-			selected_candidates.retain(|v| *v != controller);
+			selected_candidates.remove(&controller);
 			// refresh selected candidates
 			let round = <Round<T>>::get();
 			let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
@@ -1518,14 +1521,14 @@ pub mod pallet {
 				// kickout relayer
 				T::RelayManager::kickout_relayer(&controller);
 				// refresh selected full candidates
-				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
-				selected_full_candidates.retain(|c| *c != controller);
-				<SelectedFullCandidates<T>>::put(selected_full_candidates);
+				<SelectedFullCandidates<T>>::mutate(|selected_full_candidates| {
+					selected_full_candidates.remove(&controller);
+				});
 			} else {
 				// refresh selected basic candidates
-				let mut selected_basic_candidates = <SelectedBasicCandidates<T>>::get();
-				selected_basic_candidates.retain(|c| *c != controller);
-				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
+				<SelectedBasicCandidates<T>>::mutate(|selected_basic_candidates| {
+					selected_basic_candidates.remove(&controller);
+				});
 			}
 			state.go_offline();
 			<CandidateInfo<T>>::insert(&controller, state);
