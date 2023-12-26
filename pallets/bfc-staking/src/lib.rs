@@ -47,14 +47,12 @@ use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
 use bp_staking::{RoundIndex, TierType};
-use frame_support::traits::tokens::Balance;
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, Get, ReservableCurrency},
+	traits::{tokens::Balance, Currency, Get, ReservableCurrency},
 };
-use sp_runtime::traits::MaybeDisplay;
 use sp_runtime::{
-	traits::{Convert, One, Saturating, Zero},
+	traits::{Convert, MaybeDisplay, One, Saturating, Zero},
 	FixedPointOperand, Perbill, RuntimeDebug,
 };
 use sp_staking::SessionIndex;
@@ -870,7 +868,7 @@ impl<
 		self.request = None;
 		// update candidate pool value because it must change if self bond changes
 		<Total<T>>::put(new_total_staked);
-		Pallet::<T>::update_active(&controller, self.voting_power.into());
+		Pallet::<T>::update_active(&controller, self.voting_power.into())?;
 		Pallet::<T>::deposit_event(event);
 		Ok(())
 	}
@@ -896,7 +894,8 @@ impl<
 		&mut self,
 		candidate: T::AccountId,
 		top_nominations: &Nominations<T::AccountId, BalanceOf<T>>,
-	) where
+	) -> DispatchResult
+	where
 		BalanceOf<T>: Into<Balance> + From<Balance>,
 	{
 		self.lowest_top_nomination_amount = top_nominations.lowest_nomination_amount().into();
@@ -907,8 +906,10 @@ impl<
 		// so we moved the update into this function to deduplicate code and patch a bug that
 		// forgot to apply the update when increasing top nomination
 		if old_voting_power != self.voting_power {
-			Pallet::<T>::update_active(&candidate, self.voting_power.into());
+			Pallet::<T>::update_active(&candidate, self.voting_power.into())?;
 		}
+
+		Ok(())
 	}
 
 	/// Reset bottom nominations metadata
@@ -942,7 +943,7 @@ impl<
 				// top is full, insert into top iff the lowest_top < amount
 				if self.lowest_top_nomination_amount < nomination.amount.into() {
 					// bumps lowest top to the bottom inside this function call
-					less_total_staked = self.add_top_nomination::<T>(candidate, nomination);
+					less_total_staked = self.add_top_nomination::<T>(candidate, nomination)?;
 					NominatorAdded::AddedToTop { new_total: self.voting_power }
 				} else {
 					// if bottom is full, only insert if greater than lowest bottom (which will
@@ -956,13 +957,13 @@ impl<
 						less_total_staked = Some(self.lowest_bottom_nomination_amount);
 					}
 					// insert into bottom
-					self.add_bottom_nomination::<T>(false, candidate, nomination);
+					self.add_bottom_nomination::<T>(false, candidate, nomination)?;
 					NominatorAdded::AddedToBottom
 				}
 			},
 			// top is either empty or partially full
 			_ => {
-				self.add_top_nomination::<T>(candidate, nomination);
+				self.add_top_nomination::<T>(candidate, nomination)?;
 				NominatorAdded::AddedToTop { new_total: self.voting_power }
 			},
 		};
@@ -976,34 +977,35 @@ impl<
 		&mut self,
 		candidate: &T::AccountId,
 		nomination: Bond<T::AccountId, BalanceOf<T>>,
-	) -> Option<Balance>
+	) -> Result<Option<Balance>, DispatchError>
 	where
 		BalanceOf<T>: Into<Balance> + From<Balance>,
 	{
 		let mut less_total_staked = None;
-		let mut top_nominations = <TopNominations<T>>::get(candidate)
-			.expect("CandidateInfo existence => TopNominations existence");
+		let mut top_nominations =
+			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
 		let max_top_nominations_per_candidate = T::MaxTopNominationsPerCandidate::get();
 		if top_nominations.nominations.len() as u32 == max_top_nominations_per_candidate {
 			// pop lowest top nomination
-			let new_bottom_nomination = top_nominations.nominations.pop().expect("");
+			let new_bottom_nomination =
+				top_nominations.nominations.pop().ok_or(<Error<T>>::TopNominationDNE)?;
 			top_nominations.total =
 				top_nominations.total.saturating_sub(new_bottom_nomination.amount);
 			if matches!(self.bottom_capacity, CapacityStatus::Full) {
 				less_total_staked = Some(self.lowest_bottom_nomination_amount);
 			}
-			self.add_bottom_nomination::<T>(true, candidate, new_bottom_nomination);
+			self.add_bottom_nomination::<T>(true, candidate, new_bottom_nomination)?;
 		}
 		// insert into top
 		top_nominations.insert_sorted_greatest_to_least(nomination);
 		// update candidate info
-		self.reset_top_data::<T>(candidate.clone(), &top_nominations);
+		self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
 		if less_total_staked.is_none() {
 			// only increment nomination count if we are not kicking a bottom nomination
 			self.nomination_count += 1u32;
 		}
 		<TopNominations<T>>::insert(&candidate, top_nominations);
-		less_total_staked
+		Ok(less_total_staked)
 	}
 
 	/// Add nomination to bottom nominations
@@ -1015,20 +1017,19 @@ impl<
 		bumped_from_top: bool,
 		candidate: &T::AccountId,
 		nomination: Bond<T::AccountId, BalanceOf<T>>,
-	) where
+	) -> DispatchResult
+	where
 		BalanceOf<T>: Into<Balance> + From<Balance>,
 	{
-		let mut bottom_nominations = <BottomNominations<T>>::get(candidate)
-			.expect("CandidateInfo existence => BottomNominations existence");
+		let mut bottom_nominations =
+			<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
 		// if bottom is full, kick the lowest bottom (which is expected to be lower than input
 		// as per check)
 		let increase_nomination_count = if bottom_nominations.nominations.len() as u32
 			== T::MaxBottomNominationsPerCandidate::get()
 		{
-			let lowest_bottom_to_be_kicked = bottom_nominations
-				.nominations
-				.pop()
-				.expect("if at full capacity (>0), then >0 bottom nominations exist; qed");
+			let lowest_bottom_to_be_kicked =
+				bottom_nominations.nominations.pop().ok_or(<Error<T>>::BottomNominationDNE)?;
 			// EXPECT lowest_bottom_to_be_kicked.amount < nomination.amount enforced by caller
 			// if lowest_bottom_to_be_kicked.amount == nomination.amount, we will still kick
 			// the lowest bottom to enforce first come first served
@@ -1043,7 +1044,7 @@ impl<
 			// total staked is updated via propagation of lowest bottom nomination amount prior
 			// to call
 			let mut nominator_state = <NominatorState<T>>::get(&lowest_bottom_to_be_kicked.owner)
-				.expect("Nomination existence => NominatorState existence");
+				.ok_or(<Error<T>>::NominatorDNE)?;
 			let leaving = nominator_state.nominations.len() == 1usize;
 			nominator_state.rm_nomination(candidate);
 			nominator_state.requests.remove_request(&candidate);
@@ -1073,6 +1074,8 @@ impl<
 		bottom_nominations.insert_sorted_greatest_to_least(nomination);
 		self.reset_bottom_data::<T>(&bottom_nominations);
 		<BottomNominations<T>>::insert(candidate, bottom_nominations);
+
+		Ok(())
 	}
 
 	/// Remove nomination
@@ -1118,8 +1121,8 @@ impl<
 	{
 		let old_voting_power = self.voting_power;
 		// remove top nomination
-		let mut top_nominations = <TopNominations<T>>::get(candidate)
-			.expect("CandidateInfo exists => TopNominations exists");
+		let mut top_nominations =
+			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::CandidateDNE)?;
 		let mut actual_amount_option: Option<BalanceOf<T>> = None;
 		top_nominations.nominations = top_nominations
 			.nominations
@@ -1139,7 +1142,7 @@ impl<
 		// if bottom nonempty => bump top bottom to top
 		if !matches!(self.bottom_capacity, CapacityStatus::Empty) {
 			let mut bottom_nominations =
-				<BottomNominations<T>>::get(candidate).expect("bottom is nonempty as just checked");
+				<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
 			// expect already stored greatest to least by bond amount
 			let highest_bottom_nomination = bottom_nominations.nominations.remove(0);
 			bottom_nominations.total =
@@ -1150,7 +1153,7 @@ impl<
 			top_nominations.insert_sorted_greatest_to_least(highest_bottom_nomination);
 		}
 		// update candidate info
-		self.reset_top_data::<T>(candidate.clone(), &top_nominations);
+		self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
 		self.nomination_count = self.nomination_count.saturating_sub(1u32);
 		<TopNominations<T>>::insert(candidate, top_nominations);
 		// return whether total counted changed
@@ -1168,8 +1171,8 @@ impl<
 		BalanceOf<T>: Into<Balance>,
 	{
 		// remove bottom nomination
-		let mut bottom_nominations = <BottomNominations<T>>::get(candidate)
-			.expect("CandidateInfo exists => BottomNominations exists");
+		let mut bottom_nominations =
+			<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
 		let mut actual_amount_option: Option<BalanceOf<T>> = None;
 		bottom_nominations.nominations = bottom_nominations
 			.nominations
@@ -1235,8 +1238,8 @@ impl<
 	where
 		BalanceOf<T>: Into<Balance> + From<Balance>,
 	{
-		let mut top_nominations = <TopNominations<T>>::get(candidate)
-			.expect("CandidateInfo exists => TopNominations exists");
+		let mut top_nominations =
+			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
 		let mut in_top = false;
 		top_nominations.nominations = top_nominations
 			.nominations
@@ -1255,7 +1258,7 @@ impl<
 		ensure!(in_top, Error::<T>::NominationDNE);
 		top_nominations.total = top_nominations.total.saturating_add(more);
 		top_nominations.sort_greatest_to_least();
-		self.reset_top_data::<T>(candidate.clone(), &top_nominations);
+		self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
 		<TopNominations<T>>::insert(candidate, top_nominations);
 		Ok(true)
 	}
@@ -1295,22 +1298,20 @@ impl<
 			let nomination = nomination_option.ok_or(Error::<T>::NominationDNE)?;
 			bottom_nominations.total = bottom_nominations.total.saturating_sub(bond);
 			// add it to top
-			let mut top_nominations = <TopNominations<T>>::get(candidate)
-				.expect("CandidateInfo existence => TopNominations existence");
+			let mut top_nominations =
+				<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
 			// if top is full, pop lowest top
 			if matches!(top_nominations.top_capacity::<T>(), CapacityStatus::Full) {
 				// pop lowest top nomination
-				let new_bottom_nomination = top_nominations
-					.nominations
-					.pop()
-					.expect("Top capacity full => Exists at least 1 top nomination");
+				let new_bottom_nomination =
+					top_nominations.nominations.pop().ok_or(<Error<T>>::TopNominationDNE)?;
 				top_nominations.total =
 					top_nominations.total.saturating_sub(new_bottom_nomination.amount);
 				bottom_nominations.insert_sorted_greatest_to_least(new_bottom_nomination);
 			}
 			// insert into top
 			top_nominations.insert_sorted_greatest_to_least(nomination);
-			self.reset_top_data::<T>(candidate.clone(), &top_nominations);
+			self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
 			<TopNominations<T>>::insert(candidate, top_nominations);
 			true
 		} else {
@@ -1414,8 +1415,8 @@ impl<
 				.collect();
 			let nomination = nomination_option.ok_or(Error::<T>::NominationDNE)?;
 			// pop highest bottom by reverse and popping
-			let mut bottom_nominations = <BottomNominations<T>>::get(candidate)
-				.expect("CandidateInfo existence => BottomNominations existence");
+			let mut bottom_nominations =
+				<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
 			let highest_bottom_nomination = bottom_nominations.nominations.remove(0);
 			bottom_nominations.total =
 				bottom_nominations.total.saturating_sub(highest_bottom_nomination.amount);
@@ -1447,7 +1448,7 @@ impl<
 			top_nominations.sort_greatest_to_least();
 			true
 		};
-		self.reset_top_data::<T>(candidate.clone(), &top_nominations);
+		self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
 		<TopNominations<T>>::insert(candidate, top_nominations);
 		Ok(in_top_after)
 	}
@@ -1462,8 +1463,8 @@ impl<
 	where
 		BalanceOf<T>: Into<Balance>,
 	{
-		let mut bottom_nominations = <BottomNominations<T>>::get(candidate)
-			.expect("CandidateInfo exists => BottomNominations exists");
+		let mut bottom_nominations =
+			<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
 		let mut in_bottom = false;
 		bottom_nominations.nominations = bottom_nominations
 			.nominations
@@ -1726,7 +1727,7 @@ impl<
 				balance_amt,
 			)?;
 			let after = validator_state.voting_power;
-			Pallet::<T>::update_active(&candidate_id, after);
+			Pallet::<T>::update_active(&candidate_id, after)?;
 			let new_total_staked = <Total<T>>::get().saturating_add(balance_amt);
 			let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
 			<Total<T>>::put(new_total_staked);

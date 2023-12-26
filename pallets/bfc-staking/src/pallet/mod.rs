@@ -144,6 +144,10 @@ pub mod pallet {
 		StashDNE,
 		/// A nomination does not exist with the target nominator and candidate account.
 		NominationDNE,
+		/// A top nomination does not exist with the target nominator and candidate account.
+		TopNominationDNE,
+		/// A bottom nomination does not exist with the target nominator and candidate account.
+		BottomNominationDNE,
 		/// A commission set request does not exist with the target controller account.
 		CommissionSetDNE,
 		/// A controller set request does not exist with the target controller account.
@@ -212,6 +216,10 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// Cannot join candidate pool due to too many candidates.
 		TooManyCandidates,
+		/// DelayedControllerSets out of bound.
+		TooManyDelayedControllers,
+		/// DelayedCommissionSets out of bound.
+		TooManyDelayedCommissions,
 		/// Cannot join candidate pool due to too low candidate count.
 		TooLowCandidateCountWeightHintJoinCandidates,
 		/// Cannot cancel leave candidate pool due to too low candidate count.
@@ -1078,7 +1086,7 @@ pub mod pallet {
 				!Self::is_commission_set_requested(&controller),
 				Error::<T>::AlreadyCommissionSetRequested,
 			);
-			Self::add_to_commission_sets(&controller, old, new);
+			Self::add_to_commission_sets(&controller, old, new)?;
 			Self::deposit_event(Event::ValidatorCommissionSet { candidate: controller, old, new });
 			Ok(().into())
 		}
@@ -1091,7 +1099,7 @@ pub mod pallet {
 			let controller = ensure_signed(origin)?;
 			ensure!(Self::is_candidate(&controller, TierType::All), Error::<T>::CandidateDNE);
 			ensure!(Self::is_commission_set_requested(&controller), Error::<T>::CommissionSetDNE);
-			Self::remove_commission_set(&controller);
+			Self::remove_commission_set(&controller)?;
 			Self::deposit_event(Event::ValidatorCommissionSetCancelled { candidate: controller });
 			Ok(().into())
 		}
@@ -1135,8 +1143,8 @@ pub mod pallet {
 			state.tier = new;
 			state.reset_commission::<T>();
 			<CandidateInfo<T>>::insert(&controller, state.clone());
-			Self::update_active(&controller, state.voting_power);
-			Self::sort_candidates_by_voting_power();
+			Self::update_active(&controller, state.voting_power)?;
+			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1249,7 +1257,7 @@ pub mod pallet {
 				.try_push(Bond { owner: controller.clone(), amount: bond })
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			let new_total = <Total<T>>::get().saturating_add(bond);
 			<Total<T>>::put(new_total);
 			Self::deposit_event(Event::JoinedValidatorCandidates {
@@ -1308,37 +1316,40 @@ pub mod pallet {
 				Error::<T>::TooLowCandidateNominationCountToLeaveCandidates
 			);
 			state.can_leave::<T>()?;
-			let return_stake = |bond: Bond<T::AccountId, BalanceOf<T>>| {
-				T::Currency::unreserve(&bond.owner, bond.amount);
-				// remove nomination from nominator state
-				let mut nominator = NominatorState::<T>::get(&bond.owner).expect(
-					"Validator state and nominator state are consistent.
-						Validator state has a record of this nomination. Therefore,
-						Nominator state also has a record. qed.",
-				);
-				if let Some(remaining) = nominator.rm_nomination(&controller) {
-					if remaining.is_zero() {
-						<NominatorState<T>>::remove(&bond.owner);
-					} else {
-						nominator.requests.remove_request(&controller);
-						<NominatorState<T>>::insert(&bond.owner, nominator);
+			let return_stake =
+				|bond: Bond<T::AccountId, BalanceOf<T>>,
+				 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
+					T::Currency::unreserve(&bond.owner, bond.amount);
+					// remove nomination from nominator state
+					if let Some(remaining) = nominator.rm_nomination(&controller) {
+						if remaining.is_zero() {
+							<NominatorState<T>>::remove(&bond.owner);
+						} else {
+							nominator.requests.remove_request(&controller);
+							<NominatorState<T>>::insert(&bond.owner, nominator);
+						}
 					}
-				}
-			};
+				};
 			// total backing stake is at least the candidate self bond
 			let mut total_backing = state.bond;
 			// return all top nominations
 			let top_nominations =
-				<TopNominations<T>>::take(&controller).expect("CandidateInfo existence checked");
+				<TopNominations<T>>::take(&controller).ok_or(<Error<T>>::TopNominationDNE)?;
 			for bond in top_nominations.nominations {
-				return_stake(bond);
+				return_stake(
+					bond.clone(),
+					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+				);
 			}
 			total_backing += top_nominations.total;
 			// return all bottom nominations
 			let bottom_nominations =
-				<BottomNominations<T>>::take(&controller).expect("CandidateInfo existence checked");
+				<BottomNominations<T>>::take(&controller).ok_or(<Error<T>>::BottomNominationDNE)?;
 			for bond in bottom_nominations.nominations {
-				return_stake(bond);
+				return_stake(
+					bond.clone(),
+					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+				);
 			}
 			total_backing += bottom_nominations.total;
 			// return stake to stash account
@@ -1385,7 +1396,7 @@ pub mod pallet {
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			Self::deposit_event(Event::CancelledCandidateExit { candidate: controller });
 			Ok(().into())
 		}
@@ -1407,8 +1418,8 @@ pub mod pallet {
 				!Self::is_controller_set_requested(old.clone()),
 				Error::<T>::AlreadyControllerSetRequested
 			);
-			Self::add_to_controller_sets(stash, old.clone(), new.clone());
-			Self::deposit_event(Event::ControllerSet { old: old.clone(), new: new.clone() });
+			Self::add_to_controller_sets(stash, old.clone(), new.clone())?;
+			Self::deposit_event(Event::ControllerSet { old, new });
 			Ok(().into())
 		}
 
@@ -1423,7 +1434,7 @@ pub mod pallet {
 				Self::is_controller_set_requested(controller.clone()),
 				Error::<T>::ControllerSetDNE
 			);
-			Self::remove_controller_set(&controller);
+			Self::remove_controller_set(&controller)?;
 			Self::deposit_event(Event::ControllerSetCancelled { candidate: controller });
 			Ok(().into())
 		}
@@ -1561,8 +1572,8 @@ pub mod pallet {
 			ensure!(T::Currency::can_reserve(&stash, more), Error::<T>::InsufficientBalance);
 			state.bond_more::<T>(stash.clone(), controller.clone(), more)?;
 			<CandidateInfo<T>>::insert(&controller, state.clone());
-			Self::update_active(&controller, state.voting_power);
-			Self::sort_candidates_by_voting_power();
+			Self::update_active(&controller, state.voting_power)?;
+			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1597,7 +1608,7 @@ pub mod pallet {
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			state.execute_bond_less::<T>(stash.clone(), controller.clone())?;
 			<CandidateInfo<T>>::insert(&controller, state);
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1667,8 +1678,7 @@ pub mod pallet {
 			);
 			let (nominator_position, less_total_staked) =
 				state.add_nomination::<T>(&candidate, Bond { owner: nominator.clone(), amount })?;
-			T::Currency::reserve(&nominator, amount)
-				.expect("verified can reserve at top of this extrinsic body");
+			T::Currency::reserve(&nominator, amount)?;
 			// only is_some if kicked the lowest bottom as a consequence of this new nomination
 			let net_total_increase =
 				if let Some(less) = less_total_staked { amount - less } else { amount };
@@ -1676,7 +1686,7 @@ pub mod pallet {
 			<Total<T>>::put(new_total_locked);
 			<CandidateInfo<T>>::insert(&candidate, state);
 			<NominatorState<T>>::insert(&nominator, nominator_state);
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			Self::deposit_event(Event::Nomination {
 				nominator,
 				locked_amount: amount,
@@ -1717,11 +1727,9 @@ pub mod pallet {
 			let state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.can_execute_leave::<T>(nomination_count)?;
 			for bond in state.nominations {
-				if let Err(error) = Self::nominator_leaves_candidate(
-					bond.0.clone(),
-					nominator.clone(),
-					bond.1,
-				) {
+				if let Err(error) =
+					Self::nominator_leaves_candidate(bond.0.clone(), nominator.clone(), bond.1)
+				{
 					log::warn!(
 						"STORAGE CORRUPTED \nNominator leaving validator failed with error: {:?}",
 						error
@@ -1729,7 +1737,7 @@ pub mod pallet {
 				}
 			}
 			<NominatorState<T>>::remove(&nominator);
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			Self::deposit_event(Event::NominatorLeft { nominator, unstaked_amount: state.total });
 			Ok(().into())
 		}
@@ -1784,7 +1792,7 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.increase_nomination::<T>(candidate.clone(), more)?;
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1820,7 +1828,7 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.execute_pending_request::<T>(candidate)?;
-			Self::sort_candidates_by_voting_power();
+			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 

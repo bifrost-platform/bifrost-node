@@ -10,7 +10,7 @@ use pallet_session::ShouldEndSession;
 
 use bp_staking::{
 	traits::{OffenceHandler, RelayManager},
-	Offence,
+	Offence, MAX_AUTHORITIES,
 };
 use sp_runtime::{
 	traits::{Convert, Saturating, Zero},
@@ -79,72 +79,88 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Adds a new controller set request. The state reflection will be applied in the next round.
-	pub fn add_to_controller_sets(stash: T::AccountId, old: T::AccountId, new: T::AccountId) {
+	pub fn add_to_controller_sets(
+		stash: T::AccountId,
+		old: T::AccountId,
+		new: T::AccountId,
+	) -> DispatchResult {
 		let round = <Round<T>>::get();
 		let mut controller_sets = <DelayedControllerSets<T>>::get(round.current_round_index);
 		controller_sets
 			.try_push(DelayedControllerSet::new(stash, old, new))
-			.expect("DelayedControllerSets out of bound");
+			.map_err(|_| <Error<T>>::TooManyDelayedControllers)?;
 		<DelayedControllerSets<T>>::insert(round.current_round_index, controller_sets);
+		Ok(())
 	}
 
 	/// Adds a new commission set request. The state reflection will be applied in the next round.
-	pub fn add_to_commission_sets(who: &T::AccountId, old: Perbill, new: Perbill) {
+	pub fn add_to_commission_sets(
+		who: &T::AccountId,
+		old: Perbill,
+		new: Perbill,
+	) -> DispatchResult {
 		let round = <Round<T>>::get();
 		let mut commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
 		commission_sets
 			.try_push(DelayedCommissionSet::new(who.clone(), old, new))
-			.expect("DelayedCommissionSets out of bound");
+			.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?;
 		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
+
+		Ok(())
 	}
 
 	/// Remove the given `who` from the `DelayedControllerSets` of the current round.
-	pub fn remove_controller_set(who: &T::AccountId) {
+	pub fn remove_controller_set(who: &T::AccountId) -> DispatchResult {
 		let round = <Round<T>>::get();
 		let mut controller_sets =
 			<DelayedControllerSets<T>>::get(round.current_round_index).into_inner();
 		controller_sets.retain(|c| c.old != *who);
-		<DelayedControllerSets<T>>::insert(
-			round.current_round_index,
-			BoundedVec::try_from(controller_sets).expect("DelayedControllerSets out of bound"),
-		);
+		let controller_sets = BoundedVec::try_from(controller_sets)
+			.map_err(|_| <Error<T>>::TooManyDelayedControllers)?;
+		<DelayedControllerSets<T>>::insert(round.current_round_index, controller_sets);
+		Ok(())
 	}
 
 	/// Remove the given `who` from the `DelayedCommissionSets` of the current round.
-	pub fn remove_commission_set(who: &T::AccountId) {
+	pub fn remove_commission_set(who: &T::AccountId) -> DispatchResult {
 		let round = <Round<T>>::get();
 		let mut commission_sets =
 			<DelayedCommissionSets<T>>::get(round.current_round_index).into_inner();
 		commission_sets.retain(|c| c.who != *who);
-		<DelayedCommissionSets<T>>::insert(
-			round.current_round_index,
-			BoundedVec::try_from(commission_sets).expect("DelayedCommissionSets out of bound"),
-		);
+		let commission_sets = BoundedVec::try_from(commission_sets)
+			.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?;
+		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
+
+		Ok(())
 	}
 
 	/// Updates the given candidates voting power persisted in the `CandidatePool`
-	pub(crate) fn update_active(candidate: &T::AccountId, total: BalanceOf<T>) {
+	pub(crate) fn update_active(candidate: &T::AccountId, total: BalanceOf<T>) -> DispatchResult {
 		let origin_pool = <CandidatePool<T>>::get().into_inner();
-		let new_pool = origin_pool
-			.into_iter()
-			.map(|mut c| {
-				if c.owner == *candidate {
-					c.amount = total;
-				}
-				c
-			})
-			.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>();
-		<CandidatePool<T>>::put(
-			BoundedVec::try_from(new_pool).expect("CandidatePool out of bound"),
-		);
+		let new_pool: BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>> =
+			origin_pool
+				.into_iter()
+				.map(|mut c| {
+					if c.owner == *candidate {
+						c.amount = total;
+					}
+					c
+				})
+				.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>()
+				.try_into()
+				.map_err(|_| <Error<T>>::TooManyCandidates)?;
+		<CandidatePool<T>>::put(new_pool);
+		Ok(())
 	}
 
 	/// Sort `CandidatePool` candidates by voting power in descending order
-	pub fn sort_candidates_by_voting_power() {
+	pub fn sort_candidates_by_voting_power() -> DispatchResult {
 		let mut pool = <CandidatePool<T>>::get().into_inner();
 		pool.sort_by(|x, y| y.amount.cmp(&x.amount));
 		pool.dedup_by(|x, y| x.owner == y.owner);
-		<CandidatePool<T>>::put(BoundedVec::try_from(pool).expect("CandidatePool out of bound"));
+		let pool = BoundedVec::try_from(pool).map_err(|_| <Error<T>>::TooManyCandidates)?;
+		<CandidatePool<T>>::put(pool);
+		Ok(())
 	}
 
 	/// Removes the given `candidate` from the `CandidatePool`. Returns `true` if a candidate has
@@ -324,8 +340,8 @@ impl<T: Config> Pallet<T> {
 					controller.clone(),
 					reward,
 				)?;
-				Self::update_active(&controller, validator_state.voting_power);
-				Self::sort_candidates_by_voting_power();
+				Self::update_active(&controller, validator_state.voting_power)?;
+				Self::sort_candidates_by_voting_power()?;
 			}
 			<CandidateInfo<T>>::insert(&controller, validator_state);
 		}
@@ -356,7 +372,7 @@ impl<T: Config> Pallet<T> {
 							.is_ok()
 						{
 							<NominatorState<T>>::insert(&nominator, nominator_state);
-							Self::sort_candidates_by_voting_power();
+							Self::sort_candidates_by_voting_power()?;
 						}
 					},
 					RewardDestination::Account => {
@@ -808,33 +824,35 @@ impl<T: Config> Pallet<T> {
 	/// Compute block productivity of the current validators
 	/// - decrease the productivity if the validator produced zero blocks in the current session
 	pub fn compute_productivity(session_validators: Vec<T::AccountId>) {
-		for validator in session_validators {
-			if let Some(mut state) = <CandidateInfo<T>>::get(&validator) {
+		session_validators.iter().for_each(|validator| {
+			if let Some(mut state) = <CandidateInfo<T>>::get(validator) {
 				if state.productivity_status == ProductivityStatus::Idle {
 					state.decrement_productivity::<T>();
 				}
-				<CandidateInfo<T>>::insert(&validator, state);
+				<CandidateInfo<T>>::insert(validator, state);
 			}
-		}
+		});
 	}
 
 	/// Refresh the `ProductivityPerBlock` based on the current round length
 	pub fn refresh_productivity_per_block(validator_count: u32, round_length: u32) {
-		let blocks_per_validator = {
-			if validator_count == 0 {
-				0u32
-			} else {
-				(round_length / validator_count) + 1
-			}
-		};
-		let productivity_per_block = {
-			if blocks_per_validator == 0 {
-				Perbill::zero()
-			} else {
-				Perbill::from_percent((100 / blocks_per_validator) + 1)
-			}
-		};
+		let productivity_per_block =
+			Self::calculate_productivity_per_block(validator_count, round_length);
 		<ProductivityPerBlock<T>>::put(productivity_per_block);
+	}
+
+	fn calculate_productivity_per_block(validator_count: u32, round_length: u32) -> Perbill {
+		if validator_count == 0 {
+			return Perbill::zero();
+		}
+
+		let blocks_per_validator = (round_length / validator_count) + 1;
+
+		if blocks_per_validator == 0 {
+			Perbill::zero()
+		} else {
+			Perbill::from_percent((100 / blocks_per_validator) + 1)
+		}
 	}
 
 	/// Refresh the current staking state of the network of the current round
