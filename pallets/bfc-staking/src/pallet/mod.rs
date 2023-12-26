@@ -2,9 +2,9 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberOf, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
-	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
-	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationRequest, Nominations, Nominator,
+	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
+	TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -14,7 +14,7 @@ use bp_staking::{
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::*,
-	traits::{Currency, Get, ReservableCurrency, StorageVersion, OnRuntimeUpgrade},
+	traits::{Currency, Get, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
 	Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
@@ -1320,14 +1320,7 @@ pub mod pallet {
 					if remaining.is_zero() {
 						<NominatorState<T>>::remove(&bond.owner);
 					} else {
-						if let Some(request) = nominator.requests.requests.remove(&controller) {
-							nominator.requests.less_total =
-								nominator.requests.less_total.saturating_sub(request.amount);
-							if matches!(request.action, NominationChange::Revoke) {
-								nominator.requests.revocations_count =
-									nominator.requests.revocations_count.saturating_sub(1u32);
-							}
-						}
+						nominator.requests.remove_request(&controller);
 						<NominatorState<T>>::insert(&bond.owner, nominator);
 					}
 				}

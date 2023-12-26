@@ -47,17 +47,20 @@ use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
 use bp_staking::{RoundIndex, TierType};
+use frame_support::traits::tokens::Balance;
 use frame_support::{
 	pallet_prelude::*,
 	traits::{Currency, Get, ReservableCurrency},
 };
+use sp_runtime::traits::MaybeDisplay;
 use sp_runtime::{
 	traits::{Convert, One, Saturating, Zero},
-	Perbill, RuntimeDebug,
+	FixedPointOperand, Perbill, RuntimeDebug,
 };
 use sp_staking::SessionIndex;
 use sp_std::{
 	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+	fmt::Debug,
 	prelude::*,
 };
 
@@ -1043,14 +1046,7 @@ impl<
 				.expect("Nomination existence => NominatorState existence");
 			let leaving = nominator_state.nominations.len() == 1usize;
 			nominator_state.rm_nomination(candidate);
-			if let Some(request) = nominator_state.requests.requests.remove(&candidate) {
-				nominator_state.requests.less_total =
-					nominator_state.requests.less_total.saturating_sub(request.amount);
-				if matches!(request.action, NominationChange::Revoke) {
-					nominator_state.requests.revocations_count =
-						nominator_state.requests.revocations_count.saturating_sub(1u32);
-				}
-			}
+			nominator_state.requests.remove_request(&candidate);
 			Pallet::<T>::deposit_event(Event::NominationKicked {
 				nominator: lowest_bottom_to_be_kicked.owner.clone(),
 				candidate: candidate.clone(),
@@ -1966,6 +1962,21 @@ impl<A: Ord, B: Zero> Default for PendingNominationRequests<A, B> {
 			revocations_count: 0u32,
 			requests: BTreeMap::new(),
 			less_total: B::zero(),
+		}
+	}
+}
+
+impl<
+		A: Parameter + Member + MaybeSerializeDeserialize + Debug + MaybeDisplay + Ord + MaxEncodedLen,
+		B: Balance + MaybeSerializeDeserialize + Debug + MaxEncodedLen + FixedPointOperand,
+	> PendingNominationRequests<A, B>
+{
+	pub fn remove_request(&mut self, address: &A) {
+		if let Some(request) = self.requests.remove(address) {
+			self.less_total = self.less_total.saturating_sub(request.amount);
+			if matches!(request.action, NominationChange::Revoke) {
+				self.revocations_count = self.revocations_count.saturating_sub(1u32);
+			}
 		}
 	}
 }
