@@ -89,9 +89,6 @@ pub mod pallet {
 		/// Default maximum number of selected basic node candidates every round
 		#[pallet::constant]
 		type DefaultMaxSelectedBasicCandidates: Get<u32>;
-		/// Default minimum number of selected candidates (full and basic) every round
-		#[pallet::constant]
-		type DefaultMinSelectedCandidates: Get<u32>;
 		/// Maximum top nominations counted per candidate
 		#[pallet::constant]
 		type MaxTopNominationsPerCandidate: Get<u32>;
@@ -407,8 +404,6 @@ pub mod pallet {
 		MaxFullSelectedSet { old: u32, new: u32 },
 		/// Set the maximum selected basic candidates to this value.
 		MaxBasicSelectedSet { old: u32, new: u32 },
-		/// Set the minimum selected candidates to this value.
-		MinTotalSelectedSet { old: u32, new: u32 },
 		/// Set the default validator commission to this value.
 		DefaultValidatorCommissionSet { old: Perbill, new: Perbill, tier: TierType },
 		/// Set the maximum validator commission to this value.
@@ -498,11 +493,6 @@ pub mod pallet {
 	#[pallet::getter(fn max_basic_selected)]
 	/// The maximum basic node candidates selected every round
 	pub type MaxBasicSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn min_total_selected)]
-	/// The minimum candidates selected every round
-	pub type MinTotalSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn productivity_per_block)]
@@ -806,8 +796,6 @@ pub mod pallet {
 			<MaxFullSelected<T>>::put(T::DefaultMaxSelectedFullCandidates::get());
 			// Set max selected basic node candidates to maximum config
 			<MaxBasicSelected<T>>::put(T::DefaultMaxSelectedBasicCandidates::get());
-			// Set min selected candidates to minimum config
-			<MinTotalSelected<T>>::put(T::DefaultMinSelectedCandidates::get());
 			// Set storage cache lifetime to default config
 			<StorageCacheLifetime<T>>::put(T::StorageCacheLifetimeInRounds::get());
 			// Choose top MaxFullSelected validator candidates
@@ -913,7 +901,7 @@ pub mod pallet {
 		/// Set the maximum number of full validator candidates selected per round
 		pub fn set_max_full_selected(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
-			ensure!(new >= <MinTotalSelected<T>>::get(), Error::<T>::CannotSetBelowMin);
+			ensure!(new >= 1u32, Error::<T>::CannotSetBelowMin);
 			let old = <MaxFullSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
@@ -934,7 +922,7 @@ pub mod pallet {
 			new: u32,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
-			ensure!(new >= <MinTotalSelected<T>>::get(), Error::<T>::CannotSetBelowMin);
+			ensure!(new >= 1u32, Error::<T>::CannotSetBelowMin);
 			let old = <MaxBasicSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
@@ -948,26 +936,6 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_min_total_selected())]
-		/// Set the minimum number of validator candidates selected per round
-		pub fn set_min_total_selected(
-			origin: OriginFor<T>,
-			new: u32,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-			ensure!(new <= <MaxTotalSelected<T>>::get(), Error::<T>::CannotSetAboveMax);
-			let old = <MinTotalSelected<T>>::get();
-			ensure!(old != new, Error::<T>::NoWritingSameValue);
-			ensure!(
-				new <= <Round<T>>::get().round_length,
-				Error::<T>::RoundLengthMustBeAtLeastTotalSelectedValidators,
-			);
-			<MinTotalSelected<T>>::put(new);
-			Self::deposit_event(Event::MinTotalSelectedSet { old, new });
-			Ok(().into())
-		}
-
-		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_default_validator_commission())]
 		/// Set the default commission rate for all validators of the given tier
 		pub fn set_default_validator_commission(
@@ -1022,7 +990,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(6)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_max_validator_commission())]
 		/// Set the maximum commission rate for all validators of the given tier
 		pub fn set_max_validator_commission(
@@ -1069,7 +1037,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(7)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_validator_commission())]
 		/// Set the commission rate of the given validator
 		/// - origin should be the controller account
@@ -1095,7 +1063,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(8)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_validator_commission_set())]
 		/// Cancel the request for (re-)setting the commission rate.
 		/// - origin should be the controller account.
@@ -1108,7 +1076,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(9)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_validator_tier())]
 		/// Modify validator candidate tier. The actual state reflection will apply at the next
 		/// round
@@ -1151,7 +1119,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(10)]
+		#[pallet::call_index(9)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_blocks_per_round())]
 		/// Set blocks per round
 		/// - the `new` round length will be updated immediately in the next block
@@ -1193,7 +1161,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(11)]
+		#[pallet::call_index(10)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_storage_cache_lifetime())]
 		/// Set the `StorageCacheLifetime` round length
 		pub fn set_storage_cache_lifetime(
@@ -1209,7 +1177,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(12)]
+		#[pallet::call_index(11)]
 		#[pallet::weight(<T as Config>::WeightInfo::join_candidates(*candidate_count))]
 		/// Join the set of validator candidates
 		/// - origin should be the stash account
@@ -1270,7 +1238,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(13)]
+		#[pallet::call_index(12)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_leave_candidates(*candidate_count))]
 		/// Request to leave the set of candidates. If successful, the account is immediately
 		/// removed from the candidate pool to prevent selection as a validator.
@@ -1300,7 +1268,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(14)]
+		#[pallet::call_index(13)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::execute_leave_candidates(*candidate_nomination_count)
 		)]
@@ -1374,7 +1342,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(15)]
+		#[pallet::call_index(14)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_candidates(*candidate_count))]
 		/// Cancel open request to leave candidates
 		/// - only callable by validator account
@@ -1402,7 +1370,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(16)]
+		#[pallet::call_index(15)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_controller())]
 		/// (Re-)set the bonded controller account. The origin must be the bonded stash account. The
 		/// actual change will apply on the next round update.
@@ -1424,7 +1392,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(17)]
+		#[pallet::call_index(16)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_controller_set())]
 		/// Cancel the request for (re-)setting the bonded controller account.
 		/// - origin should be the controller account.
@@ -1440,7 +1408,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(18)]
+		#[pallet::call_index(17)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_candidate_reward_dst())]
 		/// Set the validator candidate reward destination
 		/// - origin should be the controller account
@@ -1462,7 +1430,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(19)]
+		#[pallet::call_index(18)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_nominator_reward_dst())]
 		/// Set the nominator reward destination
 		pub fn set_nominator_reward_dst(
@@ -1483,7 +1451,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(20)]
+		#[pallet::call_index(19)]
 		#[pallet::weight(<T as Config>::WeightInfo::go_offline())]
 		/// Temporarily leave the set of validator candidates without unbonding
 		/// - removed from candidate pool
@@ -1535,7 +1503,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(21)]
+		#[pallet::call_index(20)]
 		#[pallet::weight(<T as Config>::WeightInfo::go_online())]
 		/// Rejoin the set of validator candidates if previously been kicked out or went offline
 		/// - state changed to `Active`
@@ -1558,7 +1526,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(22)]
+		#[pallet::call_index(21)]
 		#[pallet::weight(<T as Config>::WeightInfo::candidate_bond_more())]
 		/// Increase validator candidate self bond by `more`
 		/// - origin should be the stash account
@@ -1577,7 +1545,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(23)]
+		#[pallet::call_index(22)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_candidate_bond_less())]
 		/// Request by validator candidate to decrease self bond by `less`
 		/// - origin should be the controller account
@@ -1598,7 +1566,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(24)]
+		#[pallet::call_index(23)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_candidate_bond_less())]
 		/// Execute pending request to adjust the validator candidate self bond
 		/// - origin should be the stash account
@@ -1611,7 +1579,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(25)]
+		#[pallet::call_index(24)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_candidate_bond_less())]
 		/// Cancel pending request to adjust the validator candidate self bond
 		/// - origin should be the controller account
@@ -1623,7 +1591,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(26)]
+		#[pallet::call_index(25)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::nominate(
 				*candidate_nomination_count,
@@ -1695,7 +1663,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(27)]
+		#[pallet::call_index(26)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_leave_nominators())]
 		/// Request to leave the set of nominators. If successful, the caller is scheduled
 		/// to be allowed to exit. Success forbids future nominator actions until the request is
@@ -1715,7 +1683,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(28)]
+		#[pallet::call_index(27)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_leave_nominators(*nomination_count))]
 		/// Execute the right to exit the set of nominators and revoke all ongoing nominations.
 		pub fn execute_leave_nominators(
@@ -1740,7 +1708,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(29)]
+		#[pallet::call_index(28)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_nominators())]
 		/// Cancel a pending request to exit the set of nominators. Success clears the pending exit
 		/// request (thereby resetting the delay upon another `leave_nominators` call).
@@ -1757,7 +1725,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(30)]
+		#[pallet::call_index(29)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_revoke_nomination())]
 		/// Request to revoke an existing nomination. If successful, the nomination is scheduled
 		/// to be allowed to be revoked via the `execute_nomination_request` extrinsic.
@@ -1779,7 +1747,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(31)]
+		#[pallet::call_index(30)]
 		#[pallet::weight(<T as Config>::WeightInfo::nominator_bond_more())]
 		/// Bond more for nominators wrt a specific validator candidate.
 		pub fn nominator_bond_more(
@@ -1793,7 +1761,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(32)]
+		#[pallet::call_index(31)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_nominator_bond_less())]
 		/// Request bond less for nominators wrt a specific validator candidate.
 		pub fn schedule_nominator_bond_less(
@@ -1815,7 +1783,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(33)]
+		#[pallet::call_index(32)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_nominator_bond_less())]
 		/// Execute pending request to change an existing nomination
 		pub fn execute_nomination_request(
@@ -1828,7 +1796,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(34)]
+		#[pallet::call_index(33)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_nominator_bond_less())]
 		/// Cancel request to change an existing nomination.
 		pub fn cancel_nomination_request(

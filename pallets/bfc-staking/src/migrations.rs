@@ -13,6 +13,10 @@ pub mod v4 {
 
 	#[storage_alias]
 	pub type StorageVersion<T: Config> = StorageValue<Pallet<T>, Releases, ValueQuery>;
+
+	#[storage_alias]
+	pub type MinTotalSelected<T: Config> = StorageValue<Pallet<T>, u32, ValueQuery>;
+
 	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 	/// Nominator state
 	pub struct OrderedSetNominator<AccountId, Balance> {
@@ -32,6 +36,9 @@ pub mod v4 {
 	impl<T: Config> OnRuntimeUpgrade for MigrateToV4<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
+
+			MinTotalSelected::<T>::kill();
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(0, 1));
 
 			<CandidatePool<T>>::translate::<
 				BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
