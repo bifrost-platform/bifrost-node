@@ -710,7 +710,7 @@ pub mod pallet {
 			weight
 		}
 
-		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+		fn on_runtime_upgrade() -> Weight {
 			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
 		}
 	}
@@ -911,7 +911,7 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::set_max_total_selected())]
 		/// Set the maximum number of full validator candidates selected per round
 		pub fn set_max_full_selected(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= <MinTotalSelected<T>>::get(), Error::<T>::CannotSetBelowMin);
 			let old = <MaxFullSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -932,7 +932,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= <MinTotalSelected<T>>::get(), Error::<T>::CannotSetBelowMin);
 			let old = <MaxBasicSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -953,7 +953,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new <= <MaxTotalSelected<T>>::get(), Error::<T>::CannotSetAboveMax);
 			let old = <MinTotalSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -974,7 +974,7 @@ pub mod pallet {
 			new: Perbill,
 			tier: TierType,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			match tier {
 				TierType::Full => {
 					let old = <DefaultFullValidatorCommission<T>>::get();
@@ -1029,7 +1029,7 @@ pub mod pallet {
 			new: Perbill,
 			tier: TierType,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			match tier {
 				TierType::Full => {
 					let old = <MaxFullValidatorCommission<T>>::get();
@@ -1157,7 +1157,7 @@ pub mod pallet {
 		/// - the `new` round length will be updated immediately in the next block
 		/// - also updates per-round inflation config
 		pub fn set_blocks_per_round(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= T::MinBlocksPerRound::get(), Error::<T>::CannotSetBelowMin);
 			let mut round = <Round<T>>::get();
 			let (current_round, now, first, old) = (
@@ -1200,7 +1200,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= 1u32, Error::<T>::CannotSetBelowOne);
 			let old = <StorageCacheLifetime<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
