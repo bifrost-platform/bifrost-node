@@ -3,7 +3,8 @@ use crate::cli::{Cli, Subcommand};
 use bifrost_common_node::cli_opt::{BackendType, BackendTypeConfig, RpcConfig};
 
 use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
-use sc_cli::{ChainSpec, RuntimeVersion, SubstrateCli};
+
+use sc_cli::SubstrateCli;
 use sc_service::PartialComponents;
 
 trait IdentifyChain {
@@ -76,18 +77,6 @@ impl SubstrateCli for Cli {
 				std::path::PathBuf::from(path),
 			)?),
 		})
-	}
-
-	fn native_runtime_version(chain_spec: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-		if chain_spec.is_dev() {
-			&bifrost_dev_runtime::VERSION
-		} else if chain_spec.is_testnet() {
-			&bifrost_testnet_runtime::VERSION
-		} else if chain_spec.is_mainnet() {
-			&bifrost_mainnet_runtime::VERSION
-		} else {
-			&bifrost_dev_runtime::VERSION
-		}
 	}
 }
 
@@ -288,6 +277,8 @@ pub fn run() -> sc_cli::Result<()> {
 			}
 		},
 		Some(Subcommand::Benchmark(cmd)) => {
+			use bifrost_common_node::rpc::Block;
+
 			let runner = cli.create_runner(cmd)?;
 
 			runner.sync_run(|config| {
@@ -303,7 +294,7 @@ pub fn run() -> sc_cli::Result<()> {
 							);
 						}
 
-						cmd.run::<bifrost_dev_runtime::Block, bifrost_dev_node::service::dev::ExecutorDispatch>(config)
+						cmd.run::<Block, bifrost_common_node::service::HostFunctions>(config)
 					},
 					BenchmarkCmd::Block(cmd) => {
 						let PartialComponents { client, .. } =

@@ -27,6 +27,9 @@ sc-network-sync = { workspace = true }
 sc-service = { workspace = true }
 substrate-prometheus-endpoint = { workspace = true }
 
+# benchmarking dependencies
+frame-benchmarking = { workspace = true, features = ["std"] }
+
 # substrate primitives dependencies
 sp-core = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
@@ -44,6 +47,7 @@ fp-storage = { workspace = true }
 fp-rpc = { workspace = true }
 fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }
+fp-ext = { workspace = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }
