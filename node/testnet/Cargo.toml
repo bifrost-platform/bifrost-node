@@ -33,6 +33,7 @@ sc-rpc = { workspace = true }
 sc-rpc-api = { workspace = true }
 sc-chain-spec = { workspace = true }
 sc-basic-authorship = { workspace = true }
+sc-offchain = { workspace = true }
 
 # substrate primitives dependencies
 sp-core = { workspace = true, features = ["std"] }

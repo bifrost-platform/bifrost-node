@@ -5,6 +5,7 @@ use fc_db::Backend;
 use futures::StreamExt;
 use jsonrpsee::RpcModule;
 use sc_network_sync::SyncingService;
+use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use bifrost_common_node::{
@@ -34,6 +35,10 @@ use sc_telemetry::{Telemetry, TelemetryWorker};
 use sp_api::NumberFor;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_runtime::traits::Block as BlockT;
+
+/// The minimum period of blocks on which justifications will be
+/// imported and generated.
+const GRANDPA_JUSTIFICATION_PERIOD: u32 = 512;
 
 /// Testnet runtime executor
 pub mod testnet {
@@ -175,6 +180,7 @@ pub fn new_partial(
 
 	let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
 		client.clone(),
+		GRANDPA_JUSTIFICATION_PERIOD,
 		&(client.clone() as Arc<_>),
 		select_chain.clone(),
 		telemetry.as_ref().map(|x| x.handle()),
@@ -264,11 +270,23 @@ pub fn new_full_base(
 		})?;
 
 	if config.offchain_worker.enabled {
-		sc_service::build_offchain_workers(
-			&config,
-			task_manager.spawn_handle(),
-			client.clone(),
-			network.clone(),
+		task_manager.spawn_handle().spawn(
+			"offchain-workers-runner",
+			"offchain-worker",
+			sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
+				runtime_api_provider: client.clone(),
+				is_validator: config.role.is_authority(),
+				keystore: Some(keystore_container.keystore()),
+				offchain_db: backend.offchain_storage(),
+				transaction_pool: Some(OffchainTransactionPoolFactory::new(
+					transaction_pool.clone(),
+				)),
+				network_provider: network.clone(),
+				enable_http_requests: true,
+				custom_extensions: |_| vec![],
+			})
+			.run(client.clone(), task_manager.spawn_handle())
+			.boxed(),
 		);
 	}
 
@@ -365,7 +383,7 @@ pub fn new_full_base(
 
 	let grandpa_config = sc_consensus_grandpa::Config {
 		gossip_duration: Duration::from_millis(333),
-		justification_period: 512,
+		justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
 		name: Some(name),
 		observer_enabled: false,
 		keystore,
@@ -384,6 +402,7 @@ pub fn new_full_base(
 			prometheus_registry,
 			shared_voter_state,
 			sync: sync_service.clone(),
+			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
 		};
 
 		task_manager.spawn_essential_handle().spawn_blocking(

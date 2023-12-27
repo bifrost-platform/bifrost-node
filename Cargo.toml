@@ -127,6 +127,7 @@ sc-executor = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch
 sc-telemetry = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
 sc-basic-authorship = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
 substrate-prometheus-endpoint = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
+sc-offchain = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
 
 # Substrate Primitive
 sp-io = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
