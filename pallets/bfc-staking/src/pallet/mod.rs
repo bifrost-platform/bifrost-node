@@ -15,7 +15,7 @@ use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::*,
 	traits::{Currency, Get, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
-	BoundedBTreeSet, Twox64Concat,
+	BoundedBTreeMap, BoundedBTreeSet, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
 use sp_runtime::{
@@ -604,10 +604,10 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn candidate_pool)]
-	/// The pool of validator candidates, each with their total voting power. This storage is sorted by amount.
+	/// The pool of validator candidates, each with their total voting power.
 	pub(crate) type CandidatePool<T: Config> = StorageValue<
 		_,
-		BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
+		BoundedBTreeMap<T::AccountId, BalanceOf<T>, ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
@@ -697,16 +697,17 @@ pub mod pallet {
 		fn on_initialize(n: T::BlockNumber) -> Weight {
 			let mut weight = T::WeightInfo::base_on_initialize();
 
-			// Update the current block of the round
-			let mut round = <Round<T>>::get();
-			round.update_block(n);
-			<Round<T>>::put(round);
+			<Round<T>>::mutate(|round| {
+				// Update the current block of the round
+				round.update_block(n);
 
-			// Refresh the current state of the total stake snapshot
-			Self::refresh_total_snapshot(round.current_round_index);
+				// Refresh the current state of the total stake snapshot
+				Self::refresh_total_snapshot(round.current_round_index);
 
-			// Handle the delayed payouts for the previous round
-			weight += Self::handle_delayed_payouts(round.current_round_index);
+				// Handle the delayed payouts for the previous round
+				weight += Self::handle_delayed_payouts(round.current_round_index);
+			});
+
 			weight
 		}
 
@@ -1147,7 +1148,6 @@ pub mod pallet {
 			state.reset_commission::<T>();
 			<CandidateInfo<T>>::insert(&controller, state.clone());
 			Self::update_active(&controller, state.voting_power)?;
-			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1257,10 +1257,9 @@ pub mod pallet {
 			// insert empty bottom nominations
 			<BottomNominations<T>>::insert(&controller, empty_nominations);
 			candidates
-				.try_push(Bond { owner: controller.clone(), amount: bond })
+				.try_insert(controller.clone(), bond)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
-			Self::sort_candidates_by_voting_power()?;
 			let new_total = <Total<T>>::get().saturating_add(bond);
 			<Total<T>>::put(new_total);
 			Self::deposit_event(Event::JoinedValidatorCandidates {
@@ -1395,11 +1394,10 @@ pub mod pallet {
 				Error::<T>::TooLowCandidateCountWeightHintCancelLeaveCandidates,
 			);
 			candidates
-				.try_push(Bond { owner: controller.clone(), amount: state.voting_power })
+				.try_insert(controller.clone(), state.voting_power)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
-			Self::sort_candidates_by_voting_power()?;
 			Self::deposit_event(Event::CancelledCandidateExit { candidate: controller });
 			Ok(().into())
 		}
@@ -1552,7 +1550,7 @@ pub mod pallet {
 			state.go_online();
 			let mut candidates = <CandidatePool<T>>::get();
 			candidates
-				.try_push(Bond { owner: controller.clone(), amount: state.voting_power })
+				.try_insert(controller.clone(), state.voting_power)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
@@ -1576,7 +1574,6 @@ pub mod pallet {
 			state.bond_more::<T>(stash.clone(), controller.clone(), more)?;
 			<CandidateInfo<T>>::insert(&controller, state.clone());
 			Self::update_active(&controller, state.voting_power)?;
-			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1611,7 +1608,6 @@ pub mod pallet {
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			state.execute_bond_less::<T>(stash.clone(), controller.clone())?;
 			<CandidateInfo<T>>::insert(&controller, state);
-			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1685,11 +1681,11 @@ pub mod pallet {
 			// only is_some if kicked the lowest bottom as a consequence of this new nomination
 			let net_total_increase =
 				if let Some(less) = less_total_staked { amount - less } else { amount };
-			let new_total_locked = <Total<T>>::get() + net_total_increase;
-			<Total<T>>::put(new_total_locked);
+			<Total<T>>::mutate(|total_locked| {
+				*total_locked += net_total_increase;
+			});
 			<CandidateInfo<T>>::insert(&candidate, state);
 			<NominatorState<T>>::insert(&nominator, nominator_state);
-			Self::sort_candidates_by_voting_power()?;
 			Self::deposit_event(Event::Nomination {
 				nominator,
 				locked_amount: amount,
@@ -1740,7 +1736,6 @@ pub mod pallet {
 				}
 			}
 			<NominatorState<T>>::remove(&nominator);
-			Self::sort_candidates_by_voting_power()?;
 			Self::deposit_event(Event::NominatorLeft { nominator, unstaked_amount: state.total });
 			Ok(().into())
 		}
@@ -1795,7 +1790,6 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.increase_nomination::<T>(candidate.clone(), more)?;
-			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 
@@ -1831,7 +1825,6 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.execute_pending_request::<T>(candidate)?;
-			Self::sort_candidates_by_voting_power()?;
 			Ok(().into())
 		}
 

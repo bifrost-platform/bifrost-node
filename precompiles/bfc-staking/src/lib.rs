@@ -756,7 +756,7 @@ where
 	fn candidate_pool(handle: &mut impl PrecompileHandle) -> EvmResult<EvmCandidatePoolOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let candidate_pool = <StakingOf<Runtime>>::candidate_pool();
+		let candidate_pool = <StakingOf<Runtime>>::get_sorted_candidates();
 
 		let mut candidates: Vec<Address> = vec![];
 		let mut bonds: Vec<U256> = vec![];

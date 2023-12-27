@@ -10,7 +10,7 @@ use pallet_session::ShouldEndSession;
 
 use bp_staking::{
 	traits::{OffenceHandler, RelayManager},
-	Offence, MAX_AUTHORITIES,
+	Offence,
 };
 use sp_runtime::{
 	traits::{Convert, Saturating, Zero},
@@ -137,69 +137,55 @@ impl<T: Config> Pallet<T> {
 
 	/// Updates the given candidates voting power persisted in the `CandidatePool`
 	pub(crate) fn update_active(candidate: &T::AccountId, total: BalanceOf<T>) -> DispatchResult {
-		let origin_pool = <CandidatePool<T>>::get().into_inner();
-		let new_pool: BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>> =
-			origin_pool
-				.into_iter()
-				.map(|mut c| {
-					if c.owner == *candidate {
-						c.amount = total;
-					}
-					c
-				})
-				.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>()
-				.try_into()
-				.map_err(|_| <Error<T>>::TooManyCandidates)?;
-		<CandidatePool<T>>::put(new_pool);
+		<CandidatePool<T>>::mutate(|pool| {
+			if let Some(amount) = pool.get_mut(candidate) {
+				*amount = total;
+			}
+		});
 		Ok(())
 	}
 
-	/// Sort `CandidatePool` candidates by voting power in descending order
-	pub fn sort_candidates_by_voting_power() -> DispatchResult {
-		let mut pool = <CandidatePool<T>>::get().into_inner();
-		pool.sort_by(|x, y| y.amount.cmp(&x.amount));
-		pool.dedup_by(|x, y| x.owner == y.owner);
-		let pool = BoundedVec::try_from(pool).map_err(|_| <Error<T>>::TooManyCandidates)?;
-		<CandidatePool<T>>::put(pool);
-		Ok(())
+	/// Get vectorized & sorted by voting power in descending order `CandidatePool`
+	pub fn get_sorted_candidates() -> Vec<Bond<T::AccountId, BalanceOf<T>>> {
+		let mut candidates = <CandidatePool<T>>::get()
+			.into_iter()
+			.map(|(owner, amount)| Bond { owner, amount })
+			.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>();
+		candidates.sort_by(|x, y| y.amount.cmp(&x.amount));
+
+		candidates
 	}
 
 	/// Removes the given `candidate` from the `CandidatePool`. Returns `true` if a candidate has
 	/// been removed.
 	pub fn remove_from_candidate_pool(candidate: &T::AccountId) -> bool {
-		let mut pool = <CandidatePool<T>>::get();
-		let prev_len = pool.len();
-		pool.retain(|c| c.owner != *candidate);
-		let curr_len = pool.len();
-		<CandidatePool<T>>::put(pool);
-		curr_len < prev_len
+		let mut removed: bool = false;
+		<CandidatePool<T>>::mutate(|pool| {
+			if let Some(_) = pool.remove(candidate) {
+				removed = true;
+			}
+		});
+
+		removed
 	}
 
 	/// Replace the bonded `old` account to the given `new` account from the `CandidatePool`
 	pub fn replace_from_candidate_pool(old: &T::AccountId, new: &T::AccountId) {
-		let origin_pool = <CandidatePool<T>>::get().into_inner();
-		let new_pool = origin_pool
-			.into_iter()
-			.map(|mut c| {
-				if c.owner == *old {
-					c.owner = new.clone();
-				}
-				c
-			})
-			.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>();
-		<CandidatePool<T>>::put(
-			BoundedVec::try_from(new_pool).expect("CandidatePool out of bound"),
-		);
+		<CandidatePool<T>>::mutate(|pool| {
+			if let Some(balance) = pool.remove(old) {
+				pool.try_insert(new.clone(), balance).expect("CandidatePool out of bound");
+			}
+		});
 	}
 
 	/// Adds the given `candidate` to the `SelectedCandidates`. Depends on the given `tier` whether
 	/// it's added to the `SelectedFullCandidates` or `SelectedBasicCandidates`.
 	fn add_to_selected_candidates(candidate: T::AccountId, tier: TierType) {
-		let mut selected_candidates = <SelectedCandidates<T>>::get();
-		selected_candidates
-			.try_insert(candidate.clone())
-			.expect("SelectedCandidates out of bound");
-		<SelectedCandidates<T>>::put(selected_candidates);
+		<SelectedCandidates<T>>::mutate(|selected_candidates| {
+			selected_candidates
+				.try_insert(candidate.clone())
+				.expect("SelectedCandidates out of bound");
+		});
 		match tier {
 			TierType::Full => {
 				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
@@ -339,7 +325,6 @@ impl<T: Config> Pallet<T> {
 					reward,
 				)?;
 				Self::update_active(&controller, validator_state.voting_power)?;
-				Self::sort_candidates_by_voting_power()?;
 			}
 			<CandidateInfo<T>>::insert(&controller, validator_state);
 		}
@@ -370,7 +355,6 @@ impl<T: Config> Pallet<T> {
 							.is_ok()
 						{
 							<NominatorState<T>>::insert(&nominator, nominator_state);
-							Self::sort_candidates_by_voting_power()?;
 						}
 					},
 					RewardDestination::Account => {
@@ -585,72 +569,51 @@ impl<T: Config> Pallet<T> {
 	/// Compute the top full and basic candidates in the CandidatePool and return
 	/// a vector of their AccountIds (in the order of selection)
 	pub fn compute_top_candidates() -> (Vec<T::AccountId>, Vec<T::AccountId>) {
-		let candidates = <CandidatePool<T>>::get();
+		let candidates = Self::get_sorted_candidates();
 		let mut full_candidates = vec![];
 		let mut basic_candidates = vec![];
 
-		for candidate in candidates {
+		candidates.into_iter().for_each(|candidate| {
 			if let Some(state) = <CandidateInfo<T>>::get(&candidate.owner) {
-				let bond = Bond { owner: candidate.owner.clone(), amount: state.voting_power };
 				match state.tier {
 					TierType::Full => {
 						if state.bond >= T::MinFullCandidateStk::get() {
-							full_candidates.push(bond);
+							full_candidates.push(candidate);
 						}
 					},
 					_ => {
 						if state.bond >= T::MinBasicCandidateStk::get() {
-							basic_candidates.push(bond);
+							basic_candidates.push(candidate);
 						}
 					},
 				}
 			}
-		}
+		});
 
-		let full_validators = Self::compute_top_full_candidates(full_candidates);
-		let basic_validators = Self::compute_top_basic_candidates(basic_candidates);
+		let full_validators = Self::get_top_n_candidates(
+			full_candidates,
+			<MaxFullSelected<T>>::get() as usize,
+			T::MinFullValidatorStk::get(),
+		);
+		let basic_validators = Self::get_top_n_candidates(
+			basic_candidates,
+			<MaxBasicSelected<T>>::get() as usize,
+			T::MinBasicValidatorStk::get(),
+		);
 
-		let length = (full_validators.len() as u32) + (basic_validators.len() as u32);
-
-		if <MinTotalSelected<T>>::get() > length {
-			(vec![], vec![])
-		} else {
-			(full_validators, basic_validators)
-		}
+		(full_validators, basic_validators)
 	}
 
-	/// Compute the top full candidates based on their voting power
-	pub fn compute_top_full_candidates(
-		mut candidates: Vec<Bond<T::AccountId, BalanceOf<T>>>,
+	/// Compute the top basic/full candidates based on their voting power
+	fn get_top_n_candidates(
+		candidates: Vec<Bond<T::AccountId, BalanceOf<T>>>,
+		top_n: usize,
+		min_stake: BalanceOf<T>,
 	) -> Vec<T::AccountId> {
-		// order full candidates by voting power (least to greatest so requires `rev()`)
-		candidates.sort_by(|a, b| b.amount.cmp(&a.amount));
-		let top_n = <MaxFullSelected<T>>::get() as usize;
-
-		// choose the top MaxFullSelected qualified candidates, ordered by voting power
-		let mut validators = candidates
-			.into_iter()
-			.filter(|x| x.amount >= T::MinFullValidatorStk::get())
-			.take(top_n)
-			.map(|x| x.owner)
-			.collect::<Vec<T::AccountId>>();
-		validators.sort();
-		validators
-	}
-
-	/// Compute the top basic candidates based on their voting power
-	pub fn compute_top_basic_candidates(
-		mut candidates: Vec<Bond<T::AccountId, BalanceOf<T>>>,
-	) -> Vec<T::AccountId> {
-		// order candidates by voting power (least to greatest so requires `rev()`)
-		candidates.sort_by(|a, b| a.amount.cmp(&b.amount));
-		let top_n = <MaxBasicSelected<T>>::get() as usize;
-
 		// choose the top MaxBasicSelected qualified candidates, ordered by voting power
 		let mut validators = candidates
 			.into_iter()
-			.rev()
-			.filter(|x| x.amount >= T::MinBasicValidatorStk::get())
+			.filter(|x| x.amount >= min_stake)
 			.take(top_n)
 			.map(|x| x.owner)
 			.collect::<Vec<T::AccountId>>();

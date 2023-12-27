@@ -4,7 +4,9 @@ use crate::set::OrderedSet;
 pub mod v4 {
 	use super::*;
 	use bp_staking::MAX_AUTHORITIES;
-	use frame_support::{storage_alias, traits::OnRuntimeUpgrade, BoundedBTreeSet};
+	use frame_support::{
+		storage_alias, traits::OnRuntimeUpgrade, BoundedBTreeMap, BoundedBTreeSet,
+	};
 
 	#[cfg(feature = "try-runtime")]
 	use sp_runtime::TryRuntimeError;
@@ -30,6 +32,21 @@ pub mod v4 {
 	impl<T: Config> OnRuntimeUpgrade for MigrateToV4<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
+
+			<CandidatePool<T>>::translate::<
+				BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
+				_,
+			>(|old_pool| {
+				let new_pool = old_pool
+					.expect("")
+					.into_iter()
+					.map(|bond| (bond.owner, bond.amount))
+					.collect::<BTreeMap<T::AccountId, BalanceOf<T>>>();
+
+				Some(BoundedBTreeMap::try_from(new_pool).expect(""))
+			})
+			.expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
 			let vec_to_bset = |old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
 				let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
