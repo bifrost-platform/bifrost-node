@@ -3,7 +3,7 @@ name = "bifrost-dev-node"
 version = "1.0.0"
 description = "The node specification for Bifrost Node development"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -46,6 +46,7 @@ sp-block-builder = { workspace = true, features = ["std"] }
 sp-timestamp = { workspace = true, features = ["std"] }
 sp-blockchain = { workspace = true }
 sp-consensus = { workspace = true }
+sp-inherents = { workspace = true }
 
 # FRAME dependencies
 pallet-bfc-staking = { workspace = true }
@@ -82,6 +83,4 @@ bifrost-common-node = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = [
-	"bifrost-dev-runtime/runtime-benchmarks",
-]
+runtime-benchmarks = ["bifrost-dev-runtime/runtime-benchmarks"]

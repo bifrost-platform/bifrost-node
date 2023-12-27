@@ -70,7 +70,7 @@ pub struct GrandpaDeps<B> {
 }
 
 /// Full client dependencies.
-pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
+pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -115,10 +115,12 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
 	pub sync_service: Arc<SyncingService<Block>>,
+	/// Something that can create the inherent data providers for pending state
+	pub pending_create_inherent_data_providers: CIDP,
 }
 
 /// Mainnet/Testnet client dependencies.
-pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
+pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -161,6 +163,8 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
 	pub sync_service: Arc<SyncingService<Block>>,
+	/// Something that can create the inherent data providers for pending state
+	pub pending_create_inherent_data_providers: CIDP,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {

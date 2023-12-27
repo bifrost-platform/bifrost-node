@@ -5,6 +5,7 @@
 
 #![warn(missing_docs)]
 
+use fc_rpc::pending::AuraConsensusDataProvider;
 use jsonrpsee::RpcModule;
 use std::sync::Arc;
 
@@ -17,6 +18,7 @@ use sp_blockchain::{
 	Backend as BlockchainBackend, Error as BlockChainError, HeaderBackend, HeaderMetadata,
 };
 use sp_consensus::SelectChain;
+use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::BlakeTwo256;
 
 use bifrost_common_node::rpc::{FullDevDeps, GrandpaDeps};
@@ -28,8 +30,8 @@ use sc_transaction_pool::ChainApi;
 use sc_transaction_pool_api::TransactionPool;
 
 /// Instantiate all full RPC extensions.
-pub fn create_full<C, P, BE, SC, A>(
-	deps: FullDevDeps<C, P, BE, SC, A>,
+pub fn create_full<C, P, BE, SC, A, CIDP>(
+	deps: FullDevDeps<C, P, BE, SC, A, CIDP>,
 	maybe_tracing_config: Option<TracingConfig>,
 	pubsub_notification_sinks: Arc<
 		fc_mapping_sync::EthereumBlockNotificationSinks<
@@ -58,6 +60,7 @@ where
 	P: TransactionPool<Block = Block> + 'static,
 	A: ChainApi<Block = Block> + 'static,
 	SC: SelectChain<Block> + 'static,
+	CIDP: CreateInherentDataProviders<Block, ()> + Send + 'static,
 {
 	use fc_rpc::{
 		Eth, EthApiServer, EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, Net,
@@ -94,6 +97,7 @@ where
 		logs_request_timeout,
 		forced_parent_hashes,
 		sync_service,
+		pending_create_inherent_data_providers,
 	} = deps;
 
 	let GrandpaDeps {
@@ -195,6 +199,8 @@ where
 			fee_history_limit,
 			10,
 			forced_parent_hashes,
+			pending_create_inherent_data_providers,
+			Some(Box::new(AuraConsensusDataProvider::new(client.clone()))),
 		)
 		.into_rpc(),
 	)

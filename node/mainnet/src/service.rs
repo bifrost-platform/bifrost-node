@@ -436,6 +436,19 @@ pub fn build_rpc_extensions_builder(
 		prometheus_registry.clone(),
 	));
 
+	let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+	let pending_create_inherent_data_providers = move |_, ()| async move {
+		let current = sp_timestamp::InherentDataProvider::from_system_time();
+		let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
+		let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
+		let slot =
+			sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+				*timestamp,
+				slot_duration,
+			);
+		Ok((slot, timestamp))
+	};
+
 	// Sinks for pubsub notifications.
 	// Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
 	// The MappingSyncWorker sends through the channel on block import and the subscription emits a
@@ -569,6 +582,7 @@ pub fn build_rpc_extensions_builder(
 			logs_request_timeout: rpc_config.logs_request_timeout,
 			forced_parent_hashes: None,
 			sync_service: sync_service.clone(),
+			pending_create_inherent_data_providers,
 		};
 
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {
