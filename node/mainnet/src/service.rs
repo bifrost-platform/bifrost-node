@@ -1,11 +1,9 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
-use bp_core::*;
-use fc_db::Backend;
-use futures::StreamExt;
+use crate::rpc::create_full;
+
+use futures::{FutureExt, StreamExt};
 use jsonrpsee::RpcModule;
-use sc_network_sync::SyncingService;
-use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use bifrost_common_node::{
@@ -15,23 +13,24 @@ use bifrost_common_node::{
 	tracing::{spawn_tracing_tasks, RpcRequesters},
 };
 
-use crate::rpc::create_full;
-
 use fc_mapping_sync::{kv::MappingSyncWorker, SyncStrategy};
 use fc_rpc::EthTask;
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
 
-use sc_client_api::{BlockBackend, BlockchainEvents};
+use sc_client_api::{Backend, BlockBackend, BlockchainEvents};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 pub use sc_executor::NativeElseWasmExecutor;
 use sc_network::NetworkService;
+use sc_network_sync::SyncingService;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::{
 	error::Error as ServiceError, Configuration, RpcHandlers, SpawnTaskHandle, TaskManager,
 	WarpSyncParams,
 };
 use sc_telemetry::{Telemetry, TelemetryWorker};
+use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 
+use bp_core::*;
 use sp_api::NumberFor;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_runtime::traits::Block as BlockT;
@@ -456,7 +455,7 @@ pub fn build_rpc_extensions_builder(
 		prometheus_registry.clone(),
 	));
 
-	let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+	let slot_duration = sc_consensus_aura::slot_duration(&*client).expect("Slot duration exists");
 	let pending_create_inherent_data_providers = move |_, ()| async move {
 		let current = sp_timestamp::InherentDataProvider::from_system_time();
 		let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
@@ -506,7 +505,7 @@ pub fn build_rpc_extensions_builder(
 	);
 
 	match frontier_backend.clone() {
-		Backend::KeyValue(b) => {
+		fc_db::Backend::KeyValue(b) => {
 			// Frontier offchain DB task. Essential.
 			// Maps emulated ethereum data to substrate native data.
 			builder.task_manager.spawn_essential_handle().spawn(
@@ -528,7 +527,7 @@ pub fn build_rpc_extensions_builder(
 				.for_each(|()| futures::future::ready(())),
 			);
 		},
-		Backend::Sql(b) => {
+		fc_db::Backend::Sql(b) => {
 			builder.task_manager.spawn_essential_handle().spawn_blocking(
 				"frontier-mapping-sync-worker",
 				Some("frontier"),
