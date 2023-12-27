@@ -9,7 +9,7 @@ use jsonrpsee::RpcModule;
 use std::sync::Arc;
 
 use bifrost_common_node::{cli_opt::EthApi as EthApiCmd, rpc::TracingConfig};
-use bifrost_mainnet_runtime::{opaque::Block, AccountId, Balance, Index};
+use bifrost_mainnet_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 use sp_api::{CallApiAt, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
@@ -48,7 +48,7 @@ where
 	C: AuxStore,
 	C: StorageProvider<Block, BE>,
 	C: Send + Sync + 'static,
-	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>,
+	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
 	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	C::Api: BlockBuilder<Block>,
 	C::Api: fp_rpc::EthereumRuntimeRPCApi<Block>,
