@@ -278,9 +278,9 @@ impl pallet_balances::Config for Runtime {
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
-	type MaxHolds = ();
-	type RuntimeHoldReason = ();
-	type RuntimeFreezeReason = ();
+	type MaxHolds = ConstU32<1>;
+	type RuntimeHoldReason = RuntimeHoldReason;
+	type RuntimeFreezeReason = RuntimeFreezeReason;
 }
 
 pub struct DealWithFees<R>(sp_std::marker::PhantomData<R>);
@@ -969,7 +969,7 @@ construct_runtime!(
 		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
 		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
 		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
-		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>} = 57,
+		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>, HoldReason} = 57,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,
