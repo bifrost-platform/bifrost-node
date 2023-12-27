@@ -5,7 +5,6 @@
 
 #![warn(missing_docs)]
 
-use fc_rpc::pending::AuraConsensusDataProvider;
 use jsonrpsee::RpcModule;
 use std::sync::Arc;
 
