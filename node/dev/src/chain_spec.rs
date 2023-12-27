@@ -16,7 +16,7 @@ use sp_runtime::{BoundedVec, Perbill};
 use hex_literal::hex;
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
-pub type ChainSpec = sc_service::GenericChainSpec<devnet::GenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec<devnet::RuntimeGenesisConfig>;
 
 /// Generate a crypto pair from seed.
 pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
@@ -171,16 +171,17 @@ fn development_genesis(
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	_enable_println: bool,
-) -> devnet::GenesisConfig {
+) -> devnet::RuntimeGenesisConfig {
 	// This is the simplest bytecode to revert without returning any data.
 	// We will pre-deploy it under all of our precompiles to ensure they can be called from
 	// within contracts.
 	// (PUSH1 0x00 PUSH1 0x00 REVERT)
 	let _revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
-	devnet::GenesisConfig {
+	devnet::RuntimeGenesisConfig {
 		system: devnet::SystemConfig {
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
+			..Default::default()
 		},
 		balances: devnet::BalancesConfig {
 			balances: endowed_accounts
