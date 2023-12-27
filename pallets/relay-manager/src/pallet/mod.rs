@@ -202,7 +202,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+		fn on_runtime_upgrade() -> Weight {
 			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
 		}
 	}
@@ -235,7 +235,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= 1u32, Error::<T>::CannotSetBelowOne);
 			let old = <StorageCacheLifetime<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -251,7 +251,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_active: bool,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(
 				is_active != <IsHeartbeatOffenceActive<T>>::get(),
 				Error::<T>::NoWritingSameValue
@@ -268,7 +268,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: Perbill,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			let old = <HeartbeatSlashFraction<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			<HeartbeatSlashFraction<T>>::put(new);

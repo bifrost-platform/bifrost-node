@@ -58,7 +58,7 @@ pub mod v2 {
 	use frame_support::{pallet_prelude::Weight, traits::Get};
 
 	pub fn pre_migrate<T: Config>() -> Result<(), &'static str> {
-		frame_support::ensure!(
+		ensure!(
 			StorageVersion::<T>::get() == Releases::V1_0_0,
 			"Storage version must match to v1.0.0",
 		);
@@ -80,7 +80,7 @@ pub mod v1 {
 	use frame_support::{pallet_prelude::Weight, traits::Get};
 
 	pub fn pre_migrate<T: Config>() -> Result<(), &'static str> {
-		frame_support::ensure!(
+		ensure!(
 			StorageVersion::<T>::get() == Releases::V1_0_0,
 			"Storage version must match to v1.0.0",
 		);

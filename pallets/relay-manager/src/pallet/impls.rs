@@ -14,7 +14,7 @@ use sp_std::{vec, vec::Vec};
 impl<T: Config> RelayManager<T::AccountId> for Pallet<T>
 where
 	<T as frame_system::Config>::AccountId: From<
-		<<T as pallet::Config>::ValidatorSet as ValidatorSet<
+		<<T as Config>::ValidatorSet as ValidatorSet<
 			<T as frame_system::Config>::AccountId,
 		>>::ValidatorId,
 	>,

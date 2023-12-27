@@ -109,7 +109,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade() -> frame_support::weights::Weight {
+		fn on_runtime_upgrade() -> Weight {
 			migrations::v3::MigrateToV3::<T>::on_runtime_upgrade()
 		}
 	}
@@ -147,7 +147,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: SessionIndex,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new > 0u32, Error::<T>::CannotSetBelowMin);
 			let old = <OffenceExpirationInSessions<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -166,7 +166,7 @@ pub mod pallet {
 			new: OffenceCount,
 			tier: TierType,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new > 0u32, Error::<T>::CannotSetBelowMin);
 			match tier {
 				TierType::Full => {
@@ -214,7 +214,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_active: bool,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(is_active != <IsOffenceActive<T>>::get(), Error::<T>::NoWritingSameValue);
 			<IsOffenceActive<T>>::put(is_active);
 			Self::deposit_event(Event::OffenceActivationSet { is_active });
@@ -230,7 +230,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_active: bool,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(is_active != <IsSlashActive<T>>::get(), Error::<T>::NoWritingSameValue);
 			<IsSlashActive<T>>::put(is_active);
 			Self::deposit_event(Event::SlashActivationSet { is_active });
