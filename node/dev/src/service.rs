@@ -411,7 +411,7 @@ pub fn new_full_base(
 			prometheus_registry,
 			shared_voter_state,
 			sync: sync_service.clone(),
-			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
+			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
 		};
 
 		task_manager.spawn_essential_handle().spawn_blocking(
@@ -604,7 +604,7 @@ pub fn new_manual_base(
 			prometheus_registry,
 			shared_voter_state,
 			sync: sync_service.clone(),
-			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
+			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
 		};
 
 		task_manager.spawn_essential_handle().spawn_blocking(
