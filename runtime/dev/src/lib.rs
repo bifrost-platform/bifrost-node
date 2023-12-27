@@ -66,6 +66,7 @@ use pallet_transaction_payment::CurrencyAdapter;
 pub use frame_support::{
 	construct_runtime,
 	dispatch::{DispatchClass, GetDispatchInfo},
+	genesis_builder_helper::{build_config, create_default_config},
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{

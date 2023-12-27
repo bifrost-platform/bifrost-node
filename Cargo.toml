@@ -148,6 +148,7 @@ sp-version = { default-features = false, git = "https://github.com/bifrost-platf
 sp-staking = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
 sp-keystore = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
 sp-timestamp = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
+sp-genesis-builder = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }
 
 # Substrate FRAME
 substrate-frame-rpc-system = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }

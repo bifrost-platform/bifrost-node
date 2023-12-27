@@ -423,8 +423,8 @@ macro_rules! impl_common_runtime_apis {
 					None
 				}
 			}
-			impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
-				fn account_nonce(account: AccountId) -> Index {
+			impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
+				fn account_nonce(account: AccountId) -> Nonce {
 					System::account_nonce(account)
 				}
 			}
@@ -487,6 +487,15 @@ macro_rules! impl_common_runtime_apis {
 					let params = (&config, &whitelist);
 					add_benchmarks!(params, batches);
 					Ok(batches)
+				}
+			}
+			impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
+				fn create_default_config() -> Vec<u8> {
+					create_default_config::<RuntimeGenesisConfig>()
+				}
+
+				fn build_config(config: Vec<u8>) -> sp_genesis_builder::Result {
+					build_config::<RuntimeGenesisConfig>(config)
 				}
 			}
 		}
