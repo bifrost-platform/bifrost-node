@@ -20,7 +20,7 @@ where
 	>,
 {
 	fn join_relayers(relayer: T::AccountId, controller: T::AccountId) -> Result<(), DispatchError> {
-		Self::verify_relayer_existance(&relayer, &controller)?;
+		Self::verify_relayer_existence(&relayer, &controller)?;
 		Self::add_to_relayer_pool(relayer.clone(), controller.clone());
 		<RelayerState<T>>::insert(&relayer, RelayerMetadata::new(controller.clone()));
 		<BondedController<T>>::insert(&controller, relayer.clone());
@@ -220,9 +220,9 @@ impl<T: Config> Pallet<T> {
 		return half + 1;
 	}
 
-	/// Verifies the existance of the given relayer and controller account. If it is both not bonded
+	/// Verifies the existence of the given relayer and controller account. If it is both not bonded
 	/// yet, it will return an `Ok`, if not an `Error` will be returned.
-	fn verify_relayer_existance(
+	fn verify_relayer_existence(
 		relayer: &T::AccountId,
 		controller: &T::AccountId,
 	) -> Result<(), DispatchError> {
