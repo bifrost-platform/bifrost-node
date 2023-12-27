@@ -71,7 +71,7 @@ pub use frame_support::{
 	traits::{
 		ConstU128, ConstU32, ConstU8, Contains, Currency, EitherOfDiverse, EqualPrivilegeOnly,
 		FindAuthor, Imbalance, KeyOwnerProofSystem, LockIdentifier, NeverEnsureOrigin, OnFinalize,
-		OnUnbalanced, Randomness, StorageInfo, U128CurrencyToVote,
+		OnUnbalanced, Randomness, StorageInfo,
 	},
 	weights::{
 		constants::{
@@ -882,6 +882,7 @@ impl pallet_evm::Config for Runtime {
 	type PrecompilesValue = PrecompilesValue;
 	type OnCreate = ();
 	type GasLimitPovSizeRatio = GasLimitPovSizeRatio;
+	type SuicideQuickClearLimit = ConstU32<0>;
 	type Timestamp = Timestamp;
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
