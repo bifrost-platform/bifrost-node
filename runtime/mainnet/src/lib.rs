@@ -12,6 +12,7 @@ use frame_support::traits::{
 	tokens::{PayFromAccount, UnityAssetBalanceConversion},
 	LinearStoragePrice,
 };
+use pallet_identity::simple::IdentityInfo;
 use parity_scale_codec::{Decode, Encode};
 
 pub use bifrost_mainnet_constants::{
@@ -665,6 +666,7 @@ impl pallet_identity::Config for Runtime {
 	type SubAccountDeposit = SubAccountDeposit;
 	type MaxSubAccounts = MaxSubAccounts;
 	type MaxAdditionalFields = MaxAdditionalFields;
+	type IdentityInformation = IdentityInfo<MaxAdditionalFields>;
 	type MaxRegistrars = MaxRegistrars;
 	type Slashed = Treasury;
 	type ForceOrigin = EnsureRoot<AccountId>;
