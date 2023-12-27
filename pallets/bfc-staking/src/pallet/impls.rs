@@ -624,13 +624,12 @@ impl<T: Config> Pallet<T> {
 		mut candidates: Vec<Bond<T::AccountId, BalanceOf<T>>>,
 	) -> Vec<T::AccountId> {
 		// order full candidates by voting power (least to greatest so requires `rev()`)
-		candidates.sort_by(|a, b| a.amount.cmp(&b.amount));
+		candidates.sort_by(|a, b| b.amount.cmp(&a.amount));
 		let top_n = <MaxFullSelected<T>>::get() as usize;
 
 		// choose the top MaxFullSelected qualified candidates, ordered by voting power
 		let mut validators = candidates
 			.into_iter()
-			.rev()
 			.filter(|x| x.amount >= T::MinFullValidatorStk::get())
 			.take(top_n)
 			.map(|x| x.owner)
