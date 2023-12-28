@@ -125,37 +125,6 @@ impl<A: Decode, B: Default> Default for Bond<A, B> {
 	}
 }
 
-impl<A: Ord + Clone, B: Zero + Ord + Copy + Clone> From<CandidateBond<A, B>> for Bond<A, B> {
-	fn from(candidate_bond: CandidateBond<A, B>) -> Self {
-		Self { owner: candidate_bond.owner, amount: candidate_bond.amount }
-	}
-}
-
-#[derive(
-	Eq, PartialEq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
-)]
-/// Same as `Bond<AccountId, Balance>`. Only difference is order by amount.
-pub struct CandidateBond<AccountId, Balance> {
-	pub amount: Balance,
-	pub owner: AccountId,
-}
-
-impl<A: Decode, B: Default> Default for CandidateBond<A, B> {
-	fn default() -> CandidateBond<A, B> {
-		CandidateBond {
-			amount: B::default(),
-			owner: A::decode(&mut sp_runtime::traits::TrailingZeroInput::zeroes())
-				.expect("infinite length input; no invalid inputs for type; qed"),
-		}
-	}
-}
-
-impl<A: Ord + Clone, B: Zero + Ord + Copy + Clone> From<Bond<A, B>> for CandidateBond<A, B> {
-	fn from(bond: Bond<A, B>) -> Self {
-		Self { amount: bond.amount, owner: bond.owner }
-	}
-}
-
 #[derive(
 	Eq,
 	PartialEq,
