@@ -6,21 +6,13 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
-use frame_support::traits::{
-	fungible::HoldConsideration,
-	tokens::{PayFromAccount, UnityAssetBalanceConversion},
-	LinearStoragePrice,
-};
-use pallet_identity::simple::IdentityInfo;
-use parity_scale_codec::{Decode, Encode};
-
 pub use bifrost_dev_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
 	time::*,
 };
 
+pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
@@ -41,10 +33,11 @@ use sp_runtime::{
 };
 pub use sp_runtime::{Perbill, Percent, Permill};
 use sp_std::prelude::*;
-
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
+
+use parity_scale_codec::{Decode, Encode};
 
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
@@ -58,6 +51,7 @@ use pallet_evm::{
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
+use pallet_identity::simple::IdentityInfo;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use pallet_session::historical::{self as pallet_session_historical};
 pub use pallet_timestamp::Call as TimestampCall;
@@ -70,9 +64,11 @@ pub use frame_support::{
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{
+		fungible::HoldConsideration,
+		tokens::{PayFromAccount, UnityAssetBalanceConversion},
 		ConstU128, ConstU32, ConstU8, Contains, Currency, EitherOfDiverse, EqualPrivilegeOnly,
-		FindAuthor, Imbalance, KeyOwnerProofSystem, LockIdentifier, NeverEnsureOrigin, OnFinalize,
-		OnUnbalanced, Randomness, StorageInfo,
+		FindAuthor, Imbalance, KeyOwnerProofSystem, LinearStoragePrice, LockIdentifier,
+		NeverEnsureOrigin, OnFinalize, OnUnbalanced, Randomness, StorageInfo,
 	},
 	weights::{
 		constants::{
@@ -282,7 +278,7 @@ impl pallet_balances::Config for Runtime {
 	type MaxFreezes = ();
 	type MaxHolds = ConstU32<1>;
 	type RuntimeHoldReason = RuntimeHoldReason;
-	type RuntimeFreezeReason = RuntimeFreezeReason;
+	type RuntimeFreezeReason = ();
 }
 
 pub struct DealWithFees<R>(sp_std::marker::PhantomData<R>);
