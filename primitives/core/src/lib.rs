@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use account::EthereumSignature;
+use fp_account::EthereumSignature;
 
 pub use sp_runtime::OpaqueExtrinsic;
 use sp_runtime::{

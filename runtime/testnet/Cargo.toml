@@ -25,7 +25,6 @@ num_enum = { workspace = true }
 bifrost-common-runtime = { workspace = true }
 bifrost-testnet-constants = { workspace = true }
 bp-core = { workspace = true }
-account = { workspace = true }
 precompile-utils = { workspace = true }
 
 # FRAME dependencies
@@ -80,6 +79,7 @@ fp-rpc = { workspace = true }
 fp-rpc-debug = { workspace = true }
 fp-rpc-txpool = { workspace = true }
 fp-rpc-evm-tracing-events = { workspace = true, optional = true }
+fp-account = { workspace = true, features = ["serde"] }
 evm-tracer = { workspace = true, optional = true }
 
 # Custom Pallets
@@ -159,8 +159,8 @@ std = [
 	"fp-rpc-debug/std",
 	"fp-rpc-txpool/std",
 	"fp-rpc-evm-tracing-events/std",
+	"fp-account/std",
 	"evm-tracer/std",
-	"account/std",
 	"precompile-utils/std",
 ]
 evm-tracing = [

@@ -13,26 +13,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "account"
-version = "0.0.1"
-dependencies = [
- "blake2-rfc",
- "hex",
- "impl-serde",
- "libsecp256k1",
- "log",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sha3",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-runtime-interface",
- "sp-std",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -434,15 +414,6 @@ checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
 
 [[package]]
 name = "arrayvec"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd9fd44efafa8690358b7408d253adf110036b88f55672a933f01d616ad9b1b9"
-dependencies = [
- "nodrop",
-]
-
-[[package]]
-name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
@@ -820,11 +791,11 @@ dependencies = [
 name = "bifrost-dev-runtime"
 version = "1.0.0"
 dependencies = [
- "account",
  "bifrost-common-runtime",
  "bifrost-dev-constants",
  "bp-core",
  "evm-tracer",
+ "fp-account",
  "fp-evm",
  "fp-rpc",
  "fp-rpc-debug",
@@ -973,11 +944,11 @@ dependencies = [
 name = "bifrost-mainnet-runtime"
 version = "1.0.0"
 dependencies = [
- "account",
  "bifrost-common-runtime",
  "bifrost-mainnet-constants",
  "bp-core",
  "evm-tracer",
+ "fp-account",
  "fp-evm",
  "fp-rpc",
  "fp-rpc-debug",
@@ -1146,11 +1117,11 @@ dependencies = [
 name = "bifrost-testnet-runtime"
 version = "1.0.0"
 dependencies = [
- "account",
  "bifrost-common-runtime",
  "bifrost-testnet-constants",
  "bp-core",
  "evm-tracer",
+ "fp-account",
  "fp-evm",
  "fp-rpc",
  "fp-rpc-debug",
@@ -1298,16 +1269,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blake2-rfc"
-version = "0.2.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d530bdd2d52966a6d03b7a964add7ae1a288d25214066fd4b600f0f796400"
-dependencies = [
- "arrayvec 0.4.12",
- "constant_time_eq 0.1.5",
-]
-
-[[package]]
 name = "blake2b_simd"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1315,7 +1276,7 @@ checksum = "23285ad32269793932e830392f2fe2f83e26488fd3ec778883a93c8323735780"
 dependencies = [
  "arrayref",
  "arrayvec 0.7.4",
- "constant_time_eq 0.3.0",
+ "constant_time_eq",
 ]
 
 [[package]]
@@ -1326,7 +1287,7 @@ checksum = "94230421e395b9920d23df13ea5d77a20e1725331f90fbbf6df6040b33f756ae"
 dependencies = [
  "arrayref",
  "arrayvec 0.7.4",
- "constant_time_eq 0.3.0",
+ "constant_time_eq",
 ]
 
 [[package]]
@@ -1339,7 +1300,7 @@ dependencies = [
  "arrayvec 0.7.4",
  "cc",
  "cfg-if",
- "constant_time_eq 0.3.0",
+ "constant_time_eq",
 ]
 
 [[package]]
@@ -1397,7 +1358,7 @@ dependencies = [
 name = "bp-core"
 version = "0.0.1"
 dependencies = [
- "account",
+ "fp-account",
  "fp-self-contained",
  "sp-core",
  "sp-runtime",
@@ -1824,12 +1785,6 @@ dependencies = [
  "once_cell",
  "tiny-keccak",
 ]
-
-[[package]]
-name = "constant_time_eq"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "constant_time_eq"
@@ -5816,12 +5771,6 @@ dependencies = [
  "cfg-if",
  "libc",
 ]
-
-[[package]]
-name = "nodrop"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 
 [[package]]
 name = "nohash-hasher"
