@@ -471,33 +471,18 @@ impl<
 	/// nominations if the amount is the same
 	pub fn insert_sorted_greatest_to_least(&mut self, nomination: Bond<AccountId, Balance>) {
 		self.total = self.total.saturating_add(nomination.amount);
-		// if nominations nonempty && last_element == nomination.amount => push input and return
-		if !self.nominations.is_empty() {
-			// if last_element == nomination.amount => push the nomination and return early
-			if self.nominations[self.nominations.len() - 1].amount == nomination.amount {
-				self.nominations.push(nomination);
-				// early return
-				return;
-			}
-		}
-		// else binary search insertion
-		match self.nominations.binary_search_by(|x| nomination.amount.cmp(&x.amount)) {
-			// sorted insertion on sorted vec
-			// enforces first come first serve for equal bond amounts
-			Ok(i) => {
-				let mut new_index = i + 1;
-				while new_index <= (self.nominations.len() - 1) {
-					if self.nominations[new_index].amount == nomination.amount {
-						new_index += 1;
-					} else {
-						self.nominations.insert(new_index, nomination);
-						return;
-					}
-				}
-				self.nominations.push(nomination)
-			},
-			Err(i) => self.nominations.insert(i, nomination),
-		}
+
+		let insertion_index =
+			match self.nominations.binary_search_by(|x| nomination.amount.cmp(&x.amount)) {
+				// Find the next index where amount is not equal to the current nomination amount.
+				Ok(i) => self.nominations[i..]
+					.iter()
+					.position(|x| x.amount != nomination.amount)
+					.map_or(self.nominations.len(), |offset| i + offset),
+				Err(i) => i,
+			};
+
+		self.nominations.insert(insertion_index, nomination);
 	}
 
 	/// Return the capacity status for top nominations
