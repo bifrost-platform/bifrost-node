@@ -453,7 +453,7 @@ impl<T: Config> Pallet<T> {
 					// replace `TopNominations`
 					if let Some(top_nominations) = <TopNominations<T>>::take(&c.old) {
 						Self::replace_nominator_nominations(
-							&top_nominations.clone().nominators(),
+							&top_nominations.nominators(),
 							&c.old,
 							&c.new,
 						);
@@ -462,7 +462,7 @@ impl<T: Config> Pallet<T> {
 					// replace `BottomNominations`
 					if let Some(bottom_nominations) = <BottomNominations<T>>::get(&c.old) {
 						Self::replace_nominator_nominations(
-							&bottom_nominations.clone().nominators(),
+							&bottom_nominations.nominators(),
 							&c.old,
 							&c.new,
 						);

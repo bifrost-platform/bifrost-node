@@ -454,8 +454,8 @@ impl<
 	> Nominations<AccountId, Balance>
 {
 	/// Retrieve the nominator accounts as a vector
-	pub fn nominators(self) -> Vec<AccountId> {
-		self.nominations.into_iter().map(|n| n.owner).collect()
+	pub fn nominators(&self) -> Vec<AccountId> {
+		self.nominations.iter().map(|n| n.owner.clone()).collect()
 	}
 
 	pub fn count(&self) -> u32 {
