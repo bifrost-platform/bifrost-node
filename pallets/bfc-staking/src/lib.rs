@@ -567,12 +567,10 @@ impl<
 		nominator: &AccountId,
 		value: Balance,
 	) -> bool {
-		for (i, bond) in &mut self.nominations.iter().enumerate() {
+		for bond in self.nominations.iter_mut() {
 			if bond.owner == *nominator {
-				let new = Bond { owner: bond.owner.clone(), amount: bond.amount - value };
-				self.nominations[i] = new;
+				bond.amount = bond.amount.saturating_sub(value);
 				self.total = self.total.saturating_sub(value);
-
 				return true;
 			}
 		}
