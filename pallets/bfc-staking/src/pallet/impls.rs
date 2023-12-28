@@ -86,11 +86,15 @@ impl<T: Config> Pallet<T> {
 		new: T::AccountId,
 	) -> DispatchResult {
 		let round = <Round<T>>::get();
-		let mut controller_sets = <DelayedControllerSets<T>>::get(round.current_round_index);
-		controller_sets
-			.try_push(DelayedControllerSet::new(stash, old, new))
-			.map_err(|_| <Error<T>>::TooManyDelayedControllers)?;
-		<DelayedControllerSets<T>>::insert(round.current_round_index, controller_sets);
+		<DelayedControllerSets<T>>::try_mutate(
+			round.current_round_index,
+			|controller_sets| -> DispatchResult {
+				controller_sets
+					.try_push(DelayedControllerSet::new(stash, old, new))
+					.map_err(|_| <Error<T>>::TooManyDelayedControllers)?;
+				Ok(())
+			},
+		)?;
 		Ok(())
 	}
 
