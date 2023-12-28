@@ -51,7 +51,6 @@ use pallet_grandpa::{
 };
 use pallet_identity::simple::IdentityInfo;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
-use pallet_session::historical::{self as pallet_session_historical};
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 
@@ -941,7 +940,7 @@ construct_runtime!(
 		// Consensus
 		Authorship: pallet_authorship::{Pallet, Storage} = 4,
 		Session: pallet_session::{Pallet, Call, Storage, Config<T>, Event} = 5,
-		Historical: pallet_session_historical::{Pallet} = 6,
+		Historical: pallet_session::historical::{Pallet} = 6,
 		Offences: pallet_offences::{Pallet, Storage, Event} = 7,
 		ImOnline: pallet_im_online::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event<T>} = 8,
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event} = 9,
