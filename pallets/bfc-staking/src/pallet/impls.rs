@@ -898,29 +898,22 @@ impl<T: Config> Pallet<T> {
 		candidate_state.slash_voting_power(offender_slash);
 
 		// remove validator bond less request amount to prevent integer underflow
-		if let Some(request) = candidate_state.request {
-			let mut request_underflow = false;
-			// bond less amount exceeds current self bond
-			if candidate_state.bond <= request.amount {
-				// remove request
+		if let Some(request) = &candidate_state.request {
+			let minimum_self_bond = match candidate_state.tier {
+				TierType::Full => T::MinFullCandidateStk::get(),
+				_ => T::MinBasicCandidateStk::get(),
+			};
+
+			if candidate_state.bond <= request.amount
+				|| candidate_state.bond.saturating_sub(request.amount) < minimum_self_bond
+			{
 				candidate_state.request = None;
-				request_underflow = true;
-			}
-			if !request_underflow {
-				let mut minimum_self_bond = T::MinBasicCandidateStk::get();
-				if candidate_state.tier == TierType::Full {
-					minimum_self_bond = T::MinFullCandidateStk::get();
-				}
-				// bond less results to insufficient self bond
-				if (candidate_state.bond - request.amount) < minimum_self_bond {
-					// remove request
-					candidate_state.request = None;
-				}
 			}
 		}
-		let new_total_locked = <Total<T>>::get().saturating_sub(offender_slash);
+
+		let new_total_locked = Self::total().saturating_sub(offender_slash);
 		<Total<T>>::put(new_total_locked);
-		CandidateInfo::<T>::insert(offender, candidate_state.clone());
+		CandidateInfo::<T>::insert(offender, candidate_state);
 	}
 
 	/// Update to the new round. This method will refresh the candidate states and some other
