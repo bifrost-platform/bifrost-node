@@ -455,7 +455,7 @@ impl<T: Config> Pallet<T> {
 						<TopNominations<T>>::insert(&c.new, top_nominations);
 					}
 					// replace `BottomNominations`
-					if let Some(bottom_nominations) = <BottomNominations<T>>::get(&c.old) {
+					if let Some(bottom_nominations) = <BottomNominations<T>>::take(&c.old) {
 						Self::replace_nominator_nominations(
 							&bottom_nominations.nominators(),
 							&c.old,
