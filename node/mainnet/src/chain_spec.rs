@@ -111,7 +111,6 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 					// Relayer accounts
 					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
 				],
-				true,
 			)
 		},
 		// Bootnodes
@@ -149,13 +148,7 @@ fn mainnet_genesis(
 	initial_tech_committee_members: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	_enable_println: bool,
 ) -> mainnet::RuntimeGenesisConfig {
-	// This is the simplest bytecode to revert without returning any data.
-	// We will pre-deploy it under all of our precompiles to ensure they can be called from
-	// within contracts.
-	// (PUSH1 0x00 PUSH1 0x00 REVERT)
-	let _revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
 	mainnet::RuntimeGenesisConfig {
 		system: mainnet::SystemConfig {
 			// Add Wasm runtime to storage.

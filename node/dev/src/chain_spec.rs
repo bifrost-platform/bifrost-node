@@ -132,7 +132,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					AccountId::from(hex!("f4fc2d9Be3D6e19cCAfd575dE7CB290A585A1a22")),
 					AccountId::from(hex!("962dBf2aecF6545f552373487127976fD5B55105")),
 				],
-				true,
 			)
 		},
 		// Bootnodes
@@ -170,13 +169,7 @@ fn development_genesis(
 	initial_tech_committee_members: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	_enable_println: bool,
 ) -> devnet::RuntimeGenesisConfig {
-	// This is the simplest bytecode to revert without returning any data.
-	// We will pre-deploy it under all of our precompiles to ensure they can be called from
-	// within contracts.
-	// (PUSH1 0x00 PUSH1 0x00 REVERT)
-	let _revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
 	devnet::RuntimeGenesisConfig {
 		system: devnet::SystemConfig {
 			// Add Wasm runtime to storage.
