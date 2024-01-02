@@ -633,13 +633,6 @@ impl<T: Config> Pallet<T> {
 				.expect("all members of CandidateQ must be candidates");
 			let top_nominations = Self::top_nominations(validator)
 				.expect("all members of CandidateQ must be candidates");
-			let bottom_nominations = BottomNominations::<T>::get(validator)
-				.expect("all members of CandidateQ must be candidates");
-
-			// Nominators for each validator
-			let mut nominators = vec![];
-			nominators.append(&mut top_nominations.nominations.clone());
-			nominators.append(&mut bottom_nominations.nominations.clone());
 
 			validator_count += 1u32;
 			nomination_count += state.nomination_count;
