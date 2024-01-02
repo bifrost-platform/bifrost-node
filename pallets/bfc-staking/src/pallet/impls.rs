@@ -32,13 +32,13 @@ use frame_support::{
 impl<T: Config> Pallet<T> {
 	/// Verifies if the given account is a nominator
 	pub fn is_nominator(acc: &T::AccountId) -> bool {
-		<NominatorState<T>>::get(acc).is_some()
+		Self::nominator_state(acc).is_some()
 	}
 
 	/// Verifies if the given account is a candidate
 	pub fn is_candidate(acc: &T::AccountId, tier: TierType) -> bool {
 		let mut is_candidate = false;
-		if let Some(state) = <CandidateInfo<T>>::get(acc) {
+		if let Some(state) = Self::candidate_info(acc) {
 			is_candidate = match tier {
 				TierType::Full | TierType::Basic => state.tier == tier,
 				TierType::All => true,
@@ -50,7 +50,7 @@ impl<T: Config> Pallet<T> {
 	/// Verifies if the given account is a selected candidate for the current round
 	pub fn is_selected_candidate(acc: &T::AccountId, tier: TierType) -> bool {
 		let mut is_selected_candidate = false;
-		match <SelectedCandidates<T>>::get().contains(acc) {
+		match Self::selected_candidates().contains(acc) {
 			true => {
 				is_selected_candidate = Self::is_candidate(acc, tier);
 			},
@@ -61,8 +61,8 @@ impl<T: Config> Pallet<T> {
 
 	/// Verifies if the given account has already requested for controller account update
 	pub fn is_controller_set_requested(controller: T::AccountId) -> bool {
-		let round = <Round<T>>::get();
-		let controller_sets = <DelayedControllerSets<T>>::get(round.current_round_index);
+		let round = Self::round();
+		let controller_sets = Self::delayed_controller_sets(round.current_round_index);
 		if controller_sets.is_empty() {
 			return false;
 		}
@@ -71,8 +71,8 @@ impl<T: Config> Pallet<T> {
 
 	/// Verifies if the given account has already requested for commission rate update
 	pub fn is_commission_set_requested(who: &T::AccountId) -> bool {
-		let round = <Round<T>>::get();
-		let commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
+		let round = Self::round();
+		let commission_sets = Self::delayed_commission_sets(round.current_round_index);
 		if commission_sets.is_empty() {
 			return false;
 		}
@@ -85,7 +85,7 @@ impl<T: Config> Pallet<T> {
 		old: T::AccountId,
 		new: T::AccountId,
 	) -> DispatchResult {
-		let round = <Round<T>>::get();
+		let round = Self::round();
 		<DelayedControllerSets<T>>::try_mutate(
 			round.current_round_index,
 			|controller_sets| -> DispatchResult {
@@ -104,38 +104,35 @@ impl<T: Config> Pallet<T> {
 		old: Perbill,
 		new: Perbill,
 	) -> DispatchResult {
-		let round = <Round<T>>::get();
-		let mut commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
-		commission_sets
-			.try_push(DelayedCommissionSet::new(who.clone(), old, new))
-			.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?;
-		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
+		let round = Self::round();
+		<DelayedCommissionSets<T>>::try_mutate(
+			round.current_round_index,
+			|commission_sets| -> DispatchResult {
+				commission_sets
+					.try_push(DelayedCommissionSet::new(who.clone(), old, new))
+					.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?;
+				Ok(())
+			},
+		)?;
 
 		Ok(())
 	}
 
 	/// Remove the given `who` from the `DelayedControllerSets` of the current round.
 	pub fn remove_controller_set(who: &T::AccountId) -> DispatchResult {
-		let round = <Round<T>>::get();
-		let mut controller_sets =
-			<DelayedControllerSets<T>>::get(round.current_round_index).into_inner();
-		controller_sets.retain(|c| c.old != *who);
-		let controller_sets = BoundedVec::try_from(controller_sets)
-			.map_err(|_| <Error<T>>::TooManyDelayedControllers)?;
-		<DelayedControllerSets<T>>::insert(round.current_round_index, controller_sets);
+		let round = Self::round();
+		<DelayedControllerSets<T>>::mutate(round.current_round_index, |controller_set| {
+			controller_set.retain(|c| c.old != *who);
+		});
 		Ok(())
 	}
 
 	/// Remove the given `who` from the `DelayedCommissionSets` of the current round.
 	pub fn remove_commission_set(who: &T::AccountId) -> DispatchResult {
-		let round = <Round<T>>::get();
-		let mut commission_sets =
-			<DelayedCommissionSets<T>>::get(round.current_round_index).into_inner();
-		commission_sets.retain(|c| c.who != *who);
-		let commission_sets = BoundedVec::try_from(commission_sets)
-			.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?;
-		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
-
+		let round = Self::round();
+		<DelayedCommissionSets<T>>::mutate(round.current_round_index, |commission_sets| {
+			commission_sets.retain(|c| c.who != *who);
+		});
 		Ok(())
 	}
 
@@ -151,7 +148,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Get vectorized & sorted by voting power in descending order `CandidatePool`
 	pub fn get_sorted_candidates() -> Vec<Bond<T::AccountId, BalanceOf<T>>> {
-		let mut candidates = <CandidatePool<T>>::get()
+		let mut candidates = Self::candidate_pool()
 			.into_iter()
 			.map(|(owner, amount)| Bond { owner, amount })
 			.collect::<Vec<Bond<T::AccountId, BalanceOf<T>>>>();
@@ -192,18 +189,18 @@ impl<T: Config> Pallet<T> {
 		});
 		match tier {
 			TierType::Full => {
-				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
-				selected_full_candidates
-					.try_insert(candidate.clone())
-					.expect("SelectedFullCandidates out of bound");
-				<SelectedFullCandidates<T>>::put(selected_full_candidates);
+				<SelectedFullCandidates<T>>::mutate(|selected_full_candidates| {
+					selected_full_candidates
+						.try_insert(candidate.clone())
+						.expect("SelectedFullCandidates out of bound");
+				});
 			},
 			_ => {
-				let mut selected_basic_candidates = <SelectedBasicCandidates<T>>::get();
-				selected_basic_candidates
-					.try_insert(candidate.clone())
-					.expect("SelectedBasicCandidates out of bound");
-				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
+				<SelectedBasicCandidates<T>>::mutate(|selected_basic_candidates| {
+					selected_basic_candidates
+						.try_insert(candidate.clone())
+						.expect("SelectedBasicCandidates out of bound");
+				});
 			},
 		};
 	}
@@ -237,7 +234,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Compute round issuance based on the total amount of stake of the current round
 	pub fn compute_issuance(staked: BalanceOf<T>) -> BalanceOf<T> {
-		let config = <InflationConfig<T>>::get();
+		let config = Self::inflation_config();
 		let round_issuance = Range {
 			min: config.round.min * staked,
 			ideal: config.round.ideal * staked,
@@ -254,9 +251,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Compute the majority of the selected candidates
 	pub fn compute_majority() -> u32 {
-		let selected_candidates = <SelectedCandidates<T>>::get();
-		let half = (selected_candidates.len() as u32) / 2;
-		return half + 1;
+		((Self::selected_candidates().len() as u32) / 2) + 1
 	}
 
 	/// Remove nomination from candidate state
@@ -266,10 +261,10 @@ impl<T: Config> Pallet<T> {
 		nominator: T::AccountId,
 		amount: BalanceOf<T>,
 	) -> DispatchResult {
-		let mut state = <CandidateInfo<T>>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
+		let mut state = Self::candidate_info(&candidate).ok_or(Error::<T>::CandidateDNE)?;
 		state.rm_nomination_if_exists::<T>(&candidate, nominator.clone(), amount)?;
 		T::Currency::unreserve(&nominator, amount);
-		let new_total_locked = <Total<T>>::get().saturating_sub(amount);
+		let new_total_locked = Self::total().saturating_sub(amount);
 		<Total<T>>::put(new_total_locked);
 		let new_total = state.voting_power;
 		<CandidateInfo<T>>::insert(&candidate, state);
@@ -290,7 +285,7 @@ impl<T: Config> Pallet<T> {
 			return;
 		}
 		let round_to_payout = now - delay;
-		let total_points = <Points<T>>::get(round_to_payout);
+		let total_points = Self::points(round_to_payout);
 		if total_points.is_zero() {
 			return;
 		}
@@ -303,7 +298,7 @@ impl<T: Config> Pallet<T> {
 		let payout = DelayedPayout {
 			round_issuance,
 			total_staking_reward: round_issuance,
-			validator_commission: <DefaultBasicValidatorCommission<T>>::get(),
+			validator_commission: Self::default_basic_validator_commission(),
 		};
 		<DelayedPayouts<T>>::insert(round_to_payout, payout);
 	}
@@ -315,7 +310,7 @@ impl<T: Config> Pallet<T> {
 		stash: T::AccountId,
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
-		if let Some(mut validator_state) = <CandidateInfo<T>>::get(&controller) {
+		if let Some(mut validator_state) = Self::candidate_info(&controller) {
 			// mint rewards to the validators stash account
 			Self::mint_reward(reward, stash);
 			// increment the awarded tokens of this validator
@@ -342,7 +337,7 @@ impl<T: Config> Pallet<T> {
 		nominator: T::AccountId,
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
-		if let Some(mut nominator_state) = <NominatorState<T>>::get(&nominator) {
+		if let Some(mut nominator_state) = Self::nominator_state(&nominator) {
 			// the nominator must be active and not revoking the current validator
 			if nominator_state.is_active() && !nominator_state.is_revoking(&controller) {
 				// mint rewards to the nominator account
@@ -387,7 +382,7 @@ impl<T: Config> Pallet<T> {
 		}
 		let round_to_payout = now - delay;
 
-		if let Some(payout_info) = <DelayedPayouts<T>>::get(round_to_payout) {
+		if let Some(payout_info) = Self::delayed_payouts(round_to_payout) {
 			let result = Self::pay_one_validator_reward(round_to_payout, payout_info);
 			if result.0.is_none() {
 				// result.0 indicates whether or not a payout was made
@@ -410,7 +405,7 @@ impl<T: Config> Pallet<T> {
 		new: &T::AccountId,
 	) {
 		nominators.into_iter().for_each(|n| {
-			if let Some(mut nominator) = <NominatorState<T>>::get(n) {
+			if let Some(mut nominator) = Self::nominator_state(n) {
 				nominator.replace_nominations(old, new);
 				nominator.replace_requests(old, new);
 				<NominatorState<T>>::insert(n, nominator);
@@ -423,7 +418,7 @@ impl<T: Config> Pallet<T> {
 		let delayed_round = now - 1;
 		let commission_sets = <DelayedCommissionSets<T>>::take(delayed_round);
 		commission_sets.into_iter().for_each(|c| {
-			if let Some(mut candidate) = <CandidateInfo<T>>::get(&c.who) {
+			if let Some(mut candidate) = Self::candidate_info(&c.who) {
 				candidate.set_commission(c.new);
 				<CandidateInfo<T>>::insert(&c.who, candidate);
 			}
@@ -437,7 +432,7 @@ impl<T: Config> Pallet<T> {
 		let controller_sets = <DelayedControllerSets<T>>::take(delayed_round);
 		if !controller_sets.is_empty() {
 			controller_sets.into_iter().for_each(|c| {
-				if let Some(candidate) = <CandidateInfo<T>>::get(&c.old) {
+				if let Some(candidate) = Self::candidate_info(&c.old) {
 					// replace `CandidateInfo`
 					<CandidateInfo<T>>::remove(&c.old);
 					<CandidateInfo<T>>::insert(&c.new, candidate.clone());
@@ -482,9 +477,9 @@ impl<T: Config> Pallet<T> {
 	/// Mints exactly `amount` native tokens to the `to` account.
 	fn mint_reward(amount: BalanceOf<T>, to: T::AccountId) {
 		if let Ok(amount_transferred) = T::Currency::deposit_into_existing(&to, amount) {
-			let mut awarded_tokens = <AwardedTokens<T>>::get();
-			awarded_tokens += amount_transferred.peek();
-			<AwardedTokens<T>>::put(awarded_tokens);
+			<AwardedTokens<T>>::mutate(|awarded_tokens| {
+				*awarded_tokens += amount_transferred.peek();
+			});
 			Self::deposit_event(Event::Rewarded {
 				account: to.clone(),
 				rewards: amount_transferred.peek(),
@@ -500,14 +495,14 @@ impl<T: Config> Pallet<T> {
 		round_to_payout: RoundIndex,
 		payout_info: DelayedPayout<BalanceOf<T>>,
 	) -> (Option<(T::AccountId, BalanceOf<T>)>, Weight) {
-		let total_points = <Points<T>>::get(round_to_payout);
+		let total_points = Self::points(round_to_payout);
 		if total_points.is_zero() {
 			return (None, Weight::from_parts(0u64, 0u64));
 		}
 
 		if let Some((validator, pts)) = <AwardedPts<T>>::iter_prefix(round_to_payout).drain().next()
 		{
-			if let Some(state) = <CandidateInfo<T>>::get(&validator) {
+			if let Some(state) = Self::candidate_info(&validator) {
 				let validator_issuance = state.commission * payout_info.round_issuance;
 
 				// compute contribution percentage from given round total points
@@ -578,7 +573,7 @@ impl<T: Config> Pallet<T> {
 		let mut basic_candidates = vec![];
 
 		candidates.into_iter().for_each(|candidate| {
-			if let Some(state) = <CandidateInfo<T>>::get(&candidate.owner) {
+			if let Some(state) = Self::candidate_info(&candidate.owner) {
 				match state.tier {
 					TierType::Full => {
 						if state.bond >= T::MinFullCandidateStk::get() {
@@ -596,12 +591,12 @@ impl<T: Config> Pallet<T> {
 
 		let full_validators = Self::get_top_n_candidates(
 			full_candidates,
-			<MaxFullSelected<T>>::get() as usize,
+			Self::max_full_selected() as usize,
 			T::MinFullValidatorStk::get(),
 		);
 		let basic_validators = Self::get_top_n_candidates(
 			basic_candidates,
-			<MaxBasicSelected<T>>::get() as usize,
+			Self::max_basic_selected() as usize,
 			T::MinBasicValidatorStk::get(),
 		);
 
@@ -634,9 +629,9 @@ impl<T: Config> Pallet<T> {
 			(0u32, 0u32, BalanceOf::<T>::zero());
 		// snapshot exposure for round for weighting reward distribution
 		for validator in validators.iter() {
-			let mut state = <CandidateInfo<T>>::get(validator)
+			let mut state = Self::candidate_info(validator)
 				.expect("all members of CandidateQ must be candidates");
-			let top_nominations = <TopNominations<T>>::get(validator)
+			let top_nominations = Self::top_nominations(validator)
 				.expect("all members of CandidateQ must be candidates");
 			let bottom_nominations = BottomNominations::<T>::get(validator)
 				.expect("all members of CandidateQ must be candidates");
@@ -723,18 +718,18 @@ impl<T: Config> Pallet<T> {
 
 	/// Updates the block productivity and increases block points of the block author
 	pub(crate) fn note_author(author: &T::AccountId) {
-		let round = <Round<T>>::get();
+		let round = Self::round();
 		let round_index = round.current_round_index;
 		let current_block = round.current_block;
 
-		if let Some(mut state) = <CandidateInfo<T>>::get(author) {
+		if let Some(mut state) = Self::candidate_info(author) {
 			// rounds current block increases after block authoring
 			state.set_last_block(current_block + T::BlockNumber::from(1u32));
 			state.increment_blocks_produced();
 			<CandidateInfo<T>>::insert(author, state);
 		}
 
-		let score_plus_5 = <AwardedPts<T>>::get(round_index, &author) + 5;
+		let score_plus_5 = Self::awarded_pts(round_index, &author) + 5;
 		<AwardedPts<T>>::insert(round_index, author, score_plus_5);
 		<Points<T>>::mutate(round_index, |x: &mut RewardPoint| *x += 5);
 	}
@@ -753,39 +748,39 @@ impl<T: Config> Pallet<T> {
 
 	/// Refresh the `CachedSelectedCandidates` adding the new selected candidates
 	pub fn refresh_cached_selected_candidates(now: RoundIndex, validators: BTreeSet<T::AccountId>) {
-		let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
-		if <StorageCacheLifetime<T>>::get() <= cached_selected_candidates.len() as u32 {
-			cached_selected_candidates.remove(0);
-		}
-		cached_selected_candidates.push((now, validators));
-		<CachedSelectedCandidates<T>>::put(cached_selected_candidates);
+		<CachedSelectedCandidates<T>>::mutate(|cached_selected_candidates| {
+			if Self::storage_cache_lifetime() <= cached_selected_candidates.len() as u32 {
+				cached_selected_candidates.remove(0);
+			}
+			cached_selected_candidates.push((now, validators));
+		});
 	}
 
 	/// Refresh the latest rounds cached selected candidates to the current state
 	fn refresh_latest_cached_selected_candidates() {
-		let round = <Round<T>>::get();
-		let selected_candidates = <SelectedCandidates<T>>::get();
-		let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
-		cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
-		cached_selected_candidates
-			.push((round.current_round_index, selected_candidates.into_inner()));
-		<CachedSelectedCandidates<T>>::put(cached_selected_candidates);
+		let round = Self::round();
+		let selected_candidates = Self::selected_candidates();
+		<CachedSelectedCandidates<T>>::mutate(|cached_selected_candidates| {
+			cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
+			cached_selected_candidates
+				.push((round.current_round_index, selected_candidates.into_inner()));
+		});
 	}
 
 	/// Refresh the latest rounds cached majority to the current state
 	fn refresh_latest_cached_majority() {
-		let round = <Round<T>>::get();
-		let majority = <Majority<T>>::get();
-		let mut cached_majority = <CachedMajority<T>>::get();
-		cached_majority.retain(|r| r.0 != round.current_round_index);
-		cached_majority.push((round.current_round_index, majority));
-		<CachedMajority<T>>::put(cached_majority);
+		let round = Self::round();
+		let majority = Self::majority();
+		<CachedMajority<T>>::mutate(|cached_majority| {
+			cached_majority.retain(|r| r.0 != round.current_round_index);
+			cached_majority.push((round.current_round_index, majority));
+		});
 	}
 
 	/// Refresh the `Majority` and `CachedMajority` based on the new selected candidates
 	pub fn refresh_majority(now: RoundIndex) {
-		let mut cached_majority = <CachedMajority<T>>::get();
-		if <StorageCacheLifetime<T>>::get() <= cached_majority.len() as u32 {
+		let mut cached_majority = Self::cached_majority();
+		if Self::storage_cache_lifetime() <= cached_majority.len() as u32 {
 			cached_majority.remove(0);
 		}
 		let majority: u32 = Self::compute_majority();
@@ -798,7 +793,7 @@ impl<T: Config> Pallet<T> {
 	/// - decrease the productivity if the validator produced zero blocks in the current session
 	pub fn compute_productivity(session_validators: Vec<T::AccountId>) {
 		session_validators.iter().for_each(|validator| {
-			if let Some(mut state) = <CandidateInfo<T>>::get(validator) {
+			if let Some(mut state) = Self::candidate_info(validator) {
 				if state.productivity_status == ProductivityStatus::Idle {
 					state.decrement_productivity::<T>();
 				}
@@ -830,16 +825,16 @@ impl<T: Config> Pallet<T> {
 
 	/// Refresh the current staking state of the network of the current round
 	pub fn refresh_total_snapshot(now: RoundIndex) {
-		let selected_candidates = <SelectedCandidates<T>>::get();
+		let selected_candidates = Self::selected_candidates();
 		let mut snapshot: TotalSnapshot<BalanceOf<T>> = TotalSnapshot::default();
 		for candidate in <CandidateInfo<T>>::iter() {
 			let owner = candidate.0;
 			let state = candidate.1;
 
 			let top_nominations =
-				<TopNominations<T>>::get(&owner).expect("Candidate must have top nominations");
-			let bottom_nominations = <BottomNominations<T>>::get(&owner)
-				.expect("Candidate must have bottom nominations");
+				Self::top_nominations(&owner).expect("Candidate must have top nominations");
+			let bottom_nominations =
+				Self::bottom_nominations(&owner).expect("Candidate must have bottom nominations");
 
 			if selected_candidates.contains(&owner) {
 				snapshot.increment_active_self_bond(state.bond);
@@ -879,7 +874,7 @@ impl<T: Config> Pallet<T> {
 		// remove from candidate pool
 		Self::remove_from_candidate_pool(who);
 		// update candidate info
-		let mut candidate_state = CandidateInfo::<T>::get(who).expect("CandidateInfo must exist");
+		let mut candidate_state = Self::candidate_info(who).expect("CandidateInfo must exist");
 		candidate_state.kick_out();
 		CandidateInfo::<T>::insert(who, &candidate_state);
 		// remove from selected candidates
@@ -905,10 +900,10 @@ impl<T: Config> Pallet<T> {
 		offender_slash: BalanceOf<T>,
 		_nominators_slash: &Vec<(T::AccountId, BalanceOf<T>)>,
 	) {
-		let mut candidate_state =
-			CandidateInfo::<T>::get(offender).expect("CandidateInfo must exist");
+		let mut candidate_state = Self::candidate_info(offender).expect("CandidateInfo must exist");
 		candidate_state.slash_bond(offender_slash);
 		candidate_state.slash_voting_power(offender_slash);
+
 		// remove validator bond less request amount to prevent integer underflow
 		if let Some(request) = candidate_state.request {
 			let mut request_underflow = false;
@@ -943,7 +938,7 @@ impl<T: Config> Pallet<T> {
 		basic_validators: Vec<T::AccountId>,
 	) {
 		// update round
-		let mut round = <Round<T>>::get();
+		let mut round = Self::round();
 		round.update_round::<T>(now);
 		let current_round = round.current_round_index;
 		// reset candidate states
@@ -961,7 +956,7 @@ impl<T: Config> Pallet<T> {
 		// refresh productivity rate per block
 		Self::refresh_productivity_per_block(validator_count, round.round_length);
 		// snapshot total stake and storage state
-		<Staked<T>>::insert(current_round, <Total<T>>::get());
+		<Staked<T>>::insert(current_round, Self::total());
 		<TotalAtStake<T>>::remove(current_round - 1);
 		// handle delayed set requests
 		Self::handle_delayed_controller_sets(current_round);
@@ -985,7 +980,7 @@ where
 	fn note_author(author: T::AccountId) {
 		Pallet::<T>::note_author(&author);
 
-		if let Some(mut state) = <CandidateInfo<T>>::get(&author) {
+		if let Some(mut state) = Self::candidate_info(&author) {
 			state.productivity_status = ProductivityStatus::Active;
 			<CandidateInfo<T>>::insert(&author, state);
 		}
@@ -1015,9 +1010,9 @@ where
 		// Update to a new session
 		let new_session = new_index - 1;
 		Session::<T>::put(new_session);
-		let mut round = Pallet::<T>::round();
+		let mut round = Self::round();
 		round.update_session::<T>(now, new_session);
-		Round::<T>::put(round);
+		<Round<T>>::put(round);
 
 		// Check if the round should update
 		if round.should_update(now) {
@@ -1062,7 +1057,7 @@ where
 
 impl<T: Config> ShouldEndSession<T::BlockNumber> for Pallet<T> {
 	fn should_end_session(now: T::BlockNumber) -> bool {
-		let round = <Round<T>>::get();
+		let round = Self::round();
 		// always update when a new round should start
 		round.should_update(now)
 	}
@@ -1085,7 +1080,7 @@ impl<T: Config> EstimateNextSessionRotation<T::BlockNumber> for Pallet<T> {
 	}
 
 	fn estimate_next_session_rotation(_now: T::BlockNumber) -> (Option<T::BlockNumber>, Weight) {
-		let round = <Round<T>>::get();
+		let round = Self::round();
 
 		(
 			Some(round.first_round_block + round.round_length.into()),
@@ -1124,10 +1119,10 @@ where
 		slash_session: SessionIndex,
 		_disable_strategy: DisableStrategy,
 	) -> Weight {
-		let round = Round::<T>::get();
+		let round = Self::round();
 		for (details, slash_fraction) in offenders.iter().zip(slash_fraction) {
 			let (controller, _snapshot) = &details.offender;
-			if let Some(candidate_state) = CandidateInfo::<T>::get(controller) {
+			if let Some(candidate_state) = Self::candidate_info(controller) {
 				// prevent offence handling if the validator is already kicked out (due to session
 				// update delay)
 				if candidate_state.is_kicked_out() {
