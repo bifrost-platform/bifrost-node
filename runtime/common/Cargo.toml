@@ -3,7 +3,7 @@ name = "bifrost-common-runtime"
 version = "1.0.0"
 description = "The common code shared between substrate runtimes for Bifrost Node"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -19,12 +19,5 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 [features]
-std = [
-	"frame-support/std",
-	"sp-core/std",
-	"sp-runtime/std",
-	"sp-std/std",
-]
-try-runtime = [
-	"frame-support/try-runtime",
-]
+std = ["frame-support/std", "sp-core/std", "sp-runtime/std", "sp-std/std"]
+try-runtime = ["frame-support/try-runtime"]

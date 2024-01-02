@@ -68,9 +68,10 @@ fp-storage = { workspace = true }
 fp-ext = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-rpc-txpool = { workspace = true, features = ["std"] }
-pallet-evm = { workspace = true, features = ["std"] }
-
-pallet-ethereum = { workspace = true, features = ["forbid-evm-reentrancy"] }
+pallet-ethereum = { workspace = true, features = [
+	"std",
+	"forbid-evm-reentrancy",
+] }
 
 # benchmarking dependencies
 frame-benchmarking-cli = { workspace = true }
