@@ -1,7 +1,7 @@
 [package]
 name = "bifrost-common-runtime"
 version = "1.0.0"
-description = "The common code shared between substrate runtimes for Bifrost Node"
+description = "The common runtime apis for Bifrost"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }

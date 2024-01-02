@@ -1,7 +1,7 @@
 [package]
 name = "bifrost-common-node"
 version = "1.0.0"
-description = "The common code shared between node specifications for Bifrost Node"
+description = "The common code shared between client implementations for Bifrost"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }

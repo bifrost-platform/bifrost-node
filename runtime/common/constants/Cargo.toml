@@ -1,7 +1,7 @@
 [package]
 name = "bifrost-common-constants"
 version = "1.0.0"
-description = "The substrate runtime constants for Bifrost Node development"
+description = "The common runtime constants for Bifrost"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
