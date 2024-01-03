@@ -73,7 +73,6 @@ pub mod pallet {
 		pub _config: PhantomData<T>,
 	}
 
-	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
 			Self { proposal_index: 0, _config: Default::default() }
