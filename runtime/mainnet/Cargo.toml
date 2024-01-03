@@ -74,7 +74,7 @@ pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 pallet-ethereum = { workspace = true, features = ["forbid-evm-reentrancy"] }
 pallet-base-fee = { workspace = true }
 fp-self-contained = { workspace = true, features = ["serde"] }
-fp-evm = { workspace = true }
+fp-evm = { workspace = true, features = ["serde"] }
 fp-rpc = { workspace = true }
 fp-rpc-debug = { workspace = true }
 fp-rpc-txpool = { workspace = true }

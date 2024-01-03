@@ -10,7 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 log = { workspace = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true, features = ["std"] }
 substrate-fixed = { workspace = true }
 
 # Substrate
@@ -51,7 +51,6 @@ std = [
 	"pallet-im-online/std",
 	"pallet-relay-manager/std",
 	"pallet-bfc-offences/std",
-	"serde",
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-staking/std",
