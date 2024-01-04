@@ -7,7 +7,7 @@ use precompile_utils::prelude::*;
 use bp_staking::TierType;
 use fp_evm::PrecompileHandle;
 use sp_core::{H160, H256};
-use sp_std::{marker::PhantomData, vec, vec::Vec};
+use sp_std::{collections::btree_set::BTreeSet, marker::PhantomData, vec, vec::Vec};
 
 mod types;
 use types::{
@@ -65,17 +65,14 @@ where
 		let validator = Runtime::AddressMapping::into_account_id(validator.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut validator_offence = ValidatorOffences::<Runtime>::default();
 
 		if let Some(offence) = OffencesOf::<Runtime>::validator_offences(&validator) {
 			let mut new = ValidatorOffence::<Runtime>::default();
 			new.set_offence(validator, offence);
-			validator_offence.insert_offence(new);
+			Ok(new.into())
 		} else {
-			validator_offence.insert_empty(validator);
+			Ok(ValidatorOffence::<Runtime>::default().into())
 		}
-
-		Ok(validator_offence.into())
 	}
 
 	#[precompile::public("validatorOffences(address[])")]
@@ -86,17 +83,12 @@ where
 		validators: Vec<Address>,
 	) -> EvmResult<EvmValidatorOffencesOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_validators = validators
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
 
-		let previous_len = unique_validators.len();
-		unique_validators.sort();
-		unique_validators.dedup();
-		let current_len = unique_validators.len();
-		if current_len < previous_len {
+		let unique_validators: BTreeSet<Runtime::AccountId> = validators
+			.iter()
+			.map(|validator| Runtime::AddressMapping::into_account_id(validator.0))
+			.collect();
+		if unique_validators.len() != validators.len() {
 			return Err(RevertReason::custom("Duplicate validator address received").into());
 		}
 

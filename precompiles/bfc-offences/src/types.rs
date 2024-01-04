@@ -60,6 +60,20 @@ where
 	}
 }
 
+impl<Runtime> From<ValidatorOffence<Runtime>> for EvmValidatorOffenceOf
+where
+	Runtime: pallet_bfc_offences::Config,
+{
+	fn from(offence: ValidatorOffence<Runtime>) -> Self {
+		(
+			offence.validator,
+			offence.latest_offence_round_index,
+			offence.latest_offence_session_index,
+			offence.offence_count,
+		)
+	}
+}
+
 /// EVM struct for validator offences
 pub struct ValidatorOffences<Runtime: pallet_bfc_offences::Config> {
 	/// The address of this validator
@@ -101,20 +115,6 @@ where
 		self.latest_offence_round_index.push(offence.latest_offence_round_index);
 		self.latest_offence_session_index.push(offence.latest_offence_session_index);
 		self.offence_count.push(offence.offence_count);
-	}
-}
-
-impl<Runtime> From<ValidatorOffences<Runtime>> for EvmValidatorOffenceOf
-where
-	Runtime: pallet_bfc_offences::Config,
-{
-	fn from(offence: ValidatorOffences<Runtime>) -> Self {
-		(
-			offence.validator[0],
-			offence.latest_offence_round_index[0],
-			offence.latest_offence_session_index[0],
-			offence.offence_count[0],
-		)
 	}
 }
 
