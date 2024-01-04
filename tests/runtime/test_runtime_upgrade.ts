@@ -117,7 +117,10 @@ describe('runtime_upgrade - evm interactions', function () {
       data: contract.methods.store(1).encodeABI()
     }, alithPk)).rawTransaction;
 
-    await sendTransaction(signedTx_2);
+    const txHash = await sendTransaction(signedTx_2);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
 
     // call contract methods
     const response = await contract.methods.retrieve().call();
@@ -147,7 +150,10 @@ describe('runtime_upgrade - evm interactions', function () {
       data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI()
     }, baltatharPk)).rawTransaction;
 
-    await sendTransaction(signedTx);
+    const txHash = await sendTransaction(signedTx);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
   });
 });
 
