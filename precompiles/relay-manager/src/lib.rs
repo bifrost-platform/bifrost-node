@@ -60,34 +60,37 @@ where
 		Ok(is_selected_relayer)
 	}
 
+	fn set_and_validate<F>(relayers: &Vec<Address>, exact: bool, validate: F) -> EvmResult<bool>
+	where
+		F: FnMut(&Runtime::AccountId) -> bool,
+	{
+		let unique_relayers: BTreeSet<Runtime::AccountId> = relayers
+			.iter()
+			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
+			.collect();
+		if unique_relayers.len() != relayers.len() {
+			return Err(RevertReason::custom("Duplicate relayer address received").into());
+		}
+
+		if exact {
+			let selected_relayers = RelayManagerOf::<Runtime>::selected_relayers();
+			if selected_relayers.len() != unique_relayers.len() {
+				return Ok(false);
+			}
+		}
+
+		Ok(unique_relayers.iter().all(validate))
+	}
+
 	#[precompile::public("isRelayers(address[])")]
 	#[precompile::public("is_relayers(address[])")]
 	#[precompile::view]
 	fn is_relayers(handle: &mut impl PrecompileHandle, relayers: Vec<Address>) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_relayers = relayers
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
 
-		let previous_len = unique_relayers.len();
-		unique_relayers.sort();
-		unique_relayers.dedup();
-		let current_len = unique_relayers.len();
-		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
-
-		let mut is_relayers = true;
-		for relayer in unique_relayers {
-			if !RelayManagerOf::<Runtime>::is_relayer(&relayer) {
-				is_relayers = false;
-				break;
-			}
-		}
-
-		Ok(is_relayers)
+		Self::set_and_validate(&relayers, false, |relayer| {
+			RelayManagerOf::<Runtime>::is_relayer(relayer)
+		})
 	}
 
 	#[precompile::public("isSelectedRelayers(address[],bool)")]
@@ -99,29 +102,10 @@ where
 		is_initial: bool,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_relayers = relayers
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
 
-		let previous_len = unique_relayers.len();
-		unique_relayers.sort();
-		unique_relayers.dedup();
-		let current_len = unique_relayers.len();
-		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
-
-		let mut is_relayers = true;
-		for relayer in unique_relayers {
-			if !RelayManagerOf::<Runtime>::is_selected_relayer(&relayer, is_initial) {
-				is_relayers = false;
-				break;
-			}
-		}
-
-		Ok(is_relayers)
+		Self::set_and_validate(&relayers, false, |relayer| {
+			RelayManagerOf::<Runtime>::is_selected_relayer(relayer, is_initial)
+		})
 	}
 
 	#[precompile::public("isCompleteSelectedRelayers(address[],bool)")]
@@ -133,34 +117,10 @@ where
 		is_initial: bool,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_relayers = relayers
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
 
-		let previous_len = unique_relayers.len();
-		unique_relayers.sort();
-		unique_relayers.dedup();
-		let current_len = unique_relayers.len();
-		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
-
-		let mut is_relayers = true;
-		let selected_relayers = RelayManagerOf::<Runtime>::selected_relayers();
-		if selected_relayers.len() != unique_relayers.len() {
-			is_relayers = false;
-		} else {
-			for relayer in unique_relayers {
-				if !RelayManagerOf::<Runtime>::is_selected_relayer(&relayer, is_initial) {
-					is_relayers = false;
-					break;
-				}
-			}
-		}
-
-		Ok(is_relayers)
+		Self::set_and_validate(&relayers, true, |relayer| {
+			RelayManagerOf::<Runtime>::is_selected_relayer(relayer, is_initial)
+		})
 	}
 
 	fn get_previous_selected_relayers(
