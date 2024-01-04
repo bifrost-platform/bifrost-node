@@ -109,18 +109,6 @@ where
 		Ok(is_selected_candidate)
 	}
 
-	fn get_unique_candidates(candidates: &Vec<Address>) -> EvmResult<BTreeSet<Runtime::AccountId>> {
-		let unique_candidates: BTreeSet<Runtime::AccountId> = candidates
-			.iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect();
-		if unique_candidates.len() != candidates.len() {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
-
-		Ok(unique_candidates)
-	}
-
 	/// Verifies if each of the address in the given `candidates` vector parameter
 	/// is a active validator for the current round
 	/// @param: `candidates` the address vector for which to verify
@@ -169,17 +157,6 @@ where
 			},
 			true,
 		))
-	}
-
-	fn get_previous_selected_candidates(
-		round_index: &RoundIndex,
-	) -> EvmResult<BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>>> {
-		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
-		if let Some(previous_selected_candidates) = previous_selected_candidates.get(round_index) {
-			Ok(previous_selected_candidates.clone())
-		} else {
-			Err(RevertReason::read_out_of_bounds("round_index").into())
-		}
 	}
 
 	/// Verifies if the given `candidate` parameter was an active validator at the given
@@ -1350,6 +1327,29 @@ where
 	}
 
 	// Util methods
+
+	fn get_unique_candidates(candidates: &Vec<Address>) -> EvmResult<BTreeSet<Runtime::AccountId>> {
+		let unique_candidates: BTreeSet<Runtime::AccountId> = candidates
+			.iter()
+			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
+			.collect();
+		if unique_candidates.len() != candidates.len() {
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
+		}
+
+		Ok(unique_candidates)
+	}
+
+	fn get_previous_selected_candidates(
+		round_index: &RoundIndex,
+	) -> EvmResult<BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>>> {
+		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
+		if let Some(previous_selected_candidates) = previous_selected_candidates.get(round_index) {
+			Ok(previous_selected_candidates.clone())
+		} else {
+			Err(RevertReason::read_out_of_bounds("round_index").into())
+		}
+	}
 
 	fn compare_selected_candidates(
 		candidates: BTreeSet<Runtime::AccountId>,
