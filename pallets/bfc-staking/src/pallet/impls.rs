@@ -89,13 +89,11 @@ impl<T: Config> Pallet<T> {
 		<DelayedControllerSets<T>>::try_mutate(
 			round.current_round_index,
 			|controller_sets| -> DispatchResult {
-				controller_sets
+				Ok(controller_sets
 					.try_push(DelayedControllerSet::new(stash, old, new))
-					.map_err(|_| <Error<T>>::TooManyDelayedControllers)?;
-				Ok(())
+					.map_err(|_| <Error<T>>::TooManyDelayedControllers)?)
 			},
-		)?;
-		Ok(())
+		)
 	}
 
 	/// Adds a new commission set request. The state reflection will be applied in the next round.
@@ -108,14 +106,11 @@ impl<T: Config> Pallet<T> {
 		<DelayedCommissionSets<T>>::try_mutate(
 			round.current_round_index,
 			|commission_sets| -> DispatchResult {
-				commission_sets
+				Ok(commission_sets
 					.try_push(DelayedCommissionSet::new(who.clone(), old, new))
-					.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?;
-				Ok(())
+					.map_err(|_| <Error<T>>::TooManyDelayedCommissions)?)
 			},
-		)?;
-
-		Ok(())
+		)
 	}
 
 	/// Remove the given `who` from the `DelayedControllerSets` of the current round.
@@ -763,10 +758,9 @@ impl<T: Config> Pallet<T> {
 	/// Refresh the latest rounds cached majority to the current state
 	fn refresh_latest_cached_majority() {
 		let round = Self::round();
-		let majority = Self::majority();
 		<CachedMajority<T>>::mutate(|cached_majority| {
 			cached_majority.retain(|r| r.0 != round.current_round_index);
-			cached_majority.push((round.current_round_index, majority));
+			cached_majority.push((round.current_round_index, Self::majority()));
 		});
 	}
 
