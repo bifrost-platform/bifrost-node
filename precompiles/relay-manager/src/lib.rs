@@ -172,7 +172,7 @@ where
 			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
 			.collect::<BTreeSet<Runtime::AccountId>>();
 		if unique_relayers.len() != relayers.len() {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
+			return Err(RevertReason::custom("Duplicate relayer address received").into());
 		}
 
 		let previous_selected_relayers =
