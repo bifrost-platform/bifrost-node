@@ -14,11 +14,12 @@ use frame_system::pallet_prelude::*;
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
-use sp_std::prelude::*;
+use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use frame_support::BoundedBTreeSet;
 
 	/// The current storage version.
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
@@ -70,6 +71,10 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// Cannot set the value below one
 		CannotSetBelowOne,
+		/// RelayerPool out of bound
+		TooManyRelayers,
+		/// SelectedRelayers out of bound
+		TooManySelectedRelayers,
 	}
 
 	#[pallet::event]
@@ -132,27 +137,33 @@ pub mod pallet {
 	#[pallet::getter(fn selected_relayers)]
 	/// The active relayer set selected for the current round. This storage is sorted by address.
 	pub type SelectedRelayers<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn initial_selected_relayers)]
 	/// The active relayer set selected at the beginning of the current round. This storage is sorted by address.
 	pub type InitialSelectedRelayers<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_relayers)]
 	/// The cached active relayer set selected from previous rounds. This storage is sorted by address.
-	pub type CachedSelectedRelayers<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
+	pub type CachedSelectedRelayers<T: Config> = StorageValue<
+		_,
+		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_selected_relayers)]
 	/// The cached active relayer set selected from the beginning of each previous rounds. This storage is sorted by address.
-	pub type CachedInitialSelectedRelayers<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
+	pub type CachedInitialSelectedRelayers<T: Config> = StorageValue<
+		_,
+		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn majority)]
@@ -286,7 +297,7 @@ pub mod pallet {
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
 			ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
-			ensure!(Self::replace_bonded_relayer(&old, &new), Error::<T>::RelayerDNE);
+			ensure!(Self::replace_bonded_relayer(&old, &new)?, Error::<T>::RelayerDNE);
 			Self::deposit_event(Event::RelayerSet { old, new });
 			Ok(().into())
 		}

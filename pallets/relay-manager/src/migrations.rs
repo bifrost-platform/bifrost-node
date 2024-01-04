@@ -6,6 +6,9 @@ pub type StorageVersion<T: Config> = StorageValue<Pallet<T>, Releases, ValueQuer
 
 pub mod v4 {
 	use super::*;
+	use bp_staking::{RoundIndex, MAX_AUTHORITIES};
+	use frame_support::BoundedBTreeSet;
+	use sp_std::collections::{btree_map::BTreeMap, btree_set::BTreeSet};
 
 	#[cfg(feature = "try-runtime")]
 	use sp_runtime::TryRuntimeError;
@@ -15,6 +18,52 @@ pub mod v4 {
 	impl<T: Config> OnRuntimeUpgrade for MigrateToV4<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
+
+			let old_selected_to_new =
+				|old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
+					let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
+						.expect("")
+						.into_iter()
+						.collect::<BTreeSet<T::AccountId>>()
+						.try_into()
+						.expect("");
+					Some(new)
+				};
+			<SelectedRelayers<T>>::translate::<
+				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+				_,
+			>(old_selected_to_new)
+			.expect("");
+			<InitialSelectedRelayers<T>>::translate::<
+				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+				_,
+			>(old_selected_to_new)
+			.expect("");
+
+			let old_cache_to_new = |old: Option<Vec<(RoundIndex, Vec<T::AccountId>)>>| {
+				let new: BTreeMap<
+					RoundIndex,
+					BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+				> = old.expect("")
+					.into_iter()
+					.map(|(round_index, vec_ids)| {
+						let set_ids: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
+							vec_ids
+								.into_iter()
+								.collect::<BTreeSet<T::AccountId>>()
+								.try_into()
+								.expect("");
+						(round_index, set_ids)
+					})
+					.collect();
+
+				Some(new)
+			};
+			<CachedSelectedRelayers<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
+				old_cache_to_new,
+			)
+			.expect("");
+			<CachedInitialSelectedRelayers<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(old_cache_to_new).expect("");
 
 			let current = Pallet::<T>::current_storage_version();
 			let onchain = StorageVersion::<T>::get();

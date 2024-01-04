@@ -72,7 +72,7 @@ pub enum RelayerStatus {
 	Active,
 	/// It is offline due to unsending heartbeats for the current session
 	Idle,
-	/// It is kicked out due to continueing unresponsiveness
+	/// It is kicked out due to continuing unresponsiveness
 	KickedOut,
 }
 
