@@ -2,7 +2,9 @@
 
 use frame_support::{
 	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
+	pallet_prelude::ConstU32,
 	traits::Get,
+	BoundedBTreeSet,
 };
 
 use pallet_bfc_staking::{Call as StakingCall, NominationChange, RewardDestination};
@@ -10,11 +12,13 @@ use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
-use bp_staking::{RoundIndex, TierType};
+use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
 use fp_evm::PrecompileHandle;
 use sp_core::{H160, U256};
 use sp_runtime::Perbill;
-use sp_std::{convert::TryInto, marker::PhantomData, vec, vec::Vec};
+use sp_std::{
+	collections::btree_set::BTreeSet, convert::TryInto, marker::PhantomData, vec, vec::Vec,
+};
 
 mod types;
 use types::{
@@ -105,6 +109,18 @@ where
 		Ok(is_selected_candidate)
 	}
 
+	fn get_unique_candidates(candidates: &Vec<Address>) -> EvmResult<BTreeSet<Runtime::AccountId>> {
+		let unique_candidates: BTreeSet<Runtime::AccountId> = candidates
+			.iter()
+			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
+			.collect();
+		if unique_candidates.len() != candidates.len() {
+			return Err(RevertReason::custom("Duplicate candidate address received").into());
+		}
+
+		Ok(unique_candidates)
+	}
+
 	/// Verifies if each of the address in the given `candidates` vector parameter
 	/// is a active validator for the current round
 	/// @param: `candidates` the address vector for which to verify
@@ -118,22 +134,9 @@ where
 		tier: u32,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_candidates = candidates
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
-
-		let previous_len = unique_candidates.len();
-		unique_candidates.sort();
-		unique_candidates.dedup();
-		let current_len = unique_candidates.len();
-		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
 
 		Ok(Self::compare_selected_candidates(
-			candidates,
+			Self::get_unique_candidates(&candidates)?,
 			match tier {
 				2 => TierType::Full,
 				1 => TierType::Basic,
@@ -156,22 +159,9 @@ where
 		tier: u32,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_candidates = candidates
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
-
-		let previous_len = unique_candidates.len();
-		unique_candidates.sort();
-		unique_candidates.dedup();
-		let current_len = unique_candidates.len();
-		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
 
 		Ok(Self::compare_selected_candidates(
-			candidates,
+			Self::get_unique_candidates(&candidates)?,
 			match tier {
 				2 => TierType::Full,
 				1 => TierType::Basic,
@@ -179,6 +169,17 @@ where
 			},
 			true,
 		))
+	}
+
+	fn get_previous_selected_candidates(
+		round_index: &RoundIndex,
+	) -> EvmResult<BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>>> {
+		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
+		if let Some(previous_selected_candidates) = previous_selected_candidates.get(round_index) {
+			Ok(previous_selected_candidates.clone())
+		} else {
+			Err(RevertReason::read_out_of_bounds("round_index").into())
+		}
 	}
 
 	/// Verifies if the given `candidate` parameter was an active validator at the given
@@ -197,31 +198,8 @@ where
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut is_previous_selected_candidate: bool = false;
-		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
 
-		let cached_len = previous_selected_candidates.len();
-		if cached_len > 0 {
-			let head_selected = &previous_selected_candidates[0];
-			let tail_selected = &previous_selected_candidates[cached_len - 1];
-
-			// out of round index
-			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into());
-			}
-			'outer: for selected_candidates in previous_selected_candidates {
-				if round_index == selected_candidates.0 {
-					for selected_candidate in selected_candidates.1 {
-						if candidate == selected_candidate {
-							is_previous_selected_candidate = true;
-							break 'outer;
-						}
-					}
-					break;
-				}
-			}
-		}
-		Ok(is_previous_selected_candidate)
+		Ok(Self::get_previous_selected_candidates(&round_index)?.contains(&candidate))
 	}
 
 	/// Verifies if each of the address in the given `candidates` parameter
@@ -238,51 +216,11 @@ where
 		candidates: Vec<Address>,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut unique_candidates = candidates
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
 
-		let previous_len = unique_candidates.len();
-		unique_candidates.sort();
-		unique_candidates.dedup();
-		let current_len = unique_candidates.len();
-		if current_len < previous_len {
-			return Err(RevertReason::custom("Duplicate candidate address received").into());
-		}
-		let mut is_previous_selected_candidates: bool = false;
-
-		if candidates.len() > 0 {
-			let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
-
-			let cached_len = previous_selected_candidates.len();
-			if cached_len > 0 {
-				let head_selected = &previous_selected_candidates[0];
-				let tail_selected = &previous_selected_candidates[cached_len - 1];
-
-				if round_index < head_selected.0 || round_index > tail_selected.0 {
-					return Err(RevertReason::read_out_of_bounds("round_index").into());
-				}
-				'outer: for selected_candidates in previous_selected_candidates {
-					if round_index == selected_candidates.0 {
-						let mutated_candidates: Vec<Address> = selected_candidates
-							.1
-							.into_iter()
-							.map(|address| Address(address.into()))
-							.collect();
-						for candidate in candidates {
-							if !mutated_candidates.contains(&candidate) {
-								break 'outer;
-							}
-						}
-						is_previous_selected_candidates = true;
-						break;
-					}
-				}
-			}
-		}
-		Ok(is_previous_selected_candidates)
+		let previous_selected_candidates = Self::get_previous_selected_candidates(&round_index)?;
+		Ok(Self::get_unique_candidates(&candidates)?
+			.iter()
+			.all(|candidate| previous_selected_candidates.contains(candidate)))
 	}
 
 	// Common storage getters
@@ -400,26 +338,12 @@ where
 		round_index: RoundIndex,
 	) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut result: u32 = 0;
-		let previous_majority = <StakingOf<Runtime>>::cached_majority();
 
-		let cached_len = previous_majority.len();
-		if cached_len > 0 {
-			let head_majority = &previous_majority[0];
-			let tail_majority = &previous_majority[cached_len - 1];
-
-			if round_index < head_majority.0 || round_index > tail_majority.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into());
-			}
-			for majority in previous_majority {
-				if round_index == majority.0 {
-					result = majority.1;
-					break;
-				}
-			}
+		if let Some(previous_majority) = <StakingOf<Runtime>>::cached_majority().get(&round_index) {
+			Ok(previous_majority.clone())
+		} else {
+			Err(RevertReason::read_out_of_bounds("round_index").into())
 		}
-
-		Ok(result)
 	}
 
 	/// Returns total points awarded to all validators in the given `round_index` round
@@ -724,28 +648,11 @@ where
 		round_index: RoundIndex,
 	) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut result: Vec<Address> = vec![];
-		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
 
-		let cached_len = previous_selected_candidates.len();
-		if cached_len > 0 {
-			let head_selected = &previous_selected_candidates[0];
-			let tail_selected = &previous_selected_candidates[cached_len - 1];
-
-			// out of round index
-			if round_index < head_selected.0 || round_index > tail_selected.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into());
-			}
-			for candidates in previous_selected_candidates {
-				if round_index == candidates.0 {
-					result =
-						candidates.1.into_iter().map(|address| Address(address.into())).collect();
-					break;
-				}
-			}
-		}
-
-		Ok(result)
+		Ok(Self::get_previous_selected_candidates(&round_index)?
+			.into_iter()
+			.map(|candidate| Address(candidate.into()))
+			.collect::<Vec<Address>>())
 	}
 
 	/// Returns a vector of the validator candidate addresses
@@ -1445,44 +1352,29 @@ where
 	// Util methods
 
 	fn compare_selected_candidates(
-		candidates: Vec<Address>,
+		candidates: BTreeSet<Runtime::AccountId>,
 		tier: TierType,
 		is_complete: bool,
 	) -> bool {
-		let mut result: bool = true;
-		if candidates.len() < 1 {
-			result = false;
-		} else {
-			let raw_selected_candidates = match tier {
-				TierType::Full => StakingOf::<Runtime>::selected_full_candidates().into_inner(),
-				TierType::Basic => StakingOf::<Runtime>::selected_basic_candidates().into_inner(),
-				TierType::All => StakingOf::<Runtime>::selected_candidates().into_inner(),
-			};
-			let selected_candidates = raw_selected_candidates
-				.into_iter()
-				.map(|address| Address(address.into()))
-				.collect::<Vec<Address>>();
-			if is_complete {
-				if selected_candidates.len() != candidates.len() {
-					result = false;
-				} else {
-					for selected_candidate in &selected_candidates {
-						if !candidates.contains(&selected_candidate) {
-							result = false;
-							break;
-						}
-					}
-				}
-			} else {
-				for candidate in &candidates {
-					if !selected_candidates.contains(&candidate) {
-						result = false;
-						break;
-					}
-				}
-			}
+		if candidates.is_empty() {
+			return false;
 		}
-		result
+
+		let selected_candidates: BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>> =
+			match tier {
+				TierType::Full => StakingOf::<Runtime>::selected_full_candidates(),
+				TierType::Basic => StakingOf::<Runtime>::selected_basic_candidates(),
+				TierType::All => StakingOf::<Runtime>::selected_candidates(),
+			};
+
+		return if is_complete {
+			if selected_candidates.len() != candidates.len() {
+				return false;
+			}
+			candidates.iter().all(|candidate| selected_candidates.contains(candidate))
+		} else {
+			candidates.iter().all(|candidate| selected_candidates.contains(candidate))
+		};
 	}
 
 	fn u256_array_to_amount_array(values: Vec<U256>) -> MayRevert<Vec<BalanceOf<Runtime>>> {

@@ -23,10 +23,7 @@ use sp_runtime::{
 	Perbill,
 };
 use sp_staking::SessionIndex;
-use sp_std::{
-	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
-	prelude::*,
-};
+use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -573,8 +570,11 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_candidates)]
 	/// The cached active validator set selected from previous rounds. This storage is sorted by address.
-	pub type CachedSelectedCandidates<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, BTreeSet<T::AccountId>)>, ValueQuery>;
+	pub type CachedSelectedCandidates<T: Config> = StorageValue<
+		_,
+		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn majority)]
@@ -585,7 +585,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active validator set selected from previous rounds
-	pub type CachedMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
+	pub type CachedMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn total)]
@@ -805,7 +805,7 @@ pub mod pallet {
 			// Set majority to initial value
 			let initial_majority: u32 = <Pallet<T>>::compute_majority();
 			<Majority<T>>::put(initial_majority);
-			<CachedMajority<T>>::put(vec![(1u32, initial_majority)]);
+			<CachedMajority<T>>::put(BTreeMap::from([(1u32, initial_majority)]));
 			T::RelayManager::refresh_majority(1u32);
 			// Start Round 1 at Block 0
 			let round: RoundInfo<T::BlockNumber> = RoundInfo::new(
@@ -1470,18 +1470,19 @@ pub mod pallet {
 			let mut selected_candidates = SelectedCandidates::<T>::get();
 			selected_candidates.remove(&controller);
 			// refresh selected candidates
-			let round = <Round<T>>::get();
-			let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
-			cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
-			cached_selected_candidates
-				.push((round.current_round_index, selected_candidates.clone().into_inner()));
-			<CachedSelectedCandidates<T>>::put(cached_selected_candidates);
+			let round = <Round<T>>::get().current_round_index;
+			Self::refresh_cached_selected_candidates(
+				round,
+				selected_candidates.clone(),
+			);
 			// refresh majority
 			let majority: u32 = Self::compute_majority();
 			<Majority<T>>::put(majority);
 			let mut cached_majority = <CachedMajority<T>>::get();
-			cached_majority.retain(|r| r.0 != round.current_round_index);
-			cached_majority.push((round.current_round_index, majority));
+			cached_majority
+				.entry(round)
+				.and_modify(|m| *m = majority)
+				.or_insert(majority);
 			<CachedMajority<T>>::put(cached_majority);
 			if state.tier == TierType::Full {
 				// kickout relayer

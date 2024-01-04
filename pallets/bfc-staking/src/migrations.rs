@@ -87,8 +87,12 @@ pub mod v4 {
 						old.expect("")
 							.into_iter()
 							.map(|(round_index, candidates)| {
-								let bset =
-									candidates.into_iter().collect::<BTreeSet<T::AccountId>>();
+								let bset: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
+									candidates
+										.into_iter()
+										.collect::<BTreeSet<T::AccountId>>()
+										.try_into()
+										.expect("");
 								(round_index, bset)
 							})
 							.collect(),
@@ -134,6 +138,21 @@ pub mod v4 {
 					})
 				},
 			);
+
+			<CachedSelectedCandidates<T>>::translate::<Vec<(RoundIndex, BTreeSet<T::AccountId>)>, _>(|old| {
+				Some(old
+					.expect("")
+					.into_iter()
+					.map(|(index, set)| (index, BoundedBTreeSet::try_from(set).expect("")))
+					.collect::<BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>>())
+			}).expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
+			<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(|old| {
+				Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
+			})
+			.expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
 			let current = Pallet::<T>::current_storage_version();
 			let onchain = StorageVersion::<T>::get();

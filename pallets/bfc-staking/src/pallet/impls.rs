@@ -10,7 +10,7 @@ use pallet_session::ShouldEndSession;
 
 use bp_staking::{
 	traits::{OffenceHandler, RelayManager},
-	Offence,
+	Offence, MAX_AUTHORITIES,
 };
 use sp_runtime::{
 	traits::{Convert, Saturating, Zero},
@@ -669,18 +669,16 @@ impl<T: Config> Pallet<T> {
 		nomination_count += full_snapshot.1 + basic_snapshot.1;
 		total += full_snapshot.2 + basic_snapshot.2;
 
-		let validators = [full_validators.clone(), basic_validators.clone()]
-			.concat()
-			.into_iter()
-			.collect::<BTreeSet<T::AccountId>>();
+		let validators: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
+			[full_validators.clone(), basic_validators.clone()]
+				.concat()
+				.into_iter()
+				.collect::<BTreeSet<T::AccountId>>()
+				.try_into()
+				.expect("SelectedCandidates out of bound");
 
 		// reset active validator set
-		<SelectedCandidates<T>>::put(
-			BoundedBTreeSet::try_from(
-				validators.clone().into_iter().collect::<BTreeSet<T::AccountId>>(),
-			)
-			.expect("SelectedCandidates out of bound"),
-		);
+		<SelectedCandidates<T>>::put(validators.clone());
 		<SelectedFullCandidates<T>>::put(
 			BoundedBTreeSet::try_from(
 				full_validators.clone().into_iter().collect::<BTreeSet<T::AccountId>>(),
@@ -735,32 +733,35 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Refresh the `CachedSelectedCandidates` adding the new selected candidates
-	pub fn refresh_cached_selected_candidates(now: RoundIndex, validators: BTreeSet<T::AccountId>) {
+	pub fn refresh_cached_selected_candidates(
+		now: RoundIndex,
+		validators: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+	) {
 		<CachedSelectedCandidates<T>>::mutate(|cached_selected_candidates| {
 			if Self::storage_cache_lifetime() <= cached_selected_candidates.len() as u32 {
-				cached_selected_candidates.remove(0);
+				cached_selected_candidates.pop_first();
 			}
-			cached_selected_candidates.push((now, validators));
+			cached_selected_candidates.insert(now, validators);
 		});
 	}
 
 	/// Refresh the latest rounds cached selected candidates to the current state
 	fn refresh_latest_cached_selected_candidates() {
-		let round = Self::round();
-		let selected_candidates = Self::selected_candidates();
 		<CachedSelectedCandidates<T>>::mutate(|cached_selected_candidates| {
-			cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
 			cached_selected_candidates
-				.push((round.current_round_index, selected_candidates.into_inner()));
+				.entry(Self::round().current_round_index)
+				.and_modify(|candidates| *candidates = Self::selected_candidates())
+				.or_insert(Self::selected_candidates());
 		});
 	}
 
 	/// Refresh the latest rounds cached majority to the current state
 	fn refresh_latest_cached_majority() {
-		let round = Self::round();
 		<CachedMajority<T>>::mutate(|cached_majority| {
-			cached_majority.retain(|r| r.0 != round.current_round_index);
-			cached_majority.push((round.current_round_index, Self::majority()));
+			cached_majority
+				.entry(Self::round().current_round_index)
+				.and_modify(|majority| *majority = Self::majority())
+				.or_insert(Self::majority());
 		});
 	}
 
@@ -768,10 +769,10 @@ impl<T: Config> Pallet<T> {
 	pub fn refresh_majority(now: RoundIndex) {
 		let mut cached_majority = Self::cached_majority();
 		if Self::storage_cache_lifetime() <= cached_majority.len() as u32 {
-			cached_majority.remove(0);
+			cached_majority.pop_first();
 		}
 		let majority: u32 = Self::compute_majority();
-		cached_majority.push((now, majority));
+		cached_majority.insert(now, majority);
 		<CachedMajority<T>>::put(cached_majority);
 		<Majority<T>>::put(majority);
 	}
