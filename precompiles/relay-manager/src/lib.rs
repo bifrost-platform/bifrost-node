@@ -60,7 +60,11 @@ where
 		Ok(is_selected_relayer)
 	}
 
-	fn set_and_validate<F>(relayers: &Vec<Address>, exact: bool, validate: F) -> EvmResult<bool>
+	fn dedup_sort_validate<F>(
+		relayers: &Vec<Address>,
+		is_complete: bool,
+		validate: F,
+	) -> EvmResult<bool>
 	where
 		F: FnMut(&Runtime::AccountId) -> bool,
 	{
@@ -72,7 +76,7 @@ where
 			return Err(RevertReason::custom("Duplicate relayer address received").into());
 		}
 
-		if exact {
+		if is_complete {
 			let selected_relayers = RelayManagerOf::<Runtime>::selected_relayers();
 			if selected_relayers.len() != unique_relayers.len() {
 				return Ok(false);
@@ -88,7 +92,7 @@ where
 	fn is_relayers(handle: &mut impl PrecompileHandle, relayers: Vec<Address>) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		Self::set_and_validate(&relayers, false, |relayer| {
+		Self::dedup_sort_validate(&relayers, false, |relayer| {
 			RelayManagerOf::<Runtime>::is_relayer(relayer)
 		})
 	}
@@ -103,7 +107,7 @@ where
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		Self::set_and_validate(&relayers, false, |relayer| {
+		Self::dedup_sort_validate(&relayers, false, |relayer| {
 			RelayManagerOf::<Runtime>::is_selected_relayer(relayer, is_initial)
 		})
 	}
@@ -118,7 +122,7 @@ where
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		Self::set_and_validate(&relayers, true, |relayer| {
+		Self::dedup_sort_validate(&relayers, true, |relayer| {
 			RelayManagerOf::<Runtime>::is_selected_relayer(relayer, is_initial)
 		})
 	}
@@ -288,24 +292,11 @@ where
 			false => RelayManagerOf::<Runtime>::cached_majority(),
 		};
 
-		let mut result = 0u32;
-		let cached_len = cached_majority.len();
-		if cached_len > 0 {
-			let head_majority = &cached_majority[0];
-			let tail_majority = &cached_majority[cached_len - 1];
-
-			if round_index < head_majority.0 || round_index > tail_majority.0 {
-				return Err(RevertReason::read_out_of_bounds("round_index").into());
-			}
-			for majority in cached_majority {
-				if round_index == majority.0 {
-					result = majority.1;
-					break;
-				}
-			}
+		if let Some(majority) = cached_majority.get(&round_index) {
+			Ok(majority.clone().into())
+		} else {
+			Err(RevertReason::read_out_of_bounds("round_index").into())
 		}
-
-		Ok(result.into())
 	}
 
 	#[precompile::public("latestRound()")]
@@ -328,17 +319,14 @@ where
 		let relayer = Runtime::AddressMapping::into_account_id(relayer.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let mut relayer_state = RelayerStates::<Runtime>::default();
 
 		if let Some(state) = RelayManagerOf::<Runtime>::relayer_state(&relayer) {
 			let mut new = RelayerState::<Runtime>::default();
 			new.set_state(relayer, state);
-			relayer_state.insert_state(new);
+			Ok(new.into())
 		} else {
-			relayer_state.insert_empty();
+			Ok(RelayerState::<Runtime>::default().into())
 		}
-
-		Ok(relayer_state.into())
 	}
 
 	#[precompile::public("relayerStates()")]

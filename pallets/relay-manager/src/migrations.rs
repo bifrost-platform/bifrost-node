@@ -39,6 +39,7 @@ pub mod v4 {
 				_,
 			>(old_selected_to_new)
 			.expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
 
 			let old_cache_to_new = |old: Option<Vec<(RoundIndex, Vec<T::AccountId>)>>| {
 				let new: BTreeMap<
@@ -64,6 +65,17 @@ pub mod v4 {
 			)
 			.expect("");
 			<CachedInitialSelectedRelayers<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(old_cache_to_new).expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
+
+			let old_cache_to_new =
+				|old: Option<Vec<(RoundIndex, u32)>>| -> Option<BTreeMap<RoundIndex, u32>> {
+					Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
+				};
+			<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(old_cache_to_new)
+				.expect("");
+			<CachedInitialMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(old_cache_to_new)
+				.expect("");
+			weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
 
 			let current = Pallet::<T>::current_storage_version();
 			let onchain = StorageVersion::<T>::get();

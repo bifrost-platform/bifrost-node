@@ -84,14 +84,14 @@ where
 		let mut cached_majority = Self::cached_majority();
 		let mut cached_initial_majority = Self::cached_initial_majority();
 		if Self::storage_cache_lifetime() <= cached_majority.len() as u32 {
-			cached_majority.remove(0);
+			cached_majority.pop_first();
 		}
 		if Self::storage_cache_lifetime() <= cached_initial_majority.len() as u32 {
-			cached_initial_majority.remove(0);
+			cached_initial_majority.pop_first();
 		}
 		let majority: u32 = Self::compute_majority();
-		cached_majority.push((round, majority));
-		cached_initial_majority.push((round, majority));
+		cached_majority.insert(round, majority);
+		cached_initial_majority.insert(round, majority);
 		<Majority<T>>::put(majority);
 		<InitialMajority<T>>::put(majority);
 		<CachedMajority<T>>::put(cached_majority);
@@ -270,8 +270,10 @@ impl<T: Config> Pallet<T> {
 	fn refresh_latest_cached_majority() {
 		let round = Self::round();
 		<CachedMajority<T>>::mutate(|cached_majority| {
-			cached_majority.retain(|r| r.0 != round);
-			cached_majority.push((round, Self::majority()));
+			cached_majority
+				.entry(round)
+				.and_modify(|majority| *majority = Self::majority())
+				.or_insert(Self::majority());
 		});
 	}
 

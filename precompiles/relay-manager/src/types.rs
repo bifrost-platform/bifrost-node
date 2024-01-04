@@ -52,6 +52,15 @@ where
 	}
 }
 
+impl<Runtime> From<RelayerState<Runtime>> for EvmRelayerStateOf
+where
+	Runtime: pallet_relay_manager::Config,
+{
+	fn from(state: RelayerState<Runtime>) -> Self {
+		(state.relayer, state.controller, state.status)
+	}
+}
+
 /// EVM struct for relayer states
 pub struct RelayerStates<Runtime: pallet_relay_manager::Config> {
 	/// This relayer's account
@@ -83,15 +92,6 @@ where
 		self.relayer.push(Address(state.relayer.into()));
 		self.controller.push(Address(state.controller.into()));
 		self.status.push(state.status);
-	}
-}
-
-impl<Runtime> From<RelayerStates<Runtime>> for EvmRelayerStateOf
-where
-	Runtime: pallet_relay_manager::Config,
-{
-	fn from(state: RelayerStates<Runtime>) -> Self {
-		(state.relayer[0], state.controller[0], state.status[0])
 	}
 }
 

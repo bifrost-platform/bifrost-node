@@ -179,14 +179,14 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active relayer set selected from previous rounds
-	pub type CachedMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
+	pub type CachedMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_majority)]
 	/// The cached majority based on the active relayer set selected from the beginning of each
 	/// previous rounds
-	pub type CachedInitialMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
+	pub type CachedInitialMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn received_heartbeats)]
