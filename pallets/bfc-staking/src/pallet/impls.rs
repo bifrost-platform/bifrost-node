@@ -748,20 +748,22 @@ impl<T: Config> Pallet<T> {
 	/// Refresh the latest rounds cached selected candidates to the current state
 	fn refresh_latest_cached_selected_candidates() {
 		<CachedSelectedCandidates<T>>::mutate(|cached_selected_candidates| {
+			let candidates = Self::selected_candidates();
 			cached_selected_candidates
 				.entry(Self::round().current_round_index)
-				.and_modify(|candidates| *candidates = Self::selected_candidates())
-				.or_insert(Self::selected_candidates());
+				.and_modify(|c| *c = candidates.clone())
+				.or_insert(candidates);
 		});
 	}
 
 	/// Refresh the latest rounds cached majority to the current state
 	fn refresh_latest_cached_majority() {
 		<CachedMajority<T>>::mutate(|cached_majority| {
+			let majority = Self::majority();
 			cached_majority
 				.entry(Self::round().current_round_index)
-				.and_modify(|majority| *majority = Self::majority())
-				.or_insert(Self::majority());
+				.and_modify(|m| *m = majority)
+				.or_insert(majority);
 		});
 	}
 

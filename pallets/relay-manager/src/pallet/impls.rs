@@ -270,10 +270,8 @@ impl<T: Config> Pallet<T> {
 	fn refresh_latest_cached_majority() {
 		let round = Self::round();
 		<CachedMajority<T>>::mutate(|cached_majority| {
-			cached_majority
-				.entry(round)
-				.and_modify(|majority| *majority = Self::majority())
-				.or_insert(Self::majority());
+			let majority = Self::majority();
+			cached_majority.entry(round).and_modify(|m| *m = majority).or_insert(majority);
 		});
 	}
 
