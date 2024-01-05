@@ -1629,15 +1629,19 @@ impl<
 		self.status = NominatorStatus::Active
 	}
 
-	pub fn add_nomination(&mut self, bond: Bond<AccountId, Balance>) -> bool {
-		let amt = bond.amount;
-		if let Some(_) = self.nominations.insert(bond.owner.clone(), bond.amount) {
-			self.total += amt;
-			self.initial_nominations.insert(bond.owner.clone(), bond.amount);
-			self.awarded_tokens_per_candidate.insert(bond.owner.clone(), Zero::zero());
-			true
+	// pub fn add_nomination(&mut self, bond: Bond<AccountId, Balance>) -> bool {
+	pub fn add_nomination<T: Config>(
+		&mut self,
+		candidate: AccountId,
+		amount: Balance,
+	) -> DispatchResult {
+		if let Some(_) = self.nominations.insert(candidate.clone(), amount) {
+			self.total += amount;
+			self.initial_nominations.insert(candidate.clone(), amount);
+			self.awarded_tokens_per_candidate.insert(candidate.clone(), Zero::zero());
+			Ok(())
 		} else {
-			false
+			Err(<Error<T>>::AlreadyNominatedCandidate.into())
 		}
 	}
 

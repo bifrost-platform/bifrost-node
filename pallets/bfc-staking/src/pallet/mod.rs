@@ -1471,18 +1471,12 @@ pub mod pallet {
 			selected_candidates.remove(&controller);
 			// refresh selected candidates
 			let round = <Round<T>>::get().current_round_index;
-			Self::refresh_cached_selected_candidates(
-				round,
-				selected_candidates.clone(),
-			);
+			Self::refresh_cached_selected_candidates(round, selected_candidates.clone());
 			// refresh majority
 			let majority: u32 = Self::compute_majority();
 			<Majority<T>>::put(majority);
 			let mut cached_majority = <CachedMajority<T>>::get();
-			cached_majority
-				.entry(round)
-				.and_modify(|m| *m = majority)
-				.or_insert(majority);
+			cached_majority.entry(round).and_modify(|m| *m = majority).or_insert(majority);
 			<CachedMajority<T>>::put(cached_majority);
 			if state.tier == TierType::Full {
 				// kickout relayer
@@ -1625,10 +1619,7 @@ pub mod pallet {
 					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
-				ensure!(
-					state.add_nomination(Bond { owner: candidate.clone(), amount }),
-					Error::<T>::AlreadyNominatedCandidate
-				);
+				state.add_nomination::<T>(candidate.clone(), amount)?;
 				state
 			} else {
 				// first nomination
