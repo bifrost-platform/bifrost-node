@@ -726,7 +726,6 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
 		fn build(&self) {
-			// StorageVersion::<T>::put(Releases::V3_0_0);
 			<InflationConfig<T>>::put(self.inflation_config.clone());
 			// Set validator commission to default config
 			<DefaultFullValidatorCommission<T>>::put(T::DefaultFullValidatorCommission::get());
