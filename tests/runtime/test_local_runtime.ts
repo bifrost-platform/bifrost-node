@@ -5,7 +5,9 @@ import Web3, { TransactionReceiptAPI } from 'web3';
 
 import { ApiPromise, HttpProvider, Keyring } from '@polkadot/api';
 
-import { MIN_NOMINATOR_STAKING_AMOUNT } from '../constants/currency';
+import {
+  AMOUNT_FACTOR, MIN_NOMINATOR_STAKING_AMOUNT
+} from '../constants/currency';
 import { DEMO_ABI, DEMO_BYTE_CODE } from '../constants/demo_contract';
 import { ERC20_ABI, ERC20_BYTE_CODE } from '../constants/ERC20';
 import { TEST_CONTROLLERS } from '../constants/keys';
@@ -181,8 +183,12 @@ describe('test_runtime - evm interactions', function () {
 
     await sleep(4000);
 
+    await api.tx.democracy.delegate(alith, 1, AMOUNT_FACTOR).signAndSend(baltatharS);
+
+    await sleep(4000);
+
     const rawBalanceS: any = await api.query.system.account(baltatharS.address);
-    const balanceS = new BigNumber(rawBalanceS.toJSON().data.free);
+    const balanceS = new BigNumber(rawBalanceS.toJSON().data.free).minus(rawBalanceS.toJSON().data.frozen);
     const balanceE = new BigNumber((await web3.eth.getBalance(baltathar)).toString());
 
     expect(balanceS.toFixed()).equal(balanceE.toFixed());
