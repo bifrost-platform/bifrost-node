@@ -1225,15 +1225,13 @@ impl<
 		let mut in_top = false;
 		top_nominations.nominations = top_nominations
 			.nominations
-			.clone()
 			.into_iter()
 			.map(|d| {
-				if d.owner != nominator {
-					d
-				} else {
+				if d.owner == nominator {
 					in_top = true;
-					let new_amount = d.amount.saturating_add(more);
-					Bond { owner: d.owner, amount: new_amount }
+					Bond { owner: d.owner, amount: d.amount.saturating_add(more) }
+				} else {
+					d
 				}
 			})
 			.collect();
@@ -1301,14 +1299,13 @@ impl<
 			// just increase the nomination
 			bottom_nominations.nominations = bottom_nominations
 				.nominations
-				.clone()
 				.into_iter()
 				.map(|d| {
-					if d.owner != nominator {
-						d
-					} else {
+					if d.owner == nominator {
 						in_bottom = true;
 						Bond { owner: d.owner, amount: d.amount.saturating_add(more) }
+					} else {
+						d
 					}
 				})
 				.collect();
@@ -1414,14 +1411,13 @@ impl<
 			let mut is_in_top = false;
 			top_nominations.nominations = top_nominations
 				.nominations
-				.clone()
 				.into_iter()
 				.map(|d| {
-					if d.owner != nominator {
-						d
-					} else {
+					if d.owner == nominator {
 						is_in_top = true;
 						Bond { owner: d.owner, amount: d.amount.saturating_sub(less) }
+					} else {
+						d
 					}
 				})
 				.collect();
@@ -1450,14 +1446,13 @@ impl<
 		let mut in_bottom = false;
 		bottom_nominations.nominations = bottom_nominations
 			.nominations
-			.clone()
 			.into_iter()
 			.map(|d| {
-				if d.owner != nominator {
-					d
-				} else {
+				if d.owner == nominator {
 					in_bottom = true;
 					Bond { owner: d.owner, amount: d.amount.saturating_sub(less) }
+				} else {
+					d
 				}
 			})
 			.collect();
