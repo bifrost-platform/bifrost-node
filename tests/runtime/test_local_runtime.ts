@@ -12,6 +12,8 @@ import { TEST_CONTROLLERS } from '../constants/keys';
 import { STAKING_ABI, STAKING_ADDRESS } from '../constants/staking_contract';
 import { sleep } from '../tests/utils';
 
+import type { SubmittableExtrinsic } from '@polkadot/api/promise/types';
+
 const node_endpoint = 'http://localhost:9944';
 const web3 = new Web3(new Web3.providers.HttpProvider(node_endpoint));
 
@@ -72,6 +74,13 @@ const createErc20Transfer = async (): Promise<string> => {
 
 describe('test_runtime - evm interactions', function () {
   this.timeout(20000);
+
+  let api: ApiPromise;
+  const keyring = new Keyring({ type: 'ethereum' });
+
+  before('should initialize api', async function () {
+    api = await ApiPromise.create({ provider: new HttpProvider(node_endpoint), noInitWarn: true });
+  });
 
   it('should successfully send transaction - legacy', async function () {
     const signedTx = (await web3.eth.accounts.signTransaction({
@@ -157,6 +166,26 @@ describe('test_runtime - evm interactions', function () {
 
     const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
     expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
+  });
+
+  it('should consistently maintain substrate and evm balances', async function () {
+    const baltatharS = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+
+    // now note a preimage
+    const xt = api.tx.bfcStaking.setMaxFullSelected(20);
+    const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
+
+    await api.tx.preimage
+      .notePreimage(encodedProposal)
+      .signAndSend(baltatharS);
+
+    await sleep(4000);
+
+    const rawBalanceS: any = await api.query.system.account(baltatharS.address);
+    const balanceS = new BigNumber(rawBalanceS.toJSON().data.free);
+    const balanceE = new BigNumber((await web3.eth.getBalance(baltathar)).toString());
+
+    expect(balanceS.toFixed()).equal(balanceE.toFixed());
   });
 });
 
