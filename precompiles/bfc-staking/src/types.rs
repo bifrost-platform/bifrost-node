@@ -483,13 +483,13 @@ where
 	}
 
 	pub fn set_state(&mut self, state: Nominator<Runtime::AccountId, BalanceOf<Runtime>>) {
-		state.nominations.iter().for_each(|(owner, amount)| {
-			self.candidates.push(Address(owner.clone().into()));
-			self.nominations.push(*amount);
+		state.nominations.into_iter().for_each(|(owner, amount)| {
+			self.candidates.push(Address(owner.into()));
+			self.nominations.push(amount);
 		});
-		for nomination in state.initial_nominations {
-			self.initial_nominations.push(nomination.amount);
-		}
+		state.initial_nominations.into_iter().for_each(|(_, amount)| {
+			self.initial_nominations.push(amount);
+		});
 
 		self.total = state.total;
 		self.request_revocations_count = state.requests.revocations_count.into();

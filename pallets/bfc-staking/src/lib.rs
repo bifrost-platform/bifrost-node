@@ -1488,7 +1488,7 @@ pub struct Nominator<AccountId, Balance> {
 	/// Current state of all nominations
 	pub nominations: BTreeMap<AccountId, Balance>,
 	/// Initial state of all nominations
-	pub initial_nominations: BTreeSet<Bond<AccountId, Balance>>,
+	pub initial_nominations: BTreeMap<AccountId, Balance>,
 	/// Total balance locked for this nominator
 	pub total: Balance,
 	/// Requests to change nominations, relevant if active
@@ -1516,12 +1516,12 @@ impl<
 	> Nominator<AccountId, Balance>
 {
 	pub fn new(id: AccountId, validator: AccountId, amount: Balance) -> Self {
-		let mut nominations: BTreeMap<AccountId, Balance> = BTreeMap::new();
-		nominations.insert(validator.clone(), amount);
-		let initial_nominations =
-			vec![Bond { owner: validator.clone(), amount }].into_iter().collect();
-		let mut awarded_tokens_per_candidate: BTreeMap<AccountId, Balance> = BTreeMap::new();
-		awarded_tokens_per_candidate.insert(validator.clone(), Zero::zero());
+		let nominations: BTreeMap<AccountId, Balance> =
+			BTreeMap::from([(validator.clone(), amount)]);
+		let initial_nominations: BTreeMap<AccountId, Balance> =
+			BTreeMap::from([(validator.clone(), amount)]);
+		let awarded_tokens_per_candidate: BTreeMap<AccountId, Balance> =
+			BTreeMap::from([(validator.clone(), Zero::zero())]);
 		Nominator {
 			id,
 			nominations,
@@ -1561,17 +1561,9 @@ impl<
 			self.nominations.insert(new.clone(), amount);
 		}
 
-		self.initial_nominations = self
-			.initial_nominations
-			.clone()
-			.into_iter()
-			.map(|mut n| {
-				if n.owner == *old {
-					n.owner = new.clone();
-				}
-				n
-			})
-			.collect();
+		if let Some(amount) = self.initial_nominations.remove(old) {
+			self.initial_nominations.insert(new.clone(), amount);
+		}
 	}
 
 	pub fn replace_requests(&mut self, old: &AccountId, new: &AccountId) {
@@ -1641,7 +1633,7 @@ impl<
 		let amt = bond.amount;
 		if let Some(_) = self.nominations.insert(bond.owner.clone(), bond.amount) {
 			self.total += amt;
-			self.initial_nominations.insert(bond.clone());
+			self.initial_nominations.insert(bond.owner.clone(), bond.amount);
 			self.awarded_tokens_per_candidate.insert(bond.owner.clone(), Zero::zero());
 			true
 		} else {
@@ -1652,23 +1644,11 @@ impl<
 	// Return Some(remaining balance), must be more than MinNominatorStk
 	// Return None if nomination not found
 	pub fn rm_nomination(&mut self, validator: &AccountId) -> Option<Balance> {
-		let mut amt: Option<Balance> = None;
-
 		if let Some(amount) = self.nominations.remove(validator) {
-			amt = Some(amount);
-		}
+			self.initial_nominations.remove(validator);
+			self.awarded_tokens_per_candidate.remove(validator);
 
-		let initial_nominations: BTreeSet<Bond<AccountId, Balance>> = self
-			.initial_nominations
-			.iter()
-			.filter_map(|x| if &x.owner == validator { None } else { Some(x.clone()) })
-			.collect();
-
-		self.awarded_tokens_per_candidate.remove(validator);
-
-		if let Some(balance) = amt {
-			self.initial_nominations = initial_nominations;
-			self.total = self.total.saturating_sub(balance);
+			self.total = self.total.saturating_sub(amount);
 			Some(self.total)
 		} else {
 			None

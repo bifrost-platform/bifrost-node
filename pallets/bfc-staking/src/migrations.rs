@@ -109,13 +109,16 @@ pub mod v4 {
 					let nominations: BTreeMap<_, _> = old
 						.nominations
 						.0
-						.clone()
-						.iter()
-						.map(|bond| (bond.owner.clone(), bond.amount))
+						.into_iter()
+						.map(|bond| (bond.owner, bond.amount))
 						.collect();
 
-					let initial_nominations: BTreeSet<_> =
-						old.initial_nominations.0.clone().into_iter().collect();
+					let initial_nominations: BTreeMap<_, _> = old
+						.initial_nominations
+						.0
+						.into_iter()
+						.map(|bond| (bond.owner, bond.amount))
+						.collect();
 
 					let awarded_tokens_per_candidate: BTreeMap<_, _> = old
 						.awarded_tokens_per_candidate
