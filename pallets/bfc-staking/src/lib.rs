@@ -1635,13 +1635,14 @@ impl<
 		candidate: AccountId,
 		amount: Balance,
 	) -> DispatchResult {
-		if let Some(_) = self.nominations.insert(candidate.clone(), amount) {
+		if self.nominations.contains_key(&candidate) {
+			Err(<Error<T>>::AlreadyNominatedCandidate.into())
+		} else {
+			self.nominations.insert(candidate.clone(), amount);
 			self.total += amount;
 			self.initial_nominations.insert(candidate.clone(), amount);
-			self.awarded_tokens_per_candidate.insert(candidate.clone(), Zero::zero());
+			self.awarded_tokens_per_candidate.insert(candidate, Zero::zero());
 			Ok(())
-		} else {
-			Err(<Error<T>>::AlreadyNominatedCandidate.into())
 		}
 	}
 
