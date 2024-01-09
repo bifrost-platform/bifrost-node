@@ -260,9 +260,11 @@ impl<T: Config> Pallet<T> {
 	fn refresh_latest_cached_relayers() {
 		let round = Self::round();
 		<CachedSelectedRelayers<T>>::mutate(|cached_selected_relayers| {
-			if let Some(relayers) = cached_selected_relayers.get_mut(&round) {
-				*relayers = Self::selected_relayers();
-			}
+			let selected_relayers = Self::selected_relayers();
+			cached_selected_relayers
+				.entry(round)
+				.and_modify(|s| *s = selected_relayers.clone())
+				.or_insert(selected_relayers);
 		});
 	}
 
