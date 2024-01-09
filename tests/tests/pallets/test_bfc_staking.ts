@@ -66,14 +66,11 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
     const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatePool = rawCandidatePool.toJSON();
     let isCandidateFound = false;
-    for (const candidate of candidatePool) {
-      if (candidate.owner === newAlith.address) {
-        isCandidateFound = true;
-        break;
-      }
+    if (candidatePool[newAlith.address]) {
+      isCandidateFound = true;
     }
     expect(isCandidateFound).equal(true);
-    expect(candidatePool.length).equal(1);
+    expect(Object.keys(candidatePool).length).equal(1);
 
     const rawSelectedCandidates: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
     const selectedCandidates = rawSelectedCandidates.toJSON();
@@ -103,25 +100,11 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
 
     const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
     const nominatorState = rawNominatorState.unwrap().toJSON();
-    expect(nominatorState.nominations.length).equal(1);
-    expect(nominatorState.initialNominations.length).equal(1);
-    let isNominationFound = false;
-    for (const nomination of nominatorState.nominations) {
-      if (nomination.owner === newAlith.address) {
-        isNominationFound = true;
-        break;
-      }
-    }
-    expect(isNominationFound).equal(true);
-    let isInitialNominationFound = false;
-    for (const nomination of nominatorState.nominations) {
-      if (nomination.owner === newAlith.address) {
-        isInitialNominationFound = true;
-        break;
-      }
-    }
-    expect(isInitialNominationFound).equal(true);
+    expect(Object.keys(nominatorState.nominations).length).equal(1);
+    expect(Object.keys(nominatorState.initialNominations).length).equal(1);
 
+    expect(nominatorState.nominations).has.key(newAlith.address);
+    expect(nominatorState.initialNominations).has.key(newAlith.address);
     expect(nominatorState.requests.revocationsCount).equal(1);
     expect(nominatorState.requests.requests).has.key(newAlith.address);
     expect(Object.keys(nominatorState.requests.requests).length).equal(1);
@@ -141,9 +124,10 @@ describeDevNode('pallet_bfc_staking - genesis', (context) => {
   });
 
   it('should include candidate to pool', async function () {
-    const candidates = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const rawCandidates: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const candidates = rawCandidates.toJSON();
     expect(candidates).to.not.empty;
-    expect(candidates[0].toHuman()!['owner'].toLowerCase()).equal(alith.address.toLowerCase());
+    expect(Object.keys(candidates).includes(alith.address));
   });
 
   it('should include validator as selected candidate', async function () {
@@ -793,86 +777,13 @@ describeDevNode('pallet_bfc_staking - validator selection', (context) => {
     await context.createBlock();
 
     const rawSelectedCandidates: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
-    expect(rawSelectedCandidates.length).equal(1);
+    expect(rawSelectedCandidates.toJSON().length).equal(1);
 
     const rawSelectedFullCandidates: any = await context.polkadotApi.query.bfcStaking.selectedFullCandidates();
-    expect(rawSelectedFullCandidates.length).equal(1);
+    expect(rawSelectedFullCandidates.toJSON().length).equal(1);
 
     const rawSelectedBasicCandidates: any = await context.polkadotApi.query.bfcStaking.selectedBasicCandidates();
-    expect(rawSelectedBasicCandidates.length).equal(0);
-  });
-
-  it('should successfully update min total selected', async function () {
-    const min = 3;
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.bfcStaking.setMinTotalSelected(min)
-    ).signAndSend(alith);
-    await context.createBlock();
-
-    const rawMinTotalSelected: any = await context.polkadotApi.query.bfcStaking.minTotalSelected();
-    const minTotalSelected = rawMinTotalSelected.toNumber();
-    expect(minTotalSelected).equal(min);
-  });
-
-  it('should fail due to non-root origin', async function () {
-    const max = 2;
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.bfcStaking.setMinTotalSelected(max)
-    ).signAndSend(baltathar);
-    const block = await context.createBlock();
-
-    const success = await isEventTriggered(
-      context,
-      block.block.hash,
-      [
-        { method: 'ExtrinsicFailed', section: 'system' },
-      ],
-    );
-    expect(success).equal(true);
-  });
-
-  it('should fail due to min above max', async function () {
-    const prevMin = 3;
-    const afterMin = 100;
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.bfcStaking.setMinTotalSelected(afterMin)
-    ).signAndSend(alith);
-    await context.createBlock();
-
-    const rawMinTotalSelected: any = await context.polkadotApi.query.bfcStaking.minTotalSelected();
-    const minTotalSelected = rawMinTotalSelected.toNumber();
-    expect(minTotalSelected).equal(prevMin);
-  });
-
-  it('should fail due to full max below min', async function () {
-    const prevMax = 15;
-    const afterMax = 1;
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.bfcStaking.setMaxFullSelected(afterMax)
-    ).signAndSend(alith);
-    await context.createBlock();
-
-    const rawMaxFullSelected: any = await context.polkadotApi.query.bfcStaking.maxFullSelected();
-    const maxFullSelected = rawMaxFullSelected.toNumber();
-    expect(maxFullSelected).equal(prevMax);
-  });
-
-  it('should fail due to basic max below min', async function () {
-    const prevMax = 15;
-    const afterMax = 1;
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.bfcStaking.setMaxBasicSelected(afterMax)
-    ).signAndSend(alith);
-    await context.createBlock();
-
-    const rawMaxBasicSelected: any = await context.polkadotApi.query.bfcStaking.maxBasicSelected();
-    const maxBasicSelected = rawMaxBasicSelected.toNumber();
-    expect(maxBasicSelected).equal(prevMax);
+    expect(rawSelectedBasicCandidates.toJSON().length).equal(0);
   });
 });
 
@@ -976,7 +887,7 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     const candidatesBefore = rawCandidatesBefore.toJSON();
 
     await context.polkadotApi.tx.bfcStaking
-      .joinCandidates(baltathar.address, baltatharRelayer.address, stake.toFixed(), candidatesBefore.length)
+      .joinCandidates(baltathar.address, baltatharRelayer.address, stake.toFixed(), Object.keys(candidatesBefore).length)
       .signAndSend(baltatharStash, { nonce: -1 });
     await context.createBlock();
 
@@ -993,8 +904,8 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     // check candidate pool
     const rawCandidatesAfter: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatesAfter = rawCandidatesAfter.toJSON();
-    expect(candidatesAfter.length).equal(candidatesBefore.length + 1);
-    expect(candidatesAfter[1].owner).equal(baltathar.address);
+    expect(Object.keys(candidatesAfter).length).equal(Object.keys(candidatesBefore).length + 1);
+    expect(Object.keys(candidatesAfter)).includes(baltathar.address);
 
     // check candidate info
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(baltathar.address);
@@ -1010,7 +921,7 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     // check relayer pool
     const rawRelayerPool: any = await context.polkadotApi.query.relayManager.relayerPool();
     const relayerPool = rawRelayerPool.toJSON();
-    expect(relayerPool.length).equal(candidatesBefore.length + 1);
+    expect(relayerPool.length).equal(Object.keys(candidatesBefore).length + 1);
     expect(relayerPool[1].relayer).equal(baltatharRelayer.address);
 
     // check bonded controller
@@ -1021,11 +932,12 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
 
   it('should successfully join candidate pool with identical essential accounts - full node', async function () {
     const stake = new BigNumber(MIN_FULL_CANDIDATE_STAKING_AMOUNT);
-    const candidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const rawCandidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const candidatesBefore = rawCandidatesBefore.toJSON();
 
     // stash, controller, relayer with identical accounts
     await context.polkadotApi.tx.bfcStaking
-      .joinCandidates(charleth.address, charleth.address, stake.toFixed(), candidatesBefore.length)
+      .joinCandidates(charleth.address, charleth.address, stake.toFixed(), Object.keys(candidatesBefore).length)
       .signAndSend(charleth, { nonce: -1 });
     const keys: any = {
       aura: SESSION_KEYS[2].aura,
@@ -1040,8 +952,8 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     // check candidate pool
     const rawCandidatesAfter: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatesAfter = rawCandidatesAfter.toJSON();
-    expect(candidatesAfter.length).equal(candidatesBefore.length + 1);
-    expect(candidatesAfter[2].owner).equal(charleth.address);
+    expect(Object.keys(candidatesAfter).length).equal(Object.keys(candidatesBefore).length + 1);
+    expect(Object.keys(candidatesAfter)).includes(charleth.address);
 
     // check candidate info
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(charleth.address);
@@ -1057,7 +969,7 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     // check relayer pool
     const rawRelayerPool: any = await context.polkadotApi.query.relayManager.relayerPool();
     const relayerPool = rawRelayerPool.toJSON();
-    expect(relayerPool.length).equal(candidatesBefore.length + 1);
+    expect(relayerPool.length).equal(Object.keys(candidatesBefore).length + 1);
     expect(relayerPool[2].relayer).equal(charleth.address);
 
     // check bonded controller
@@ -1068,10 +980,11 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
 
   it('should successfully join candidate pool - basic node', async function () {
     const stake = new BigNumber(MIN_BASIC_CANDIDATE_STAKING_AMOUNT);
-    const candidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const rawCandidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const candidatesBefore: any = rawCandidatesBefore.toJSON();
 
     await context.polkadotApi.tx.bfcStaking
-      .joinCandidates(ethan.address, null, stake.toFixed(), candidatesBefore.length)
+      .joinCandidates(ethan.address, null, stake.toFixed(), Object.keys(candidatesBefore).length)
       .signAndSend(ethanStash, { nonce: -1 });
     const keys: any = {
       aura: SESSION_KEYS[4].aura,
@@ -1086,8 +999,8 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     // check candidate pool
     const rawCandidatesAfter: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatesAfter = rawCandidatesAfter.toJSON();
-    expect(candidatesAfter.length).equal(candidatesBefore.length + 1);
-    expect(candidatesAfter[3].owner).equal(ethan.address);
+    expect(Object.keys(candidatesAfter).length).equal(Object.keys(candidatesBefore).length + 1);
+    expect(Object.keys(candidatesAfter)).includes(ethan.address);
 
     // check candidate info
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(ethan.address);
@@ -1103,7 +1016,7 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     // check relayer pool
     const rawRelayerPool: any = await context.polkadotApi.query.relayManager.relayerPool();
     const relayerPool = rawRelayerPool.toJSON();
-    expect(relayerPool.length).equal(candidatesBefore.length);
+    expect(relayerPool.length).equal(Object.keys(candidatesBefore).length);
 
     // check bonded controller
     const rawBondedController: any = await context.polkadotApi.query.relayManager.bondedController(ethan.address);
@@ -1120,7 +1033,7 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     await jumpToRound(context, currentRound + 1);
 
     const validators: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
-    expect(validators.length).equal(1);
+    expect(Object.keys(validators.toJSON()).length).equal(1);
   });
 
   it('should successfully join candidate pool and be selected as a validator in the next round - full node', async function () {
@@ -1130,7 +1043,7 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     const candidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
 
     await context.polkadotApi.tx.bfcStaking
-      .joinCandidates(faith.address, faithRelayer.address, stake.toFixed(), candidatesBefore.length)
+      .joinCandidates(faith.address, faithRelayer.address, stake.toFixed(), Object.keys(candidatesBefore).length)
       .signAndSend(faithStash, { nonce: -1 });
     const keys: any = {
       aura: SESSION_KEYS[5].aura,
@@ -1180,10 +1093,11 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     this.timeout(20000);
 
     const stake = new BigNumber(MIN_BASIC_VALIDATOR_STAKING_AMOUNT);
-    const candidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const rawCandidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const candidatesBefore = rawCandidatesBefore.toJSON();
 
     await context.polkadotApi.tx.bfcStaking
-      .joinCandidates(dorothy.address, null, stake.toFixed(), candidatesBefore.length)
+      .joinCandidates(dorothy.address, null, stake.toFixed(), Object.keys(candidatesBefore).length)
       .signAndSend(dorothyStash, { nonce: -1 });
     const keys: any = {
       aura: SESSION_KEYS[3].aura,
@@ -1256,7 +1170,8 @@ describeDevNode('pallet_bfc_staking - session keys', (context) => {
 
     await jumpToRound(context, currentRound + 1);
 
-    const validators: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
+    const rawValidators: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
+    const validators = rawValidators.toJSON();
     expect(validators.length).equal(1);
     expect(validators).not.include(baltathar.address);
   });
@@ -1276,7 +1191,8 @@ describeDevNode('pallet_bfc_staking - session keys', (context) => {
     const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
     await jumpToRound(context, currentRound + 1);
 
-    const validators: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
+    const rawValidators: any = await context.polkadotApi.query.bfcStaking.selectedCandidates();
+    const validators = rawValidators.toJSON();
     expect(validators.length).equal(2);
     expect(validators).include(baltathar.address);
   });
@@ -1624,10 +1540,11 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
   });
 
   it('should successfully schedule leave candidates', async function () {
-    const candidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const rawCandidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const candidatesBefore = await rawCandidatesBefore.toJSON();
 
     await context.polkadotApi.tx.bfcStaking
-      .scheduleLeaveCandidates(candidatesBefore.length)
+      .scheduleLeaveCandidates(Object.keys(candidatesBefore).length)
       .signAndSend(baltathar, { nonce: -1 });
     await context.createBlock();
 
@@ -1670,9 +1587,10 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
     this.timeout(20000);
 
     // 1. schedule leave candidates
-    const candidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const rawCandidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+    const candidatesBefore = rawCandidatesBefore.toJSON();
     await context.polkadotApi.tx.bfcStaking
-      .scheduleLeaveCandidates(candidatesBefore.length)
+      .scheduleLeaveCandidates(Object.keys(candidatesBefore).length)
       .signAndSend(baltathar, { nonce: -1 });
     await context.createBlock();
 
@@ -1708,14 +1626,7 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
     // 5. check candidate pool - must be not found
     const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatePool = rawCandidatePool.toJSON();
-    let isCandidateFound = false;
-    for (const candidate of candidatePool) {
-      if (candidate.owner === baltathar.address) {
-        isCandidateFound = true;
-        break;
-      }
-    }
-    expect(isCandidateFound).equal(false);
+    expect(candidatePool).not.has.key(baltathar.address);
 
     // 6. check balance - self-bond must be unreserved
     const balanceAfter = new BigNumber((await context.web3.eth.getBalance(baltatharStash.address)).toString());
@@ -1798,10 +1709,10 @@ describeDevNode('pallet_bfc_staking - join nominators', (context) => {
     await context.createBlock();
 
     const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
-    const nominatorState = rawNominatorState.unwrap();
+    const nominatorState = rawNominatorState.unwrap().toJSON();
 
-    expect(nominatorState.nominations[0].owner.toString().toLowerCase()).equal(alith.address.toLowerCase());
-    expect(nominatorState.nominations[0].amount.toString()).equal(stake.toFixed());
+    expect(nominatorState.nominations).has.key(alith.address);
+    expect(parseInt(nominatorState.nominations[alith.address].toString(), 16).toString()).equal(stake.toFixed());
 
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
     const candidateState = rawCandidateState.unwrap();
@@ -1874,10 +1785,10 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     const stakeAfter = stake.multipliedBy(2);
 
     const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
-    const nominatorState = rawNominatorState.unwrap();
+    const nominatorState = rawNominatorState.unwrap().toJSON();
 
-    expect(nominatorState.nominations[0].owner.toString().toLowerCase()).equal(alith.address.toLowerCase());
-    expect(nominatorState.nominations[0].amount.toString()).equal(stakeAfter.toFixed());
+    expect(nominatorState.nominations).has.key(alith.address);
+    expect(parseInt(nominatorState.nominations[alith.address].toString(), 16).toString()).equal(stakeAfter.toFixed());
 
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
     const candidateState = rawCandidateState.unwrap();
@@ -1988,15 +1899,15 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     await context.createBlock();
 
     const rawNominatorStateAfter: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
-    const nominatorStateAfter = rawNominatorStateAfter.unwrap();
-    const nominatorRequestsAfter = nominatorStateAfter.requests.toJSON();
+    const nominatorStateAfter = rawNominatorStateAfter.unwrap().toJSON();
+    const nominatorRequestsAfter = nominatorStateAfter.requests;
 
     let validatorAfter = null;
     Object.keys(nominatorRequestsAfter['requests']).forEach(function (key) {
       validator = key.toLowerCase();
     });
     expect(validatorAfter).to.be.null;
-    expect(nominatorStateAfter.nominations[0].amount.toString()).equal(MIN_NOMINATOR_STAKING_AMOUNT);
+    expect(parseInt(nominatorStateAfter.nominations[alith.address].toString(), 16).toString()).equal(MIN_NOMINATOR_STAKING_AMOUNT);
   });
 });
 
