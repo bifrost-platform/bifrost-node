@@ -67,11 +67,9 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		if let Some(offence) = OffencesOf::<Runtime>::validator_offences(&validator) {
-			let mut new = ValidatorOffence::<Runtime>::default();
-			new.set_offence(validator, offence);
-			Ok(new.into())
+			Ok(ValidatorOffence::<Runtime>::set_offence(validator, offence).into())
 		} else {
-			Ok(ValidatorOffence::<Runtime>::default().into())
+			Ok(ValidatorOffence::<Runtime>::set_empty(validator).into())
 		}
 	}
 
@@ -95,9 +93,8 @@ where
 		let mut validator_offences = ValidatorOffences::<Runtime>::default();
 		unique_validators.clone().into_iter().for_each(|v| {
 			if let Some(offence) = OffencesOf::<Runtime>::validator_offences(&v) {
-				let mut new = ValidatorOffence::<Runtime>::default();
-				new.set_offence(v, offence);
-				validator_offences.insert_offence(new);
+				validator_offences
+					.insert_offence(ValidatorOffence::<Runtime>::set_offence(v, offence));
 			} else {
 				validator_offences.insert_empty(v);
 			}

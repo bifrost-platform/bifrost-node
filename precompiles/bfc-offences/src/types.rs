@@ -48,15 +48,23 @@ where
 		}
 	}
 
+	pub fn set_empty(validator: Runtime::AccountId) -> Self {
+		let mut offence = Self::default();
+		offence.validator = Address(validator.into());
+		offence
+	}
+
 	pub fn set_offence(
-		&mut self,
 		validator: Runtime::AccountId,
 		offence: ValidatorOffenceInfo<BalanceOf<Runtime>>,
-	) {
-		self.validator = Address(validator.into());
-		self.latest_offence_round_index = offence.latest_offence_round_index;
-		self.latest_offence_session_index = offence.latest_offence_session_index;
-		self.offence_count = offence.offence_count;
+	) -> Self {
+		Self {
+			validator: Address(validator.into()),
+			latest_offence_round_index: offence.latest_offence_round_index,
+			latest_offence_session_index: offence.latest_offence_session_index,
+			offence_count: offence.offence_count,
+			phantom: PhantomData,
+		}
 	}
 }
 
