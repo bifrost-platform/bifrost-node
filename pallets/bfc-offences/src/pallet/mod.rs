@@ -127,7 +127,6 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			// StorageVersion::<T>::put(Releases::V2_0_0);
 			OffenceExpirationInSessions::<T>::put(T::DefaultOffenceExpirationInSessions::get());
 			FullMaximumOffenceCount::<T>::put(T::DefaultFullMaximumOffenceCount::get());
 			BasicMaximumOffenceCount::<T>::put(T::DefaultBasicMaximumOffenceCount::get());
