@@ -19,68 +19,74 @@ pub mod v4 {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
-			let old_selected_to_new =
-				|old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
-					let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
-						.expect("")
-						.into_iter()
-						.collect::<BTreeSet<T::AccountId>>()
-						.try_into()
-						.expect("");
-					Some(new)
-				};
-			<SelectedRelayers<T>>::translate::<
-				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-				_,
-			>(old_selected_to_new)
-			.expect("");
-			<InitialSelectedRelayers<T>>::translate::<
-				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-				_,
-			>(old_selected_to_new)
-			.expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
-
-			let old_cache_to_new = |old: Option<Vec<(RoundIndex, Vec<T::AccountId>)>>| {
-				let new: BTreeMap<
-					RoundIndex,
-					BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-				> = old.expect("")
-					.into_iter()
-					.map(|(round_index, vec_ids)| {
-						let set_ids: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
-							vec_ids
-								.into_iter()
-								.collect::<BTreeSet<T::AccountId>>()
-								.try_into()
-								.expect("");
-						(round_index, set_ids)
-					})
-					.collect();
-
-				Some(new)
-			};
-			<CachedSelectedRelayers<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
-				old_cache_to_new,
-			)
-			.expect("");
-			<CachedInitialSelectedRelayers<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(old_cache_to_new).expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
-
-			let old_cache_to_new =
-				|old: Option<Vec<(RoundIndex, u32)>>| -> Option<BTreeMap<RoundIndex, u32>> {
-					Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
-				};
-			<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(old_cache_to_new)
-				.expect("");
-			<CachedInitialMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(old_cache_to_new)
-				.expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
-
 			let current = Pallet::<T>::current_storage_version();
 			let onchain = StorageVersion::<T>::get();
 
 			if current == 4 && onchain == Releases::V3_0_0 {
+				let old_selected_to_new =
+					|old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
+						let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
+							.expect("")
+							.into_iter()
+							.collect::<BTreeSet<T::AccountId>>()
+							.try_into()
+							.expect("");
+						Some(new)
+					};
+				<SelectedRelayers<T>>::translate::<
+					BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+					_,
+				>(old_selected_to_new)
+				.expect("");
+				<InitialSelectedRelayers<T>>::translate::<
+					BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+					_,
+				>(old_selected_to_new)
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
+
+				let old_cache_to_new = |old: Option<Vec<(RoundIndex, Vec<T::AccountId>)>>| {
+					let new: BTreeMap<
+						RoundIndex,
+						BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+					> = old.expect("")
+						.into_iter()
+						.map(|(round_index, vec_ids)| {
+							let set_ids: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
+								vec_ids
+									.into_iter()
+									.collect::<BTreeSet<T::AccountId>>()
+									.try_into()
+									.expect("");
+							(round_index, set_ids)
+						})
+						.collect();
+
+					Some(new)
+				};
+				<CachedSelectedRelayers<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
+					old_cache_to_new,
+				)
+				.expect("");
+				<CachedInitialSelectedRelayers<T>>::translate::<
+					Vec<(RoundIndex, Vec<T::AccountId>)>,
+					_,
+				>(old_cache_to_new)
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
+
+				let old_cache_to_new =
+					|old: Option<Vec<(RoundIndex, u32)>>| -> Option<BTreeMap<RoundIndex, u32>> {
+						Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
+					};
+				<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(old_cache_to_new)
+					.expect("");
+				<CachedInitialMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(
+					old_cache_to_new,
+				)
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
+
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
 

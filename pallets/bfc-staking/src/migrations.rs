@@ -37,129 +37,139 @@ pub mod v4 {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
-			MinTotalSelected::<T>::kill();
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(0, 1));
+			let current = Pallet::<T>::current_storage_version();
+			let onchain = StorageVersion::<T>::get();
 
-			<CandidatePool<T>>::translate::<
-				BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
-				_,
-			>(|old_pool| {
-				let new_pool = old_pool
-					.expect("")
-					.into_iter()
-					.map(|bond| (bond.owner, bond.amount))
-					.collect::<BTreeMap<T::AccountId, BalanceOf<T>>>();
+			if current == 4 && onchain == Releases::V3_0_0 {
+				MinTotalSelected::<T>::kill();
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(0, 1));
 
-				Some(BoundedBTreeMap::try_from(new_pool).expect(""))
-			})
-			.expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+				<CandidatePool<T>>::translate::<
+					BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
+					_,
+				>(|old_pool| {
+					let new_pool = old_pool
+						.expect("")
+						.into_iter()
+						.map(|bond| (bond.owner, bond.amount))
+						.collect::<BTreeMap<T::AccountId, BalanceOf<T>>>();
 
-			let vec_to_bset = |old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
-				let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
-					.expect("")
-					.into_iter()
-					.collect::<BTreeSet<T::AccountId>>()
-					.try_into()
+					Some(BoundedBTreeMap::try_from(new_pool).expect(""))
+				})
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
+				let vec_to_bset =
+					|old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
+						let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
+							.expect("")
+							.into_iter()
+							.collect::<BTreeSet<T::AccountId>>()
+							.try_into()
+							.expect("");
+						Some(new)
+					};
+				<SelectedCandidates<T>>::translate::<
+					BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+					_,
+				>(vec_to_bset)
+				.expect("");
+				<SelectedFullCandidates<T>>::translate::<
+					BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+					_,
+				>(vec_to_bset)
+				.expect("");
+				<SelectedBasicCandidates<T>>::translate::<
+					BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+					_,
+				>(vec_to_bset)
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(3, 3));
+
+				<CachedSelectedCandidates<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
+					|old| {
+						Some(
+							old.expect("")
+								.into_iter()
+								.map(|(round_index, candidates)| {
+									let bset: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
+										candidates
+											.into_iter()
+											.collect::<BTreeSet<T::AccountId>>()
+											.try_into()
+											.expect("");
+									(round_index, bset)
+								})
+								.collect(),
+						)
+					},
+				)
 					.expect("");
-				Some(new)
-			};
-			<SelectedCandidates<T>>::translate::<
-				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-				_,
-			>(vec_to_bset)
-			.expect("");
-			<SelectedFullCandidates<T>>::translate::<
-				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-				_,
-			>(vec_to_bset)
-			.expect("");
-			<SelectedBasicCandidates<T>>::translate::<
-				BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-				_,
-			>(vec_to_bset)
-			.expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(3, 3));
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
-			<CachedSelectedCandidates<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
-				|old| {
+				<NominatorState<T>>::translate(
+					|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
+						weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
+						let nominations: BTreeMap<_, _> = old
+							.nominations
+							.0
+							.into_iter()
+							.map(|bond| (bond.owner, bond.amount))
+							.collect();
+
+						let initial_nominations: BTreeMap<_, _> = old
+							.initial_nominations
+							.0
+							.into_iter()
+							.map(|bond| (bond.owner, bond.amount))
+							.collect();
+
+						let awarded_tokens_per_candidate: BTreeMap<_, _> = old
+							.awarded_tokens_per_candidate
+							.0
+							.clone()
+							.iter()
+							.map(|bond| (bond.owner.clone(), bond.amount))
+							.collect();
+
+						Some(Nominator {
+							id: old.id,
+							nominations,
+							initial_nominations,
+							total: old.total,
+							requests: old.requests,
+							status: old.status,
+							reward_dst: old.reward_dst,
+							awarded_tokens: old.awarded_tokens,
+							awarded_tokens_per_candidate,
+						})
+					},
+				);
+
+				<CachedSelectedCandidates<T>>::translate::<
+					Vec<(RoundIndex, BTreeSet<T::AccountId>)>,
+					_,
+				>(|old| {
 					Some(
 						old.expect("")
 							.into_iter()
-							.map(|(round_index, candidates)| {
-								let bset: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> =
-									candidates
-										.into_iter()
-										.collect::<BTreeSet<T::AccountId>>()
-										.try_into()
-										.expect("");
-								(round_index, bset)
-							})
-							.collect(),
+							.map(|(index, set)| (index, BoundedBTreeSet::try_from(set).expect("")))
+							.collect::<BTreeMap<
+								RoundIndex,
+								BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+							>>(),
 					)
-				},
-			)
-			.expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+				})
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
-			<NominatorState<T>>::translate(
-				|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
-					weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+				<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(|old| {
+					Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
+				})
+				.expect("");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
-					let nominations: BTreeMap<_, _> = old
-						.nominations
-						.0
-						.into_iter()
-						.map(|bond| (bond.owner, bond.amount))
-						.collect();
-
-					let initial_nominations: BTreeMap<_, _> = old
-						.initial_nominations
-						.0
-						.into_iter()
-						.map(|bond| (bond.owner, bond.amount))
-						.collect();
-
-					let awarded_tokens_per_candidate: BTreeMap<_, _> = old
-						.awarded_tokens_per_candidate
-						.0
-						.clone()
-						.iter()
-						.map(|bond| (bond.owner.clone(), bond.amount))
-						.collect();
-
-					Some(Nominator {
-						id: old.id,
-						nominations,
-						initial_nominations,
-						total: old.total,
-						requests: old.requests,
-						status: old.status,
-						reward_dst: old.reward_dst,
-						awarded_tokens: old.awarded_tokens,
-						awarded_tokens_per_candidate,
-					})
-				},
-			);
-
-			<CachedSelectedCandidates<T>>::translate::<Vec<(RoundIndex, BTreeSet<T::AccountId>)>, _>(|old| {
-				Some(old
-					.expect("")
-					.into_iter()
-					.map(|(index, set)| (index, BoundedBTreeSet::try_from(set).expect("")))
-					.collect::<BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>>())
-			}).expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
-
-			<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(|old| {
-				Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
-			})
-			.expect("");
-			weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
-
-			let current = Pallet::<T>::current_storage_version();
-			let onchain = StorageVersion::<T>::get();
-			if current == 4 && onchain == Releases::V3_0_0 {
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
 				log!(info, "bfc-staking storage migration passes v4 update ✅");
