@@ -44,6 +44,7 @@ pub mod v4 {
 				MinTotalSelected::<T>::kill();
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(0, 1));
 
+				// translate `BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>` to `BoundedBTreeMap<T::AccountId, BalanceOf<T>, ConstU32<MAX_AUTHORITIES>>`
 				<CandidatePool<T>>::translate::<
 					BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
 					_,
@@ -59,6 +60,7 @@ pub mod v4 {
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
+				// closure for translate `BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>` to `BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>`
 				let vec_to_bset =
 					|old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
 						let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
@@ -86,6 +88,7 @@ pub mod v4 {
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(3, 3));
 
+				// translate `Vec<(RoundIndex, Vec<T::AccountId>)>` to `BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>`
 				<CachedSelectedCandidates<T>>::translate::<Vec<(RoundIndex, Vec<T::AccountId>)>, _>(
 					|old| {
 						Some(
@@ -107,6 +110,7 @@ pub mod v4 {
 					.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
+				// translate old `Nominator` which using ordered set to new Nominator
 				<NominatorState<T>>::translate(
 					|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
 						weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
@@ -147,6 +151,7 @@ pub mod v4 {
 					},
 				);
 
+				// translate `Vec<(RoundIndex, BTreeSet<T::AccountId>)>` to `BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>`
 				<CachedSelectedCandidates<T>>::translate::<
 					Vec<(RoundIndex, BTreeSet<T::AccountId>)>,
 					_,
@@ -164,14 +169,17 @@ pub mod v4 {
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
+				// translate `Vec<(RoundIndex, u32)>` to `BTreeMap<RoundIndex, u32>`
 				<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(|old| {
 					Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
 				})
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
+				// migrate to new standard storage version
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
+
 				log!(info, "bfc-staking storage migration passes v4 update ✅");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 2));
 			} else {

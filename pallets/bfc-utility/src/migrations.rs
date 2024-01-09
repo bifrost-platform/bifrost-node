@@ -19,6 +19,7 @@ pub mod v3 {
 			let onchain = StorageVersion::<T>::get();
 
 			if current == 3 && onchain == Releases::V2_0_0 {
+				// migrate to new standard storage version
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
 

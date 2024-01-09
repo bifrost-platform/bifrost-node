@@ -23,6 +23,7 @@ pub mod v4 {
 			let onchain = StorageVersion::<T>::get();
 
 			if current == 4 && onchain == Releases::V3_0_0 {
+				// closure for translate old selected relayers format to new selected relayers format
 				let old_selected_to_new =
 					|old: Option<BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>>| {
 						let new: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>> = old
@@ -45,6 +46,7 @@ pub mod v4 {
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
 
+				// closure for translate old Cached*SelectedRelayers format to new Cached*SelectedRelayers format
 				let old_cache_to_new = |old: Option<Vec<(RoundIndex, Vec<T::AccountId>)>>| {
 					let new: BTreeMap<
 						RoundIndex,
@@ -75,6 +77,7 @@ pub mod v4 {
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
 
+				// closure for translate old Cached*Majority format to new Cached*Majority format
 				let old_cache_to_new =
 					|old: Option<Vec<(RoundIndex, u32)>>| -> Option<BTreeMap<RoundIndex, u32>> {
 						Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
@@ -87,6 +90,7 @@ pub mod v4 {
 				.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
 
+				// migrate to new standard storage version
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
 
