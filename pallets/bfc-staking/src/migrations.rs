@@ -151,24 +151,6 @@ pub mod v4 {
 					},
 				);
 
-				// translate `Vec<(RoundIndex, BTreeSet<T::AccountId>)>` to `BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>`
-				<CachedSelectedCandidates<T>>::translate::<
-					Vec<(RoundIndex, BTreeSet<T::AccountId>)>,
-					_,
-				>(|old| {
-					Some(
-						old.expect("")
-							.into_iter()
-							.map(|(index, set)| (index, BoundedBTreeSet::try_from(set).expect("")))
-							.collect::<BTreeMap<
-								RoundIndex,
-								BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
-							>>(),
-					)
-				})
-				.expect("");
-				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
-
 				// translate `Vec<(RoundIndex, u32)>` to `BTreeMap<RoundIndex, u32>`
 				<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(|old| {
 					Some(old.expect("").into_iter().collect::<BTreeMap<RoundIndex, u32>>())
