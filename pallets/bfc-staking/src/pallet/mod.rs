@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	migrations, BalanceOf, BlockNumberOf, Bond, CandidateMetadata, DelayedCommissionSet,
+	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
 	DelayedControllerSet, DelayedPayout, InflationInfo, NominationRequest, Nominations, Nominator,
 	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
 	TotalSnapshot, ValidatorSnapshot, WeightInfo,

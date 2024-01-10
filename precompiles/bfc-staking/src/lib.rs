@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::{
-	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
 	pallet_prelude::ConstU32,
 	traits::Get,
 	BoundedBTreeSet,
@@ -17,7 +17,7 @@ use precompile_utils::prelude::*;
 use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
 use fp_evm::PrecompileHandle;
 use sp_core::{H160, U256};
-use sp_runtime::Perbill;
+use sp_runtime::{traits::Dispatchable, Perbill};
 use sp_std::{
 	collections::btree_set::BTreeSet, convert::TryInto, marker::PhantomData, vec, vec::Vec,
 };

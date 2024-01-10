@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo};
+use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_support::pallet_prelude::ConstU32;
 use frame_support::BoundedBTreeSet;
 
@@ -11,6 +11,7 @@ use precompile_utils::prelude::*;
 
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
 use sp_core::{H160, H256, U256};
+use sp_runtime::traits::Dispatchable;
 use sp_std::{collections::btree_set::BTreeSet, marker::PhantomData, vec, vec::Vec};
 
 mod types;
