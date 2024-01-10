@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::{Offence, RoundIndex, TierType};
+use crate::{Offence, RoundIndex, TierType, MAX_AUTHORITIES};
+use frame_support::{pallet_prelude::ConstU32, BoundedBTreeSet};
 
 use sp_runtime::{DispatchError, Perbill};
 use sp_std::vec::Vec;
@@ -17,7 +18,10 @@ pub trait RelayManager<AccountId> {
 	fn refresh_selected_relayers(round: RoundIndex, selected_candidates: Vec<AccountId>);
 
 	/// Refresh the `CachedSelectedRelayers` based on the new selected relayers
-	fn refresh_cached_selected_relayers(round: RoundIndex, relayers: Vec<AccountId>);
+	fn refresh_cached_selected_relayers(
+		round: RoundIndex,
+		relayers: BoundedBTreeSet<AccountId, ConstU32<MAX_AUTHORITIES>>,
+	);
 
 	/// Refresh the `Majority` and `CachedMajority` of the selected relayers
 	fn refresh_majority(round: RoundIndex);

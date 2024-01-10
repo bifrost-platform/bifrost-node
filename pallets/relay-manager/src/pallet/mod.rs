@@ -1,23 +1,32 @@
 mod impls;
 
 use crate::{
-	IdentificationTuple, Relayer, RelayerMetadata, Releases, UnresponsivenessOffence, WeightInfo,
+	migrations, IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence, WeightInfo,
 };
 
-use frame_support::{pallet_prelude::*, traits::ValidatorSetWithIdentification, Twox64Concat};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion, ValidatorSetWithIdentification},
+	Twox64Concat,
+};
 use frame_system::pallet_prelude::*;
 
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
-use sp_std::prelude::*;
+use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
+	use frame_support::BoundedBTreeSet;
+
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 	/// Pallet for relay manager
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(PhantomData<T>);
 
 	/// Configuration trait of this pallet
@@ -62,6 +71,10 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// Cannot set the value below one
 		CannotSetBelowOne,
+		/// RelayerPool out of bound
+		TooManyRelayers,
+		/// SelectedRelayers out of bound
+		TooManySelectedRelayers,
 	}
 
 	#[pallet::event]
@@ -86,10 +99,6 @@ pub mod pallet {
 		/// Set the slash fraction for heartbeat offences
 		HeartbeatSlashFractionSet { old: Perbill, new: Perbill },
 	}
-
-	#[pallet::storage]
-	/// Storage version of the pallet.
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn storage_cache_lifetime)]
@@ -128,27 +137,33 @@ pub mod pallet {
 	#[pallet::getter(fn selected_relayers)]
 	/// The active relayer set selected for the current round. This storage is sorted by address.
 	pub type SelectedRelayers<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn initial_selected_relayers)]
 	/// The active relayer set selected at the beginning of the current round. This storage is sorted by address.
 	pub type InitialSelectedRelayers<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_relayers)]
 	/// The cached active relayer set selected from previous rounds. This storage is sorted by address.
-	pub type CachedSelectedRelayers<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
+	pub type CachedSelectedRelayers<T: Config> = StorageValue<
+		_,
+		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_selected_relayers)]
 	/// The cached active relayer set selected from the beginning of each previous rounds. This storage is sorted by address.
-	pub type CachedInitialSelectedRelayers<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
+	pub type CachedInitialSelectedRelayers<T: Config> = StorageValue<
+		_,
+		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn majority)]
@@ -164,14 +179,14 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active relayer set selected from previous rounds
-	pub type CachedMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
+	pub type CachedMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_majority)]
 	/// The cached majority based on the active relayer set selected from the beginning of each
 	/// previous rounds
-	pub type CachedInitialMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
+	pub type CachedInitialMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn received_heartbeats)]
@@ -196,6 +211,13 @@ pub mod pallet {
 	/// The slash fraction for heartbeat offences
 	pub type HeartbeatSlashFraction<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
+		}
+	}
+
 	#[pallet::genesis_config]
 	pub struct GenesisConfig {}
 
@@ -209,7 +231,6 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> GenesisBuild<T> for GenesisConfig {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V3_0_0);
 			StorageCacheLifetime::<T>::put(T::StorageCacheLifetimeInRounds::get());
 			IsHeartbeatOffenceActive::<T>::put(T::IsHeartbeatOffenceActive::get());
 			HeartbeatSlashFraction::<T>::put(T::DefaultHeartbeatSlashFraction::get());
@@ -225,7 +246,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= 1u32, Error::<T>::CannotSetBelowOne);
 			let old = <StorageCacheLifetime<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -241,7 +262,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_active: bool,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(
 				is_active != <IsHeartbeatOffenceActive<T>>::get(),
 				Error::<T>::NoWritingSameValue
@@ -258,7 +279,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: Perbill,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			let old = <HeartbeatSlashFraction<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			<HeartbeatSlashFraction<T>>::put(new);
@@ -276,7 +297,7 @@ pub mod pallet {
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
 			ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
-			ensure!(Self::replace_bonded_relayer(&old, &new), Error::<T>::RelayerDNE);
+			ensure!(Self::replace_bonded_relayer(&old, &new)?, Error::<T>::RelayerDNE);
 			Self::deposit_event(Event::RelayerSet { old, new });
 			Ok(().into())
 		}

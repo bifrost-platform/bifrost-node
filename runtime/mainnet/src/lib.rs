@@ -713,8 +713,6 @@ parameter_types! {
 	pub const DefaultMaxSelectedFullCandidates: u32 = 20;
 	/// Default maximum basic validators selected per round, default at genesis.
 	pub const DefaultMaxSelectedBasicCandidates: u32 = 200;
-	/// Default minimum validators selected per round, default at genesis.
-	pub const DefaultMinSelectedCandidates: u32 = 1;
 	/// Maximum top nominations per candidate.
 	pub const MaxTopNominationsPerCandidate: u32 = 100;
 	/// Maximum bottom nominations per candidate.
@@ -760,7 +758,6 @@ impl pallet_bfc_staking::Config for Runtime {
 	type RewardPaymentDelay = RewardPaymentDelay;
 	type DefaultMaxSelectedFullCandidates = DefaultMaxSelectedFullCandidates;
 	type DefaultMaxSelectedBasicCandidates = DefaultMaxSelectedBasicCandidates;
-	type DefaultMinSelectedCandidates = DefaultMinSelectedCandidates;
 	type MaxTopNominationsPerCandidate = MaxTopNominationsPerCandidate;
 	type MaxBottomNominationsPerCandidate = MaxBottomNominationsPerCandidate;
 	type MaxNominationsPerNominator = MaxNominationsPerNominator;

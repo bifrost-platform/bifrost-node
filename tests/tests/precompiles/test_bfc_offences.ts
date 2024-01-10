@@ -15,7 +15,7 @@ const PRECOMPILE_ADDRESS = '0x0000000000000000000000000000000000000500';
 describeDevNode('precompile_bfc_offences - precompile view functions', (context) => {
   const alith: { public: string, private: string } = TEST_CONTROLLERS[0];
 
-  it('should successfully verify offence storage existance', async function () {
+  it('should successfully verify offence storage existence', async function () {
     const maximum_offence_count = await callPrecompile(
       context,
       alith.public,

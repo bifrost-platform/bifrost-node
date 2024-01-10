@@ -9,6 +9,7 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
+log = { workspace = true }
 serde = { workspace = true, optional = true }
 impl-serde = { workspace = true }
 
@@ -32,17 +33,17 @@ sp-io = { workspace = true, features = ["std"] }
 [features]
 default = ["std"]
 std = [
-	"impl-serde/std",
-	"scale-info/std",
-	"parity-scale-codec/std",
-	"frame-benchmarking/std",
-	"frame-support/std",
-	"frame-system/std",
-	"serde",
-	"sp-runtime/std",
-	"sp-std/std",
-	"sp-core/std",
-	"sp-io/std",
+    "impl-serde/std",
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "frame-benchmarking/std",
+    "frame-support/std",
+    "frame-system/std",
+    "serde",
+    "sp-runtime/std",
+    "sp-std/std",
+    "sp-core/std",
+    "sp-io/std",
 ]
 runtime-benchmarks = ["frame-benchmarking"]
 try-runtime = ["frame-support/try-runtime"]

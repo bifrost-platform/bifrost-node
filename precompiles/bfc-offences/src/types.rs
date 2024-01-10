@@ -48,15 +48,37 @@ where
 		}
 	}
 
+	pub fn set_empty(validator: Runtime::AccountId) -> Self {
+		let mut offence = Self::default();
+		offence.validator = Address(validator.into());
+		offence
+	}
+
 	pub fn set_offence(
-		&mut self,
 		validator: Runtime::AccountId,
 		offence: ValidatorOffenceInfo<BalanceOf<Runtime>>,
-	) {
-		self.validator = Address(validator.into());
-		self.latest_offence_round_index = offence.latest_offence_round_index;
-		self.latest_offence_session_index = offence.latest_offence_session_index;
-		self.offence_count = offence.offence_count;
+	) -> Self {
+		Self {
+			validator: Address(validator.into()),
+			latest_offence_round_index: offence.latest_offence_round_index,
+			latest_offence_session_index: offence.latest_offence_session_index,
+			offence_count: offence.offence_count,
+			phantom: PhantomData,
+		}
+	}
+}
+
+impl<Runtime> From<ValidatorOffence<Runtime>> for EvmValidatorOffenceOf
+where
+	Runtime: pallet_bfc_offences::Config,
+{
+	fn from(offence: ValidatorOffence<Runtime>) -> Self {
+		(
+			offence.validator,
+			offence.latest_offence_round_index,
+			offence.latest_offence_session_index,
+			offence.offence_count,
+		)
 	}
 }
 
@@ -101,20 +123,6 @@ where
 		self.latest_offence_round_index.push(offence.latest_offence_round_index);
 		self.latest_offence_session_index.push(offence.latest_offence_session_index);
 		self.offence_count.push(offence.offence_count);
-	}
-}
-
-impl<Runtime> From<ValidatorOffences<Runtime>> for EvmValidatorOffenceOf
-where
-	Runtime: pallet_bfc_offences::Config,
-{
-	fn from(offence: ValidatorOffences<Runtime>) -> Self {
-		(
-			offence.validator[0],
-			offence.latest_offence_round_index[0],
-			offence.latest_offence_session_index[0],
-			offence.offence_count[0],
-		)
 	}
 }
 

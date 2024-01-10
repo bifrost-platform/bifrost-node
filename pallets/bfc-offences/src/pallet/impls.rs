@@ -61,33 +61,33 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 		slash_fraction: Perbill,
 		bond: BalanceOf<T>,
 	) -> BalanceOf<T> {
-		let mut slash_amount = BalanceOf::<T>::zero();
 		// slash bonds only if activated
-		if IsSlashActive::<T>::get() {
-			slash_amount = slash_fraction * bond;
+		if Self::is_slash_active() {
+			let slash_amount = slash_fraction * bond;
 			// slash the validator's reserved self bond
 			// the slashed imbalance will be reserved to the treasury
 			T::Slash::on_unbalanced(T::Currency::slash_reserved(stash, slash_amount).0);
 			Self::deposit_event(Event::Slashed { who: who.clone(), amount: slash_amount });
+			return slash_amount;
 		}
-		slash_amount
+		BalanceOf::<T>::zero()
 	}
 
 	fn refresh_offences(session_index: SessionIndex) {
-		for offences in ValidatorOffences::<T>::iter() {
+		<ValidatorOffences<T>>::iter().for_each(|offences| {
 			if (session_index - offences.1.latest_offence_session_index)
-				> OffenceExpirationInSessions::<T>::get()
+				> Self::offence_expiration_in_sessions()
 			{
-				ValidatorOffences::<T>::remove(&offences.0);
+				<ValidatorOffences<T>>::remove(&offences.0);
 			}
-		}
+		});
 	}
 
 	fn is_offence_count_exceeds(count: u32, tier: TierType) -> bool {
 		// if offence count exceeds the configured limit
 		return match tier {
-			TierType::Full => count > FullMaximumOffenceCount::<T>::get(),
-			_ => count > BasicMaximumOffenceCount::<T>::get(),
+			TierType::Full => count > Self::full_maximum_offence_count(),
+			_ => count > Self::basic_maximum_offence_count(),
 		};
 	}
 }
