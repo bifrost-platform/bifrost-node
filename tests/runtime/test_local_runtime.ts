@@ -21,8 +21,8 @@ const web3 = new Web3(new Web3.providers.HttpProvider(node_endpoint));
 
 const alithPk = TEST_CONTROLLERS[0].private;
 const alith = web3.eth.accounts.wallet.add(alithPk)[0].address;
-const charlethPk = TEST_CONTROLLERS[2].private;
-const charleth = web3.eth.accounts.wallet.add(charlethPk)[1].address;
+const baltatharPk = TEST_CONTROLLERS[1].private;
+const baltathar = web3.eth.accounts.wallet.add(baltatharPk)[1].address;
 
 let erc20Address: string | undefined;
 
@@ -38,7 +38,7 @@ const deployDemo = async (deployTx: any): Promise<TransactionReceiptAPI | undefi
   const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
   expect(txHash).is.ok;
 
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt?.status).equal('0x1');
@@ -52,7 +52,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
   expect(txHash).is.ok;
 
   // get transaction receipt
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt!.status).equal('0x1');
@@ -62,7 +62,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
 
 const createErc20Transfer = async (): Promise<string> => {
   const erc20: any = new web3.eth.Contract(ERC20_ABI, erc20Address);
-  const gas = await erc20.methods.transfer(charleth, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
+  const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
   expect(gas).is.ok;
 
   return (await web3.eth.accounts.signTransaction({
@@ -70,7 +70,7 @@ const createErc20Transfer = async (): Promise<string> => {
     to: erc20Address,
     gas,
     gasPrice: web3.utils.toWei(1000, 'gwei'),
-    data: erc20.methods.transfer(charleth, web3.utils.toWei(1, 'ether')).encodeABI()
+    data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI()
   }, alithPk)).rawTransaction;
 };
 
@@ -153,16 +153,16 @@ describe('test_runtime - evm interactions', function () {
     expect(candidateState.candidate).equal(alith);
     expect(Number(candidateState.bond)).greaterThanOrEqual(Number(web3.utils.toWei(1000, 'ether')));
 
-    const gas = await staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).estimateGas({ from: charleth });
+    const gas = await staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).estimateGas({ from: baltathar });
     expect(gas).is.ok;
 
     const signedTx = (await web3.eth.accounts.signTransaction({
-      from: charleth,
+      from: baltathar,
       to: STAKING_ADDRESS,
       gas,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
       data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI()
-    }, charlethPk)).rawTransaction;
+    }, baltatharPk)).rawTransaction;
 
     const txHash = await sendTransaction(signedTx);
 
@@ -171,7 +171,7 @@ describe('test_runtime - evm interactions', function () {
   });
 
   it('should consistently maintain substrate and evm balances', async function () {
-    const baltatharS = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+    const baltatharSubKey = keyring.addFromUri(TEST_CONTROLLERS[1].private);
 
     // now note a preimage
     const xt = api.tx.bfcStaking.setMaxFullSelected(20);
@@ -179,19 +179,24 @@ describe('test_runtime - evm interactions', function () {
 
     await api.tx.preimage
       .notePreimage(encodedProposal)
-      .signAndSend(baltatharS);
+      .signAndSend(baltatharSubKey, { nonce: -1 });
 
-    await sleep(4000);
+    await sleep(6000);
 
-    await api.tx.democracy.delegate(alith, 1, AMOUNT_FACTOR).signAndSend(baltatharS);
+    await api.tx.democracy.delegate(alith, 1, AMOUNT_FACTOR).signAndSend(baltatharSubKey, { nonce: -1 });
 
-    await sleep(4000);
+    await sleep(6000);
 
-    const rawBalanceS: any = await api.query.system.account(baltatharS.address);
-    const balanceS = new BigNumber(rawBalanceS.toJSON().data.free).minus(rawBalanceS.toJSON().data.frozen);
-    const balanceE = new BigNumber((await web3.eth.getBalance(charleth)).toString());
+    const rawBalanceSub: any = (await api.query.system.account(baltatharSubKey.address)).toJSON().data;
 
-    expect(balanceS.toFixed()).equal(balanceE.toFixed());
+    expect(rawBalanceSub.free).exist;
+    expect(rawBalanceSub.frozen).exist;
+    expect(rawBalanceSub.reserved).exist;
+
+    const balanceSub = new BigNumber(rawBalanceSub.free).minus(rawBalanceSub.frozen);
+    const balanceEvm = new BigNumber((await web3.eth.getBalance(baltathar)).toString());
+
+    expect(balanceSub.toFixed()).equal(balanceEvm.toFixed());
   });
 });
 
@@ -322,7 +327,7 @@ describe('test_runtime - pallet interactions', function () {
       .nominate(alith, stake.toFixed(), 10, 10)
       .signAndSend(charleth);
 
-    await sleep(4000);
+    await sleep(6000);
 
     const rawNominatorState: any = await api.query.bfcStaking.nominatorState(charleth.address);
     const nominatorState = rawNominatorState.unwrap().toJSON();
