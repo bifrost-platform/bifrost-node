@@ -21,8 +21,8 @@ const web3 = new Web3(new Web3.providers.HttpProvider(node_endpoint));
 
 const alithPk = TEST_CONTROLLERS[0].private;
 const alith = web3.eth.accounts.wallet.add(alithPk)[0].address;
-const baltatharPk = TEST_CONTROLLERS[1].private;
-const baltathar = web3.eth.accounts.wallet.add(baltatharPk)[1].address;
+const charlethPk = TEST_CONTROLLERS[2].private;
+const charleth = web3.eth.accounts.wallet.add(charlethPk)[1].address;
 
 let erc20Address: string | undefined;
 
@@ -62,7 +62,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
 
 const createErc20Transfer = async (): Promise<string> => {
   const erc20: any = new web3.eth.Contract(ERC20_ABI, erc20Address);
-  const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
+  const gas = await erc20.methods.transfer(charleth, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
   expect(gas).is.ok;
 
   return (await web3.eth.accounts.signTransaction({
@@ -70,7 +70,7 @@ const createErc20Transfer = async (): Promise<string> => {
     to: erc20Address,
     gas,
     gasPrice: web3.utils.toWei(1000, 'gwei'),
-    data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI()
+    data: erc20.methods.transfer(charleth, web3.utils.toWei(1, 'ether')).encodeABI()
   }, alithPk)).rawTransaction;
 };
 
@@ -153,16 +153,16 @@ describe('test_runtime - evm interactions', function () {
     expect(candidateState.candidate).equal(alith);
     expect(Number(candidateState.bond)).greaterThanOrEqual(Number(web3.utils.toWei(1000, 'ether')));
 
-    const gas = await staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).estimateGas({ from: baltathar });
+    const gas = await staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).estimateGas({ from: charleth });
     expect(gas).is.ok;
 
     const signedTx = (await web3.eth.accounts.signTransaction({
-      from: baltathar,
+      from: charleth,
       to: STAKING_ADDRESS,
       gas,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
       data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI()
-    }, baltatharPk)).rawTransaction;
+    }, charlethPk)).rawTransaction;
 
     const txHash = await sendTransaction(signedTx);
 
