@@ -45,7 +45,7 @@ parity-scale-codec = { version = "3.2.2", default-features = false, features = [
 scale-info = { version = "2.0", default-features = false, features = [
     "derive",
 ] }
-evm = { git = "https://github.com/rust-blockchain/evm", rev = "b7b82c7e1fc57b7449d6dfa6826600de37cc1e65", default-features = false }
+evm = { git = "https://github.com/bifrost-platform/evm", default-features = false, branch = "bifrost-polkadot-v0.9.43" }
 environmental = { version = "1.1.2", default-features = false }
 clap = { version = "4.0.9", features = ["derive"] }
 hex = { version = "0.4.3", default-features = false }
