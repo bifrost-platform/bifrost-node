@@ -1,7 +1,0 @@
-{
-  "nodeEndpoint": "http://localhost:9944",
-  "testerPk": "0x8075991ce870b93a8870eca0c0f91913d12f47948ca0fd25b49c6fa7cdbeee8b",
-  "tester": "0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0",
-  "tester2": "0x798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc",
-  "validator": "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"
-}
