@@ -55,7 +55,7 @@ impl SubstrateCli for Cli {
 	}
 
 	fn support_url() -> String {
-		"support.anonymous.an".into()
+		env!("CARGO_PKG_HOMEPAGE").into()
 	}
 
 	fn copyright_start_year() -> i32 {

@@ -81,6 +81,7 @@ where
 
 	let mut io = RpcModule::new(());
 	let FullDevDeps {
+		client_version,
 		client,
 		pool,
 		select_chain: _,
@@ -169,7 +170,7 @@ where
 	)
 	.ok();
 
-	io.merge(Web3::new(Arc::clone(&client)).into_rpc()).ok();
+	io.merge(Web3::new(&client_version).into_rpc()).ok();
 
 	if ethapi_cmd.contains(&EthApiCmd::Txpool) {
 		io.merge(TxPool::new(Arc::clone(&client), graph.clone()).into_rpc()).ok();

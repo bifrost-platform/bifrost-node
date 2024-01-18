@@ -632,6 +632,7 @@ pub fn build_rpc_extensions_builder(
 		Some(shared_authority_set.clone()),
 	);
 
+	let client_version = config.impl_version.clone();
 	let client = builder.client.clone();
 	let pool = builder.transaction_pool.clone();
 	let network = builder.network.clone();
@@ -774,6 +775,7 @@ pub fn build_rpc_extensions_builder(
 
 	let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
 		let deps = FullDevDeps {
+			client_version: client_version.clone(),
 			client: client.clone(),
 			pool: pool.clone(),
 			graph: pool.pool().clone(),
