@@ -86,6 +86,8 @@ pub struct GrandpaDeps<B> {
 
 /// Full client dependencies.
 pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
+	/// Client version.
+	pub client_version: String,
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -136,6 +138,8 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 
 /// Mainnet/Testnet client dependencies.
 pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
+	/// Client version.
+	pub client_version: String,
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.

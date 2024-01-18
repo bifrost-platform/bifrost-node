@@ -80,6 +80,7 @@ where
 
 	let mut io = RpcModule::new(());
 	let FullDeps {
+		client_version,
 		client,
 		pool,
 		select_chain: _,
@@ -154,7 +155,7 @@ where
 	)
 	.ok();
 
-	io.merge(Web3::new(Arc::clone(&client)).into_rpc()).ok();
+	io.merge(Web3::new(&client_version).into_rpc()).ok();
 
 	io.merge(
 		EthPubSub::new(
