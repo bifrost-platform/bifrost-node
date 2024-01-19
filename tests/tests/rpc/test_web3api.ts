@@ -6,10 +6,7 @@ import { describeDevNode } from '../set_dev_node';
 describeDevNode('Web3Api Information', (context) => {
   it('should include client version', async function () {
     const version = await context.web3.eth.getNodeInfo();
-    const specName: string = context.polkadotApi.runtimeVersion.specName.toString();
-    const specVersion: string = context.polkadotApi.runtimeVersion.specVersion.toString();
-    const implVersion: string = context.polkadotApi.runtimeVersion.implVersion.toString();
-    const regex = new RegExp(specName + '/v' + specVersion + '.' + implVersion + '/fc-rpc-2.0.0');
+    const regex = new RegExp('^bifrost-node\\/v\\d+\\.\\d+\\.\\d+-[0-9a-f]+\\/[^\\/]+\\/rustc\\d+\\.\\d+\\.\\d+$');
     expect(version).to.be.match(regex);
   });
 
