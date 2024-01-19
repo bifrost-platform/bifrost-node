@@ -151,6 +151,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn initial_selected_relayers)]
 	/// The active relayer set selected at the beginning of the current round. This storage is sorted by address.
+	/// This is used to differentiate with kicked out relayers.
 	pub type InitialSelectedRelayers<T: Config> =
 		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
@@ -168,6 +169,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_selected_relayers)]
 	/// The cached active relayer set selected from the beginning of each previous rounds. This storage is sorted by address.
+	/// This is used to differentiate with kicked out relayers.
 	pub type CachedInitialSelectedRelayers<T: Config> = StorageValue<
 		_,
 		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
@@ -181,7 +183,8 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn initial_majority)]
-	/// The majority of the current active relayer set at the beginning of the current round
+	/// The majority of the current active relayer set at the beginning of the current round.
+	/// This is used to differentiate with kicked out relayers.
 	pub type InitialMajority<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
@@ -193,8 +196,8 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_initial_majority)]
-	/// The cached majority based on the active relayer set selected from the beginning of each
-	/// previous rounds
+	/// The cached majority based on the active relayer set selected from the beginning of each previous rounds.
+	/// This is used to differentiate with kicked out relayers.
 	pub type CachedInitialMajority<T: Config> =
 		StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 

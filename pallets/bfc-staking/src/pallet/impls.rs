@@ -426,48 +426,46 @@ impl<T: Config> Pallet<T> {
 	pub fn handle_delayed_controller_sets(now: RoundIndex) {
 		let delayed_round = now - 1;
 		let controller_sets = <DelayedControllerSets<T>>::take(delayed_round);
-		if !controller_sets.is_empty() {
-			controller_sets.into_iter().for_each(|c| {
-				if let Some(candidate) = Self::candidate_info(&c.old) {
-					// replace `CandidateInfo`
-					<CandidateInfo<T>>::remove(&c.old);
-					<CandidateInfo<T>>::insert(&c.new, candidate.clone());
-					// replace `BondedStash`
-					<BondedStash<T>>::insert(&c.stash, c.new.clone());
-					// replace `CandidatePool`
-					Self::replace_from_candidate_pool(&c.old, &c.new);
-					// replace `SelectedCandidates`
-					if candidate.is_selected {
-						Self::replace_from_selected_candidates(&c.old, &c.new, candidate.tier);
-						T::RelayManager::replace_bonded_controller(c.old.clone(), c.new.clone());
-					}
-					// replace `TopNominations`
-					if let Some(top_nominations) = <TopNominations<T>>::take(&c.old) {
-						Self::replace_nominator_nominations(
-							&top_nominations.nominators(),
-							&c.old,
-							&c.new,
-						);
-						<TopNominations<T>>::insert(&c.new, top_nominations);
-					}
-					// replace `BottomNominations`
-					if let Some(bottom_nominations) = <BottomNominations<T>>::take(&c.old) {
-						Self::replace_nominator_nominations(
-							&bottom_nominations.nominators(),
-							&c.old,
-							&c.new,
-						);
-						<BottomNominations<T>>::insert(&c.new, bottom_nominations);
-					}
-					// replace `AwardedPts`
-					let points = <AwardedPts<T>>::take(now, &c.old);
-					<AwardedPts<T>>::insert(now, &c.new, points);
-					// replace `AtStake`
-					let at_stake = <AtStake<T>>::take(now, &c.old);
-					<AtStake<T>>::insert(now, &c.new, at_stake);
+		controller_sets.into_iter().for_each(|c| {
+			if let Some(candidate) = Self::candidate_info(&c.old) {
+				// replace `CandidateInfo`
+				<CandidateInfo<T>>::remove(&c.old);
+				<CandidateInfo<T>>::insert(&c.new, candidate.clone());
+				// replace `BondedStash`
+				<BondedStash<T>>::insert(&c.stash, c.new.clone());
+				// replace `CandidatePool`
+				Self::replace_from_candidate_pool(&c.old, &c.new);
+				// replace `SelectedCandidates`
+				if candidate.is_selected {
+					Self::replace_from_selected_candidates(&c.old, &c.new, candidate.tier);
+					T::RelayManager::replace_bonded_controller(c.old.clone(), c.new.clone());
 				}
-			});
-		}
+				// replace `TopNominations`
+				if let Some(top_nominations) = <TopNominations<T>>::take(&c.old) {
+					Self::replace_nominator_nominations(
+						&top_nominations.nominators(),
+						&c.old,
+						&c.new,
+					);
+					<TopNominations<T>>::insert(&c.new, top_nominations);
+				}
+				// replace `BottomNominations`
+				if let Some(bottom_nominations) = <BottomNominations<T>>::take(&c.old) {
+					Self::replace_nominator_nominations(
+						&bottom_nominations.nominators(),
+						&c.old,
+						&c.new,
+					);
+					<BottomNominations<T>>::insert(&c.new, bottom_nominations);
+				}
+				// replace `AwardedPts`
+				let points = <AwardedPts<T>>::take(now, &c.old);
+				<AwardedPts<T>>::insert(now, &c.new, points);
+				// replace `AtStake`
+				let at_stake = <AtStake<T>>::take(now, &c.old);
+				<AtStake<T>>::insert(now, &c.new, at_stake);
+			}
+		});
 	}
 
 	/// Mints exactly `amount` native tokens to the `to` account.
@@ -925,6 +923,9 @@ impl<T: Config> Pallet<T> {
 		let mut round = Self::round();
 		round.update_round::<T>(now);
 		let current_round = round.current_round_index;
+		// handle delayed relayer update requests
+		// this must be executed in advance, bc initial and current state should be matched at this moment
+		T::RelayManager::handle_delayed_relayer_sets(current_round);
 		// reset candidate states
 		Pallet::<T>::reset_candidate_states();
 		// pay all stakers for T::RewardPaymentDelay rounds ago
@@ -942,9 +943,10 @@ impl<T: Config> Pallet<T> {
 		// snapshot total stake and storage state
 		<Staked<T>>::insert(current_round, Self::total());
 		<TotalAtStake<T>>::remove(current_round - 1);
-		// handle delayed set requests
+		// handle delayed controller update requests
 		Self::handle_delayed_controller_sets(current_round);
 		Self::handle_delayed_commission_sets(current_round);
+
 		Self::deposit_event(Event::NewRound {
 			starting_block: round.first_round_block,
 			round: current_round,

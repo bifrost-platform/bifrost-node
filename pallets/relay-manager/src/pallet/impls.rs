@@ -187,6 +187,14 @@ where
 			Self::deposit_event(Event::<T>::SomeOffline { offline: offenders.clone() });
 		}
 	}
+
+	fn handle_delayed_relayer_sets(now: RoundIndex) {
+		let delayed_round = now - 1;
+		let relayer_sets = <DelayedRelayerSets<T>>::take(delayed_round);
+		relayer_sets.into_iter().for_each(|r| {
+			Self::replace_bonded_relayer(&r.old, &r.new).expect("Relayer set must success");
+		});
+	}
 }
 
 impl<T: Config> Pallet<T> {
