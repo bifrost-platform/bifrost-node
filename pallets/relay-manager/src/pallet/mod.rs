@@ -1,7 +1,8 @@
 mod impls;
 
 use crate::{
-	migrations, IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence, WeightInfo,
+	migrations, DelayedRelayerSet, IdentificationTuple, Relayer, RelayerMetadata,
+	UnresponsivenessOffence, WeightInfo,
 };
 
 use frame_support::{
@@ -67,6 +68,8 @@ pub mod pallet {
 		RelayerDNE,
 		/// The controller does not exist
 		ControllerDNE,
+		/// A relayer set request does not exist with the target account.
+		RelayerSetDNE,
 		/// Cannot set the value as identical to the previous value
 		NoWritingSameValue,
 		/// Cannot set the value below one
@@ -75,6 +78,10 @@ pub mod pallet {
 		TooManyRelayers,
 		/// SelectedRelayers out of bound
 		TooManySelectedRelayers,
+		/// The given account has already requested a relayer set.
+		AlreadyRelayerSetRequested,
+		/// DelayedRelayerSets out of bound.
+		TooManyDelayedRelayers,
 	}
 
 	#[pallet::event]
@@ -98,6 +105,8 @@ pub mod pallet {
 		HeartbeatOffenceActivationSet { is_active: bool },
 		/// Set the slash fraction for heartbeat offences
 		HeartbeatSlashFractionSet { old: Perbill, new: Perbill },
+		/// Cancel the relayer set.
+		RelayerSetCancelled { relayer: T::AccountId },
 	}
 
 	#[pallet::storage]
@@ -212,6 +221,16 @@ pub mod pallet {
 	/// The slash fraction for heartbeat offences
 	pub type HeartbeatSlashFraction<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn delayed_relayer_sets)]
+	pub type DelayedRelayerSets<T: Config> = StorageMap<
+		_,
+		Twox64Concat,
+		RoundIndex,
+		BoundedVec<DelayedRelayerSet<T::AccountId>, ConstU32<MAX_AUTHORITIES>>,
+		ValueQuery,
+	>;
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
@@ -301,19 +320,37 @@ pub mod pallet {
 		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_relayer())]
 		/// (Re-)set the bonded relayer account. The origin must be the bonded controller account.
-		/// The state reflection will be immediately applied.
+		/// The state reflection will be applied on the next round update.
+		/// - origin should be the controller account
 		pub fn set_relayer(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
 			let old = Self::bonded_controller(&controller).ok_or(Error::<T>::ControllerDNE)?;
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
 			ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
-			ensure!(Self::replace_bonded_relayer(&old, &new)?, Error::<T>::RelayerDNE);
+			ensure!(
+				!Self::is_relayer_set_requested(old.clone()),
+				Error::<T>::AlreadyRelayerSetRequested
+			);
+			Self::add_to_relayer_sets(old.clone(), new.clone())?;
 			Self::deposit_event(Event::RelayerSet { old, new });
 			Ok(().into())
 		}
 
 		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::cancel_relayer_set())]
+		/// Cancel the request for (re-)setting the bonded relayer account.
+		/// - origin should be the controller account.
+		pub fn cancel_relayer_set(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			let controller = ensure_signed(origin)?;
+			let relayer = Self::bonded_controller(&controller).ok_or(Error::<T>::ControllerDNE)?;
+			ensure!(Self::is_relayer_set_requested(controller.clone()), Error::<T>::RelayerSetDNE);
+			Self::remove_relayer_set(&relayer)?;
+			Self::deposit_event(Event::RelayerSetCancelled { relayer });
+			Ok(().into())
+		}
+
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::heartbeat())]
 		/// DEPRECATED, this extrinsic will be removed later on. Please use `heartbeat_v2()`
 		/// instead. Sends a new heartbeat to manage relayer liveness for the current session. The
@@ -334,7 +371,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(5)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::heartbeat_v2())]
 		/// Sends a new heartbeat to manage relayer liveness for the current session. The origin
 		/// must be the registered relayer account, and only the selected relayers can request.

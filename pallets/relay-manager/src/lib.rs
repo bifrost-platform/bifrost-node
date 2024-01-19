@@ -180,3 +180,15 @@ impl<Offender: Clone, T: pallet::pallet::Config> Offence<Offender>
 		<HeartbeatSlashFraction<T>>::get()
 	}
 }
+
+#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+pub struct DelayedRelayerSet<AccountId> {
+	pub old: AccountId,
+	pub new: AccountId,
+}
+
+impl<AccountId: PartialEq + Clone> DelayedRelayerSet<AccountId> {
+	pub fn new(old: AccountId, new: AccountId) -> Self {
+		DelayedRelayerSet { old, new }
+	}
+}
