@@ -1,10 +1,9 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
-use bp_core::*;
-use fc_db::Backend;
-use futures::StreamExt;
+use crate::rpc::create_full;
+
+use futures::{FutureExt, StreamExt};
 use jsonrpsee::RpcModule;
-use sc_network_sync::SyncingService;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use bifrost_common_node::{
@@ -14,26 +13,31 @@ use bifrost_common_node::{
 	tracing::{spawn_tracing_tasks, RpcRequesters},
 };
 
-use crate::rpc::create_full;
-
 use fc_mapping_sync::{kv::MappingSyncWorker, SyncStrategy};
 use fc_rpc::EthTask;
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
 
-use sc_client_api::{BlockBackend, BlockchainEvents};
+use sc_client_api::{Backend, BlockBackend, BlockchainEvents};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 pub use sc_executor::NativeElseWasmExecutor;
 use sc_network::NetworkService;
+use sc_network_sync::SyncingService;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::{
 	error::Error as ServiceError, Configuration, RpcHandlers, SpawnTaskHandle, TaskManager,
 	WarpSyncParams,
 };
 use sc_telemetry::{Telemetry, TelemetryWorker};
+use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 
+use bp_core::*;
 use sp_api::NumberFor;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_runtime::traits::Block as BlockT;
+
+/// The minimum period of blocks on which justifications will be
+/// imported and generated.
+const GRANDPA_JUSTIFICATION_PERIOD: u32 = 512;
 
 /// Testnet runtime executor
 pub mod testnet {
@@ -119,7 +123,7 @@ pub fn new_partial(
 		FullClient,
 		FullBackend,
 		FullSelectChain,
-		sc_consensus::DefaultImportQueue<Block, FullClient>,
+		sc_consensus::DefaultImportQueue<Block>,
 		sc_transaction_pool::FullPool<Block, FullClient>,
 		(
 			sc_consensus_grandpa::GrandpaBlockImport<
@@ -175,6 +179,7 @@ pub fn new_partial(
 
 	let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
 		client.clone(),
+		GRANDPA_JUSTIFICATION_PERIOD,
 		&(client.clone() as Arc<_>),
 		select_chain.clone(),
 		telemetry.as_ref().map(|x| x.handle()),
@@ -261,14 +266,27 @@ pub fn new_full_base(
 			import_queue,
 			block_announce_validator_builder: None,
 			warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
+			block_relay: None,
 		})?;
 
 	if config.offchain_worker.enabled {
-		sc_service::build_offchain_workers(
-			&config,
-			task_manager.spawn_handle(),
-			client.clone(),
-			network.clone(),
+		task_manager.spawn_handle().spawn(
+			"offchain-workers-runner",
+			"offchain-worker",
+			sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
+				runtime_api_provider: client.clone(),
+				is_validator: config.role.is_authority(),
+				keystore: Some(keystore_container.keystore()),
+				offchain_db: backend.offchain_storage(),
+				transaction_pool: Some(OffchainTransactionPoolFactory::new(
+					transaction_pool.clone(),
+				)),
+				network_provider: network.clone(),
+				enable_http_requests: true,
+				custom_extensions: |_| vec![],
+			})
+			.run(client.clone(), task_manager.spawn_handle())
+			.boxed(),
 		);
 	}
 
@@ -365,7 +383,7 @@ pub fn new_full_base(
 
 	let grandpa_config = sc_consensus_grandpa::Config {
 		gossip_duration: Duration::from_millis(333),
-		justification_period: 512,
+		justification_generation_period: GRANDPA_JUSTIFICATION_PERIOD,
 		name: Some(name),
 		observer_enabled: false,
 		keystore,
@@ -384,6 +402,7 @@ pub fn new_full_base(
 			prometheus_registry,
 			shared_voter_state,
 			sync: sync_service.clone(),
+			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
 		};
 
 		task_manager.spawn_essential_handle().spawn_blocking(
@@ -411,6 +430,7 @@ pub fn build_rpc_extensions_builder(
 		Some(shared_authority_set.clone()),
 	);
 
+	let client_version = config.impl_version.clone();
 	let client = builder.client.clone();
 	let pool = builder.transaction_pool.clone();
 	let network = builder.network.clone();
@@ -435,6 +455,19 @@ pub fn build_rpc_extensions_builder(
 		rpc_config.eth_statuses_cache,
 		prometheus_registry.clone(),
 	));
+
+	let slot_duration = sc_consensus_aura::slot_duration(&*client).expect("Slot duration exists");
+	let pending_create_inherent_data_providers = move |_, ()| async move {
+		let current = sp_timestamp::InherentDataProvider::from_system_time();
+		let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
+		let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
+		let slot =
+			sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+				*timestamp,
+				slot_duration,
+			);
+		Ok((slot, timestamp))
+	};
 
 	// Sinks for pubsub notifications.
 	// Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
@@ -473,7 +506,7 @@ pub fn build_rpc_extensions_builder(
 	);
 
 	match frontier_backend.clone() {
-		Backend::KeyValue(b) => {
+		fc_db::Backend::KeyValue(b) => {
 			// Frontier offchain DB task. Essential.
 			// Maps emulated ethereum data to substrate native data.
 			builder.task_manager.spawn_essential_handle().spawn(
@@ -495,7 +528,7 @@ pub fn build_rpc_extensions_builder(
 				.for_each(|()| futures::future::ready(())),
 			);
 		},
-		Backend::Sql(b) => {
+		fc_db::Backend::Sql(b) => {
 			builder.task_manager.spawn_essential_handle().spawn_blocking(
 				"frontier-mapping-sync-worker",
 				Some("frontier"),
@@ -539,6 +572,7 @@ pub fn build_rpc_extensions_builder(
 
 	let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
 		let deps = FullDeps {
+			client_version: client_version.clone(),
 			client: client.clone(),
 			pool: pool.clone(),
 			graph: pool.pool().clone(),
@@ -569,6 +603,7 @@ pub fn build_rpc_extensions_builder(
 			logs_request_timeout: rpc_config.logs_request_timeout,
 			forced_parent_hashes: None,
 			sync_service: sync_service.clone(),
+			pending_create_inherent_data_providers,
 		};
 
 		if ethapi_cmd.contains(&EthApiCmd::Debug) || ethapi_cmd.contains(&EthApiCmd::Trace) {

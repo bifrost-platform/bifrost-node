@@ -8,8 +8,11 @@
 use jsonrpsee::RpcModule;
 use std::sync::Arc;
 
-use bifrost_common_node::{cli_opt::EthApi as EthApiCmd, rpc::TracingConfig};
-use bifrost_mainnet_runtime::{opaque::Block, AccountId, Balance, Index};
+use bifrost_common_node::{
+	cli_opt::EthApi as EthApiCmd,
+	rpc::{DefaultEthConfig, FullDeps, GrandpaDeps, TracingConfig},
+};
+use bifrost_mainnet_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 use sp_api::{CallApiAt, ProvideRuntimeApi};
 use sp_block_builder::BlockBuilder;
@@ -17,18 +20,23 @@ use sp_blockchain::{
 	Backend as BlockchainBackend, Error as BlockChainError, HeaderBackend, HeaderMetadata,
 };
 use sp_consensus::SelectChain;
+use sp_consensus_aura::{sr25519::AuthorityId as AuraId, AuraApi};
+use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::BlakeTwo256;
 
-use bifrost_common_node::rpc::{FullDeps, GrandpaDeps};
-use sc_client_api::backend::{Backend, StateBackend, StorageProvider};
+use fc_rpc::pending::AuraConsensusDataProvider;
+use sc_client_api::{
+	backend::{Backend, StateBackend, StorageProvider},
+	UsageProvider,
+};
 pub use sc_client_api::{AuxStore, BlockOf, BlockchainEvents};
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool::ChainApi;
 use sc_transaction_pool_api::TransactionPool;
 
 /// Instantiate all full RPC extensions.
-pub fn create_full<C, P, BE, SC, A>(
-	deps: FullDeps<C, P, BE, SC, A>,
+pub fn create_full<C, P, BE, SC, A, CIDP>(
+	deps: FullDeps<C, P, BE, SC, A, CIDP>,
 	maybe_tracing_config: Option<TracingConfig>,
 	pubsub_notification_sinks: Arc<
 		fc_mapping_sync::EthereumBlockNotificationSinks<
@@ -41,22 +49,23 @@ where
 	BE::State: StateBackend<BlakeTwo256>,
 	BE::Blockchain: BlockchainBackend<Block>,
 	C: ProvideRuntimeApi<Block>,
-	C: BlockchainEvents<Block>,
+	C: BlockchainEvents<Block> + UsageProvider<Block>,
 	C: StorageProvider<Block, BE>,
 	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError> + 'static,
 	C: CallApiAt<Block>,
 	C: AuxStore,
-	C: StorageProvider<Block, BE>,
 	C: Send + Sync + 'static,
-	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Index>,
+	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
 	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	C::Api: BlockBuilder<Block>,
 	C::Api: fp_rpc::EthereumRuntimeRPCApi<Block>,
 	C::Api: fp_rpc::ConvertTransactionRuntimeApi<Block>,
 	C::Api: fp_rpc_txpool::TxPoolRuntimeApi<Block>,
+	C::Api: AuraApi<Block, AuraId>,
 	P: TransactionPool<Block = Block> + 'static,
 	A: ChainApi<Block = Block> + 'static,
 	SC: SelectChain<Block> + 'static,
+	CIDP: CreateInherentDataProviders<Block, ()> + Send + 'static,
 {
 	use fc_rpc::{
 		Eth, EthApiServer, EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, Net,
@@ -71,6 +80,7 @@ where
 
 	let mut io = RpcModule::new(());
 	let FullDeps {
+		client_version,
 		client,
 		pool,
 		select_chain: _,
@@ -92,6 +102,7 @@ where
 		logs_request_timeout,
 		forced_parent_hashes,
 		sync_service,
+		pending_create_inherent_data_providers,
 	} = deps;
 
 	let GrandpaDeps {
@@ -122,7 +133,7 @@ where
 		EthFilter::new(
 			client.clone(),
 			frontier_backend.clone(),
-			fc_rpc::TxPool::new(client.clone(), graph.clone()),
+			graph.clone(),
 			filter_pool,
 			500_usize, // max stored filters
 			max_past_logs,
@@ -157,7 +168,7 @@ where
 	)
 	.ok();
 
-	io.merge(Web3::new(Arc::clone(&client)).into_rpc()).ok();
+	io.merge(Web3::new(&client_version).into_rpc()).ok();
 
 	if ethapi_cmd.contains(&EthApiCmd::Txpool) {
 		io.merge(TxPool::new(Arc::clone(&client), graph.clone()).into_rpc()).ok();
@@ -178,7 +189,7 @@ where
 	let convert_transaction: Option<Never> = None;
 
 	io.merge(
-		Eth::new(
+		Eth::<_, _, _, _, _, _, _, DefaultEthConfig<C, BE>>::new(
 			Arc::clone(&client),
 			Arc::clone(&pool),
 			graph.clone(),
@@ -186,14 +197,17 @@ where
 			Arc::clone(&sync_service),
 			signers,
 			Arc::clone(&overrides),
-			Arc::clone(&frontier_backend),
+			frontier_backend.clone(),
 			is_authority,
 			Arc::clone(&block_data_cache),
 			fee_history_cache,
 			fee_history_limit,
 			10,
 			forced_parent_hashes,
+			pending_create_inherent_data_providers,
+			Some(Box::new(AuraConsensusDataProvider::new(client.clone()))),
 		)
+		.replace_config::<DefaultEthConfig<C, BE>>()
 		.into_rpc(),
 	)
 	.ok();

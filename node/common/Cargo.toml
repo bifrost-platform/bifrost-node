@@ -1,7 +1,7 @@
 [package]
 name = "bifrost-common-node"
 version = "1.0.0"
-description = "The common code shared between node specifications for Bifrost Node"
+description = "The common code shared between client implementations for Bifrost"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
@@ -27,6 +27,9 @@ sc-network-sync = { workspace = true }
 sc-service = { workspace = true }
 substrate-prometheus-endpoint = { workspace = true }
 
+# benchmarking dependencies
+frame-benchmarking = { workspace = true, features = ["std"] }
+
 # substrate primitives dependencies
 sp-core = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
@@ -36,6 +39,7 @@ sp-block-builder = { workspace = true, features = ["std"] }
 
 # Frontier dependencies
 fc-db = { workspace = true }
+fc-api = { workspace = true }
 fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate"] }
 fc-rpc-core = { workspace = true }
 fp-rpc-debug = { workspace = true }
@@ -43,6 +47,7 @@ fp-storage = { workspace = true }
 fp-rpc = { workspace = true }
 fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }
+fp-ext = { workspace = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }

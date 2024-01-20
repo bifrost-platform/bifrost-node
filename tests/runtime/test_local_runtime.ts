@@ -1,16 +1,23 @@
+import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 import { describe } from 'mocha';
 import Web3, { TransactionReceiptAPI } from 'web3';
 
-import { ApiPromise, HttpProvider } from '@polkadot/api';
+import { ApiPromise, HttpProvider, Keyring } from '@polkadot/api';
 
+import {
+  AMOUNT_FACTOR, MIN_NOMINATOR_STAKING_AMOUNT
+} from '../constants/currency';
 import { DEMO_ABI, DEMO_BYTE_CODE } from '../constants/demo_contract';
 import { ERC20_ABI, ERC20_BYTE_CODE } from '../constants/ERC20';
 import { TEST_CONTROLLERS } from '../constants/keys';
 import { STAKING_ABI, STAKING_ADDRESS } from '../constants/staking_contract';
 import { sleep } from '../tests/utils';
 
-const web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:9944'));
+import type { SubmittableExtrinsic } from '@polkadot/api/promise/types';
+
+const node_endpoint = 'http://localhost:9944';
+const web3 = new Web3(new Web3.providers.HttpProvider(node_endpoint));
 
 const alithPk = TEST_CONTROLLERS[0].private;
 const alith = web3.eth.accounts.wallet.add(alithPk)[0].address;
@@ -31,7 +38,7 @@ const deployDemo = async (deployTx: any): Promise<TransactionReceiptAPI | undefi
   const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
   expect(txHash).is.ok;
 
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt?.status).equal('0x1');
@@ -45,7 +52,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
   expect(txHash).is.ok;
 
   // get transaction receipt
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt!.status).equal('0x1');
@@ -67,8 +74,15 @@ const createErc20Transfer = async (): Promise<string> => {
   }, alithPk)).rawTransaction;
 };
 
-describe('runtime_upgrade - evm interactions', function () {
+describe('test_runtime - evm interactions', function () {
   this.timeout(20000);
+
+  let api: ApiPromise;
+  const keyring = new Keyring({ type: 'ethereum' });
+
+  before('should initialize api', async function () {
+    api = await ApiPromise.create({ provider: new HttpProvider(node_endpoint), noInitWarn: true });
+  });
 
   it('should successfully send transaction - legacy', async function () {
     const signedTx = (await web3.eth.accounts.signTransaction({
@@ -117,7 +131,10 @@ describe('runtime_upgrade - evm interactions', function () {
       data: contract.methods.store(1).encodeABI()
     }, alithPk)).rawTransaction;
 
-    await sendTransaction(signedTx_2);
+    const txHash = await sendTransaction(signedTx_2);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
 
     // call contract methods
     const response = await contract.methods.retrieve().call();
@@ -147,11 +164,43 @@ describe('runtime_upgrade - evm interactions', function () {
       data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI()
     }, baltatharPk)).rawTransaction;
 
-    await sendTransaction(signedTx);
+    const txHash = await sendTransaction(signedTx);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
+  });
+
+  it('should consistently maintain substrate and evm balances', async function () {
+    const baltatharSubKey = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+
+    // now note a preimage
+    const xt = api.tx.bfcStaking.setMaxFullSelected(20);
+    const encodedProposal = (xt as SubmittableExtrinsic)?.method.toHex() || '';
+
+    await api.tx.preimage
+      .notePreimage(encodedProposal)
+      .signAndSend(baltatharSubKey, { nonce: -1 });
+
+    await sleep(6000);
+
+    await api.tx.democracy.delegate(alith, 1, AMOUNT_FACTOR).signAndSend(baltatharSubKey, { nonce: -1 });
+
+    await sleep(6000);
+
+    const rawBalanceSub: any = (await api.query.system.account(baltatharSubKey.address)).toJSON().data;
+
+    expect(rawBalanceSub.free).exist;
+    expect(rawBalanceSub.frozen).exist;
+    expect(rawBalanceSub.reserved).exist;
+
+    const balanceSub = new BigNumber(rawBalanceSub.free).minus(rawBalanceSub.frozen);
+    const balanceEvm = new BigNumber((await web3.eth.getBalance(baltathar)).toString());
+
+    expect(balanceSub.toFixed()).equal(balanceEvm.toFixed());
   });
 });
 
-describe('runtime_upgrade - ethapi', function () {
+describe('test_runtime - ethapi', function () {
   this.timeout(20000);
 
   it('should successfully request eth namespace methods', async function () {
@@ -234,13 +283,14 @@ describe('runtime_upgrade - ethapi', function () {
   });
 });
 
-describe('runtime_upgrade - pallet interactions', function () {
+describe('test_runtime - pallet interactions', function () {
   this.timeout(20000);
 
   let api: ApiPromise;
+  const keyring = new Keyring({ type: 'ethereum' });
 
   before('should initialize api', async function () {
-    api = await ApiPromise.create({ provider: new HttpProvider('http://localhost:9944'), noInitWarn: true });
+    api = await ApiPromise.create({ provider: new HttpProvider(node_endpoint), noInitWarn: true });
   });
 
   it('should have correct validator information', async function () {
@@ -267,5 +317,22 @@ describe('runtime_upgrade - pallet interactions', function () {
     const relayerState = rawRelayerState.unwrap().toJSON();
     expect(relayerState).is.ok;
     expect(relayerState.controller).equal(alith);
+  });
+
+  it('should successfully send pallet extrinsics', async function () {
+    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+    const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
+
+    await api.tx.bfcStaking
+      .nominate(alith, stake.toFixed(), 10, 10)
+      .signAndSend(charleth);
+
+    await sleep(6000);
+
+    const rawNominatorState: any = await api.query.bfcStaking.nominatorState(charleth.address);
+    const nominatorState = rawNominatorState.unwrap().toJSON();
+
+    expect(nominatorState.nominations).has.key(alith);
+    expect(parseInt(nominatorState.nominations[alith].toString(), 16).toString()).equal(stake.toFixed());
   });
 });

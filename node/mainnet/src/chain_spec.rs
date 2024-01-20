@@ -15,7 +15,7 @@ use sp_runtime::{BoundedVec, Perbill};
 use hex_literal::hex;
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
-pub type ChainSpec = sc_service::GenericChainSpec<mainnet::GenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec<mainnet::RuntimeGenesisConfig>;
 
 /// Generate a crypto pair from key.
 pub fn inspect_key<TPublic: Public>(key: &str) -> <TPublic::Pair as Pair>::Public {
@@ -111,7 +111,6 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 					// Relayer accounts
 					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
 				],
-				true,
 			)
 		},
 		// Bootnodes
@@ -149,17 +148,12 @@ fn mainnet_genesis(
 	initial_tech_committee_members: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	_enable_println: bool,
-) -> mainnet::GenesisConfig {
-	// This is the simplest bytecode to revert without returning any data.
-	// We will pre-deploy it under all of our precompiles to ensure they can be called from
-	// within contracts.
-	// (PUSH1 0x00 PUSH1 0x00 REVERT)
-	let _revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
-	mainnet::GenesisConfig {
+) -> mainnet::RuntimeGenesisConfig {
+	mainnet::RuntimeGenesisConfig {
 		system: mainnet::SystemConfig {
 			// Add Wasm runtime to storage.
 			code: wasm_binary.to_vec(),
+			..Default::default()
 		},
 		balances: mainnet::BalancesConfig {
 			balances: endowed_accounts.iter().cloned().map(|k| (k, 10_000_000 * BFC)).collect(),

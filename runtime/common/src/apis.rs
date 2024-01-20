@@ -195,43 +195,20 @@ macro_rules! impl_common_runtime_apis {
 						None
 					};
 
-					let is_transactional = false;
-					let validate = true;
-					let evm_config = config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config());
-
-					let mut estimated_transaction_len = data.len() +
-						20 + // to
-						20 + // from
-						32 + // value
-						32 + // gas_limit
-						32 + // nonce
-						1 + // TransactionAction
-						8 + // chain id
-						65; // signature
-
-					if max_fee_per_gas.is_some() {
-						estimated_transaction_len += 32;
-					}
-					if max_priority_fee_per_gas.is_some() {
-						estimated_transaction_len += 32;
-					}
-					if access_list.is_some() {
-						estimated_transaction_len += access_list.encoded_size();
-					}
-
-					let gas_limit = gas_limit.min(u64::MAX.into()).low_u64();
-					let without_base_extrinsic_weight = true;
-
-					let (weight_limit, proof_size_base_cost) =
-						match <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
-							gas_limit,
-							without_base_extrinsic_weight
-						) {
-							weight_limit if weight_limit.proof_size() > 0 => {
-								(Some(weight_limit), Some(estimated_transaction_len as u64))
-							}
-							_ => (None, None),
-						};
+					let gas_limit = gas_limit.min(u64::MAX.into());
+					let transaction_data = TransactionData::new(
+						TransactionAction::Call(to),
+						data.clone(),
+						nonce.unwrap_or_default(),
+						gas_limit,
+						None,
+						max_fee_per_gas,
+						max_priority_fee_per_gas,
+						value,
+						Some(<Runtime as pallet_evm::Config>::ChainId::get()),
+						access_list.clone().unwrap_or_default(),
+					);
+					let (weight_limit, proof_size_base_cost) = pallet_ethereum::Pallet::<Runtime>::transaction_weight(&transaction_data);
 
 					<Runtime as pallet_evm::Config>::Runner::call(
 						from,
@@ -243,11 +220,11 @@ macro_rules! impl_common_runtime_apis {
 						max_priority_fee_per_gas,
 						nonce,
 						access_list.unwrap_or_default(),
-						is_transactional,
-						validate,
+						false,
+						true,
 						weight_limit,
 						proof_size_base_cost,
-						evm_config,
+						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
 					).map_err(|err| err.error.into())
 				}
 				fn create(
@@ -269,46 +246,19 @@ macro_rules! impl_common_runtime_apis {
 						None
 					};
 
-					let is_transactional = false;
-					let validate = true;
-					let evm_config = config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config());
-
-					let mut estimated_transaction_len = data.len() +
-						20 + // from
-						32 + // value
-						32 + // gas_limit
-						32 + // nonce
-						1 + // TransactionAction
-						8 + // chain id
-						65; // signature
-
-					if max_fee_per_gas.is_some() {
-						estimated_transaction_len += 32;
-					}
-					if max_priority_fee_per_gas.is_some() {
-						estimated_transaction_len += 32;
-					}
-					if access_list.is_some() {
-						estimated_transaction_len += access_list.encoded_size();
-					}
-
-					let gas_limit = if gas_limit > U256::from(u64::MAX) {
-						u64::MAX
-					} else {
-						gas_limit.low_u64()
-					};
-					let without_base_extrinsic_weight = true;
-
-					let (weight_limit, proof_size_base_cost) =
-						match <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
-							gas_limit,
-							without_base_extrinsic_weight
-						) {
-							weight_limit if weight_limit.proof_size() > 0 => {
-								(Some(weight_limit), Some(estimated_transaction_len as u64))
-							}
-							_ => (None, None),
-						};
+					let transaction_data = TransactionData::new(
+						TransactionAction::Create,
+						data.clone(),
+						nonce.unwrap_or_default(),
+						gas_limit,
+						None,
+						max_fee_per_gas,
+						max_priority_fee_per_gas,
+						value,
+						Some(<Runtime as pallet_evm::Config>::ChainId::get()),
+						access_list.clone().unwrap_or_default(),
+					);
+					let (weight_limit, proof_size_base_cost) = pallet_ethereum::Pallet::<Runtime>::transaction_weight(&transaction_data);
 
 					<Runtime as pallet_evm::Config>::Runner::create(
 						from,
@@ -319,11 +269,11 @@ macro_rules! impl_common_runtime_apis {
 						max_priority_fee_per_gas,
 						nonce,
 						access_list.unwrap_or_default(),
-						is_transactional,
-						validate,
+						false,
+						true,
 						weight_limit,
 						proof_size_base_cost,
-						evm_config,
+						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
 					).map_err(|err| err.error.into())
 				}
 				fn current_transaction_statuses() -> Option<Vec<TransactionStatus>> {
@@ -423,8 +373,8 @@ macro_rules! impl_common_runtime_apis {
 					None
 				}
 			}
-			impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
-				fn account_nonce(account: AccountId) -> Index {
+			impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
+				fn account_nonce(account: AccountId) -> Nonce {
 					System::account_nonce(account)
 				}
 			}
@@ -487,6 +437,15 @@ macro_rules! impl_common_runtime_apis {
 					let params = (&config, &whitelist);
 					add_benchmarks!(params, batches);
 					Ok(batches)
+				}
+			}
+			impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
+				fn create_default_config() -> Vec<u8> {
+					create_default_config::<RuntimeGenesisConfig>()
+				}
+
+				fn build_config(config: Vec<u8>) -> sp_genesis_builder::Result {
+					build_config::<RuntimeGenesisConfig>(config)
 				}
 			}
 		}

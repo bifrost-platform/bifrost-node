@@ -1,11 +1,13 @@
 use super::*;
-use frame_support::{dispatch::Weight, pallet_prelude::*, storage_alias, traits::OnRuntimeUpgrade};
+use frame_support::{pallet_prelude::*, storage_alias, traits::OnRuntimeUpgrade};
 
 #[storage_alias]
 pub type StorageVersion<T: Config> = StorageValue<Pallet<T>, Releases, ValueQuery>;
 
 pub mod v3 {
 	use super::*;
+	use frame_support::pallet_prelude::Weight;
+
 	#[cfg(feature = "try-runtime")]
 	use sp_runtime::TryRuntimeError;
 

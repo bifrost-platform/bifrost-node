@@ -6,6 +6,7 @@ use crate::{
 	RoundIndex, TierType, TotalSnapshot, ValidatorSnapshot, ValidatorSnapshotOf,
 };
 
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_session::ShouldEndSession;
 
 use bp_staking::{
@@ -710,7 +711,7 @@ impl<T: Config> Pallet<T> {
 
 		if let Some(mut state) = Self::candidate_info(author) {
 			// rounds current block increases after block authoring
-			state.set_last_block(current_block + T::BlockNumber::from(1u32));
+			state.set_last_block(current_block + BlockNumberFor::<T>::from(1u32));
 			state.increment_blocks_produced();
 			<CandidateInfo<T>>::insert(author, state);
 		}
@@ -916,7 +917,7 @@ impl<T: Config> Pallet<T> {
 	/// Update to the new round. This method will refresh the candidate states and some other
 	/// metadata, and will also apply the new top candidates selected for the new round.
 	pub fn new_round(
-		now: T::BlockNumber,
+		now: BlockNumberFor<T>,
 		full_validators: Vec<T::AccountId>,
 		basic_validators: Vec<T::AccountId>,
 	) {
@@ -953,7 +954,7 @@ impl<T: Config> Pallet<T> {
 	}
 }
 
-impl<T> pallet_authorship::EventHandler<T::AccountId, T::BlockNumber> for Pallet<T>
+impl<T> pallet_authorship::EventHandler<T::AccountId, BlockNumberFor<T>> for Pallet<T>
 where
 	T: Config + pallet_authorship::Config + pallet_session::Config,
 	T: pallet_session::Config<ValidatorId = <T as frame_system::Config>::AccountId>,
@@ -1038,31 +1039,33 @@ where
 	fn start_session(_start_index: SessionIndex) {}
 }
 
-impl<T: Config> ShouldEndSession<T::BlockNumber> for Pallet<T> {
-	fn should_end_session(now: T::BlockNumber) -> bool {
+impl<T: Config> ShouldEndSession<BlockNumberFor<T>> for Pallet<T> {
+	fn should_end_session(now: BlockNumberFor<T>) -> bool {
 		let round = Self::round();
 		// always update when a new round should start
 		round.should_update(now)
 	}
 }
 
-impl<T: Config> EstimateNextSessionRotation<T::BlockNumber> for Pallet<T> {
-	fn average_session_length() -> T::BlockNumber {
+impl<T: Config> EstimateNextSessionRotation<BlockNumberFor<T>> for Pallet<T> {
+	fn average_session_length() -> BlockNumberFor<T> {
 		let session_period = T::DefaultBlocksPerSession::get();
-		T::BlockNumber::from(session_period)
+		BlockNumberFor::<T>::from(session_period)
 	}
 
-	fn estimate_current_session_progress(now: T::BlockNumber) -> (Option<Permill>, Weight) {
+	fn estimate_current_session_progress(now: BlockNumberFor<T>) -> (Option<Permill>, Weight) {
 		let session_period = T::DefaultBlocksPerSession::get();
-		let passed_blocks = now % T::BlockNumber::from(session_period);
+		let passed_blocks = now % BlockNumberFor::<T>::from(session_period);
 		(
-			Some(Permill::from_rational(passed_blocks, T::BlockNumber::from(session_period))),
+			Some(Permill::from_rational(passed_blocks, BlockNumberFor::<T>::from(session_period))),
 			// One read for the round info, blocknumber is read free
 			T::DbWeight::get().reads(1),
 		)
 	}
 
-	fn estimate_next_session_rotation(_now: T::BlockNumber) -> (Option<T::BlockNumber>, Weight) {
+	fn estimate_next_session_rotation(
+		_now: BlockNumberFor<T>,
+	) -> (Option<BlockNumberFor<T>>, Weight) {
 		let round = Self::round();
 
 		(

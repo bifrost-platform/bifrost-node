@@ -6,20 +6,18 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
-pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Index, Signature};
-use parity_scale_codec::{Decode, Encode};
-
 pub use bifrost_mainnet_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
 	time::*,
 };
 
+pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{crypto::KeyTypeId, ConstU64, OpaqueMetadata, H160, H256, U256};
+use sp_core::{crypto::KeyTypeId, ConstBool, ConstU64, OpaqueMetadata, H160, H256, U256};
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
@@ -35,7 +33,6 @@ use sp_runtime::{
 };
 pub use sp_runtime::{Perbill, Percent, Permill};
 use sp_std::prelude::*;
-
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
@@ -44,29 +41,34 @@ pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
+	TransactionAction, TransactionData,
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
+	FeeCalculator, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
+use pallet_identity::simple::IdentityInfo;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
-use pallet_session::historical::{self as pallet_session_historical};
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
+
+use parity_scale_codec::{Decode, Encode};
 
 pub use frame_support::{
 	construct_runtime,
 	dispatch::{DispatchClass, GetDispatchInfo},
-	log,
+	genesis_builder_helper::{build_config, create_default_config},
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{
+		fungible::HoldConsideration,
+		tokens::{PayFromAccount, UnityAssetBalanceConversion},
 		ConstU128, ConstU32, ConstU8, Contains, Currency, EitherOfDiverse, EqualPrivilegeOnly,
-		FindAuthor, Imbalance, KeyOwnerProofSystem, LockIdentifier, NeverEnsureOrigin, OnFinalize,
-		OnUnbalanced, Randomness, StorageInfo, U128CurrencyToVote,
+		FindAuthor, Imbalance, KeyOwnerProofSystem, LinearStoragePrice, LockIdentifier,
+		NeverEnsureOrigin, OnFinalize, OnUnbalanced, Randomness, StorageInfo,
 	},
 	weights::{
 		constants::{
@@ -180,6 +182,8 @@ parameter_types! {
 impl frame_system::Config for Runtime {
 	/// The basic call filter to use in dispatchable.
 	type BaseCallFilter = frame_support::traits::Everything;
+	/// The block type for the runtime.
+	type Block = Block;
 	/// Block & extrinsics weights: base values and limits.
 	type BlockWeights = BlockWeights;
 	/// The maximum length of a block (in bytes).
@@ -191,15 +195,11 @@ impl frame_system::Config for Runtime {
 	/// The lookup mechanism to get the account ID from whatever is passed in dispatchers.
 	type Lookup = IdentityLookup<AccountId>;
 	/// The index type for storing how many extrinsics an account has signed.
-	type Index = Index;
-	/// The index type for blocks.
-	type BlockNumber = BlockNumber;
+	type Nonce = Nonce;
 	/// The type for hashing blocks and tries.
 	type Hash = Hash;
 	/// The hashing algorithm used.
 	type Hashing = BlakeTwo256;
-	/// The header type.
-	type Header = generic::Header<BlockNumber, BlakeTwo256>;
 	/// The ubiquitous event type.
 	type RuntimeEvent = RuntimeEvent;
 	/// The ubiquitous origin type.
@@ -237,6 +237,7 @@ impl pallet_aura::Config for Runtime {
 	type AuthorityId = AuraId;
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
+	type AllowMultipleBlocksPerSlot = ConstBool<false>;
 }
 
 /// Provides the GRANDPA block finality gadget.
@@ -246,6 +247,7 @@ impl pallet_grandpa::Config for Runtime {
 	type EquivocationReportSystem = ();
 	type WeightInfo = ();
 	type MaxAuthorities = MaxAuthorities;
+	type MaxNominators = ConstU32<150>;
 	type MaxSetIdSessionEntries = ConstU64<0>;
 }
 
@@ -274,8 +276,9 @@ impl pallet_balances::Config for Runtime {
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
-	type HoldIdentifier = ();
-	type MaxHolds = ();
+	type MaxHolds = ConstU32<1>;
+	type RuntimeHoldReason = RuntimeHoldReason;
+	type RuntimeFreezeReason = ();
 }
 
 pub struct DealWithFees<R>(sp_std::marker::PhantomData<R>);
@@ -377,7 +380,6 @@ parameter_types! {
 	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
 	pub const MaxKeys: u32 = 10_000;
 	pub const MaxPeerInHeartbeats: u32 = 10_000;
-	pub const MaxPeerDataEncodingSize: u32 = 1_000;
 	pub const DefaultSlashFraction: Perbill = Perbill::from_parts(1000000);
 }
 
@@ -400,7 +402,6 @@ impl pallet_im_online::Config for Runtime {
 	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
 	type MaxKeys = MaxKeys;
 	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-	type MaxPeerDataEncodingSize = MaxPeerDataEncodingSize;
 	type DefaultSlashFraction = DefaultSlashFraction;
 }
 
@@ -524,7 +525,6 @@ parameter_types! {
 	pub const MaxProposals: u32 = 1_000;
 	pub const MaxDeposits: u32 = 1_000;
 	pub const MaxBlacklisted: u32 = 1_000;
-	pub const PreimageByteDeposit: Balance = STORAGE_BYTE_FEE;
 	pub const InstantAllowed: bool = true;
 }
 
@@ -582,8 +582,9 @@ impl pallet_democracy::Config for Runtime {
 }
 
 parameter_types! {
-	pub const BaseDeposit: Balance = 5 * SUPPLY_FACTOR * BFC;
-	pub const ByteDeposit: Balance = STORAGE_BYTE_FEE;
+	pub const PreimageBaseDeposit: Balance = 5 * SUPPLY_FACTOR * BFC;
+	pub const PreimageByteDeposit: Balance = STORAGE_BYTE_FEE;
+	pub const PreimageHoldReason: RuntimeHoldReason = RuntimeHoldReason::Preimage(pallet_preimage::HoldReason::Preimage);
 }
 
 impl pallet_preimage::Config for Runtime {
@@ -591,8 +592,12 @@ impl pallet_preimage::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type ManagerOrigin = EnsureRoot<AccountId>;
-	type BaseDeposit = BaseDeposit;
-	type ByteDeposit = ByteDeposit;
+	type Consideration = HoldConsideration<
+		AccountId,
+		Balances,
+		PreimageHoldReason,
+		LinearStoragePrice<PreimageBaseDeposit, PreimageByteDeposit, Balance>,
+	>;
 }
 
 parameter_types! {
@@ -601,6 +606,7 @@ parameter_types! {
 	pub const SpendPeriod: BlockNumber = 14 * DAYS;
 	pub const TreasuryPalletId: PalletId = PalletId(*b"py/trsry");
 	pub const MaxApprovals: u32 = 1_000;
+	pub TreasuryAccount: AccountId = Treasury::account_id();
 }
 
 /// A module that manages funds stored in a certain vault
@@ -627,6 +633,14 @@ impl pallet_treasury::Config for Runtime {
 	type SpendFunds = ();
 	type MaxApprovals = MaxApprovals;
 	type SpendOrigin = NeverEnsureOrigin<Balance>;
+	type AssetKind = ();
+	type Beneficiary = AccountId;
+	type BeneficiaryLookup = IdentityLookup<AccountId>;
+	type Paymaster = PayFromAccount<Balances, TreasuryAccount>;
+	type BalanceConverter = UnityAssetBalanceConversion;
+	type PayoutPeriod = ConstU32<0>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = BenchmarkHelper;
 }
 
 parameter_types! {
@@ -647,6 +661,7 @@ impl pallet_identity::Config for Runtime {
 	type SubAccountDeposit = SubAccountDeposit;
 	type MaxSubAccounts = MaxSubAccounts;
 	type MaxAdditionalFields = MaxAdditionalFields;
+	type IdentityInformation = IdentityInfo<MaxAdditionalFields>;
 	type MaxRegistrars = MaxRegistrars;
 	type Slashed = Treasury;
 	type ForceOrigin = EnsureRoot<AccountId>;
@@ -864,6 +879,7 @@ impl pallet_evm::Config for Runtime {
 	type PrecompilesValue = PrecompilesValue;
 	type OnCreate = ();
 	type GasLimitPovSizeRatio = GasLimitPovSizeRatio;
+	type SuicideQuickClearLimit = ConstU32<0>;
 	type Timestamp = Timestamp;
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
@@ -908,13 +924,9 @@ impl pallet_base_fee::Config for Runtime {
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
-	pub enum Runtime where
-		Block = Block,
-		NodeBlock = opaque::Block,
-		UncheckedExtrinsic = UncheckedExtrinsic
-	{
+	pub struct Runtime {
 		// System
-		System: frame_system::{Pallet, Call, Storage, Config, Event<T>} = 0,
+		System: frame_system::{Pallet, Call, Storage, Config<T>, Event<T>} = 0,
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent} = 2,
 
 		// Block
@@ -923,28 +935,28 @@ construct_runtime!(
 		// Consensus
 		Authorship: pallet_authorship::{Pallet, Storage} = 4,
 		Session: pallet_session::{Pallet, Call, Storage, Config<T>, Event} = 5,
-		Historical: pallet_session_historical::{Pallet} = 6,
+		Historical: pallet_session::historical::{Pallet} = 6,
 		Offences: pallet_offences::{Pallet, Storage, Event} = 7,
 		ImOnline: pallet_im_online::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event<T>} = 8,
-		Grandpa: pallet_grandpa::{Pallet, Call, Storage, ValidateUnsigned, Config, Event} = 9,
+		Grandpa: pallet_grandpa::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event} = 9,
 
 		// Monetary
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 10,
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config, Event<T>} = 11,
+		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config<T>, Event<T>} = 11,
 
 		// Staking
-		RelayManager: pallet_relay_manager::{Pallet, Call, Storage, Config, Event<T>} = 20,
+		RelayManager: pallet_relay_manager::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
 		BfcStaking: pallet_bfc_staking::{Pallet, Call, Storage, Config<T>, Event<T>} = 21,
-		BfcUtility: pallet_bfc_utility::{Pallet, Call, Storage, Config, Event<T>} = 22,
-		BfcOffences: pallet_bfc_offences::{Pallet, Call, Storage, Config, Event<T>} = 23,
+		BfcUtility: pallet_bfc_utility::{Pallet, Call, Storage, Config<T>, Event<T>} = 22,
+		BfcOffences: pallet_bfc_offences::{Pallet, Call, Storage, Config<T>, Event<T>} = 23,
 
 		// Utility
 		Utility: pallet_utility::{Pallet, Call, Event} = 30,
 		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>} = 31,
 
 		// Ethereum
-		EVM: pallet_evm::{Pallet, Config, Call, Storage, Event<T>} = 40,
-		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin, Config} = 41,
+		EVM: pallet_evm::{Pallet, Config<T>, Call, Storage, Event<T>} = 40,
+		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin, Config<T>} = 41,
 		BaseFee: pallet_base_fee::{Pallet, Call, Storage, Config<T>, Event} = 42,
 
 		// Governance
@@ -954,8 +966,8 @@ construct_runtime!(
 		TechnicalCommittee: pallet_collective::<Instance2>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 53,
 		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
 		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
-		Treasury: pallet_treasury::{Pallet, Call, Storage, Config, Event<T>} = 56,
-		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>} = 57,
+		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
+		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>, HoldReason} = 57,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,

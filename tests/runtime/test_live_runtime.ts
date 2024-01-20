@@ -1,9 +1,11 @@
+import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 import { describe } from 'mocha';
 import Web3, { TransactionReceiptAPI } from 'web3';
 
-import { ApiPromise, HttpProvider } from '@polkadot/api';
+import { ApiPromise, HttpProvider, Keyring } from '@polkadot/api';
 
+import { MIN_NOMINATOR_STAKING_AMOUNT } from '../constants/currency';
 import { DEMO_ABI, DEMO_BYTE_CODE } from '../constants/demo_contract';
 import { ERC20_ABI, ERC20_BYTE_CODE } from '../constants/ERC20';
 import { STAKING_ABI, STAKING_ADDRESS } from '../constants/staking_contract';
@@ -11,7 +13,6 @@ import { sleep } from '../tests/utils';
 import config from './config.json';
 
 const node_endpoint = config.nodeEndpoint;
-
 const web3 = new Web3(new Web3.providers.HttpProvider(node_endpoint));
 
 const testerPk = config.testerPk;
@@ -69,7 +70,7 @@ const createErc20Transfer = async (): Promise<string> => {
   }, testerPk)).rawTransaction;
 };
 
-describe('runtime_upgrade - evm interactions', function () {
+describe('test_runtime - evm interactions', function () {
   this.timeout(20000);
 
   it('should successfully send transaction - legacy', async function () {
@@ -119,7 +120,10 @@ describe('runtime_upgrade - evm interactions', function () {
       data: contract.methods.store(1).encodeABI()
     }, testerPk)).rawTransaction;
 
-    await sendTransaction(signedTx_2);
+    const txHash = await sendTransaction(signedTx_2);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
 
     // call contract methods
     const response = await contract.methods.retrieve().call();
@@ -148,11 +152,14 @@ describe('runtime_upgrade - evm interactions', function () {
       data: staking.methods.nominator_bond_more(validator, web3.utils.toWei(0.01, 'ether')).encodeABI()
     }, testerPk)).rawTransaction;
 
-    await sendTransaction(signedTx);
+    const txHash = await sendTransaction(signedTx);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
   });
 });
 
-describe('runtime_upgrade - ethapi', function () {
+describe('test_runtime - ethapi', function () {
   this.timeout(20000);
 
   it('should successfully request eth namespace methods', async function () {
@@ -235,10 +242,11 @@ describe('runtime_upgrade - ethapi', function () {
   });
 });
 
-describe('runtime_upgrade - pallet interactions', function () {
+describe('test_runtime - pallet interactions', function () {
   this.timeout(20000);
 
   let api: ApiPromise;
+  const keyring = new Keyring({ type: 'ethereum' });
 
   before('should initialize api', async function () {
     api = await ApiPromise.create({ provider: new HttpProvider(node_endpoint), noInitWarn: true });
@@ -268,5 +276,22 @@ describe('runtime_upgrade - pallet interactions', function () {
     const relayerState = rawRelayerState.unwrap().toJSON();
     expect(relayerState).is.ok;
     expect(relayerState.controller).equal(validator);
+  });
+
+  it('should successfully send pallet extrinsics', async function () {
+    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+    const testerSub = keyring.addFromUri(testerPk);
+
+    await api.tx.bfcStaking
+      .nominatorBondMore(validator, stake.toFixed())
+      .signAndSend(testerSub);
+
+    await sleep(4000);
+
+    const rawNominatorState: any = await api.query.bfcStaking.nominatorState(testerSub.address);
+    const nominatorState = rawNominatorState.unwrap();
+
+    expect(nominatorState.nominations[0].owner.toString().toLowerCase()).equal(validator.toLowerCase());
+    expect(new BigNumber(nominatorState.nominations[0].amount.toString()).isGreaterThan(stake)).is.true;
   });
 });

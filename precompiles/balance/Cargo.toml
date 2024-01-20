@@ -3,7 +3,7 @@ name = "precompile-balance"
 version = "1.0.0"
 description = "A precompile that creates pallet balance accessible to pallet-evm"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -26,7 +26,7 @@ pallet-balances = { workspace = true, features = ["insecure_zero_ed"] }
 
 # Frontier
 fp-evm = { workspace = true }
-pallet-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
 [dev-dependencies]
 derive_more = { workspace = true }

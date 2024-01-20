@@ -49,6 +49,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-bfc-staking/std",
+	"pallet-evm/std",
 	"bp-staking/std",
 	"precompile-utils/std",
 	"sp-core/std",

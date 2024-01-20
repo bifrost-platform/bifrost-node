@@ -1,16 +1,21 @@
-use bp_core::Block;
+use crate::cli_opt::{BackendTypeConfig, RpcConfig};
+
+use std::{path::Path, sync::Arc};
+
 use fc_db::DatabaseSource;
 use sc_client_api::{
 	backend::{Backend, StateBackend},
 	AuxStore, StorageProvider,
 };
 use sc_service::Configuration;
+
+use bp_core::Block;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::BlakeTwo256;
-use std::{path::Path, sync::Arc};
 
-use crate::cli_opt::{BackendTypeConfig, RpcConfig};
+pub type HostFunctions =
+	(frame_benchmarking::benchmarking::HostFunctions, fp_ext::bifrost_ext::HostFunctions);
 
 /// Configure frontier database.
 pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {

@@ -38,6 +38,7 @@ mod pallet;
 mod set;
 pub mod weights;
 
+pub use frame_system::pallet_prelude::BlockNumberFor;
 pub use inflation::{InflationInfo, Range};
 pub use pallet::pallet::*;
 use weights::WeightInfo;
@@ -63,8 +64,6 @@ use sp_std::{
 
 pub type BalanceOf<T> =
 	<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
-pub type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
 
 /// The type that indicates the point of a reward
 pub type RewardPoint = u32;
@@ -628,7 +627,7 @@ impl<
 {
 	pub fn new<T: Config>(stash: AccountId, bond: Balance, tier: TierType) -> Self
 	where
-		BlockNumberOf<T>: From<BlockNumber>,
+		BlockNumberFor<T>: From<BlockNumber>,
 	{
 		let commission = match tier {
 			TierType::Full => <DefaultFullValidatorCommission<T>>::get(),
