@@ -24,12 +24,31 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
   const alithStash = keyring.addFromUri(TEST_STASHES[0].private);
 
-  it('should successfully replace controller account', async function () {
+  it('should successfully request controller address update', async function () {
     await context.polkadotApi.tx.bfcStaking
       .setController(newAlith.address)
       .signAndSend(alithStash);
     await context.createBlock();
 
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    const rawControllerSets: any = await context.polkadotApi.query.bfcStaking.delayedControllerSets(currentRound);
+    const controllerSets = rawControllerSets.toJSON();
+    expect(controllerSets.length).equals(1);
+  });
+
+  it('should fail due to multiple requests', async function () {
+    await context.polkadotApi.tx.bfcStaking
+      .setController(newAlith.address)
+      .signAndSend(alithStash);
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'setController');
+    expect(extrinsicResult).equal('AlreadyControllerSetRequested');
+  });
+
+  it('should successfully replace controller account', async function () {
     const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
 
     await context.polkadotApi.tx.bfcStaking
@@ -44,10 +63,6 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
 
     const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
     const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
-
-    const rawControllerSets: any = await context.polkadotApi.query.bfcStaking.delayedControllerSets(currentRound);
-    const controllerSets = rawControllerSets.toJSON();
-    expect(controllerSets.length).equals(1);
 
     await jumpToRound(context, currentRound + 1);
 
@@ -1512,6 +1527,54 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
 
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleLeaveCandidates');
     expect(extrinsicResult).equal('CandidateDNE');
+  });
+
+  it('should fail due to existing controller address update request', async function () {
+    await context.polkadotApi.tx.bfcStaking
+      .setController(charleth.address)
+      .signAndSend(baltatharStash, { nonce: -1 });
+    await context.createBlock();
+    await context.createBlock();
+
+    const candidates: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleLeaveCandidates(candidates.length)
+      .signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleLeaveCandidates');
+    expect(extrinsicResult).equal('CannotLeaveIfControllerSetRequested');
+
+    // cancel request for continueing tests
+    await context.polkadotApi.tx.bfcStaking
+      .cancelControllerSet()
+      .signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
+  });
+
+  it('should fail due to existing commission update request', async function () {
+    const commission = new BigNumber(70).multipliedBy(10 ** 7);
+    await context.polkadotApi.tx.bfcStaking
+      .setValidatorCommission(commission.toFixed())
+      .signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
+
+    const candidates: any = await context.polkadotApi.query.bfcStaking.candidatePool();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleLeaveCandidates(candidates.length)
+      .signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleLeaveCandidates');
+    expect(extrinsicResult).equal('CannotLeaveIfCommissionSetRequested');
+
+    // cancel request for continueing tests
+    await context.polkadotApi.tx.bfcStaking
+      .cancelValidatorCommissionSet()
+      .signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
   });
 
   it('should fail due to invalid candidate', async function () {
