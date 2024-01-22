@@ -94,6 +94,15 @@ describeDevNode('pallet_relay_manager - set relayer', (context) => {
       .signAndSend(alith);
     await context.createBlock();
 
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    const rawRelayerSets: any = await context.polkadotApi.query.relayManager.delayedRelayerSets(currentRound);
+    const relayerSets = rawRelayerSets.toJSON();
+    expect(relayerSets.length).equals(1);
+
+    await jumpToRound(context, currentRound + 1);
+
     // check `BondedController`
     const rawBondedController: any = await context.polkadotApi.query.relayManager.bondedController(alith.address);
     const bondedController = rawBondedController.toJSON();
@@ -127,28 +136,37 @@ describeDevNode('pallet_relay_manager - set relayer', (context) => {
     const rawInitialRelayers: any = await context.polkadotApi.query.relayManager.initialSelectedRelayers();
     const initialRelayers = rawInitialRelayers.toJSON();
     expect(initialRelayers.length).equal(1);
-    expect(initialRelayers[0]).equal(alithRelayer.address);
+    expect(initialRelayers[0]).equal(newRelayer.address);
 
-    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
-    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+    const rawCurrentRoundV2: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRoundV2 = rawCurrentRoundV2.currentRoundIndex.toNumber();
 
     // check `CachedSelectedRelayers`
     const rawCachedRelayers: any = await context.polkadotApi.query.relayManager.cachedSelectedRelayers();
     const cachedRelayers = rawCachedRelayers.toJSON();
-    expect(cachedRelayers[currentRound].length).equal(1);
-    expect(cachedRelayers[currentRound]).include(newRelayer.address);
+    expect(cachedRelayers[currentRoundV2].length).equal(1);
+    expect(cachedRelayers[currentRoundV2]).include(newRelayer.address);
 
     // check `CachedInitialSelectedRelayers`
     const rawCachedInitialRelayers: any = await context.polkadotApi.query.relayManager.cachedInitialSelectedRelayers();
     const cachedInitialRelayers = rawCachedInitialRelayers.toJSON();
-    expect(cachedInitialRelayers[currentRound].length).equal(1);
-    expect(cachedInitialRelayers[currentRound]).include(alithRelayer.address);
+    expect(cachedInitialRelayers[currentRoundV2].length).equal(1);
+    expect(cachedInitialRelayers[currentRoundV2]).include(newRelayer.address);
 
     // check `ReceivedHeartbeats`
-    const currentSession = rawCurrentRound.currentSessionIndex.toNumber();
+    await context.polkadotApi.tx.relayManager.heartbeat()
+      .signAndSend(newRelayer);
+    await context.createBlock();
+
+    const currentSession = rawCurrentRoundV2.currentSessionIndex.toNumber();
+
     const rawHeartbeat: any = await context.polkadotApi.query.relayManager.receivedHeartbeats(currentSession, newRelayer.address);
     const heartbeat = rawHeartbeat.toJSON();
     expect(heartbeat).equal(true);
+
+    const rawRelayerStateV2: any = await context.polkadotApi.query.relayManager.relayerState(newRelayer.address);
+    const relayerStateV2 = rawRelayerStateV2.unwrap().toJSON();
+    expect(relayerStateV2.status).equal('Active');
   });
 });
 
