@@ -61,13 +61,13 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Verifies if the given account has already requested for controller account update
-	pub fn is_controller_set_requested(controller: T::AccountId) -> bool {
+	pub fn is_controller_set_requested(controller: &T::AccountId) -> bool {
 		let round = Self::round();
 		let controller_sets = Self::delayed_controller_sets(round.current_round_index);
 		if controller_sets.is_empty() {
 			return false;
 		}
-		return controller_sets.into_iter().any(|c| c.old == controller);
+		return controller_sets.into_iter().any(|c| c.old == *controller);
 	}
 
 	/// Verifies if the given account has already requested for commission rate update

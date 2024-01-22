@@ -187,6 +187,10 @@ pub mod pallet {
 		CannotGoOnlineIfLeaving,
 		/// The given candidate cannot leave due to its offline state.
 		CannotLeaveIfOffline,
+		/// The given candidate cannot leave if controller set requested. It must be cancelled.
+		CannotLeaveIfControllerSetRequested,
+		/// The given candidate cannot leave if commission set requested. It must be cancelled.
+		CannotLeaveIfCommissionSetRequested,
 		/// The given nominator exceeds the maximum limit of nominations.
 		ExceedMaxNominationsPerNominator,
 		/// The given nominator already nominated the candidate.
@@ -1247,7 +1251,14 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
-			let (now, when) = state.schedule_leave::<T>()?;
+			ensure!(
+				!Self::is_controller_set_requested(&controller),
+				Error::<T>::CannotLeaveIfControllerSetRequested,
+			);
+			ensure!(
+				!Self::is_commission_set_requested(&controller),
+				Error::<T>::CannotLeaveIfCommissionSetRequested,
+			);
 			let candidates = <CandidatePool<T>>::get();
 			ensure!(
 				candidate_count >= candidates.len() as u32,
@@ -1257,6 +1268,7 @@ pub mod pallet {
 				Self::remove_from_candidate_pool(&controller),
 				Error::<T>::CannotLeaveIfOffline,
 			);
+			let (now, when) = state.schedule_leave::<T>()?;
 			<CandidateInfo<T>>::insert(&controller, state);
 			Self::deposit_event(Event::CandidateScheduledExit {
 				exit_allowed_round: now,
@@ -1382,7 +1394,7 @@ pub mod pallet {
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
 			ensure!(!Self::is_candidate(&new, TierType::All), Error::<T>::AlreadyPaired);
 			ensure!(
-				!Self::is_controller_set_requested(old.clone()),
+				!Self::is_controller_set_requested(&old),
 				Error::<T>::AlreadyControllerSetRequested
 			);
 			Self::add_to_controller_sets(stash, old.clone(), new.clone())?;
@@ -1397,10 +1409,7 @@ pub mod pallet {
 		pub fn cancel_controller_set(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
 			ensure!(Self::is_candidate(&controller, TierType::All), Error::<T>::CandidateDNE);
-			ensure!(
-				Self::is_controller_set_requested(controller.clone()),
-				Error::<T>::ControllerSetDNE
-			);
+			ensure!(Self::is_controller_set_requested(&controller), Error::<T>::ControllerSetDNE);
 			Self::remove_controller_set(&controller)?;
 			Self::deposit_event(Event::ControllerSetCancelled { candidate: controller });
 			Ok(().into())
