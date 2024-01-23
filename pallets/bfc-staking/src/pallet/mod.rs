@@ -821,6 +821,7 @@ pub mod pallet {
 				T::DefaultBlocksPerSession::get(),
 			);
 			<Round<T>>::put(round);
+			T::RelayManager::refresh_round(1u32);
 			// Set productivity rate per block
 			let blocks_per_validator = {
 				if v_count == 0 {

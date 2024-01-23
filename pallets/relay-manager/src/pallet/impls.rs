@@ -29,6 +29,10 @@ where
 		Ok(())
 	}
 
+	fn refresh_round(now: RoundIndex) {
+		<Round<T>>::put(now);
+	}
+
 	fn refresh_relayer_pool() {
 		let pool = Self::relayer_pool();
 		pool.iter().for_each(|r| {
@@ -59,7 +63,6 @@ where
 				});
 			}
 		}
-		<Round<T>>::put(round);
 		<SelectedRelayers<T>>::put(selected_relayers.clone());
 		<InitialSelectedRelayers<T>>::put(selected_relayers.clone());
 		Self::refresh_cached_selected_relayers(round, selected_relayers);

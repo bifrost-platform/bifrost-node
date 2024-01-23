@@ -922,34 +922,35 @@ impl<T: Config> Pallet<T> {
 		// update round
 		let mut round = Self::round();
 		round.update_round::<T>(now);
-		let current_round = round.current_round_index;
+		let now = round.current_round_index;
 		// handle delayed relayer update requests
 		// this must be executed in advance, bc initial and current state should be matched at this moment
-		T::RelayManager::handle_delayed_relayer_sets(current_round);
+		T::RelayManager::refresh_round(now);
+		T::RelayManager::handle_delayed_relayer_sets(now);
 		// reset candidate states
 		Pallet::<T>::reset_candidate_states();
 		// pay all stakers for T::RewardPaymentDelay rounds ago
-		Self::prepare_staking_payouts(current_round);
+		Self::prepare_staking_payouts(now);
 		// select top validator candidates for the next round
 		let (validator_count, _, total_staked) =
-			Self::update_top_candidates(current_round, full_validators, basic_validators);
+			Self::update_top_candidates(now, full_validators, basic_validators);
 		// start next round
 		<Round<T>>::put(round);
 		// refresh majority
-		Self::refresh_majority(current_round);
-		T::RelayManager::refresh_majority(current_round);
+		Self::refresh_majority(now);
+		T::RelayManager::refresh_majority(now);
 		// refresh productivity rate per block
 		Self::refresh_productivity_per_block(validator_count, round.round_length);
 		// snapshot total stake and storage state
-		<Staked<T>>::insert(current_round, Self::total());
-		<TotalAtStake<T>>::remove(current_round - 1);
+		<Staked<T>>::insert(now, Self::total());
+		<TotalAtStake<T>>::remove(now - 1);
 		// handle delayed controller update requests
-		Self::handle_delayed_controller_sets(current_round);
-		Self::handle_delayed_commission_sets(current_round);
+		Self::handle_delayed_controller_sets(now);
+		Self::handle_delayed_commission_sets(now);
 
 		Self::deposit_event(Event::NewRound {
 			starting_block: round.first_round_block,
-			round: current_round,
+			round: now,
 			selected_validators_number: validator_count,
 			total_balance: total_staked,
 		});

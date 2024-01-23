@@ -11,6 +11,9 @@ pub trait RelayManager<AccountId> {
 	/// Add the given `relayer` to the `RelayerPool` and bond to the given `controller` account
 	fn join_relayers(relayer: AccountId, controller: AccountId) -> Result<(), DispatchError>;
 
+	/// Refresh the current round
+	fn refresh_round(now: RoundIndex);
+
 	/// Refresh the relayers status to default.
 	fn refresh_relayer_pool();
 
