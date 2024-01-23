@@ -1391,8 +1391,10 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
 			let old = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let state = <CandidateInfo<T>>::get(&old).ok_or(Error::<T>::CandidateDNE)?;
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
 			ensure!(!Self::is_candidate(&new, TierType::All), Error::<T>::AlreadyPaired);
+			ensure!(!state.is_leaving(), Error::<T>::CandidateAlreadyLeaving);
 			ensure!(
 				!Self::is_controller_set_requested(&old),
 				Error::<T>::AlreadyControllerSetRequested
