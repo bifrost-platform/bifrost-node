@@ -277,6 +277,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
+	/// Adds a new relayer address update request. The state reflection will be applied in the next round.
 	pub fn add_to_relayer_sets(old: T::AccountId, new: T::AccountId) -> DispatchResult {
 		let round = Self::round();
 		<DelayedRelayerSets<T>>::try_mutate(round, |relayer_sets| -> DispatchResult {
