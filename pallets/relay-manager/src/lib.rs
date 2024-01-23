@@ -182,8 +182,11 @@ impl<Offender: Clone, T: pallet::pallet::Config> Offence<Offender>
 }
 
 #[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+/// Information of the single-round delayed relayer address update request
 pub struct DelayedRelayerSet<AccountId> {
+	/// The current relayer address.
 	pub old: AccountId,
+	/// The requested relayer address.
 	pub new: AccountId,
 }
 

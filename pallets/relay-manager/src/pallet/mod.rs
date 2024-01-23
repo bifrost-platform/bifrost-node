@@ -226,6 +226,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn delayed_relayer_sets)]
+	/// Delayed relayer address update requests
 	pub type DelayedRelayerSets<T: Config> = StorageMap<
 		_,
 		Twox64Concat,
