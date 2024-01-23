@@ -192,8 +192,7 @@ where
 		let delayed_round = now - 1;
 		let relayer_sets = <DelayedRelayerSets<T>>::take(delayed_round);
 		relayer_sets.into_iter().for_each(|r| {
-			// ignore if failed. maybe execution leave
-			let _ = Self::replace_bonded_relayer(&r.old, &r.new);
+			Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success");
 		});
 	}
 }
