@@ -1060,6 +1060,7 @@ pub mod pallet {
 				!Self::is_commission_set_requested(&controller),
 				Error::<T>::AlreadyCommissionSetRequested,
 			);
+			ensure!(!state.is_leaving(), Error::<T>::CandidateAlreadyLeaving);
 			Self::add_to_commission_sets(&controller, old, new)?;
 			Self::deposit_event(Event::ValidatorCommissionSet { candidate: controller, old, new });
 			Ok(().into())
