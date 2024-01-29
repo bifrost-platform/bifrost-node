@@ -223,10 +223,7 @@ impl<T: Config> Pallet<T> {
 	pub fn is_relayer_set_requested(relayer: T::AccountId) -> bool {
 		let round = Self::round();
 		let relayer_sets = Self::delayed_relayer_sets(round);
-		if relayer_sets.is_empty() {
-			return false;
-		}
-		return relayer_sets.into_iter().any(|r| r.old == relayer);
+		relayer_sets.into_iter().any(|r| r.old == relayer)
 	}
 
 	/// Compute majority based on the current selected relayers
