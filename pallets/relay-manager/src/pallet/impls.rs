@@ -29,6 +29,10 @@ where
 		Ok(())
 	}
 
+	fn refresh_round(now: RoundIndex) {
+		<Round<T>>::put(now);
+	}
+
 	fn refresh_relayer_pool() {
 		let pool = Self::relayer_pool();
 		pool.iter().for_each(|r| {
@@ -59,7 +63,6 @@ where
 				});
 			}
 		}
-		<Round<T>>::put(round);
 		<SelectedRelayers<T>>::put(selected_relayers.clone());
 		<InitialSelectedRelayers<T>>::put(selected_relayers.clone());
 		Self::refresh_cached_selected_relayers(round, selected_relayers);
@@ -187,6 +190,14 @@ where
 			Self::deposit_event(Event::<T>::SomeOffline { offline: offenders.clone() });
 		}
 	}
+
+	fn handle_delayed_relayer_sets(now: RoundIndex) {
+		let delayed_round = now - 1;
+		let relayer_sets = <DelayedRelayerSets<T>>::take(delayed_round);
+		relayer_sets.into_iter().for_each(|r| {
+			Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success");
+		});
+	}
 }
 
 impl<T: Config> Pallet<T> {
@@ -206,6 +217,13 @@ impl<T: Config> Pallet<T> {
 		} else {
 			Self::selected_relayers().contains(relayer)
 		}
+	}
+
+	/// Verifies if the given account has already requested for relayer account update
+	pub fn is_relayer_set_requested(relayer: T::AccountId) -> bool {
+		let round = Self::round();
+		let relayer_sets = Self::delayed_relayer_sets(round);
+		relayer_sets.into_iter().any(|r| r.old == relayer)
 	}
 
 	/// Compute majority based on the current selected relayers
@@ -254,6 +272,25 @@ impl<T: Config> Pallet<T> {
 		<SelectedRelayers<T>>::try_mutate(|selected_relayers| -> Result<bool, DispatchError> {
 			Ok(selected_relayers.try_insert(relayer).map_err(|_| <Error<T>>::TooManyRelayers)?)
 		})
+	}
+
+	/// Adds a new relayer address update request. The state reflection will be applied in the next round.
+	pub fn add_to_relayer_sets(old: T::AccountId, new: T::AccountId) -> DispatchResult {
+		let round = Self::round();
+		<DelayedRelayerSets<T>>::try_mutate(round, |relayer_sets| -> DispatchResult {
+			Ok(relayer_sets
+				.try_push(DelayedRelayerSet::new(old, new))
+				.map_err(|_| <Error<T>>::TooManyDelayedRelayers)?)
+		})
+	}
+
+	/// Remove the given `who` from the `DelayedRelayerSets` of the current round.
+	pub fn remove_relayer_set(who: &T::AccountId) -> DispatchResult {
+		let round = Self::round();
+		<DelayedRelayerSets<T>>::mutate(round, |relayer_set| {
+			relayer_set.retain(|r| r.old != *who);
+		});
+		Ok(())
 	}
 
 	/// Refresh the latest rounds cached selected relayers to the current state

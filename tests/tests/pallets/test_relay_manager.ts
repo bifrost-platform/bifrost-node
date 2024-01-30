@@ -94,6 +94,15 @@ describeDevNode('pallet_relay_manager - set relayer', (context) => {
       .signAndSend(alith);
     await context.createBlock();
 
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    const rawRelayerSets: any = await context.polkadotApi.query.relayManager.delayedRelayerSets(currentRound);
+    const relayerSets = rawRelayerSets.toJSON();
+    expect(relayerSets.length).equals(1);
+
+    await jumpToRound(context, currentRound + 1);
+
     // check `BondedController`
     const rawBondedController: any = await context.polkadotApi.query.relayManager.bondedController(alith.address);
     const bondedController = rawBondedController.toJSON();
@@ -127,28 +136,37 @@ describeDevNode('pallet_relay_manager - set relayer', (context) => {
     const rawInitialRelayers: any = await context.polkadotApi.query.relayManager.initialSelectedRelayers();
     const initialRelayers = rawInitialRelayers.toJSON();
     expect(initialRelayers.length).equal(1);
-    expect(initialRelayers[0]).equal(alithRelayer.address);
+    expect(initialRelayers[0]).equal(newRelayer.address);
 
-    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
-    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+    const rawCurrentRoundV2: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRoundV2 = rawCurrentRoundV2.currentRoundIndex.toNumber();
 
     // check `CachedSelectedRelayers`
     const rawCachedRelayers: any = await context.polkadotApi.query.relayManager.cachedSelectedRelayers();
     const cachedRelayers = rawCachedRelayers.toJSON();
-    expect(cachedRelayers[currentRound].length).equal(1);
-    expect(cachedRelayers[currentRound]).include(newRelayer.address);
+    expect(cachedRelayers[currentRoundV2].length).equal(1);
+    expect(cachedRelayers[currentRoundV2]).include(newRelayer.address);
 
     // check `CachedInitialSelectedRelayers`
     const rawCachedInitialRelayers: any = await context.polkadotApi.query.relayManager.cachedInitialSelectedRelayers();
     const cachedInitialRelayers = rawCachedInitialRelayers.toJSON();
-    expect(cachedInitialRelayers[currentRound].length).equal(1);
-    expect(cachedInitialRelayers[currentRound]).include(alithRelayer.address);
+    expect(cachedInitialRelayers[currentRoundV2].length).equal(1);
+    expect(cachedInitialRelayers[currentRoundV2]).include(newRelayer.address);
 
     // check `ReceivedHeartbeats`
-    const currentSession = rawCurrentRound.currentSessionIndex.toNumber();
+    await context.polkadotApi.tx.relayManager.heartbeat()
+      .signAndSend(newRelayer);
+    await context.createBlock();
+
+    const currentSession = rawCurrentRoundV2.currentSessionIndex.toNumber();
+
     const rawHeartbeat: any = await context.polkadotApi.query.relayManager.receivedHeartbeats(currentSession, newRelayer.address);
     const heartbeat = rawHeartbeat.toJSON();
     expect(heartbeat).equal(true);
+
+    const rawRelayerStateV2: any = await context.polkadotApi.query.relayManager.relayerState(newRelayer.address);
+    const relayerStateV2 = rawRelayerStateV2.unwrap().toJSON();
+    expect(relayerStateV2.status).equal('Active');
   });
 });
 
@@ -627,3 +645,251 @@ describeDevNode('pallet_relay_manager - leave request cancelled', (context) => {
     }
   });
 }, true);
+
+describeDevNode('pallet_relay_manager - set kicked out relayer address', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const baltatharStash = keyring.addFromUri(TEST_STASHES[1].private);
+  const baltatharRelayer = keyring.addFromUri(TEST_RELAYERS[1].private);
+
+  const newRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
+
+  let baltatharAura = '';
+  let baltatharGran = '';
+  let baltatharImOnline = '';
+
+  before('should successfully join candidate pool and set session keys', async function () {
+    const stake = new BigNumber(MIN_FULL_VALIDATOR_STAKING_AMOUNT);
+
+    await context.polkadotApi.tx.bfcStaking
+      .joinCandidates(baltathar.address, baltatharRelayer.address, stake.toFixed(), 1)
+      .signAndSend(baltatharStash, { nonce: -1 });
+    await context.createBlock();
+
+    const response = await axios.post(
+      'http://localhost:9934',
+      {
+        'jsonrpc': '2.0',
+        'method': 'author_rotateKeys',
+        'id': 1,
+      },
+    );
+    const sessionKey = response.data.result.slice(2);
+    const auraSessionKey = `0x${sessionKey.slice(0, 64)}`;
+    const granSessionKey = `0x${sessionKey.slice(64, 128)}`;
+    const imonlineSessionKey = `0x${sessionKey.slice(128)}`;
+
+    baltatharAura = auraSessionKey;
+    baltatharGran = granSessionKey;
+    baltatharImOnline = imonlineSessionKey;
+
+    const keys: any = {
+      aura: auraSessionKey,
+      grandpa: granSessionKey,
+      imOnline: imonlineSessionKey,
+    };
+    await context.polkadotApi.tx.session.setKeys(keys, '0x00').signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
+  });
+
+  before('should successfully set auto-compound to account', async function () {
+    await context.polkadotApi.tx.bfcStaking
+      .setCandidateRewardDst('Account')
+      .signAndSend(baltathar, { nonce: -1 });
+    await context.createBlock();
+  });
+
+  it('should be added to queued keys on the next round - baltathar', async function () {
+    this.timeout(20000);
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    await jumpToRound(context, currentRound + 1);
+
+    const rawQueuedKeys: any = await context.polkadotApi.query.session.queuedKeys();
+    const queuedKeys = rawQueuedKeys.toJSON();
+    let isKeyFound = false;
+    for (const key of queuedKeys) {
+      if (key[0] === baltathar.address) {
+        isKeyFound = true;
+        expect(key[1].aura).equal(baltatharAura);
+        expect(key[1].grandpa).equal(baltatharGran);
+        expect(key[1].imOnline).equal(baltatharImOnline);
+        break;
+      }
+    }
+    expect(isKeyFound).equal(true);
+
+    const rawValidators: any = await context.polkadotApi.query.session.validators();
+    const validators = rawValidators.toJSON();
+    expect(validators).includes(alith.address);
+    expect(validators).not.includes(baltathar.address);
+  });
+
+  it('should be added to session validators after one session - baltathar', async function () {
+    this.timeout(20000);
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentSession = rawCurrentRound.currentSessionIndex.toNumber();
+
+    const blockHash: any = await jumpToSession(context, currentSession + 1);
+    const success = await isEventTriggered(
+      context,
+      blockHash,
+      [
+        { method: 'AllGood', section: 'imOnline' },
+        { method: 'NewSession', section: 'session' },
+      ],
+    );
+    expect(success).equal(true);
+
+    const rawValidators: any = await context.polkadotApi.query.session.validators();
+    const validators = rawValidators.toJSON();
+    expect(validators).includes(alith.address);
+    expect(validators).includes(baltathar.address);
+  });
+
+  it('should successfully activate heartbeat offences', async function () {
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.relayManager.setHeartbeatOffenceActivation(true),
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const isActive = await context.polkadotApi.query.relayManager.isHeartbeatOffenceActive();
+    expect(isActive.toJSON()).equal(true);
+  });
+
+  it('should be kicked out and apply relayer address update on next round', async function () {
+    const rawMaximumOffenceCount: any = await context.polkadotApi.query.bfcOffences.fullMaximumOffenceCount();
+    for (let idx = 0; idx < rawMaximumOffenceCount.toNumber(); idx++) {
+      const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+      const currentSession = rawCurrentRound.currentSessionIndex.toNumber();
+
+      await context.polkadotApi.tx.relayManager.heartbeat()
+        .signAndSend(alithRelayer);
+      await context.createBlock();
+
+      const rawHeartbeat: any = await context.polkadotApi.query.relayManager.receivedHeartbeats(currentSession, alithRelayer.address);
+      const heartbeat = rawHeartbeat.toJSON();
+      expect(heartbeat).equal(true);
+
+      const blockHash: any = await jumpToSession(context, currentSession + 1);
+
+      const success = await isEventTriggered(
+        context,
+        blockHash,
+        [
+          { method: 'SomeOffline', section: 'relayManager' },
+          { method: 'Offence', section: 'offences' },
+          { method: 'Slashed', section: 'bfcOffences' },
+          { method: 'Slashed', section: 'balances' },
+          { method: 'KickedOut', section: 'bfcStaking' },
+        ],
+      );
+      if (success) {
+        await context.polkadotApi.tx.relayManager
+          .setRelayer(newRelayer.address)
+          .signAndSend(baltathar);
+        await context.createBlock();
+
+        const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+        const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+        const rawRelayerSets: any = await context.polkadotApi.query.relayManager.delayedRelayerSets(currentRound);
+        const relayerSets = rawRelayerSets.toJSON();
+        expect(relayerSets.length).equals(1);
+
+        const rawRelayerState: any = await context.polkadotApi.query.relayManager.relayerState(alithRelayer.address);
+        const relayerState = rawRelayerState.unwrap().toJSON();
+        expect(relayerState.status).equal('Active');
+
+        const rawRelayerStateB: any = await context.polkadotApi.query.relayManager.relayerState(baltatharRelayer.address);
+        const relayerStateB = rawRelayerStateB.unwrap().toJSON();
+        expect(relayerStateB.status).equal('KickedOut');
+
+        const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(baltathar.address);
+        const candidateState = rawCandidateState.unwrap().toJSON();
+        expect(candidateState.status).has.key('kickedOut');
+      }
+    }
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+    await jumpToRound(context, currentRound + 1);
+
+    const rawRelayerSets: any = await context.polkadotApi.query.relayManager.delayedRelayerSets(currentRound);
+    const relayerSets = rawRelayerSets.toJSON();
+    expect(relayerSets.length).equals(0);
+
+    const rawRelayerStateB: any = await context.polkadotApi.query.relayManager.relayerState(newRelayer.address);
+    const relayerStateB = rawRelayerStateB.unwrap().toJSON();
+
+    const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(relayerStateB.controller);
+    const candidateState = rawCandidateState.unwrap().toJSON();
+    expect(candidateState.status).has.key('kickedOut');
+  });
+}, true);
+
+describeDevNode('pallet_relay_manager - controller and relayer address update', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const alithStash = keyring.addFromUri(TEST_STASHES[0].private);
+  const newController = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const newRelayer = keyring.addFromUri(TEST_RELAYERS[1].private);
+
+  before('should successfully request controller address update', async function () {
+    await context.polkadotApi.tx.bfcStaking
+      .setController(newController.address)
+      .signAndSend(alithStash);
+    await context.createBlock();
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    const rawControllerSets: any = await context.polkadotApi.query.bfcStaking.delayedControllerSets(currentRound);
+    const controllerSets = rawControllerSets.toJSON();
+    expect(controllerSets.length).equals(1);
+  });
+
+  before('should successfully request relayer address update', async function () {
+    await context.polkadotApi.tx.relayManager
+      .setRelayer(newRelayer.address)
+      .signAndSend(alith);
+    await context.createBlock();
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    const rawRelayerSets: any = await context.polkadotApi.query.relayManager.delayedRelayerSets(currentRound);
+    const relayerSets = rawRelayerSets.toJSON();
+    expect(relayerSets.length).equals(1);
+  });
+
+  it('should successfully update both controller and relayer address on same round', async function () {
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    await jumpToRound(context, currentRound + 1);
+
+    const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(newController.address);
+    const candidateState = rawCandidateState.unwrap().toJSON();
+    expect(candidateState.stash).equal(alithStash.address);
+
+    const rawBondedStash: any = await context.polkadotApi.query.bfcStaking.bondedStash(alithStash.address);
+    const bondedStash = rawBondedStash.unwrap().toJSON();
+    expect(bondedStash).equal(newController.address);
+
+    const rawBondedController: any = await context.polkadotApi.query.relayManager.bondedController(newController.address);
+    const bondedController = rawBondedController.toJSON();
+    expect(bondedController).equal(newRelayer.address);
+
+    const rawRelayerState: any = await context.polkadotApi.query.relayManager.relayerState(newRelayer.address);
+    const relayerState = rawRelayerState.unwrap().toJSON();
+    expect(relayerState.controller).equal(newController.address);
+  });
+});

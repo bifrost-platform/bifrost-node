@@ -180,3 +180,18 @@ impl<Offender: Clone, T: pallet::pallet::Config> Offence<Offender>
 		<HeartbeatSlashFraction<T>>::get()
 	}
 }
+
+#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+/// Information of the single-round delayed relayer address update request
+pub struct DelayedRelayerSet<AccountId> {
+	/// The current relayer address.
+	pub old: AccountId,
+	/// The requested relayer address.
+	pub new: AccountId,
+}
+
+impl<AccountId: PartialEq + Clone> DelayedRelayerSet<AccountId> {
+	pub fn new(old: AccountId, new: AccountId) -> Self {
+		DelayedRelayerSet { old, new }
+	}
+}

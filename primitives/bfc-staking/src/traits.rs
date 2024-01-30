@@ -11,6 +11,9 @@ pub trait RelayManager<AccountId> {
 	/// Add the given `relayer` to the `RelayerPool` and bond to the given `controller` account
 	fn join_relayers(relayer: AccountId, controller: AccountId) -> Result<(), DispatchError>;
 
+	/// Refresh the current round
+	fn refresh_round(now: RoundIndex);
+
 	/// Refresh the relayers status to default.
 	fn refresh_relayer_pool();
 
@@ -39,6 +42,9 @@ pub trait RelayManager<AccountId> {
 	/// relayer has pulsed a heartbeat. If not, it will report an offence. This method will be
 	/// requested at every block before the session ends.
 	fn collect_heartbeats();
+
+	/// Apply the delayed relayer set requests. Replaces the entire bonded storage values from the old to new.
+	fn handle_delayed_relayer_sets(now: RoundIndex);
 }
 
 /// The trait used for `pallet_bfc_offences`
