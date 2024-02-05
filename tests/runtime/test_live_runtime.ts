@@ -34,7 +34,7 @@ const deployDemo = async (deployTx: any): Promise<TransactionReceiptAPI | undefi
   const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
   expect(txHash).is.ok;
 
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt?.status).equal('0x1');
@@ -48,7 +48,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
   expect(txHash).is.ok;
 
   // get transaction receipt
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt!.status).equal('0x1');
@@ -182,6 +182,12 @@ describe('test_runtime - ethapi', function () {
     const receipt_2 = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
     expect(receipt_2).is.ok;
 
+    const blockReceipts = await web3.requestManager.send({
+      method: 'eth_getBlockReceipts', params: [receipt_2?.blockNumber],
+    });
+    expect(blockReceipts).is.ok;
+    expect(blockReceipts.length).greaterThanOrEqual(1);
+
     const logs = await web3.requestManager.send({
       method: 'eth_getLogs', params: [
         {
@@ -286,12 +292,12 @@ describe('test_runtime - pallet interactions', function () {
       .nominatorBondMore(validator, stake.toFixed())
       .signAndSend(testerSub);
 
-    await sleep(4000);
+    await sleep(6000);
 
     const rawNominatorState: any = await api.query.bfcStaking.nominatorState(testerSub.address);
-    const nominatorState = rawNominatorState.unwrap();
+    const nominatorState = rawNominatorState.unwrap().toJSON();
 
-    expect(nominatorState.nominations[0].owner.toString().toLowerCase()).equal(validator.toLowerCase());
-    expect(new BigNumber(nominatorState.nominations[0].amount.toString()).isGreaterThan(stake)).is.true;
+    expect(nominatorState.nominations).has.key(validator);
+    expect(parseInt(nominatorState.nominations[validator].toString(), 16)).greaterThan(stake.toNumber());
   });
 });
