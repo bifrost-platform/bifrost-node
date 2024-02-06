@@ -21,6 +21,22 @@ pub type BalanceOf<T> =
 /// The type that indicates the index of a general proposal
 pub type PropIndex = u32;
 
+pub(crate) const LOG_TARGET: &'static str = "runtime::bfc-utility";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
+
+/// Used for release versioning upto v2_0_0.
+///
+/// Obsolete from v3. Keeping around to make encoding/decoding of old migration code easier.
 #[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the BFC Utility storage. This
 /// value is used by the `on_runtime_upgrade` logic to determine whether we run storage migration

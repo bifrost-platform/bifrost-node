@@ -217,8 +217,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
     const candidateState = rawCandidateState.unwrap().toJSON();
     const selfBondBeforeSlash = candidateState.bond;
 
-    const rawTreauryId: any = await context.polkadotApi.query.treasury.treasuryId();
-    const treasuryId = rawTreauryId.toJSON();
+    const rawTreasuryId: any = await context.polkadotApi.query.treasury.treasuryId();
+    const treasuryId = rawTreasuryId.toJSON();
     const potBalanceBefore = new BigNumber((await context.web3.eth.getBalance(treasuryId)).toString());
 
     let offenceLength = 1;
@@ -252,11 +252,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
         const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
         const candidatePool = rawCandidatePool.toJSON();
         let isCandidateFound = false;
-        for (const candidate of candidatePool) {
-          if (candidate.owner === baltathar.address) {
-            isCandidateFound = true;
-            break;
-          }
+        if (candidatePool[baltathar.address]) {
+          isCandidateFound = true;
         }
         expect(isCandidateFound).equal(false);
 
@@ -276,15 +273,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
         const rawCachedSelectedCandidates: any = await context.polkadotApi.query.bfcStaking.cachedSelectedCandidates();
         const cachedSelectedCandidates = rawCachedSelectedCandidates.toJSON();
         let isCachedCandidate = false;
-        for (const cache of cachedSelectedCandidates) {
-          if (cache[0] === currentRound) {
-            for (const candidate of cache[1]) {
-              if (candidate === baltathar.address) {
-                isCachedCandidate = true;
-                break;
-              }
-            }
-          }
+        if (cachedSelectedCandidates[currentRound].includes(baltathar.address)) {
+          isCachedCandidate = true;
         }
         expect(isCachedCandidate).equal(false);
 
@@ -296,8 +286,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
         expect(new BigNumber(candidateState.votingPower).eq(new BigNumber(selfBondAfterSlash))).equal(true);
 
         // check treasury pot
-        const rawTreauryId: any = await context.polkadotApi.query.treasury.treasuryId();
-        const treasuryId = rawTreauryId.toJSON();
+        const rawTreasuryId: any = await context.polkadotApi.query.treasury.treasuryId();
+        const treasuryId = rawTreasuryId.toJSON();
         const potBalance = new BigNumber((await context.web3.eth.getBalance(treasuryId)).toString());
         expect(potBalance.toFixed()).equal(new BigNumber(25).multipliedBy(10 ** 18).plus(potBalanceBefore).toFixed());
 
@@ -395,11 +385,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
     const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatePool = rawCandidatePool.toJSON();
     let isCandidateFound = false;
-    for (const candidate of candidatePool) {
-      if (candidate.owner === baltathar.address) {
-        isCandidateFound = true;
-        break;
-      }
+    if (candidatePool[baltathar.address]) {
+      isCandidateFound = true;
     }
     expect(isCandidateFound).equal(true);
   });
@@ -419,11 +406,8 @@ describeDevNode('pallet_bfc_offences - simple validator offences', (context) => 
     const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatePool = rawCandidatePool.toJSON();
     let isCandidateFound = false;
-    for (const candidate of candidatePool) {
-      if (candidate.owner === alith.address) {
-        isCandidateFound = true;
-        break;
-      }
+    if (candidatePool[alith.address]) {
+      isCandidateFound = true;
     }
     expect(isCandidateFound).equal(false);
 
@@ -585,11 +569,8 @@ describeDevNode('pallet_bfc_offences - update bond less pending request #1', (co
         const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
         const candidatePool = rawCandidatePool.toJSON();
         let isCandidateFound = false;
-        for (const candidate of candidatePool) {
-          if (candidate.owner === baltathar.address) {
-            isCandidateFound = true;
-            break;
-          }
+        if (candidatePool[baltathar.address]) {
+          isCandidateFound = true;
         }
         expect(isCandidateFound).equal(false);
 
@@ -609,15 +590,8 @@ describeDevNode('pallet_bfc_offences - update bond less pending request #1', (co
         const rawCachedSelectedCandidates: any = await context.polkadotApi.query.bfcStaking.cachedSelectedCandidates();
         const cachedSelectedCandidates = rawCachedSelectedCandidates.toJSON();
         let isCachedCandidate = false;
-        for (const cache of cachedSelectedCandidates) {
-          if (cache[0] === currentRound) {
-            for (const candidate of cache[1]) {
-              if (candidate === baltathar.address) {
-                isCachedCandidate = true;
-                break;
-              }
-            }
-          }
+        if (cachedSelectedCandidates[currentRound].includes(baltathar.address)) {
+          isCachedCandidate = true;
         }
         expect(isCachedCandidate).equal(false);
 

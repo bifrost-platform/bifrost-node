@@ -5,7 +5,6 @@ use crate::{
 	BalanceOf,
 };
 
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
@@ -29,9 +28,19 @@ pub fn rounds_per_year<T: Config>() -> u32 {
 	BLOCKS_PER_YEAR / blocks_per_round
 }
 
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(
-	Eq, PartialEq, Clone, Copy, Encode, Decode, Default, RuntimeDebug, MaxEncodedLen, TypeInfo,
+	Eq,
+	PartialEq,
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	Default,
+	RuntimeDebug,
+	MaxEncodedLen,
+	TypeInfo,
+	Serialize,
+	Deserialize,
 )]
 /// A data structure that represents a certain range in three possible values
 pub struct Range<T> {
@@ -97,8 +106,19 @@ pub fn round_issuance_range<T: Config>(round_inflation: Range<Perbill>) -> Range
 	}
 }
 
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Eq, PartialEq, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(
+	Eq,
+	PartialEq,
+	Clone,
+	Encode,
+	Decode,
+	Default,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+	Serialize,
+	Deserialize,
+)]
 /// The information about the staking inflation for this network
 pub struct InflationInfo<Balance> {
 	/// Staking expectations

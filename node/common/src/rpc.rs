@@ -1,12 +1,12 @@
 use crate::cli_opt::EthApi as EthApiCmd;
-use bp_core::{BlockNumber, Hash, Header};
+
+use std::{collections::BTreeMap, sync::Arc};
+
 use fc_rpc::{
 	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
 	SchemaV2Override, SchemaV3Override, StorageOverride,
 };
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
-use fp_rpc::{self, EthereumRuntimeRPCApi};
-use fp_storage::EthereumStorageSchema;
 use sc_client_api::{backend::Backend, StorageProvider};
 use sc_consensus_grandpa::{
 	FinalityProofProvider, GrandpaJustificationStream, SharedAuthoritySet, SharedVoterState,
@@ -18,13 +18,28 @@ use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::TaskManager;
 use sc_transaction_pool::{ChainApi, Pool};
+
+use bp_core::{BlockNumber, Hash, Header};
+use fp_rpc::{self, EthereumRuntimeRPCApi};
+use fp_storage::EthereumStorageSchema;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_core::H256;
 use sp_runtime::{generic, traits::Block as BlockT, OpaqueExtrinsic as UncheckedExtrinsic};
-use std::{collections::BTreeMap, sync::Arc};
 
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+
+pub struct DefaultEthConfig<C, BE>(std::marker::PhantomData<(C, BE)>);
+
+impl<C, BE> fc_rpc::EthConfig<Block, C> for DefaultEthConfig<C, BE>
+where
+	C: StorageProvider<Block, BE> + Sync + Send + 'static,
+	BE: Backend<Block> + 'static,
+{
+	type EstimateGasAdapter = ();
+	type RuntimeStorageOverride =
+		fc_rpc::frontier_backend_client::SystemAccountId20StorageOverride<Block, C, BE>;
+}
 
 /// Override storage
 pub fn overrides_handle<B, C, BE>(client: Arc<C>) -> Arc<OverrideHandle<B>>
@@ -70,7 +85,9 @@ pub struct GrandpaDeps<B> {
 }
 
 /// Full client dependencies.
-pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
+pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
+	/// Client version.
+	pub client_version: String,
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -94,7 +111,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	/// List of optional RPC extensions.
 	pub ethapi_cmd: Vec<EthApiCmd>,
 	/// Frontier backend.
-	pub frontier_backend: Arc<dyn fc_db::BackendReader<Block> + Send + Sync>,
+	pub frontier_backend: Arc<dyn fc_api::Backend<Block> + Send + Sync>,
 	/// Backend.
 	pub backend: Arc<BE>,
 	/// Maximum fee history cache size.
@@ -115,10 +132,14 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi> {
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
 	pub sync_service: Arc<SyncingService<Block>>,
+	/// Something that can create the inherent data providers for pending state
+	pub pending_create_inherent_data_providers: CIDP,
 }
 
 /// Mainnet/Testnet client dependencies.
-pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
+pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
+	/// Client version.
+	pub client_version: String,
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// Transaction pool instance.
@@ -142,7 +163,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	/// List of optional RPC extensions.
 	pub ethapi_cmd: Vec<EthApiCmd>,
 	/// Frontier backend.
-	pub frontier_backend: Arc<dyn fc_db::BackendReader<Block> + Send + Sync>,
+	pub frontier_backend: Arc<dyn fc_api::Backend<Block> + Send + Sync>,
 	/// Backend.
 	pub backend: Arc<BE>,
 	/// Maximum fee history cache size.
@@ -161,6 +182,8 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi> {
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
 	pub sync_service: Arc<SyncingService<Block>>,
+	/// Something that can create the inherent data providers for pending state
+	pub pending_create_inherent_data_providers: CIDP,
 }
 
 pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {

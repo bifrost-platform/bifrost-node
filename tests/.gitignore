@@ -194,3 +194,5 @@ $RECYCLE.BIN/
 *.lnk
 
 config.json
+config.testnet.json
+config.mainnet.json

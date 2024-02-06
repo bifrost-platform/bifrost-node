@@ -1,10 +1,10 @@
 mod impls;
 
 use crate::{
-	BalanceOf, BlockNumberOf, Bond, CandidateMetadata, DelayedCommissionSet, DelayedControllerSet,
-	DelayedPayout, InflationInfo, NominationChange, NominationRequest, Nominations, Nominator,
-	NominatorAdded, Range, Releases, RewardDestination, RewardPoint, RoundIndex, RoundInfo,
-	TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationRequest, Nominations, Nominator,
+	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
+	TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -14,8 +14,8 @@ use bp_staking::{
 use frame_support::{
 	dispatch::DispatchResultWithPostInfo,
 	pallet_prelude::*,
-	traits::{Currency, Get, ReservableCurrency},
-	Twox64Concat,
+	traits::{Currency, Get, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
+	BoundedBTreeMap, BoundedBTreeSet, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
 use sp_runtime::{
@@ -29,8 +29,12 @@ use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 pub mod pallet {
 	use super::*;
 
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+
 	/// Pallet for bfc staking
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet.
@@ -82,9 +86,6 @@ pub mod pallet {
 		/// Default maximum number of selected basic node candidates every round
 		#[pallet::constant]
 		type DefaultMaxSelectedBasicCandidates: Get<u32>;
-		/// Default minimum number of selected candidates (full and basic) every round
-		#[pallet::constant]
-		type DefaultMinSelectedCandidates: Get<u32>;
 		/// Maximum top nominations counted per candidate
 		#[pallet::constant]
 		type MaxTopNominationsPerCandidate: Get<u32>;
@@ -100,10 +101,10 @@ pub mod pallet {
 		/// The default commission rate for a basic validator
 		#[pallet::constant]
 		type DefaultBasicValidatorCommission: Get<Perbill>;
-		/// The maxmimum commission rate available for a full validator
+		/// The maximum commission rate available for a full validator
 		#[pallet::constant]
 		type MaxFullValidatorCommission: Get<Perbill>;
-		/// The maxmimum commission rate available for a basic validator
+		/// The maximum commission rate available for a basic validator
 		#[pallet::constant]
 		type MaxBasicValidatorCommission: Get<Perbill>;
 		/// Minimum stake required for any full node candidate to be in `SelectedCandidates` for the
@@ -140,6 +141,10 @@ pub mod pallet {
 		StashDNE,
 		/// A nomination does not exist with the target nominator and candidate account.
 		NominationDNE,
+		/// A top nomination does not exist with the target nominator and candidate account.
+		TopNominationDNE,
+		/// A bottom nomination does not exist with the target nominator and candidate account.
+		BottomNominationDNE,
 		/// A commission set request does not exist with the target controller account.
 		CommissionSetDNE,
 		/// A controller set request does not exist with the target controller account.
@@ -182,6 +187,10 @@ pub mod pallet {
 		CannotGoOnlineIfLeaving,
 		/// The given candidate cannot leave due to its offline state.
 		CannotLeaveIfOffline,
+		/// The given candidate cannot leave if controller set requested. It must be cancelled.
+		CannotLeaveIfControllerSetRequested,
+		/// The given candidate cannot leave if commission set requested. It must be cancelled.
+		CannotLeaveIfCommissionSetRequested,
 		/// The given nominator exceeds the maximum limit of nominations.
 		ExceedMaxNominationsPerNominator,
 		/// The given nominator already nominated the candidate.
@@ -208,6 +217,10 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// Cannot join candidate pool due to too many candidates.
 		TooManyCandidates,
+		/// DelayedControllerSets out of bound.
+		TooManyDelayedControllers,
+		/// DelayedCommissionSets out of bound.
+		TooManyDelayedCommissions,
 		/// Cannot join candidate pool due to too low candidate count.
 		TooLowCandidateCountWeightHintJoinCandidates,
 		/// Cannot cancel leave candidate pool due to too low candidate count.
@@ -243,7 +256,7 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Started a new round.
 		NewRound {
-			starting_block: T::BlockNumber,
+			starting_block: BlockNumberFor<T>,
 			round: RoundIndex,
 			selected_validators_number: u32,
 			total_balance: BalanceOf<T>,
@@ -392,8 +405,6 @@ pub mod pallet {
 		MaxFullSelectedSet { old: u32, new: u32 },
 		/// Set the maximum selected basic candidates to this value.
 		MaxBasicSelectedSet { old: u32, new: u32 },
-		/// Set the minimum selected candidates to this value.
-		MinTotalSelectedSet { old: u32, new: u32 },
 		/// Set the default validator commission to this value.
 		DefaultValidatorCommissionSet { old: Perbill, new: Perbill, tier: TierType },
 		/// Set the maximum validator commission to this value.
@@ -405,7 +416,7 @@ pub mod pallet {
 		/// Set blocks per round.
 		BlocksPerRoundSet {
 			current_round: RoundIndex,
-			first_block: T::BlockNumber,
+			first_block: BlockNumberFor<T>,
 			old: u32,
 			new: u32,
 			new_per_round_inflation_min: Perbill,
@@ -435,10 +446,6 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	/// Storage version of the pallet.
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::getter(fn session)]
 	/// Current session index of current round
 	pub type Session<T> = StorageValue<_, SessionIndex, ValueQuery>;
@@ -446,7 +453,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn round)]
 	/// Current round index and next round scheduled transition
-	pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<T::BlockNumber>, ValueQuery>;
+	pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<BlockNumberFor<T>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn storage_cache_lifetime)]
@@ -489,11 +496,6 @@ pub mod pallet {
 	pub type MaxBasicSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn min_total_selected)]
-	/// The minimum candidates selected every round
-	pub type MinTotalSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::getter(fn productivity_per_block)]
 	/// The productivity rate per block in the current round
 	pub type ProductivityPerBlock<T: Config> = StorageValue<_, Perbill, ValueQuery>;
@@ -517,7 +519,7 @@ pub mod pallet {
 		_,
 		Twox64Concat,
 		T::AccountId,
-		CandidateMetadata<T::AccountId, BalanceOf<T>, BlockNumberOf<T>>,
+		CandidateMetadata<T::AccountId, BalanceOf<T>, BlockNumberFor<T>>,
 		OptionQuery,
 	>;
 
@@ -554,26 +556,29 @@ pub mod pallet {
 	#[pallet::getter(fn selected_candidates)]
 	/// The active validator set (full and basic) selected for the current round. This storage is sorted by address.
 	pub type SelectedCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_full_candidates)]
 	/// The active full validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedFullCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn selected_basic_candidates)]
 	/// The active basic validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedBasicCandidates<T: Config> =
-		StorageValue<_, BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
+		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_selected_candidates)]
 	/// The cached active validator set selected from previous rounds. This storage is sorted by address.
-	pub type CachedSelectedCandidates<T: Config> =
-		StorageValue<_, Vec<(RoundIndex, Vec<T::AccountId>)>, ValueQuery>;
+	pub type CachedSelectedCandidates<T: Config> = StorageValue<
+		_,
+		BTreeMap<RoundIndex, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn majority)]
@@ -584,7 +589,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active validator set selected from previous rounds
-	pub type CachedMajority<T: Config> = StorageValue<_, Vec<(RoundIndex, u32)>, ValueQuery>;
+	pub type CachedMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn total)]
@@ -593,10 +598,10 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn candidate_pool)]
-	/// The pool of validator candidates, each with their total voting power. This storage is sorted by amount.
+	/// The pool of validator candidates, each with their total voting power.
 	pub(crate) type CandidatePool<T: Config> = StorageValue<
 		_,
-		BoundedVec<Bond<T::AccountId, BalanceOf<T>>, ConstU32<MAX_AUTHORITIES>>,
+		BoundedBTreeMap<T::AccountId, BalanceOf<T>, ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
@@ -683,20 +688,25 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(n: T::BlockNumber) -> Weight {
+		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			let mut weight = T::WeightInfo::base_on_initialize();
 
-			// Update the current block of the round
-			let mut round = <Round<T>>::get();
-			round.update_block(n);
-			<Round<T>>::put(round);
+			<Round<T>>::mutate(|round| {
+				// Update the current block of the round
+				round.update_block(n);
 
-			// Refresh the current state of the total stake snapshot
-			Self::refresh_total_snapshot(round.current_round_index);
+				// Refresh the current state of the total stake snapshot
+				Self::refresh_total_snapshot(round.current_round_index);
 
-			// Handle the delayed payouts for the previous round
-			weight += Self::handle_delayed_payouts(round.current_round_index);
+				// Handle the delayed payouts for the previous round
+				weight += Self::handle_delayed_payouts(round.current_round_index);
+			});
+
 			weight
+		}
+
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -710,7 +720,6 @@ pub mod pallet {
 		pub inflation_config: InflationInfo<BalanceOf<T>>,
 	}
 
-	#[cfg(feature = "std")]
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
 			Self { candidates: vec![], nominations: vec![], inflation_config: Default::default() }
@@ -718,9 +727,8 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V3_0_0);
 			<InflationConfig<T>>::put(self.inflation_config.clone());
 			// Set validator commission to default config
 			<DefaultFullValidatorCommission<T>>::put(T::DefaultFullValidatorCommission::get());
@@ -790,8 +798,6 @@ pub mod pallet {
 			<MaxFullSelected<T>>::put(T::DefaultMaxSelectedFullCandidates::get());
 			// Set max selected basic node candidates to maximum config
 			<MaxBasicSelected<T>>::put(T::DefaultMaxSelectedBasicCandidates::get());
-			// Set min selected candidates to minimum config
-			<MinTotalSelected<T>>::put(T::DefaultMinSelectedCandidates::get());
 			// Set storage cache lifetime to default config
 			<StorageCacheLifetime<T>>::put(T::StorageCacheLifetimeInRounds::get());
 			// Choose top MaxFullSelected validator candidates
@@ -801,10 +807,10 @@ pub mod pallet {
 			// Set majority to initial value
 			let initial_majority: u32 = <Pallet<T>>::compute_majority();
 			<Majority<T>>::put(initial_majority);
-			<CachedMajority<T>>::put(vec![(1u32, initial_majority)]);
+			<CachedMajority<T>>::put(BTreeMap::from([(1u32, initial_majority)]));
 			T::RelayManager::refresh_majority(1u32);
 			// Start Round 1 at Block 0
-			let round: RoundInfo<T::BlockNumber> = RoundInfo::new(
+			let round: RoundInfo<BlockNumberFor<T>> = RoundInfo::new(
 				1u32,
 				0u32,
 				0u32,
@@ -815,6 +821,7 @@ pub mod pallet {
 				T::DefaultBlocksPerSession::get(),
 			);
 			<Round<T>>::put(round);
+			T::RelayManager::refresh_round(1u32);
 			// Set productivity rate per block
 			let blocks_per_validator = {
 				if v_count == 0 {
@@ -835,7 +842,7 @@ pub mod pallet {
 			<Staked<T>>::insert(1u32, <Total<T>>::get());
 			<TotalAtStake<T>>::insert(1u32, TotalSnapshot::default());
 			<Pallet<T>>::deposit_event(Event::NewRound {
-				starting_block: T::BlockNumber::zero(),
+				starting_block: BlockNumberFor::<T>::zero(),
 				round: 1u32,
 				selected_validators_number: v_count,
 				total_balance: total_staked,
@@ -896,8 +903,8 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::set_max_total_selected())]
 		/// Set the maximum number of full validator candidates selected per round
 		pub fn set_max_full_selected(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
-			ensure!(new >= <MinTotalSelected<T>>::get(), Error::<T>::CannotSetBelowMin);
+			ensure_root(origin)?;
+			ensure!(new >= 1u32, Error::<T>::CannotSetBelowMin);
 			let old = <MaxFullSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
@@ -917,8 +924,8 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
-			ensure!(new >= <MinTotalSelected<T>>::get(), Error::<T>::CannotSetBelowMin);
+			ensure_root(origin)?;
+			ensure!(new >= 1u32, Error::<T>::CannotSetBelowMin);
 			let old = <MaxBasicSelected<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
@@ -932,26 +939,6 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_min_total_selected())]
-		/// Set the minimum number of validator candidates selected per round
-		pub fn set_min_total_selected(
-			origin: OriginFor<T>,
-			new: u32,
-		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
-			ensure!(new <= <MaxTotalSelected<T>>::get(), Error::<T>::CannotSetAboveMax);
-			let old = <MinTotalSelected<T>>::get();
-			ensure!(old != new, Error::<T>::NoWritingSameValue);
-			ensure!(
-				new <= <Round<T>>::get().round_length,
-				Error::<T>::RoundLengthMustBeAtLeastTotalSelectedValidators,
-			);
-			<MinTotalSelected<T>>::put(new);
-			Self::deposit_event(Event::MinTotalSelectedSet { old, new });
-			Ok(().into())
-		}
-
-		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_default_validator_commission())]
 		/// Set the default commission rate for all validators of the given tier
 		pub fn set_default_validator_commission(
@@ -959,7 +946,7 @@ pub mod pallet {
 			new: Perbill,
 			tier: TierType,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			match tier {
 				TierType::Full => {
 					let old = <DefaultFullValidatorCommission<T>>::get();
@@ -1006,7 +993,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(6)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_max_validator_commission())]
 		/// Set the maximum commission rate for all validators of the given tier
 		pub fn set_max_validator_commission(
@@ -1014,7 +1001,7 @@ pub mod pallet {
 			new: Perbill,
 			tier: TierType,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			match tier {
 				TierType::Full => {
 					let old = <MaxFullValidatorCommission<T>>::get();
@@ -1053,7 +1040,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(7)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_validator_commission())]
 		/// Set the commission rate of the given validator
 		/// - origin should be the controller account
@@ -1074,12 +1061,13 @@ pub mod pallet {
 				!Self::is_commission_set_requested(&controller),
 				Error::<T>::AlreadyCommissionSetRequested,
 			);
-			Self::add_to_commission_sets(&controller, old, new);
+			ensure!(!state.is_leaving(), Error::<T>::CandidateAlreadyLeaving);
+			Self::add_to_commission_sets(&controller, old, new)?;
 			Self::deposit_event(Event::ValidatorCommissionSet { candidate: controller, old, new });
 			Ok(().into())
 		}
 
-		#[pallet::call_index(8)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_validator_commission_set())]
 		/// Cancel the request for (re-)setting the commission rate.
 		/// - origin should be the controller account.
@@ -1087,12 +1075,12 @@ pub mod pallet {
 			let controller = ensure_signed(origin)?;
 			ensure!(Self::is_candidate(&controller, TierType::All), Error::<T>::CandidateDNE);
 			ensure!(Self::is_commission_set_requested(&controller), Error::<T>::CommissionSetDNE);
-			Self::remove_commission_set(&controller);
+			Self::remove_commission_set(&controller)?;
 			Self::deposit_event(Event::ValidatorCommissionSetCancelled { candidate: controller });
 			Ok(().into())
 		}
 
-		#[pallet::call_index(9)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_validator_tier())]
 		/// Modify validator candidate tier. The actual state reflection will apply at the next
 		/// round
@@ -1131,18 +1119,17 @@ pub mod pallet {
 			state.tier = new;
 			state.reset_commission::<T>();
 			<CandidateInfo<T>>::insert(&controller, state.clone());
-			Self::update_active(&controller, state.voting_power);
-			Self::sort_candidates_by_voting_power();
+			Self::update_active(&controller, state.voting_power)?;
 			Ok(().into())
 		}
 
-		#[pallet::call_index(10)]
+		#[pallet::call_index(9)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_blocks_per_round())]
 		/// Set blocks per round
 		/// - the `new` round length will be updated immediately in the next block
 		/// - also updates per-round inflation config
 		pub fn set_blocks_per_round(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= T::MinBlocksPerRound::get(), Error::<T>::CannotSetBelowMin);
 			let mut round = <Round<T>>::get();
 			let (current_round, now, first, old) = (
@@ -1153,7 +1140,7 @@ pub mod pallet {
 			);
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(
-				now - first < T::BlockNumber::from(new),
+				now - first < BlockNumberFor::<T>::from(new),
 				Error::<T>::RoundLengthMustBeLongerThanCreatedBlocks,
 			);
 			ensure!(
@@ -1178,14 +1165,14 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(11)]
+		#[pallet::call_index(10)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_storage_cache_lifetime())]
 		/// Set the `StorageCacheLifetime` round length
 		pub fn set_storage_cache_lifetime(
 			origin: OriginFor<T>,
 			new: u32,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new >= 1u32, Error::<T>::CannotSetBelowOne);
 			let old = <StorageCacheLifetime<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -1194,7 +1181,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(12)]
+		#[pallet::call_index(11)]
 		#[pallet::weight(<T as Config>::WeightInfo::join_candidates(*candidate_count))]
 		/// Join the set of validator candidates
 		/// - origin should be the stash account
@@ -1242,10 +1229,9 @@ pub mod pallet {
 			// insert empty bottom nominations
 			<BottomNominations<T>>::insert(&controller, empty_nominations);
 			candidates
-				.try_push(Bond { owner: controller.clone(), amount: bond })
+				.try_insert(controller.clone(), bond)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
-			Self::sort_candidates_by_voting_power();
 			let new_total = <Total<T>>::get().saturating_add(bond);
 			<Total<T>>::put(new_total);
 			Self::deposit_event(Event::JoinedValidatorCandidates {
@@ -1256,7 +1242,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(13)]
+		#[pallet::call_index(12)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_leave_candidates(*candidate_count))]
 		/// Request to leave the set of candidates. If successful, the account is immediately
 		/// removed from the candidate pool to prevent selection as a validator.
@@ -1267,7 +1253,14 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
-			let (now, when) = state.schedule_leave::<T>()?;
+			ensure!(
+				!Self::is_controller_set_requested(&controller),
+				Error::<T>::CannotLeaveIfControllerSetRequested,
+			);
+			ensure!(
+				!Self::is_commission_set_requested(&controller),
+				Error::<T>::CannotLeaveIfCommissionSetRequested,
+			);
 			let candidates = <CandidatePool<T>>::get();
 			ensure!(
 				candidate_count >= candidates.len() as u32,
@@ -1277,6 +1270,7 @@ pub mod pallet {
 				Self::remove_from_candidate_pool(&controller),
 				Error::<T>::CannotLeaveIfOffline,
 			);
+			let (now, when) = state.schedule_leave::<T>()?;
 			<CandidateInfo<T>>::insert(&controller, state);
 			Self::deposit_event(Event::CandidateScheduledExit {
 				exit_allowed_round: now,
@@ -1286,7 +1280,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(14)]
+		#[pallet::call_index(13)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::execute_leave_candidates(*candidate_nomination_count)
 		)]
@@ -1304,44 +1298,40 @@ pub mod pallet {
 				Error::<T>::TooLowCandidateNominationCountToLeaveCandidates
 			);
 			state.can_leave::<T>()?;
-			let return_stake = |bond: Bond<T::AccountId, BalanceOf<T>>| {
-				T::Currency::unreserve(&bond.owner, bond.amount);
-				// remove nomination from nominator state
-				let mut nominator = NominatorState::<T>::get(&bond.owner).expect(
-					"Validator state and nominator state are consistent.
-						Validator state has a record of this nomination. Therefore,
-						Nominator state also has a record. qed.",
-				);
-				if let Some(remaining) = nominator.rm_nomination(&controller) {
-					if remaining.is_zero() {
-						<NominatorState<T>>::remove(&bond.owner);
-					} else {
-						if let Some(request) = nominator.requests.requests.remove(&controller) {
-							nominator.requests.less_total =
-								nominator.requests.less_total.saturating_sub(request.amount);
-							if matches!(request.action, NominationChange::Revoke) {
-								nominator.requests.revocations_count =
-									nominator.requests.revocations_count.saturating_sub(1u32);
-							}
+			let return_stake =
+				|bond: Bond<T::AccountId, BalanceOf<T>>,
+				 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
+					T::Currency::unreserve(&bond.owner, bond.amount);
+					// remove nomination from nominator state
+					if let Some(remaining) = nominator.rm_nomination(&controller) {
+						if remaining.is_zero() {
+							<NominatorState<T>>::remove(&bond.owner);
+						} else {
+							nominator.requests.remove_request(&controller);
+							<NominatorState<T>>::insert(&bond.owner, nominator);
 						}
-						<NominatorState<T>>::insert(&bond.owner, nominator);
 					}
-				}
-			};
+				};
 			// total backing stake is at least the candidate self bond
 			let mut total_backing = state.bond;
 			// return all top nominations
 			let top_nominations =
-				<TopNominations<T>>::take(&controller).expect("CandidateInfo existence checked");
+				<TopNominations<T>>::take(&controller).ok_or(<Error<T>>::TopNominationDNE)?;
 			for bond in top_nominations.nominations {
-				return_stake(bond);
+				return_stake(
+					bond.clone(),
+					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+				);
 			}
 			total_backing += top_nominations.total;
 			// return all bottom nominations
 			let bottom_nominations =
-				<BottomNominations<T>>::take(&controller).expect("CandidateInfo existence checked");
+				<BottomNominations<T>>::take(&controller).ok_or(<Error<T>>::BottomNominationDNE)?;
 			for bond in bottom_nominations.nominations {
-				return_stake(bond);
+				return_stake(
+					bond.clone(),
+					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+				);
 			}
 			total_backing += bottom_nominations.total;
 			// return stake to stash account
@@ -1364,7 +1354,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(15)]
+		#[pallet::call_index(14)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_candidates(*candidate_count))]
 		/// Cancel open request to leave candidates
 		/// - only callable by validator account
@@ -1384,16 +1374,15 @@ pub mod pallet {
 				Error::<T>::TooLowCandidateCountWeightHintCancelLeaveCandidates,
 			);
 			candidates
-				.try_push(Bond { owner: controller.clone(), amount: state.voting_power })
+				.try_insert(controller.clone(), state.voting_power)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
-			Self::sort_candidates_by_voting_power();
 			Self::deposit_event(Event::CancelledCandidateExit { candidate: controller });
 			Ok(().into())
 		}
 
-		#[pallet::call_index(16)]
+		#[pallet::call_index(15)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_controller())]
 		/// (Re-)set the bonded controller account. The origin must be the bonded stash account. The
 		/// actual change will apply on the next round update.
@@ -1404,34 +1393,33 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
 			let old = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let state = <CandidateInfo<T>>::get(&old).ok_or(Error::<T>::CandidateDNE)?;
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
 			ensure!(!Self::is_candidate(&new, TierType::All), Error::<T>::AlreadyPaired);
+			ensure!(!state.is_leaving(), Error::<T>::CandidateAlreadyLeaving);
 			ensure!(
-				!Self::is_controller_set_requested(old.clone()),
+				!Self::is_controller_set_requested(&old),
 				Error::<T>::AlreadyControllerSetRequested
 			);
-			Self::add_to_controller_sets(stash, old.clone(), new.clone());
-			Self::deposit_event(Event::ControllerSet { old: old.clone(), new: new.clone() });
+			Self::add_to_controller_sets(stash, old.clone(), new.clone())?;
+			Self::deposit_event(Event::ControllerSet { old, new });
 			Ok(().into())
 		}
 
-		#[pallet::call_index(17)]
+		#[pallet::call_index(16)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_controller_set())]
 		/// Cancel the request for (re-)setting the bonded controller account.
 		/// - origin should be the controller account.
 		pub fn cancel_controller_set(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
 			ensure!(Self::is_candidate(&controller, TierType::All), Error::<T>::CandidateDNE);
-			ensure!(
-				Self::is_controller_set_requested(controller.clone()),
-				Error::<T>::ControllerSetDNE
-			);
-			Self::remove_controller_set(&controller);
+			ensure!(Self::is_controller_set_requested(&controller), Error::<T>::ControllerSetDNE);
+			Self::remove_controller_set(&controller)?;
 			Self::deposit_event(Event::ControllerSetCancelled { candidate: controller });
 			Ok(().into())
 		}
 
-		#[pallet::call_index(18)]
+		#[pallet::call_index(17)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_candidate_reward_dst())]
 		/// Set the validator candidate reward destination
 		/// - origin should be the controller account
@@ -1453,7 +1441,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(19)]
+		#[pallet::call_index(18)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_nominator_reward_dst())]
 		/// Set the nominator reward destination
 		pub fn set_nominator_reward_dst(
@@ -1474,7 +1462,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(20)]
+		#[pallet::call_index(19)]
 		#[pallet::weight(<T as Config>::WeightInfo::go_offline())]
 		/// Temporarily leave the set of validator candidates without unbonding
 		/// - removed from candidate pool
@@ -1491,33 +1479,28 @@ pub mod pallet {
 			ensure!(state.is_active(), Error::<T>::AlreadyOffline);
 			ensure!(Self::remove_from_candidate_pool(&controller), Error::<T>::AlreadyOffline,);
 			let mut selected_candidates = SelectedCandidates::<T>::get();
-			selected_candidates.retain(|v| *v != controller);
+			selected_candidates.remove(&controller);
 			// refresh selected candidates
-			let round = <Round<T>>::get();
-			let mut cached_selected_candidates = <CachedSelectedCandidates<T>>::get();
-			cached_selected_candidates.retain(|r| r.0 != round.current_round_index);
-			cached_selected_candidates
-				.push((round.current_round_index, selected_candidates.clone().into_inner()));
-			<CachedSelectedCandidates<T>>::put(cached_selected_candidates);
+			let round = <Round<T>>::get().current_round_index;
+			Self::refresh_cached_selected_candidates(round, selected_candidates.clone());
 			// refresh majority
 			let majority: u32 = Self::compute_majority();
 			<Majority<T>>::put(majority);
 			let mut cached_majority = <CachedMajority<T>>::get();
-			cached_majority.retain(|r| r.0 != round.current_round_index);
-			cached_majority.push((round.current_round_index, majority));
+			cached_majority.entry(round).and_modify(|m| *m = majority).or_insert(majority);
 			<CachedMajority<T>>::put(cached_majority);
 			if state.tier == TierType::Full {
 				// kickout relayer
 				T::RelayManager::kickout_relayer(&controller);
 				// refresh selected full candidates
-				let mut selected_full_candidates = <SelectedFullCandidates<T>>::get();
-				selected_full_candidates.retain(|c| *c != controller);
-				<SelectedFullCandidates<T>>::put(selected_full_candidates);
+				<SelectedFullCandidates<T>>::mutate(|selected_full_candidates| {
+					selected_full_candidates.remove(&controller);
+				});
 			} else {
 				// refresh selected basic candidates
-				let mut selected_basic_candidates = <SelectedBasicCandidates<T>>::get();
-				selected_basic_candidates.retain(|c| *c != controller);
-				<SelectedBasicCandidates<T>>::put(selected_basic_candidates);
+				<SelectedBasicCandidates<T>>::mutate(|selected_basic_candidates| {
+					selected_basic_candidates.remove(&controller);
+				});
 			}
 			state.go_offline();
 			<CandidateInfo<T>>::insert(&controller, state);
@@ -1526,7 +1509,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(21)]
+		#[pallet::call_index(20)]
 		#[pallet::weight(<T as Config>::WeightInfo::go_online())]
 		/// Rejoin the set of validator candidates if previously been kicked out or went offline
 		/// - state changed to `Active`
@@ -1541,7 +1524,7 @@ pub mod pallet {
 			state.go_online();
 			let mut candidates = <CandidatePool<T>>::get();
 			candidates
-				.try_push(Bond { owner: controller.clone(), amount: state.voting_power })
+				.try_insert(controller.clone(), state.voting_power)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
 			<CandidatePool<T>>::put(candidates);
 			<CandidateInfo<T>>::insert(&controller, state);
@@ -1549,7 +1532,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(22)]
+		#[pallet::call_index(21)]
 		#[pallet::weight(<T as Config>::WeightInfo::candidate_bond_more())]
 		/// Increase validator candidate self bond by `more`
 		/// - origin should be the stash account
@@ -1564,12 +1547,11 @@ pub mod pallet {
 			ensure!(T::Currency::can_reserve(&stash, more), Error::<T>::InsufficientBalance);
 			state.bond_more::<T>(stash.clone(), controller.clone(), more)?;
 			<CandidateInfo<T>>::insert(&controller, state.clone());
-			Self::update_active(&controller, state.voting_power);
-			Self::sort_candidates_by_voting_power();
+			Self::update_active(&controller, state.voting_power)?;
 			Ok(().into())
 		}
 
-		#[pallet::call_index(23)]
+		#[pallet::call_index(22)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_candidate_bond_less())]
 		/// Request by validator candidate to decrease self bond by `less`
 		/// - origin should be the controller account
@@ -1590,7 +1572,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(24)]
+		#[pallet::call_index(23)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_candidate_bond_less())]
 		/// Execute pending request to adjust the validator candidate self bond
 		/// - origin should be the stash account
@@ -1600,11 +1582,10 @@ pub mod pallet {
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			state.execute_bond_less::<T>(stash.clone(), controller.clone())?;
 			<CandidateInfo<T>>::insert(&controller, state);
-			Self::sort_candidates_by_voting_power();
 			Ok(().into())
 		}
 
-		#[pallet::call_index(25)]
+		#[pallet::call_index(24)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_candidate_bond_less())]
 		/// Cancel pending request to adjust the validator candidate self bond
 		/// - origin should be the controller account
@@ -1616,7 +1597,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(26)]
+		#[pallet::call_index(25)]
 		#[pallet::weight(
 			<T as Config>::WeightInfo::nominate(
 				*candidate_nomination_count,
@@ -1642,17 +1623,14 @@ pub mod pallet {
 				// nomination after first
 				ensure!(amount >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
 				ensure!(
-					nomination_count >= state.nominations.0.len() as u32,
+					nomination_count >= state.nominations.len() as u32,
 					Error::<T>::TooLowNominationCountToNominate
 				);
 				ensure!(
-					(state.nominations.0.len() as u32) < T::MaxNominationsPerNominator::get(),
+					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
-				ensure!(
-					state.add_nomination(Bond { owner: candidate.clone(), amount }),
-					Error::<T>::AlreadyNominatedCandidate
-				);
+				state.add_nomination::<T>(candidate.clone(), amount)?;
 				state
 			} else {
 				// first nomination
@@ -1670,16 +1648,15 @@ pub mod pallet {
 			);
 			let (nominator_position, less_total_staked) =
 				state.add_nomination::<T>(&candidate, Bond { owner: nominator.clone(), amount })?;
-			T::Currency::reserve(&nominator, amount)
-				.expect("verified can reserve at top of this extrinsic body");
+			T::Currency::reserve(&nominator, amount)?;
 			// only is_some if kicked the lowest bottom as a consequence of this new nomination
 			let net_total_increase =
 				if let Some(less) = less_total_staked { amount - less } else { amount };
-			let new_total_locked = <Total<T>>::get() + net_total_increase;
-			<Total<T>>::put(new_total_locked);
+			<Total<T>>::mutate(|total_locked| {
+				*total_locked += net_total_increase;
+			});
 			<CandidateInfo<T>>::insert(&candidate, state);
 			<NominatorState<T>>::insert(&nominator, nominator_state);
-			Self::sort_candidates_by_voting_power();
 			Self::deposit_event(Event::Nomination {
 				nominator,
 				locked_amount: amount,
@@ -1689,7 +1666,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(27)]
+		#[pallet::call_index(26)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_leave_nominators())]
 		/// Request to leave the set of nominators. If successful, the caller is scheduled
 		/// to be allowed to exit. Success forbids future nominator actions until the request is
@@ -1709,7 +1686,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(28)]
+		#[pallet::call_index(27)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_leave_nominators(*nomination_count))]
 		/// Execute the right to exit the set of nominators and revoke all ongoing nominations.
 		pub fn execute_leave_nominators(
@@ -1719,12 +1696,10 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.can_execute_leave::<T>(nomination_count)?;
-			for bond in state.nominations.0 {
-				if let Err(error) = Self::nominator_leaves_candidate(
-					bond.owner.clone(),
-					nominator.clone(),
-					bond.amount,
-				) {
+			for bond in state.nominations {
+				if let Err(error) =
+					Self::nominator_leaves_candidate(bond.0.clone(), nominator.clone(), bond.1)
+				{
 					log::warn!(
 						"STORAGE CORRUPTED \nNominator leaving validator failed with error: {:?}",
 						error
@@ -1732,12 +1707,11 @@ pub mod pallet {
 				}
 			}
 			<NominatorState<T>>::remove(&nominator);
-			Self::sort_candidates_by_voting_power();
 			Self::deposit_event(Event::NominatorLeft { nominator, unstaked_amount: state.total });
 			Ok(().into())
 		}
 
-		#[pallet::call_index(29)]
+		#[pallet::call_index(28)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_nominators())]
 		/// Cancel a pending request to exit the set of nominators. Success clears the pending exit
 		/// request (thereby resetting the delay upon another `leave_nominators` call).
@@ -1754,7 +1728,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(30)]
+		#[pallet::call_index(29)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_revoke_nomination())]
 		/// Request to revoke an existing nomination. If successful, the nomination is scheduled
 		/// to be allowed to be revoked via the `execute_nomination_request` extrinsic.
@@ -1776,7 +1750,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(31)]
+		#[pallet::call_index(30)]
 		#[pallet::weight(<T as Config>::WeightInfo::nominator_bond_more())]
 		/// Bond more for nominators wrt a specific validator candidate.
 		pub fn nominator_bond_more(
@@ -1787,11 +1761,10 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.increase_nomination::<T>(candidate.clone(), more)?;
-			Self::sort_candidates_by_voting_power();
 			Ok(().into())
 		}
 
-		#[pallet::call_index(32)]
+		#[pallet::call_index(31)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_nominator_bond_less())]
 		/// Request bond less for nominators wrt a specific validator candidate.
 		pub fn schedule_nominator_bond_less(
@@ -1813,7 +1786,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(33)]
+		#[pallet::call_index(32)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_nominator_bond_less())]
 		/// Execute pending request to change an existing nomination
 		pub fn execute_nomination_request(
@@ -1823,11 +1796,10 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.execute_pending_request::<T>(candidate)?;
-			Self::sort_candidates_by_voting_power();
 			Ok(().into())
 		}
 
-		#[pallet::call_index(34)]
+		#[pallet::call_index(33)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_nominator_bond_less())]
 		/// Cancel request to change an existing nomination.
 		pub fn cancel_nomination_request(

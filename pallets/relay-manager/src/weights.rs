@@ -13,6 +13,7 @@ pub trait WeightInfo {
 	fn set_heartbeat_offence_activation() -> Weight;
 	fn set_heartbeat_slash_fraction() -> Weight;
 	fn set_relayer() -> Weight;
+	fn cancel_relayer_set() -> Weight;
 	fn heartbeat() -> Weight;
 	fn heartbeat_v2() -> Weight;
 }
@@ -36,6 +37,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
 	fn set_relayer() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(T::DbWeight::get().reads(6 as u64))
+			.saturating_add(T::DbWeight::get().writes(4 as u64))
+	}
+	fn cancel_relayer_set() -> Weight {
 		Weight::from_parts(18_178_000, 0)
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
@@ -70,6 +76,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
 	fn set_relayer() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(6 as u64))
+			.saturating_add(RocksDbWeight::get().writes(4 as u64))
+	}
+	fn cancel_relayer_set() -> Weight {
 		Weight::from_parts(18_178_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))

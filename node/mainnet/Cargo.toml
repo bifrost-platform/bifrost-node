@@ -1,9 +1,9 @@
 [package]
 name = "bifrost-mainnet-node"
 version = "1.0.0"
-description = "The node specification for Bifrost Node mainnet"
+description = "The node client implementation for Bifrost mainnet"
 authors = { workspace = true }
-homepage = { workspace = true}
+homepage = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
@@ -33,6 +33,7 @@ sc-rpc = { workspace = true }
 sc-rpc-api = { workspace = true }
 sc-chain-spec = { workspace = true }
 sc-basic-authorship = { workspace = true }
+sc-offchain = { workspace = true }
 
 # substrate primitives dependencies
 sp-core = { workspace = true, features = ["std"] }
@@ -45,6 +46,7 @@ sp-block-builder = { workspace = true, features = ["std"] }
 sp-timestamp = { workspace = true, features = ["std"] }
 sp-blockchain = { workspace = true }
 sp-consensus = { workspace = true }
+sp-inherents = { workspace = true }
 
 # FRAME dependencies
 pallet-bfc-staking = { workspace = true }
@@ -65,9 +67,10 @@ fp-storage = { workspace = true }
 fp-ext = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-rpc-txpool = { workspace = true, features = ["std"] }
-pallet-evm = { workspace = true, features = ["std"] }
-
-pallet-ethereum = { workspace = true, features = ["forbid-evm-reentrancy"] }
+pallet-ethereum = { workspace = true, features = [
+	"std",
+	"forbid-evm-reentrancy",
+] }
 
 # benchmarking dependencies
 frame-benchmarking-cli = { workspace = true }
@@ -75,12 +78,13 @@ frame-benchmarking = { workspace = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }
-bifrost-mainnet-runtime = { workspace = true, features = ["std", "evm-tracing"] }
+bifrost-mainnet-runtime = { workspace = true, features = [
+	"std",
+	"evm-tracing",
+] }
 bifrost-mainnet-constants = { workspace = true }
 bifrost-common-node = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = [
-	"bifrost-mainnet-runtime/runtime-benchmarks",
-]
+runtime-benchmarks = ["bifrost-mainnet-runtime/runtime-benchmarks"]

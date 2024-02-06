@@ -1,4 +1,5 @@
 use frame_support::traits::Currency;
+use frame_system::pallet_prelude::BlockNumberFor;
 
 use pallet_bfc_staking::{
 	CandidateMetadata, CapacityStatus, Nominator, NominatorStatus, RewardDestination,
@@ -14,8 +15,6 @@ use sp_std::{vec, vec::Vec};
 pub type BalanceOf<Runtime> = <<Runtime as pallet_bfc_staking::Config>::Currency as Currency<
 	<Runtime as frame_system::Config>::AccountId,
 >>::Balance;
-
-pub type BlockNumberOf<Runtime> = <Runtime as frame_system::Config>::BlockNumber;
 
 pub type StakingOf<Runtime> = pallet_bfc_staking::Pallet<Runtime>;
 
@@ -126,7 +125,7 @@ pub struct CandidateStates<Runtime: pallet_bfc_staking::Config> {
 	/// The validator commission ratio
 	pub commission: Vec<u32>,
 	/// The last block number this candidate produced
-	pub last_block: Vec<BlockNumberOf<Runtime>>,
+	pub last_block: Vec<BlockNumberFor<Runtime>>,
 	/// The total blocks this candidate produced in the current round
 	pub blocks_produced: Vec<u32>,
 	/// The block productivity for this candidate in the current round
@@ -143,7 +142,7 @@ impl<Runtime> From<CandidateStates<Runtime>> for EvmCandidateStateOf
 where
 	Runtime: pallet_bfc_staking::Config,
 	BalanceOf<Runtime>: Into<U256>,
-	BlockNumberOf<Runtime>: Into<U256>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	fn from(state: CandidateStates<Runtime>) -> EvmCandidateStateOf {
 		(
@@ -175,7 +174,7 @@ impl<Runtime> From<CandidateStates<Runtime>> for EvmCandidateStatesOf
 where
 	Runtime: pallet_bfc_staking::Config,
 	BalanceOf<Runtime>: Into<U256>,
-	BlockNumberOf<Runtime>: Into<U256>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	fn from(state: CandidateStates<Runtime>) -> EvmCandidateStatesOf {
 		(
@@ -338,7 +337,7 @@ pub struct CandidateState<Runtime: pallet_bfc_staking::Config> {
 	/// The validator commission ratio
 	pub commission: u32,
 	/// The last block number this candidate produced
-	pub last_block: BlockNumberOf<Runtime>,
+	pub last_block: BlockNumberFor<Runtime>,
 	/// The total blocks this candidate produced in the current round
 	pub blocks_produced: u32,
 	/// The block productivity for this candidate in the current round
@@ -355,7 +354,7 @@ impl<Runtime> CandidateState<Runtime>
 where
 	Runtime: pallet_bfc_staking::Config,
 	Runtime::AccountId: Into<H160>,
-	BlockNumberOf<Runtime>: Into<U256>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	pub fn default() -> Self {
 		let zero = 0u32;
@@ -386,7 +385,7 @@ where
 	pub fn set_state(
 		&mut self,
 		controller: Runtime::AccountId,
-		state: CandidateMetadata<Runtime::AccountId, BalanceOf<Runtime>, BlockNumberOf<Runtime>>,
+		state: CandidateMetadata<Runtime::AccountId, BalanceOf<Runtime>, BlockNumberFor<Runtime>>,
 	) {
 		self.controller = Address(controller.into());
 		self.stash = Address(state.stash.into());
@@ -483,13 +482,13 @@ where
 	}
 
 	pub fn set_state(&mut self, state: Nominator<Runtime::AccountId, BalanceOf<Runtime>>) {
-		for nomination in state.nominations.0 {
-			self.candidates.push(Address(nomination.owner.into()));
-			self.nominations.push(nomination.amount);
-		}
-		for nomination in state.initial_nominations.0 {
-			self.initial_nominations.push(nomination.amount);
-		}
+		state.nominations.into_iter().for_each(|(owner, amount)| {
+			self.candidates.push(Address(owner.into()));
+			self.nominations.push(amount);
+		});
+		state.initial_nominations.into_iter().for_each(|(_, amount)| {
+			self.initial_nominations.push(amount);
+		});
 
 		self.total = state.total;
 		self.request_revocations_count = state.requests.revocations_count.into();
@@ -505,9 +504,10 @@ where
 			RewardDestination::Account => 1u32.into(),
 		};
 
-		for awarded_token in state.awarded_tokens_per_candidate.0 {
-			self.awarded_tokens_per_candidate.push(awarded_token.amount);
-		}
+		state.awarded_tokens_per_candidate.iter().for_each(|(_, amount)| {
+			self.awarded_tokens_per_candidate.push(*amount);
+		});
+
 		self.awarded_tokens = state.awarded_tokens;
 	}
 

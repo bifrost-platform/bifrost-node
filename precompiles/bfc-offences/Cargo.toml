@@ -28,7 +28,7 @@ sp-staking = { workspace = true }
 
 # Frontier
 fp-evm = { workspace = true }
-pallet-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
 [dev-dependencies]
 derive_more = { workspace = true }

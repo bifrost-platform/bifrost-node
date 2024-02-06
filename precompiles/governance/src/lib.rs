@@ -1,9 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::{
-	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
 	traits::{Bounded, QueryPreimage},
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 
 use pallet_democracy::{
 	AccountVote, Call as DemocracyCall, Conviction, ReferendumInfo, Vote, VoteThreshold, Voting,
@@ -14,7 +15,7 @@ use pallet_preimage::Call as PreimageCall;
 use precompile_utils::prelude::*;
 
 use sp_core::{H160, H256, U256};
-use sp_runtime::traits::{Hash, StaticLookup};
+use sp_runtime::traits::{Dispatchable, Hash, StaticLookup};
 use sp_std::{
 	convert::{TryFrom, TryInto},
 	marker::PhantomData,
@@ -24,7 +25,7 @@ use sp_std::{
 
 mod types;
 use types::{
-	AccountVotes, BalanceOf, BlockNumberOf, DemocracyOf, EvmAccountVotes, EvmVotingOf,
+	AccountVotes, BalanceOf, DemocracyOf, EvmAccountVotes, EvmVotingOf,
 	GetEncodedProposalSizeLimit, HashOf, ReferendaVotes,
 };
 
@@ -36,18 +37,17 @@ impl<Runtime> GovernancePrecompile<Runtime>
 where
 	Runtime: pallet_democracy::Config
 		+ pallet_evm::Config
-		+ frame_system::Config
+		+ frame_system::Config<Hash = H256>
 		+ pallet_preimage::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<DemocracyCall<Runtime>>,
 	Runtime::RuntimeCall: From<PreimageCall<Runtime>>,
 	BalanceOf<Runtime>: TryFrom<U256> + Into<U256>,
-	BlockNumberOf<Runtime>: Into<U256>,
 	HashOf<Runtime>: Into<H256> + From<H256>,
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
-	Runtime::BlockNumber: Into<U256>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	// Storage getters
 
@@ -254,8 +254,13 @@ where
 			RevertReason::custom("Failure in preimage fetch").in_field("proposal_hash")
 		})?;
 
-		let bounded =
-			Bounded::Lookup::<pallet_democracy::CallOf<Runtime>> { hash: proposal_hash, len };
+		let bounded = Bounded::Lookup::<
+			pallet_democracy::CallOf<Runtime>,
+			<Runtime as frame_system::Config>::Hashing,
+		> {
+			hash: proposal_hash,
+			len,
+		};
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::propose { proposal: bounded, value };

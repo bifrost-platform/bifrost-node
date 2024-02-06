@@ -36,12 +36,12 @@ describeDevNode('pallet_democracy - note preimage', (context) => {
     const preimage = rawPreimage.unwrap().toJSON();
     expect(preimage).to.not.be.null;
 
-    const rawStatusFor: any = await context.polkadotApi.query.preimage.statusFor(encodedHash);
+    const rawStatusFor: any = await context.polkadotApi.query.preimage.requestStatusFor(encodedHash);
     const statusFor = rawStatusFor.unwrap().toJSON();
 
     expect(statusFor).has.key('unrequested');
-    expect(statusFor.unrequested.deposit[0]).equal(alith.address);
-    expect(new BigNumber(statusFor.unrequested.deposit[1]).toFixed()).equal(storageFee.toFixed());
+    expect(statusFor.unrequested.ticket[0]).equal(alith.address);
+    expect(new BigNumber(statusFor.unrequested.ticket[1]).toFixed()).equal(storageFee.toFixed());
     expect(statusFor.unrequested.len).equal(xt.length - 1);
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "1.2.5",
+  "version": "1.3.0",
   "author": "bifrost-platform",
   "scripts": {
     "set_session_keys": "ts-node src/set_session_keys.ts",
@@ -16,20 +16,20 @@
     "url": "git+https://github.com/bifrost-platform/bifrost-node.git"
   },
   "dependencies": {
-    "@polkadot/api": "10.9.1",
-    "axios": "1.5.0",
+    "@polkadot/api": "10.11.2",
+    "axios": "1.6.5",
     "bignumber.js": "9.1.2",
     "gauge": "5.0.1",
     "shelljs": "0.8.5",
-    "web3": "4.1.1",
+    "web3": "4.3.0",
     "yargs": "17.7.2"
   },
   "devDependencies": {
-    "@types/gauge": "5.0.0",
-    "@types/node": "20.2.1",
-    "@types/yargs": "17.0.24",
-    "ts-node": "10.9.1",
+    "@types/gauge": "5.0.4",
+    "@types/node": "20.11.0",
+    "@types/yargs": "17.0.32",
+    "ts-node": "10.9.2",
     "ts-node-register": "1.0.0",
-    "typescript": "5.0.4"
+    "typescript": "5.3.3"
   }
 }

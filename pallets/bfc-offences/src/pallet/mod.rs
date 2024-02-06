@@ -1,13 +1,13 @@
 mod impls;
 
 use crate::{
-	BalanceOf, NegativeImbalanceOf, OffenceCount, Releases, ValidatorOffenceInfo, WeightInfo,
+	migrations, BalanceOf, NegativeImbalanceOf, OffenceCount, ValidatorOffenceInfo, WeightInfo,
 };
 
 use bp_staking::TierType;
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, OnUnbalanced, ReservableCurrency},
+	traits::{Currency, OnRuntimeUpgrade, OnUnbalanced, ReservableCurrency, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 use sp_staking::SessionIndex;
@@ -16,8 +16,12 @@ use sp_staking::SessionIndex;
 pub mod pallet {
 	use super::*;
 
+	/// The current storage version.
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+
 	/// Pallet for bfc offences
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	/// Configuration trait of this pallet
@@ -72,10 +76,6 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	/// Storage version of the pallet
-	pub(crate) type StorageVersion<T: Config> = StorageValue<_, Releases, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn validator_offences)]
 	/// The current offence state of a specific validator
@@ -107,25 +107,46 @@ pub mod pallet {
 	/// The current activation of validator slashing
 	pub type IsSlashActive<T: Config> = StorageValue<_, bool, ValueQuery>;
 
-	#[pallet::genesis_config]
-	pub struct GenesisConfig {}
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v3::MigrateToV3::<T>::on_runtime_upgrade()
+		}
+	}
 
-	#[cfg(feature = "std")]
-	impl Default for GenesisConfig {
+	#[pallet::genesis_config]
+	pub struct GenesisConfig<T> {
+		pub default_offence_expiration_in_sessions: SessionIndex,
+		pub default_full_maximum_offence_count: OffenceCount,
+		pub default_basic_maximum_offence_count: OffenceCount,
+		pub is_offence_active: bool,
+		pub is_slash_active: bool,
+		#[serde(skip)]
+		pub _config: PhantomData<T>,
+	}
+
+	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self {}
+			Self {
+				default_offence_expiration_in_sessions: T::DefaultOffenceExpirationInSessions::get(
+				),
+				default_full_maximum_offence_count: T::DefaultFullMaximumOffenceCount::get(),
+				default_basic_maximum_offence_count: T::DefaultBasicMaximumOffenceCount::get(),
+				is_offence_active: T::IsOffenceActive::get(),
+				is_slash_active: T::IsSlashActive::get(),
+				_config: Default::default(),
+			}
 		}
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			StorageVersion::<T>::put(Releases::V2_0_0);
-			OffenceExpirationInSessions::<T>::put(T::DefaultOffenceExpirationInSessions::get());
-			FullMaximumOffenceCount::<T>::put(T::DefaultFullMaximumOffenceCount::get());
-			BasicMaximumOffenceCount::<T>::put(T::DefaultBasicMaximumOffenceCount::get());
-			IsOffenceActive::<T>::put(T::IsOffenceActive::get());
-			IsSlashActive::<T>::put(T::IsSlashActive::get());
+			OffenceExpirationInSessions::<T>::put(self.default_offence_expiration_in_sessions);
+			FullMaximumOffenceCount::<T>::put(self.default_full_maximum_offence_count);
+			BasicMaximumOffenceCount::<T>::put(self.default_basic_maximum_offence_count);
+			IsOffenceActive::<T>::put(self.is_offence_active);
+			IsSlashActive::<T>::put(self.is_slash_active);
 		}
 	}
 
@@ -140,7 +161,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: SessionIndex,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new > 0u32, Error::<T>::CannotSetBelowMin);
 			let old = <OffenceExpirationInSessions<T>>::get();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -159,7 +180,7 @@ pub mod pallet {
 			new: OffenceCount,
 			tier: TierType,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(new > 0u32, Error::<T>::CannotSetBelowMin);
 			match tier {
 				TierType::Full => {
@@ -207,7 +228,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_active: bool,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(is_active != <IsOffenceActive<T>>::get(), Error::<T>::NoWritingSameValue);
 			<IsOffenceActive<T>>::put(is_active);
 			Self::deposit_event(Event::OffenceActivationSet { is_active });
@@ -223,7 +244,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_active: bool,
 		) -> DispatchResultWithPostInfo {
-			frame_system::ensure_root(origin)?;
+			ensure_root(origin)?;
 			ensure!(is_active != <IsSlashActive<T>>::get(), Error::<T>::NoWritingSameValue);
 			<IsSlashActive<T>>::put(is_active);
 			Self::deposit_event(Event::SlashActivationSet { is_active });

@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::{
-	dispatch::{Dispatchable, GetDispatchInfo, PostDispatchInfo},
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
 	weights::Weight,
 };
 
@@ -11,6 +11,7 @@ use pallet_evm::AddressMapping;
 use precompile_utils::prelude::*;
 
 use sp_core::{Decode, H160, H256};
+use sp_runtime::traits::Dispatchable;
 use sp_std::{boxed::Box, convert::TryInto, marker::PhantomData, vec::Vec};
 
 type CollectiveOf<Runtime, Instance> = pallet_collective::Pallet<Runtime, Instance>;

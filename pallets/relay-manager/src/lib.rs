@@ -33,6 +33,22 @@ pub type IdentificationTuple<T> = (
 	>>::Identification,
 );
 
+pub(crate) const LOG_TARGET: &'static str = "runtime::relay-manager";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
+
+/// Used for release versioning upto v3_0_0.
+///
+/// Obsolete from v4. Keeping around to make encoding/decoding of old migration code easier.
 #[derive(Encode, Decode, Clone, Copy, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// A value placed in storage that represents the current version of the Relay Manager storage. This
 /// value is used by the `on_runtime_upgrade` logic to determine whether we run storage migration
@@ -56,7 +72,7 @@ pub enum RelayerStatus {
 	Active,
 	/// It is offline due to unsending heartbeats for the current session
 	Idle,
-	/// It is kicked out due to continueing unresponsiveness
+	/// It is kicked out due to continuing unresponsiveness
 	KickedOut,
 }
 
@@ -162,5 +178,20 @@ impl<Offender: Clone, T: pallet::pallet::Config> Offence<Offender>
 
 	fn slash_fraction(&self, _offenders: u32) -> Perbill {
 		<HeartbeatSlashFraction<T>>::get()
+	}
+}
+
+#[derive(Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+/// Information of the single-round delayed relayer address update request
+pub struct DelayedRelayerSet<AccountId> {
+	/// The current relayer address.
+	pub old: AccountId,
+	/// The requested relayer address.
+	pub new: AccountId,
+}
+
+impl<AccountId: PartialEq + Clone> DelayedRelayerSet<AccountId> {
+	pub fn new(old: AccountId, new: AccountId) -> Self {
+		DelayedRelayerSet { old, new }
 	}
 }

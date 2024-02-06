@@ -1,37 +1,40 @@
+import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 import { describe } from 'mocha';
 import Web3, { TransactionReceiptAPI } from 'web3';
 
-import { ApiPromise, HttpProvider } from '@polkadot/api';
+import { ApiPromise, HttpProvider, Keyring } from '@polkadot/api';
 
+import { MIN_NOMINATOR_STAKING_AMOUNT } from '../constants/currency';
 import { DEMO_ABI, DEMO_BYTE_CODE } from '../constants/demo_contract';
 import { ERC20_ABI, ERC20_BYTE_CODE } from '../constants/ERC20';
-import { TEST_CONTROLLERS } from '../constants/keys';
 import { STAKING_ABI, STAKING_ADDRESS } from '../constants/staking_contract';
 import { sleep } from '../tests/utils';
+import config from './config.json';
 
-const web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:9944'));
+const node_endpoint = config.nodeEndpoint;
+const web3 = new Web3(new Web3.providers.HttpProvider(node_endpoint));
 
-const alithPk = TEST_CONTROLLERS[0].private;
-const alith = web3.eth.accounts.wallet.add(alithPk)[0].address;
-const baltatharPk = TEST_CONTROLLERS[1].private;
-const baltathar = web3.eth.accounts.wallet.add(baltatharPk)[1].address;
+const testerPk = config.testerPk;
+const tester = config.tester;
+const tester2 = config.tester2;
+const validator = config.validator;
 
 let erc20Address: string | undefined;
 
 const deployDemo = async (deployTx: any): Promise<TransactionReceiptAPI | undefined> => {
   const signedTx = (await web3.eth.accounts.signTransaction({
-    from: alith,
+    from: tester,
     data: deployTx.encodeABI(),
     gasPrice: web3.utils.toWei(1000, 'gwei'),
     gas: 3000000
-  }, alithPk)).rawTransaction;
+  }, testerPk)).rawTransaction;
 
   // send transaction
   const txHash = await web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
   expect(txHash).is.ok;
 
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt?.status).equal('0x1');
@@ -45,7 +48,7 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
   expect(txHash).is.ok;
 
   // get transaction receipt
-  await sleep(3500);
+  await sleep(6000);
   const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt!.status).equal('0x1');
@@ -55,29 +58,29 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
 
 const createErc20Transfer = async (): Promise<string> => {
   const erc20: any = new web3.eth.Contract(ERC20_ABI, erc20Address);
-  const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
+  const gas = await erc20.methods.transfer(tester2, web3.utils.toWei(1, 'ether')).estimateGas({ from: tester });
   expect(gas).is.ok;
 
   return (await web3.eth.accounts.signTransaction({
-    from: alith,
+    from: tester,
     to: erc20Address,
     gas,
     gasPrice: web3.utils.toWei(1000, 'gwei'),
-    data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI()
-  }, alithPk)).rawTransaction;
+    data: erc20.methods.transfer(tester2, web3.utils.toWei(1, 'ether')).encodeABI()
+  }, testerPk)).rawTransaction;
 };
 
-describe('runtime_upgrade - evm interactions', function () {
+describe('test_runtime - evm interactions', function () {
   this.timeout(20000);
 
   it('should successfully send transaction - legacy', async function () {
     const signedTx = (await web3.eth.accounts.signTransaction({
-      from: alith,
-      to: '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac',
+      from: tester,
+      to: tester2,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
-      value: web3.utils.toWei(1, 'ether'),
+      value: web3.utils.toWei(0.01, 'ether'),
       gas: 21000
-    }, alithPk)).rawTransaction;
+    }, testerPk)).rawTransaction;
 
     // send transaction
     await sendTransaction(signedTx);
@@ -85,13 +88,13 @@ describe('runtime_upgrade - evm interactions', function () {
 
   it('should successfully send transaction - eip1559', async function () {
     const signedTx = (await web3.eth.accounts.signTransaction({
-      from: alith,
-      to: '0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac',
+      from: tester,
+      to: tester2,
       maxFeePerGas: web3.utils.toWei(1200, 'gwei'),
       maxPriorityFeePerGas: web3.utils.toWei(1.5, 'gwei'),
-      value: web3.utils.toWei(1, 'ether'),
+      value: web3.utils.toWei(0.01, 'ether'),
       gas: 21000
-    }, alithPk)).rawTransaction;
+    }, testerPk)).rawTransaction;
 
     // send transaction
     await sendTransaction(signedTx);
@@ -105,19 +108,22 @@ describe('runtime_upgrade - evm interactions', function () {
 
     // estimate contract methods
     const contract: any = new web3.eth.Contract(DEMO_ABI, receipt?.contractAddress);
-    const gas = await contract.methods.store(1).estimateGas({ from: alith });
+    const gas = await contract.methods.store(1).estimateGas({ from: tester });
     expect(gas).is.ok;
 
     // send contract methods
     const signedTx_2 = (await web3.eth.accounts.signTransaction({
-      from: alith,
+      from: tester,
       to: receipt?.contractAddress,
       gas,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
       data: contract.methods.store(1).encodeABI()
-    }, alithPk)).rawTransaction;
+    }, testerPk)).rawTransaction;
 
-    await sendTransaction(signedTx_2);
+    const txHash = await sendTransaction(signedTx_2);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
 
     // call contract methods
     const response = await contract.methods.retrieve().call();
@@ -128,30 +134,32 @@ describe('runtime_upgrade - evm interactions', function () {
     const staking: any = new web3.eth.Contract(STAKING_ABI, STAKING_ADDRESS);
     const candidatePool = await staking.methods.candidate_pool().call();
     expect(candidatePool).is.ok;
-    expect(candidatePool[0][0]).equal(alith);
     expect(Number(candidatePool[1][0])).greaterThanOrEqual(Number(web3.utils.toWei(1000, 'ether')));
 
-    const candidateState = await staking.methods.candidate_state(alith).call();
+    const candidateState = await staking.methods.candidate_state(validator).call();
     expect(candidateState).is.ok;
-    expect(candidateState.candidate).equal(alith);
+    expect(candidateState.candidate).equal(validator);
     expect(Number(candidateState.bond)).greaterThanOrEqual(Number(web3.utils.toWei(1000, 'ether')));
 
-    const gas = await staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).estimateGas({ from: baltathar });
+    const gas = await staking.methods.nominator_bond_more(validator, web3.utils.toWei(0.01, 'ether')).estimateGas({ from: tester });
     expect(gas).is.ok;
 
     const signedTx = (await web3.eth.accounts.signTransaction({
-      from: baltathar,
+      from: tester,
       to: STAKING_ADDRESS,
       gas,
       gasPrice: web3.utils.toWei(1000, 'gwei'),
-      data: staking.methods.nominate(alith, web3.utils.toWei(1000, 'ether'), 1000, 1000).encodeABI()
-    }, baltatharPk)).rawTransaction;
+      data: staking.methods.nominator_bond_more(validator, web3.utils.toWei(0.01, 'ether')).encodeABI()
+    }, testerPk)).rawTransaction;
 
-    await sendTransaction(signedTx);
+    const txHash = await sendTransaction(signedTx);
+
+    const receipt_2 = await web3.eth.getTransactionReceipt(txHash);
+    expect(Number(receipt_2.gasUsed)).lessThanOrEqual(Number(gas));
   });
 });
 
-describe('runtime_upgrade - ethapi', function () {
+describe('test_runtime - ethapi', function () {
   this.timeout(20000);
 
   it('should successfully request eth namespace methods', async function () {
@@ -159,7 +167,7 @@ describe('runtime_upgrade - ethapi', function () {
     expect(gasPrice).is.ok;
     expect(web3.utils.hexToNumberString(gasPrice)).equal(web3.utils.toWei(1000, 'gwei'));
 
-    const balance = await web3.requestManager.send({ method: 'eth_getBalance', params: [alith, null] });
+    const balance = await web3.requestManager.send({ method: 'eth_getBalance', params: [tester, null] });
     expect(balance).is.ok;
 
     const deployTx = (new web3.eth.Contract(ERC20_ABI) as any).deploy({
@@ -173,6 +181,12 @@ describe('runtime_upgrade - ethapi', function () {
     const txHash = await sendTransaction(signedTx_2);
     const receipt_2 = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
     expect(receipt_2).is.ok;
+
+    const blockReceipts = await web3.requestManager.send({
+      method: 'eth_getBlockReceipts', params: [receipt_2?.blockNumber],
+    });
+    expect(blockReceipts).is.ok;
+    expect(blockReceipts.length).greaterThanOrEqual(1);
 
     const logs = await web3.requestManager.send({
       method: 'eth_getLogs', params: [
@@ -234,17 +248,18 @@ describe('runtime_upgrade - ethapi', function () {
   });
 });
 
-describe('runtime_upgrade - pallet interactions', function () {
+describe('test_runtime - pallet interactions', function () {
   this.timeout(20000);
 
   let api: ApiPromise;
+  const keyring = new Keyring({ type: 'ethereum' });
 
   before('should initialize api', async function () {
-    api = await ApiPromise.create({ provider: new HttpProvider('http://localhost:9944'), noInitWarn: true });
+    api = await ApiPromise.create({ provider: new HttpProvider(node_endpoint), noInitWarn: true });
   });
 
   it('should have correct validator information', async function () {
-    const rawCandidateState: any = await api.query.bfcStaking.candidateInfo(alith);
+    const rawCandidateState: any = await api.query.bfcStaking.candidateInfo(validator);
     const candidateState = rawCandidateState.unwrap().toJSON();
     expect(candidateState).is.ok;
 
@@ -261,11 +276,28 @@ describe('runtime_upgrade - pallet interactions', function () {
     const relayerPool = rawRelayerPool.toJSON();
     expect(relayerPool).is.not.empty;
 
-    const rawBondedController: any = await api.query.relayManager.bondedController(alith);
+    const rawBondedController: any = await api.query.relayManager.bondedController(validator);
     const bondedController = rawBondedController.toJSON();
     const rawRelayerState: any = await api.query.relayManager.relayerState(bondedController);
     const relayerState = rawRelayerState.unwrap().toJSON();
     expect(relayerState).is.ok;
-    expect(relayerState.controller).equal(alith);
+    expect(relayerState.controller).equal(validator);
+  });
+
+  it('should successfully send pallet extrinsics', async function () {
+    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+    const testerSub = keyring.addFromUri(testerPk);
+
+    await api.tx.bfcStaking
+      .nominatorBondMore(validator, stake.toFixed())
+      .signAndSend(testerSub);
+
+    await sleep(6000);
+
+    const rawNominatorState: any = await api.query.bfcStaking.nominatorState(testerSub.address);
+    const nominatorState = rawNominatorState.unwrap().toJSON();
+
+    expect(nominatorState.nominations).has.key(validator);
+    expect(parseInt(nominatorState.nominations[validator].toString(), 16)).greaterThan(stake.toNumber());
   });
 });

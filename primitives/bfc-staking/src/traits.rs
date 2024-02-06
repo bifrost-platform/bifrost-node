@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::{Offence, RoundIndex, TierType};
+use crate::{Offence, RoundIndex, TierType, MAX_AUTHORITIES};
+use frame_support::{pallet_prelude::ConstU32, BoundedBTreeSet};
 
 use sp_runtime::{DispatchError, Perbill};
 use sp_std::vec::Vec;
@@ -10,6 +11,9 @@ pub trait RelayManager<AccountId> {
 	/// Add the given `relayer` to the `RelayerPool` and bond to the given `controller` account
 	fn join_relayers(relayer: AccountId, controller: AccountId) -> Result<(), DispatchError>;
 
+	/// Refresh the current round
+	fn refresh_round(now: RoundIndex);
+
 	/// Refresh the relayers status to default.
 	fn refresh_relayer_pool();
 
@@ -17,7 +21,10 @@ pub trait RelayManager<AccountId> {
 	fn refresh_selected_relayers(round: RoundIndex, selected_candidates: Vec<AccountId>);
 
 	/// Refresh the `CachedSelectedRelayers` based on the new selected relayers
-	fn refresh_cached_selected_relayers(round: RoundIndex, relayers: Vec<AccountId>);
+	fn refresh_cached_selected_relayers(
+		round: RoundIndex,
+		relayers: BoundedBTreeSet<AccountId, ConstU32<MAX_AUTHORITIES>>,
+	);
 
 	/// Refresh the `Majority` and `CachedMajority` of the selected relayers
 	fn refresh_majority(round: RoundIndex);
@@ -35,6 +42,9 @@ pub trait RelayManager<AccountId> {
 	/// relayer has pulsed a heartbeat. If not, it will report an offence. This method will be
 	/// requested at every block before the session ends.
 	fn collect_heartbeats();
+
+	/// Apply the delayed relayer set requests. Replaces the entire bonded storage values from the old to new.
+	fn handle_delayed_relayer_sets(now: RoundIndex);
 }
 
 /// The trait used for `pallet_bfc_offences`

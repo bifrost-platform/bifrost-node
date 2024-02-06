@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use account::EthereumSignature;
+use fp_account::EthereumSignature;
 
 pub use sp_runtime::OpaqueExtrinsic;
 use sp_runtime::{
@@ -31,7 +31,7 @@ pub type Hash = sp_core::H256;
 pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
 
 /// Index of a transaction in the chain.
-pub type Index = u32;
+pub type Nonce = u32;
 
 /// The address format for describing accounts.
 pub type Address = AccountId;

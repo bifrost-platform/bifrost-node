@@ -27,7 +27,7 @@ pallet-collective = { workspace = true }
 
 # Frontier
 fp-evm = { workspace = true }
-pallet-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
 [dev-dependencies]
 hex-literal = { workspace = true }
