@@ -14,6 +14,7 @@ members = [
 	"pallets/bfc-utility",
 	"pallets/bfc-offences",
 	"pallets/relay-manager",
+	"pallets/btc-address-registrator",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",

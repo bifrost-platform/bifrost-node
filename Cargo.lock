@@ -6121,6 +6121,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-btc-address-registrator"
+version = "1.0.0"
+dependencies = [
+ "bp-staking",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-authorship",
+ "pallet-balances",
+ "pallet-bfc-offences",
+ "pallet-im-online",
+ "pallet-relay-manager",
+ "pallet-session",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "similar-asserts",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-staking",
+ "sp-std",
+ "substrate-fixed",
+]
+
+[[package]]
 name = "pallet-collective"
 version = "4.0.0-dev"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.3.0#617cb3adbb3fbc69b2ebc62bb6ddefb0ab7e58f6"
