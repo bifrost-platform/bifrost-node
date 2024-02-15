@@ -1,5 +1,5 @@
 [package]
-name = "pallet-btc-address-registrator"
+name = "pallet-btc-registration-pool"
 version = "1.0.0"
 description = "A pallet for btc address registration"
 authors = { workspace = true }

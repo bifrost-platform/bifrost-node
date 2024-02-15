@@ -6121,7 +6121,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-btc-address-registrator"
+name = "pallet-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
  "bp-staking",
