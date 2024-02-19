@@ -9,53 +9,25 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-log = { workspace = true }
-serde = { workspace = true, features = ["std"] }
-substrate-fixed = { workspace = true }
+ethers-core = { workspace = true }
 
 # Substrate
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
-frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
+sp-core = { workspace = true }
 sp-std = { workspace = true }
-sp-staking = { workspace = true }
-pallet-session = { workspace = true, features = ["historical"] }
-pallet-authorship = { workspace = true }
-pallet-im-online = { workspace = true }
-
-# Bifrost
-pallet-relay-manager = { workspace = true }
-pallet-bfc-offences = { workspace = true }
-bp-staking = { workspace = true }
-
-[dev-dependencies]
-similar-asserts = { workspace = true }
-
-pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
-sp-core = { workspace = true, features = ["std"] }
-sp-io = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
 std = [
 	"scale-info/std",
 	"parity-scale-codec/std",
-	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
-	"pallet-session/std",
-	"pallet-authorship/std",
-	"pallet-im-online/std",
-	"pallet-relay-manager/std",
-	"pallet-bfc-offences/std",
 	"sp-runtime/std",
 	"sp-std/std",
-	"sp-staking/std",
-	"sp-io/std",
-	"bp-staking/std",
+	"sp-core/std",
 ]
-runtime-benchmarks = ["frame-benchmarking"]
-try-runtime = ["frame-support/try-runtime"]
