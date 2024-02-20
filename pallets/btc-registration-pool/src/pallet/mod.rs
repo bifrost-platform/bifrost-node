@@ -5,7 +5,7 @@ use crate::{BitcoinAddressPair, BoundedBitcoinAddress, WeightInfo};
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
-use scale_info::prelude::{format, string::String};
+use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
 #[frame_support::pallet]
@@ -36,19 +36,28 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// The Bifrost address is already registered.
 		UserBfcAddressAlreadyRegistered,
+		/// The refund Bitcoin address is already registered.
 		RefundAddressAlreadyRegistered,
+		/// The vault Bitcoin address is already registered.
 		VaultAddressAlreadyRegistered,
+		/// The requested refund and vault address are identical. It must be different.
 		RefundAndVaultAddressIdentical,
+		/// The requested refund or vault address is invalid.
 		InvalidBitcoinAddress,
+		/// The requested signature is invalid.
 		InvalidSignature,
+		/// Cannot set the value as identical to the previous value.
 		NoWritingSameValue,
+		/// The issuer is not set yet.
 		IssuerDNE,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// A new user registered its Bitcoin address pair.
 		Registered {
 			user_bfc_address: T::AccountId,
 			vault_address: BoundedBitcoinAddress,
@@ -58,21 +67,25 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn address_issuer)]
+	/// The issuer address. The signature is originated from this account.
 	pub type AddressIssuer<T: Config> = StorageValue<_, T::Signer, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn registration_pool)]
+	/// Registered addresses that are permitted to relay Bitcoin.
 	pub type RegistrationPool<T: Config> =
 		StorageMap<_, Twox64Concat, T::AccountId, BitcoinAddressPair>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
+	/// Mapped Bitcoin vault addresses. The key is the vault address and the value is the user's Bifrost address.
 	pub type BondedVault<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_refund)]
+	/// Mapped Bitcoin refund addresses. The key is the refund address and the value is the user's Bifrost address.
 	pub type BondedRefund<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
@@ -80,6 +93,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_issuer())]
+		/// (Re-)set the issuer address.
 		pub fn set_issuer(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			if let Some(old) = <AddressIssuer<T>>::get() {
@@ -91,6 +105,7 @@ pub mod pallet {
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::register())]
+		/// Register the requested addresses to the Bitcoin registration pool.
 		pub fn register(
 			origin: OriginFor<T>,
 			refund_address: BoundedBitcoinAddress,
@@ -117,8 +132,8 @@ pub mod pallet {
 			let message = format!(
 				"{:?}:{}:{}",
 				user_bfc_address.clone(),
-				String::from_utf8(refund_address.clone().into_inner()).unwrap(),
-				String::from_utf8(vault_address.clone().into_inner()).unwrap()
+				Self::convert_bitcoin_address_to_string(&refund_address)?,
+				Self::convert_bitcoin_address_to_string(&vault_address)?,
 			);
 			ensure!(
 				signature.verify(message.as_bytes(), &issuer.into_account()),

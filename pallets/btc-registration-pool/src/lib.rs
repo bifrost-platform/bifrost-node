@@ -12,13 +12,18 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
+/// The maximum length of a valid Bitcoin address in bytes (~62 bytes).
 pub const ADDRESS_MAX_BYTE_LENGTH: u32 = 62;
 
+/// The Bitcoin address type (length bounded).
 pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_BYTE_LENGTH>>;
 
 #[derive(Decode, Encode, TypeInfo)]
+/// The registered Bitcoin address pair.
 pub struct BitcoinAddressPair {
+	/// For inbound.
 	pub vault_address: BoundedBitcoinAddress,
+	/// For outbound.
 	pub refund_address: BoundedBitcoinAddress,
 }
 
