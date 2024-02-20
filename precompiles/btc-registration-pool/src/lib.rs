@@ -13,10 +13,11 @@ use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
 mod types;
-use types::{BitcoinAddressBytes, BtcRegistrationPoolOf, EvmRegistrationPoolOf, SignatureBytes};
+use types::{BitcoinAddressString, BtcRegistrationPoolOf, EvmRegistrationPoolOf, SignatureBytes};
 
 /// Solidity selector of the Registration log, which is the Keccak of the Log signature.
-pub(crate) const SELECTOR_LOG_REGISTERED: [u8; 32] = keccak256!("Registered(address,bytes,bytes)");
+pub(crate) const SELECTOR_LOG_REGISTERED: [u8; 32] =
+	keccak256!("Registered(address,string,string)");
 
 /// A precompile to wrap the functionality from `pallet_btc_registration_pool`.
 pub struct BtcRegistrationPoolPrecompile<Runtime>(PhantomData<Runtime>);
@@ -39,16 +40,16 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let mut user_bfc_addresses: Vec<Address> = vec![];
-		let mut refund_addresses: Vec<BitcoinAddressBytes> = vec![];
-		let mut vault_addresses: Vec<BitcoinAddressBytes> = vec![];
+		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
+		let mut vault_addresses: Vec<BitcoinAddressString> = vec![];
 
 		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
 			|(bfc_address, btc_pair)| {
 				user_bfc_addresses.push(Address(bfc_address.into()));
 				refund_addresses
-					.push(BitcoinAddressBytes::from(btc_pair.refund_address.into_inner()));
+					.push(BitcoinAddressString::from(btc_pair.refund_address.into_inner()));
 				vault_addresses
-					.push(BitcoinAddressBytes::from(btc_pair.vault_address.into_inner()));
+					.push(BitcoinAddressString::from(btc_pair.vault_address.into_inner()));
 			},
 		);
 		Ok((user_bfc_addresses, refund_addresses, vault_addresses))
@@ -57,14 +58,14 @@ where
 	#[precompile::public("vaultAddresses()")]
 	#[precompile::public("vault_addresses()")]
 	#[precompile::view]
-	fn vault_addresses(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<BitcoinAddressBytes>> {
+	fn vault_addresses(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<BitcoinAddressString>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let mut vault_addresses: Vec<BitcoinAddressBytes> = vec![];
+		let mut vault_addresses: Vec<BitcoinAddressString> = vec![];
 		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
 			|(_, btc_pair)| {
 				vault_addresses
-					.push(BitcoinAddressBytes::from(btc_pair.vault_address.into_inner()));
+					.push(BitcoinAddressString::from(btc_pair.vault_address.into_inner()));
 			},
 		);
 		Ok(vault_addresses)
@@ -76,14 +77,14 @@ where
 	fn vault_address(
 		handle: &mut impl PrecompileHandle,
 		user_bfc_address: Address,
-	) -> EvmResult<BitcoinAddressBytes> {
+	) -> EvmResult<BitcoinAddressString> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 
 		let vault_address =
 			match BtcRegistrationPoolOf::<Runtime>::registration_pool(user_bfc_address) {
-				Some(pair) => BitcoinAddressBytes::from(pair.vault_address.into_inner()),
-				None => BitcoinAddressBytes::from(vec![]),
+				Some(pair) => BitcoinAddressString::from(pair.vault_address.into_inner()),
+				None => BitcoinAddressString::from(vec![]),
 			};
 		Ok(vault_address)
 	}
@@ -91,14 +92,16 @@ where
 	#[precompile::public("refundAddresses()")]
 	#[precompile::public("refund_addresses()")]
 	#[precompile::view]
-	fn refund_addresses(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<BitcoinAddressBytes>> {
+	fn refund_addresses(
+		handle: &mut impl PrecompileHandle,
+	) -> EvmResult<Vec<BitcoinAddressString>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let mut refund_addresses: Vec<BitcoinAddressBytes> = vec![];
+		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
 		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
 			|(_, btc_pair)| {
 				refund_addresses
-					.push(BitcoinAddressBytes::from(btc_pair.refund_address.into_inner()));
+					.push(BitcoinAddressString::from(btc_pair.refund_address.into_inner()));
 			},
 		);
 		Ok(refund_addresses)
@@ -110,25 +113,37 @@ where
 	fn refund_address(
 		handle: &mut impl PrecompileHandle,
 		user_bfc_address: Address,
-	) -> EvmResult<BitcoinAddressBytes> {
+	) -> EvmResult<BitcoinAddressString> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 
 		let refund_address =
 			match BtcRegistrationPoolOf::<Runtime>::registration_pool(user_bfc_address) {
-				Some(pair) => BitcoinAddressBytes::from(pair.refund_address.into_inner()),
-				None => BitcoinAddressBytes::from(vec![]),
+				Some(pair) => BitcoinAddressString::from(pair.refund_address.into_inner()),
+				None => BitcoinAddressString::from(vec![]),
 			};
 		Ok(refund_address)
 	}
 
-	#[precompile::public("register(bytes,bytes,bytes)")]
+	#[precompile::public("register(string,string,bytes)")]
 	fn register(
 		handle: &mut impl PrecompileHandle,
-		refund_address: BitcoinAddressBytes,
-		vault_address: BitcoinAddressBytes,
+		refund_address: BitcoinAddressString,
+		vault_address: BitcoinAddressString,
 		signature: SignatureBytes,
 	) -> EvmResult {
+		let caller = handle.context().caller;
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_REGISTERED,
+			solidity::encode_event_data((
+				Address(caller),
+				refund_address.clone(),
+				vault_address.clone(),
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+
 		let refund_address =
 			Self::bytes_to_bitcoin_address(refund_address).in_field("refund_address")?;
 		let vault_address =
@@ -136,13 +151,9 @@ where
 		let signature =
 			EthereumSignature::new(Self::bytes_to_signature(signature).in_field("signature")?);
 
-		let caller = handle.context().caller;
-		let event = log1(
-			handle.context().address,
-			SELECTOR_LOG_REGISTERED,
-			solidity::encode_event_data(Address(caller)),
-		);
-		handle.record_log_costs(&[&event])?;
+		log::info!("refund_address -> {:?}", refund_address);
+		log::info!("vault_address -> {:?}", vault_address);
+		log::info!("signature -> {:?}", signature);
 
 		let call = BtcRegistrationPoolCall::<Runtime>::register {
 			refund_address,
@@ -157,7 +168,7 @@ where
 		Ok(())
 	}
 
-	fn bytes_to_bitcoin_address(bytes: BitcoinAddressBytes) -> MayRevert<BoundedBitcoinAddress> {
+	fn bytes_to_bitcoin_address(bytes: BitcoinAddressString) -> MayRevert<BoundedBitcoinAddress> {
 		BoundedVec::try_from(bytes.as_bytes().to_vec())
 			.map_err(|_| RevertReason::custom("invalid bytes").into())
 	}

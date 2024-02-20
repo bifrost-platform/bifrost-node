@@ -10,14 +10,14 @@ pragma solidity >=0.8.0;
 
 interface BtcRegistrationPool {
     /// @dev A new user registered its Bitcoin address pair.
-    /// @custom:selector
+    /// @custom:selector 80788e6e1951532975ceb5ca698dfbf35d3a99bc9c440d8e1bb7301534ab72a2
     /// @param user_bfc_address The registered Bifrost address.
     /// @param refund_address The registered refund address.
     /// @param vault_address The registered vault address.
     event Registered(
         address user_bfc_address,
-        bytes refund_address,
-        bytes vault_address
+        string refund_address,
+        string vault_address
     );
 
     /// @dev Returns the current registration pool
@@ -26,17 +26,17 @@ interface BtcRegistrationPool {
     function registration_pool()
         external
         view
-        returns (address[] memory, bytes[] memory, bytes[] memory);
+        returns (address[] memory, string[] memory, string[] memory);
 
     /// @dev Returns the current bonded vault addresses
     /// @custom:selector 557bca49
     /// @return The list of the current bonded vault addresses
-    function vault_addresses() external view returns (bytes[] memory);
+    function vault_addresses() external view returns (string[] memory);
 
     /// @dev Returns the current bonded refund addresses
     /// @custom:selector 135ca504
     /// @return The list of the current bonded refund addresses
-    function refund_addresses() external view returns (bytes[] memory);
+    function refund_addresses() external view returns (string[] memory);
 
     /// @dev Returns the bonded vault address mapped to the Bifrost address
     /// @custom:selector d2534116
@@ -44,7 +44,7 @@ interface BtcRegistrationPool {
     /// @return A Bitcoin vault address
     function vault_address(
         address user_bfc_address
-    ) external view returns (bytes memory);
+    ) external view returns (string memory);
 
     /// @dev Returns the bonded refund address mapped to the Bifrost address
     /// @custom:selector 6dcd31db
@@ -52,7 +52,7 @@ interface BtcRegistrationPool {
     /// @return A Bitcoin refund address
     function refund_address(
         address user_bfc_address
-    ) external view returns (bytes memory);
+    ) external view returns (string memory);
 
     /// @dev Temporarily leave the set of validator candidates without unbonding
     /// @custom:selector d4380353

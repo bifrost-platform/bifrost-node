@@ -9,6 +9,8 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
+log = { workspace = true }
+
 # Bifrost
 pallet-btc-registration-pool = { workspace = true }
 precompile-utils = { workspace = true }

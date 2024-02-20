@@ -1,3 +1,4 @@
+use scale_info::prelude::string::String;
 use sp_runtime::DispatchError;
 
 use crate::BoundedBitcoinAddress;
