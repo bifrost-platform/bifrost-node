@@ -13,6 +13,7 @@ pub use bifrost_dev_constants::{
 };
 
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
+use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
@@ -922,6 +923,13 @@ impl pallet_base_fee::Config for Runtime {
 	type DefaultElasticity = DefaultElasticity;
 }
 
+impl pallet_btc_registration_pool::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime {
@@ -968,6 +976,9 @@ construct_runtime!(
 		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
 		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
 		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>, HoldReason} = 57,
+
+		// Bitcoin
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, Event<T>} = 60,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,

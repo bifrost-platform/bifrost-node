@@ -60,8 +60,8 @@ pub mod pallet {
 		/// A new user registered its Bitcoin address pair.
 		Registered {
 			user_bfc_address: T::AccountId,
-			vault_address: BoundedBitcoinAddress,
 			refund_address: BoundedBitcoinAddress,
+			vault_address: BoundedBitcoinAddress,
 		},
 	}
 
@@ -144,13 +144,13 @@ pub mod pallet {
 			<BondedRefund<T>>::insert(&refund_address, &user_bfc_address);
 			<RegistrationPool<T>>::insert(
 				user_bfc_address.clone(),
-				BitcoinAddressPair::new(vault_address.clone(), refund_address.clone()),
+				BitcoinAddressPair::new(refund_address.clone(), vault_address.clone()),
 			);
 
 			Self::deposit_event(Event::Registered {
 				user_bfc_address,
-				vault_address,
 				refund_address,
+				vault_address,
 			});
 
 			Ok(().into())
