@@ -9,8 +9,6 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-ethers-core = { workspace = true }
-
 # Substrate
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }

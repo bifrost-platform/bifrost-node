@@ -1,12 +1,12 @@
 mod impls;
 
-use crate::{BoundedBitcoinAddress, BoundedSignature, PoolMember, WeightInfo};
+use crate::{BitcoinAddressPair, BoundedBitcoinAddress, WeightInfo};
 
-use ethers_core::types::Signature;
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
-use sp_core::H160;
-use sp_std::collections::btree_map::BTreeMap;
+
+use scale_info::prelude::{format, string::String};
+use sp_runtime::traits::{IdentifyAccount, Verify};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -22,6 +22,14 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		/// The signature signed by the issuer.
+		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
+		/// The signer of the message.
+		type Signer: IdentifyAccount<AccountId = Self::AccountId>
+			+ Encode
+			+ Decode
+			+ Parameter
+			+ MaxEncodedLen;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -31,6 +39,8 @@ pub mod pallet {
 		UserBfcAddressAlreadyRegistered,
 		RefundAddressAlreadyRegistered,
 		VaultAddressAlreadyRegistered,
+		RefundAndVaultAddressIdentical,
+		InvalidBitcoinAddress,
 		InvalidSignature,
 		NoWritingSameValue,
 		IssuerDNE,
@@ -48,13 +58,13 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn address_issuer)]
-	pub type AddressIssuer<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+	pub type AddressIssuer<T: Config> = StorageValue<_, T::Signer, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn registration_pool)]
 	pub type RegistrationPool<T: Config> =
-		StorageValue<_, BTreeMap<T::AccountId, PoolMember>, ValueQuery>;
+		StorageMap<_, Twox64Concat, T::AccountId, BitcoinAddressPair>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
@@ -62,30 +72,15 @@ pub mod pallet {
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn bonded_user)]
-	pub type BondedUser<T: Config> =
+	#[pallet::getter(fn bonded_refund)]
+	pub type BondedRefund<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
-	#[pallet::genesis_config]
-	pub struct GenesisConfig<T: Config> {
-		pub address_issuer: T::AccountId,
-	}
-
-	#[pallet::genesis_build]
-	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-		fn build(&self) {
-			<AddressIssuer<T>>::put(self.address_issuer.clone());
-		}
-	}
-
 	#[pallet::call]
-	impl<T: Config> Pallet<T>
-	where
-		T::AccountId: Into<H160>,
-	{
+	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_issuer())]
-		pub fn set_issuer(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
+		pub fn set_issuer(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			if let Some(old) = <AddressIssuer<T>>::get() {
 				ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -98,43 +93,44 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::register())]
 		pub fn register(
 			origin: OriginFor<T>,
-			vault_address: BoundedBitcoinAddress,
 			refund_address: BoundedBitcoinAddress,
-			signature: BoundedSignature,
+			vault_address: BoundedBitcoinAddress,
+			signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			let user_bfc_address = ensure_signed(origin)?;
 			let issuer = <AddressIssuer<T>>::get().ok_or(<Error<T>>::IssuerDNE)?;
+
 			ensure!(
 				!<BondedVault<T>>::contains_key(&vault_address),
 				Error::<T>::VaultAddressAlreadyRegistered
 			);
 			ensure!(
-				!<BondedUser<T>>::contains_key(&refund_address),
+				!<BondedRefund<T>>::contains_key(&refund_address),
 				Error::<T>::RefundAddressAlreadyRegistered
 			);
-
-			let mut registration_pool = <RegistrationPool<T>>::get();
 			ensure!(
-				!registration_pool.contains_key(&user_bfc_address),
+				!<RegistrationPool<T>>::contains_key(&user_bfc_address),
 				Error::<T>::UserBfcAddressAlreadyRegistered
 			);
+			ensure!(refund_address != vault_address, Error::<T>::RefundAndVaultAddressIdentical);
 
-			let signature = Signature::try_from(signature.into_inner().as_slice())
-				.map_err(|_| <Error<T>>::InvalidSignature)?;
-
-			let message =
-				format!("{}:{:?}:{:?}", user_bfc_address.clone(), refund_address, vault_address);
-			signature
-				.verify(message, issuer.into())
-				.map_err(|_| <Error<T>>::InvalidSignature)?;
+			let message = format!(
+				"{:?}:{}:{}",
+				user_bfc_address.clone(),
+				String::from_utf8(refund_address.clone().into_inner()).unwrap(),
+				String::from_utf8(vault_address.clone().into_inner()).unwrap()
+			);
+			ensure!(
+				signature.verify(message.as_bytes(), &issuer.into_account()),
+				Error::<T>::InvalidSignature
+			);
 
 			<BondedVault<T>>::insert(&vault_address, &user_bfc_address);
-			<BondedUser<T>>::insert(&refund_address, &user_bfc_address);
-			registration_pool.insert(
+			<BondedRefund<T>>::insert(&refund_address, &user_bfc_address);
+			<RegistrationPool<T>>::insert(
 				user_bfc_address.clone(),
-				PoolMember::new(vault_address.clone(), refund_address.clone()),
+				BitcoinAddressPair::new(vault_address.clone(), refund_address.clone()),
 			);
-			<RegistrationPool<T>>::put(registration_pool);
 
 			Self::deposit_event(Event::Registered {
 				user_bfc_address,
