@@ -6955,7 +6955,6 @@ dependencies = [
  "fp-evm",
  "frame-support",
  "frame-system",
- "log",
  "pallet-btc-registration-pool",
  "pallet-evm",
  "parity-scale-codec",

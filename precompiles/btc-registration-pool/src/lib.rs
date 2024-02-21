@@ -13,7 +13,9 @@ use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
 mod types;
-use types::{BitcoinAddressString, BtcRegistrationPoolOf, EvmRegistrationPoolOf, SignatureBytes};
+use types::{BitcoinAddressString, EvmRegistrationPoolOf, SignatureBytes};
+
+type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
 
 /// Solidity selector of the Registration log, which is the Keccak of the Log signature.
 pub(crate) const SELECTOR_LOG_REGISTERED: [u8; 32] =
@@ -145,15 +147,12 @@ where
 		handle.record_log_costs(&[&event])?;
 
 		let refund_address =
-			Self::bytes_to_bitcoin_address(refund_address).in_field("refund_address")?;
+			Self::convert_string_to_bitcoin_address(refund_address).in_field("refund_address")?;
 		let vault_address =
-			Self::bytes_to_bitcoin_address(vault_address).in_field("vault_address")?;
-		let signature =
-			EthereumSignature::new(Self::bytes_to_signature(signature).in_field("signature")?);
-
-		log::info!("refund_address -> {:?}", refund_address);
-		log::info!("vault_address -> {:?}", vault_address);
-		log::info!("signature -> {:?}", signature);
+			Self::convert_string_to_bitcoin_address(vault_address).in_field("vault_address")?;
+		let signature = EthereumSignature::new(
+			Self::convert_bytes_to_signature(signature).in_field("signature")?,
+		);
 
 		let call = BtcRegistrationPoolCall::<Runtime>::register {
 			refund_address: refund_address.to_vec(),
@@ -168,12 +167,16 @@ where
 		Ok(())
 	}
 
-	fn bytes_to_bitcoin_address(bytes: BitcoinAddressString) -> MayRevert<BoundedBitcoinAddress> {
-		BoundedVec::try_from(bytes.as_bytes().to_vec())
+	/// Converts a solidity string typed Bitcoin address to a `BoundedVec`.
+	fn convert_string_to_bitcoin_address(
+		string: BitcoinAddressString,
+	) -> MayRevert<BoundedBitcoinAddress> {
+		BoundedVec::try_from(string.as_bytes().to_vec())
 			.map_err(|_| RevertReason::custom("invalid bytes").into())
 	}
 
-	fn bytes_to_signature(bytes: SignatureBytes) -> MayRevert<Signature> {
+	/// Converts a solidity bytes typed signature to a `Signature`.
+	fn convert_bytes_to_signature(bytes: SignatureBytes) -> MayRevert<Signature> {
 		Signature::try_from(bytes.as_bytes())
 			.map_err(|_| RevertReason::custom("invalid bytes").into())
 	}
