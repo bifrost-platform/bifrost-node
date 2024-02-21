@@ -7,6 +7,7 @@ use frame_system::pallet_prelude::*;
 
 use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -108,12 +109,17 @@ pub mod pallet {
 		/// Register the requested addresses to the Bitcoin registration pool.
 		pub fn register(
 			origin: OriginFor<T>,
-			refund_address: BoundedBitcoinAddress,
-			vault_address: BoundedBitcoinAddress,
+			refund_address: Vec<u8>,
+			vault_address: Vec<u8>,
 			signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			let user_bfc_address = ensure_signed(origin)?;
 			let issuer = <AddressIssuer<T>>::get().ok_or(<Error<T>>::IssuerDNE)?;
+
+			let refund_address: BoundedBitcoinAddress =
+				refund_address.try_into().map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+			let vault_address: BoundedBitcoinAddress =
+				vault_address.try_into().map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
 			ensure!(
 				!<BondedVault<T>>::contains_key(&vault_address),

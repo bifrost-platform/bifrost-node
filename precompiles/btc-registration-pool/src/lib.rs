@@ -156,8 +156,8 @@ where
 		log::info!("signature -> {:?}", signature);
 
 		let call = BtcRegistrationPoolCall::<Runtime>::register {
-			refund_address,
-			vault_address,
+			refund_address: refund_address.to_vec(),
+			vault_address: vault_address.to_vec(),
 			signature,
 		};
 		let origin = Runtime::AddressMapping::into_account_id(caller);
