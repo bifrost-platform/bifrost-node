@@ -13,13 +13,13 @@ use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
 /// The maximum length of a valid signature in bytes (~65 bytes).
-pub const SIGNATURE_MAX_BYTE_LENGTH: u32 = 65;
+pub const SIGNATURE_BYTE_MAX_LENGTH: u32 = 65;
 
-/// The maximum length of a valid Bitcoin address in bytes (~32 bytes).
-pub const ADDRESS_MAX_BYTE_LENGTH: u32 = 32;
+/// The maximum length of a valid Bitcoin address in characters (~62 alphanumeric characters).
+pub const ADDRESS_MAX_LENGTH: u32 = 62;
 
 /// The Bitcoin address type (length bounded).
-pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_BYTE_LENGTH>>;
+pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_LENGTH>>;
 
 #[derive(Decode, Encode, TypeInfo)]
 /// The registered Bitcoin address pair.
