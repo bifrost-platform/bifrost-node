@@ -55,7 +55,7 @@ interface BtcRegistrationPool {
     ) external view returns (string memory);
 
     /// @dev Temporarily leave the set of validator candidates without unbonding
-    /// @custom:selector d4380353
+    /// @custom:selector f77f272b
     /// @param refund_address The Bitcoin refund address
     /// @param vault_address The Bitcoin vault address
     /// @param signature The signature signed by the issuer
