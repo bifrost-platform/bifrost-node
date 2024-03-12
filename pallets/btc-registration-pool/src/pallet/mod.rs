@@ -2,7 +2,10 @@ mod impls;
 
 use crate::{BitcoinAddressPair, BoundedBitcoinAddress, WeightInfo};
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{Contains, SortedMembers, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 
 use scale_info::prelude::format;
@@ -31,6 +34,8 @@ pub mod pallet {
 			+ Decode
 			+ Parameter
 			+ MaxEncodedLen;
+		/// The relay executive members.
+		type Executives: Contains<Self::AccountId> + SortedMembers<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}

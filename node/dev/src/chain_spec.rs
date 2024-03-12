@@ -219,6 +219,7 @@ fn development_genesis(
 		democracy: Default::default(),
 		council: Default::default(),
 		technical_committee: Default::default(),
+		relay_executive: Default::default(),
 		council_membership: devnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_council_members.clone())
@@ -227,6 +228,11 @@ fn development_genesis(
 		technical_membership: devnet::TechnicalMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_tech_committee_members.clone())
+				.expect("Membership must be initialized"),
+		},
+		relay_executive_membership: devnet::RelayExecutiveMembershipConfig {
+			phantom: Default::default(),
+			members: BoundedVec::try_from(initial_council_members.clone())
 				.expect("Membership must be initialized"),
 		},
 		treasury: Default::default(),
