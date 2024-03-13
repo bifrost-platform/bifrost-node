@@ -972,6 +972,9 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
+	type DefaultRequiredPubKeys = ConstU8<1>;
+	type DefaultRequiredSignatures = ConstU8<1>;
+	type IsBitcoinMainnet = ConstBool<false>;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1025,7 +1028,7 @@ construct_runtime!(
 		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
 
 		// Bitcoin
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, Event<T>} = 60,
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,
