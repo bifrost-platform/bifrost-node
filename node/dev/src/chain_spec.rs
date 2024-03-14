@@ -239,6 +239,10 @@ fn development_genesis(
 				.expect("Membership must be initialized"),
 		},
 		treasury: Default::default(),
-		btc_registration_pool: Default::default(),
+		btc_registration_pool: devnet::BtcRegistrationPoolConfig {
+			required_m: 1u8,
+			required_n: 1u8,
+			..Default::default()
+		},
 	}
 }

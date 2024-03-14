@@ -2,10 +2,10 @@ use miniscript::bitcoin::{
 	opcodes::all::OP_CHECKMULTISIG, script::Builder, Address, Network, Opcode, PublicKey,
 };
 
-use scale_info::prelude::string::String;
+use scale_info::{prelude::string::String, prelude::string::ToString};
 use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
-use sp_std::str::FromStr;
+use sp_std::{str::FromStr, vec, vec::Vec};
 
 use crate::BoundedBitcoinAddress;
 
@@ -15,7 +15,7 @@ impl<T: Config> Pallet<T> {
 	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
 	fn sort_pub_keys(raw_pub_keys: Vec<String>) -> Result<Vec<PublicKey>, DispatchError> {
 		let mut pub_keys = vec![];
-		for raw_key in raw_pub_keys.into_iter() {
+		for raw_key in raw_pub_keys.iter() {
 			let key = PublicKey::from_str(&raw_key).map_err(|_| Error::<T>::InvalidPublicKey)?;
 			pub_keys.push(key);
 		}
@@ -28,7 +28,7 @@ impl<T: Config> Pallet<T> {
 		let mut redeem_script =
 			Builder::new().push_opcode(Opcode::from(<RequiredM<T>>::get().saturating_add(80))); // m
 
-		for key in pub_keys.into_iter() {
+		for key in pub_keys.iter() {
 			redeem_script = redeem_script.push_key(&key);
 		}
 
