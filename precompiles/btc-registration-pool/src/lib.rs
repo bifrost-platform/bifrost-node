@@ -68,18 +68,15 @@ where
 	fn vault_addresses(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<BitcoinAddressString>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let mut vault_addresses: Vec<BitcoinAddressString> = vec![];
-		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
-			|(_, btc_pair)| {
-				match btc_pair.vault_address {
-					VaultAddress::Pending => (),
+		let vault_addresses: Vec<BitcoinAddressString> =
+			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter()
+				.filter_map(|(_, btc_pair)| match btc_pair.vault_address {
+					VaultAddress::Pending => None,
 					VaultAddress::Generated(vault) => {
-						vault_addresses
-							.push(BitcoinAddressString::from(vault.address.into_inner()));
+						Some(BitcoinAddressString::from(vault.address.into_inner()))
 					},
-				};
-			},
-		);
+				})
+				.collect();
 		Ok(vault_addresses)
 	}
 
@@ -114,13 +111,12 @@ where
 	) -> EvmResult<Vec<BitcoinAddressString>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
-		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
-			|(_, btc_pair)| {
-				refund_addresses
-					.push(BitcoinAddressString::from(btc_pair.refund_address.into_inner()));
-			},
-		);
+		let refund_addresses: Vec<BitcoinAddressString> =
+			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter()
+				.map(|(_, btc_pair)| {
+					BitcoinAddressString::from(btc_pair.refund_address.into_inner())
+				})
+				.collect();
 		Ok(refund_addresses)
 	}
 
