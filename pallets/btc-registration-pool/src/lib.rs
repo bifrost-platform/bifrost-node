@@ -14,9 +14,6 @@ use frame_support::traits::SortedMembers;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::{prelude::string::String, TypeInfo};
 
-/// The maximum length of a valid signature in bytes (~65 bytes).
-pub const SIGNATURE_BYTE_MAX_LENGTH: u32 = 65;
-
 /// The maximum length of a valid Bitcoin address in characters (~62 alphanumeric characters).
 pub const ADDRESS_MAX_LENGTH: u32 = 62;
 

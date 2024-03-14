@@ -80,9 +80,13 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// A new user registered its credentials and received a pending vault address.
-		VaultPending { who: T::AccountId },
+		VaultPending { who: T::AccountId, refund_address: BoundedBitcoinAddress },
 		/// A user's vault address has been successfully generated.
-		VaultGenerated { who: T::AccountId, vault_address: BoundedBitcoinAddress },
+		VaultGenerated {
+			who: T::AccountId,
+			refund_address: BoundedBitcoinAddress,
+			vault_address: BoundedBitcoinAddress,
+		},
 	}
 
 	#[pallet::storage]
@@ -163,9 +167,12 @@ pub mod pallet {
 			);
 
 			<BondedRefund<T>>::insert(&refund_address, &who);
-			<RegistrationPool<T>>::insert(who.clone(), BitcoinAddressPair::new(refund_address));
+			<RegistrationPool<T>>::insert(
+				who.clone(),
+				BitcoinAddressPair::new(refund_address.clone()),
+			);
 
-			Self::deposit_event(Event::VaultPending { who });
+			Self::deposit_event(Event::VaultPending { who, refund_address });
 
 			Ok(().into())
 		}
@@ -205,7 +212,11 @@ pub mod pallet {
 					VaultAddress::Generated(MultiSigAddress::new::<T>(vault_address.clone()));
 
 				<BondedVault<T>>::insert(&vault_address, who.clone());
-				Self::deposit_event(Event::VaultGenerated { who: who.clone(), vault_address });
+				Self::deposit_event(Event::VaultGenerated {
+					who: who.clone(),
+					refund_address: registered.refund_address.clone(),
+					vault_address,
+				});
 			}
 
 			<RegistrationPool<T>>::insert(&who, registered);
