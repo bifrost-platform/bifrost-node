@@ -6198,6 +6198,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-btc-socket-queue"
+version = "1.0.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "miniscript",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-collective"
 version = "4.0.0-dev"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.3.0#617cb3adbb3fbc69b2ebc62bb6ddefb0ab7e58f6"
