@@ -2,77 +2,50 @@ import { expect } from 'chai';
 
 import { Keyring } from '@polkadot/api';
 
-import { TEST_CONTROLLERS } from '../../constants/keys';
+import { TEST_CONTROLLERS, TEST_RELAYERS } from '../../constants/keys';
 import { getExtrinsicResult } from '../extrinsics';
 import { describeDevNode } from '../set_dev_node';
 
-const ISSUER = '0x052368678191fe3754ffd28015ff6ac54601e76c';
-
-describeDevNode('pallet_btc_registration_pool - register', (context) => {
+describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
-  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
-  const dorothy = keyring.addFromUri(TEST_CONTROLLERS[3].private);
-  const ethan = keyring.addFromUri(TEST_CONTROLLERS[4].private);
 
-  before('should succesfully set issuer', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcRegistrationPool.setIssuer(ISSUER)
-    ).signAndSend(alith);
+  it('should fail to join registration pool due to invalid refund address - wrong format', async function () {
+    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h1';
+
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
 
-    const rawIssuer: any = await context.polkadotApi.query.btcRegistrationPool.addressIssuer();
-    const issuer = rawIssuer.toJSON();
-    expect(issuer).eq(ISSUER);
-  });
-
-  it('should fail to join bitcoin registration pool due to invalid vault address', async function () {
-    const refund = 'bc1qe5l5jde9jc0w9psn9jstgcp82gy5rtnkpak4k4';
-    const signature = '0x618f6a4a53f26200229549e55c592d0e1ee1dcac6292ed7296c91d53383eb6411f6159acb6f46412cae2a46bea906d4d35d31856a19fafac57cc19526712f8271c';
-    const vault = signature;
-
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(baltathar);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'requestVault');
     expect(extrinsicResult).eq('InvalidBitcoinAddress');
   });
 
-  it('should fail to join bitcoin registration pool due to invalid refund address', async function () {
-    const vault = 'bc1qx8g09fhlza3whpt7ae7z3tyrh8akfc7anyfr3c'
-    const signature = '0x618f6a4a53f26200229549e55c592d0e1ee1dcac6292ed7296c91d53383eb6411f6159acb6f46412cae2a46bea906d4d35d31856a19fafac57cc19526712f8271c';
-    const refund = signature;
+  it('should fail to join registration pool due to invalid refund address - wrong network', async function () {
+    const refund = 'bc1qe5l5jde9jc0w9psn9jstgcp82gy5rtnkpak4k4';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(baltathar);
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'requestVault');
     expect(extrinsicResult).eq('InvalidBitcoinAddress');
   });
 
-  it('should fail to join bitcoin registration pool due to invalid signature - segwit refund', async function () {
-    const refund = 'bc1qe5l5jde9jc0w9psn9jstgcp82gy5rtnkpak4k4';
-    const vault = 'bc1qx8g09fhlza3whpt7ae7z3tyrh8akfc7anyfr3c'
-    const signature = '0x618f6a4a53f26200229549e55c592d0e1ee1dcac6292ed7296c91d53383eb6411f6159acb6f46412cae2a46bea906d4d35d31856a19fafac57cc19526712f82711';
+  it('should fail to join registration pool due to invalid refund address - out of bound', async function () {
+    const refund = '0x618f6a4a53f26200229549e55c592d0e1ee1dcac6292ed7296c91d53383eb6411f6159acb6f46412cae2a46bea906d4d35d31856a19fafac57cc19526712f8271c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(baltathar);
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
-    expect(extrinsicResult).eq('InvalidSignature');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'requestVault');
+    expect(extrinsicResult).eq('InvalidBitcoinAddress');
   });
 
-  it('should successfully join bitcoin registration pool - segwit refund', async function () {
-    const refund = 'bc1qe5l5jde9jc0w9psn9jstgcp82gy5rtnkpak4k4';
-    const vault = 'bc1qx8g09fhlza3whpt7ae7z3tyrh8akfc7anyfr3c'
-    const signature = '0x618f6a4a53f26200229549e55c592d0e1ee1dcac6292ed7296c91d53383eb6411f6159acb6f46412cae2a46bea906d4d35d31856a19fafac57cc19526712f8271c';
+  it('should successfully join registration pool', async function () {
+    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(baltathar);
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
-
-    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
-    expect(rawBondedVault.toJSON()).eq(baltathar.address);
 
     const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
     expect(rawBondedRefund.toJSON()).eq(baltathar.address);
@@ -80,150 +53,252 @@ describeDevNode('pallet_btc_registration_pool - register', (context) => {
     const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
     expect(registeredBitcoinPair.refundAddress).eq(refund);
-    expect(registeredBitcoinPair.vaultAddress).eq(vault);
+    expect(registeredBitcoinPair.vaultAddress).eq('Pending');
+    expect(registeredBitcoinPair.pubKeys).empty;
   });
 
-  it('should fail to join bitcoin registration pool due to already registered refund address', async function () {
-    const refund = 'bc1qe5l5jde9jc0w9psn9jstgcp82gy5rtnkpak4k4';
-    const vault = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'
-    const signature = '0x893047e180c024f270d705f3baccfd5317c495a5d4d7de250588aa4312ff99750075ca3d4d5a1f9fd8062aa9b8c3cc823b4b57ce24044b17ef3953c4d435ff261c';
+  it('should fail to join registration pool due to duplicate refund address', async function () {
+    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(charleth);
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(charleth);
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'requestVault');
     expect(extrinsicResult).eq('RefundAddressAlreadyRegistered');
   });
 
-  it('should fail to join bitcoin registration pool due to already registered vault address', async function () {
-    const refund = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
-    const vault = 'bc1qx8g09fhlza3whpt7ae7z3tyrh8akfc7anyfr3c'
-    const signature = '0x367160f12d45bb7f8dcebf92213e9672d3be8b95bad3178a5217e577a62975c50bb324f859d4d71b5d06f2c17a7eb73980b8b35533e464b2d87e0804ef3b0d791b';
+  it('should fail to join registration pool due to duplicate user address', async function () {
+    const refund = 'tb1qm25npfj7a5dzewgz95l4cqy5vxpqyx7n3yqsjc';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(charleth);
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
-    expect(extrinsicResult).eq('VaultAddressAlreadyRegistered');
-  });
-
-  it('should fail to join bitcoin registration pool due to already registered bifrost address', async function () {
-    const refund = 'bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297';
-    const vault = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'
-    const signature = '0x10c0bda2d96b7f089def4c302861eda19df7d3e85f3bac4af4620490446fa7b84f3da1adb866d1ba3494cecd55d85049c86466ddffa123152af3e8e547ffac5c1c';
-
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(baltathar);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'requestVault');
     expect(extrinsicResult).eq('UserBfcAddressAlreadyRegistered');
   });
+});
 
-  it('should fail to join bitcoin registration pool due to identical bitcoin address pair', async function () {
-    const refund = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
-    const vault = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'
-    const signature = '0x10c0bda2d96b7f089def4c302861eda19df7d3e85f3bac4af4620490446fa7b84f3da1adb866d1ba3494cecd55d85049c86466ddffa123152af3e8e547ffac5c1c';
+describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+  const charlethRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(charleth);
+  before('should successfully join registration pool', async function () {
+    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
+
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
-    expect(extrinsicResult).eq('RefundAndVaultAddressIdentical');
   });
 
-  it('should fail to join bitcoin registration pool due to invalid signature - taproot refund', async function () {
-    const refund = 'bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297';
-    const vault = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'
-    const signature = '0x10c0bda2d96b7f089def4c302861eda19df7d3e85f3bac4af4620490446fa7b84f3da1adb866d1ba3494cecd55d85049c86466ddffa123152af3e8e547ffac5c11';
+  it('should fail to submit a key due to invalid signature', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: alithRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x57d23044a8da46ad8be01497332c8797f6369dabec84a5be6bac5a8d41d766c52cc82839ad99d12c46bfd65aaff20ff58aadbd71b4011697a378b26a94a2dde511';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(charleth);
+    let errorMsg = '';
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send().catch(err => {
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+    });
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
-    expect(extrinsicResult).eq('InvalidSignature');
+    expect(errorMsg).eq('1010: Invalid Transaction: Transaction has a bad signature');
   });
 
-  it('should successfully join bitcoin registration pool - taproot refund', async function () {
-    const refund = 'bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297';
-    const vault = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq'
-    const signature = '0x10c0bda2d96b7f089def4c302861eda19df7d3e85f3bac4af4620490446fa7b84f3da1adb866d1ba3494cecd55d85049c86466ddffa123152af3e8e547ffac5c1c';
+  it('should fail to submit a key due to unknown relay executive', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: charlethRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x57d23044a8da46ad8be01497332c8797f6369dabec84a5be6bac5a8d41d766c52cc82839ad99d12c46bfd65aaff20ff58aadbd71b4011697a378b26a94a2dde511';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(charleth);
+    let errorMsg = '';
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send().catch(err => {
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+    });
     await context.createBlock();
 
-    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
-    expect(rawBondedVault.toJSON()).eq(charleth.address);
+    expect(errorMsg).eq('1010: Invalid Transaction: Invalid signing address');
+  });
 
-    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
-    expect(rawBondedRefund.toJSON()).eq(charleth.address);
+  it('should successfully submit public key', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: alithRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0xd14ca16f2cc2f960ce31bb4199b6f7a3434794d316d8792b0c1f934be7ebd7ce28b07c4dbf2c07d3ec3731fdf97c4dfd3d5b6c9edf7d36abc42067a98c41b1741c';
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(charleth.address);
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
+    await context.createBlock();
+
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
-    expect(registeredBitcoinPair.refundAddress).eq(refund);
-    expect(registeredBitcoinPair.vaultAddress).eq(vault);
+
+    const vault = registeredBitcoinPair.vaultAddress['Generated'];
+    expect(vault).is.exist;
+    expect(vault.address).is.exist;
+    expect(Number(vault.m)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredM()));
+    expect(Number(vault.n)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
+
+    expect(Object.keys(registeredBitcoinPair.pubKeys).length).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
+    expect(registeredBitcoinPair.pubKeys[alithRelayer.address]).eq(pubKey);
   });
 
-  it('should fail to join bitcoin registration pool due to invalid signature - script refund', async function () {
-    const refund = '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy';
-    const vault = 'bc1q07r5j9vmdu3pznajeerr762afhw265q5g8652l'
-    const signature = '0xfd994a34e215d7caa23bb123ad79d5e6355d0e417c8bb4892da4866b6eb3cc751ebd81ee895b3913182efa811a01f53ba69e8feadf309ab9ec25d8b012e39bf811';
+  it('should fail to submit a key due to vault address already generated', async function () {
+    const pubKey = '0x0248033c224979a9a190cfb147488d84b153a3352273dfac63fd895baefffb1697';
+    const keySubmission = {
+      authorityId: alithRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x57d23044a8da46ad8be01497332c8797f6369dabec84a5be6bac5a8d41d766c52cc82839ad99d12c46bfd65aaff20ff58aadbd71b4011697a378b26a94a2dde51b';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(dorothy);
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
-    expect(extrinsicResult).eq('InvalidSignature');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitKey');
+    expect(extrinsicResult).eq('VaultAddressAlreadyGenerated');
+  });
+});
+
+describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+  const charlethRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
+
+  before('should successfully set vault config', async function () {
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcRegistrationPool.setVaultConfig(1, 2)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const m = Number(await context.polkadotApi.query.btcRegistrationPool.requiredM());
+    const n = Number(await context.polkadotApi.query.btcRegistrationPool.requiredN());
+    expect(m).eq(1);
+    expect(n).eq(2);
   });
 
-  it('should successfully join bitcoin registration pool - script refund', async function () {
-    const refund = '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy';
-    const vault = 'bc1q07r5j9vmdu3pznajeerr762afhw265q5g8652l'
-    const signature = '0xfd994a34e215d7caa23bb123ad79d5e6355d0e417c8bb4892da4866b6eb3cc751ebd81ee895b3913182efa811a01f53ba69e8feadf309ab9ec25d8b012e39bf81c';
-
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(dorothy);
+  before('should successfully add relay executive member', async function () {
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.relayExecutiveMembership.addMember(charlethRelayer.address)
+    ).signAndSend(alith);
     await context.createBlock();
 
-    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
-    expect(rawBondedVault.toJSON()).eq(dorothy.address);
+    const rawMembers = await context.polkadotApi.query.relayExecutiveMembership.members();
+    const members = rawMembers.toJSON();
+    expect(members).contains(charlethRelayer.address);
+  });
 
-    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
-    expect(rawBondedRefund.toJSON()).eq(dorothy.address);
+  before('should successfully join registration pool', async function () {
+    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(dorothy.address);
+    await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
+    await context.createBlock();
+  });
+
+  it('should successfully submit public key', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: alithRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0xd14ca16f2cc2f960ce31bb4199b6f7a3434794d316d8792b0c1f934be7ebd7ce28b07c4dbf2c07d3ec3731fdf97c4dfd3d5b6c9edf7d36abc42067a98c41b1741c';
+
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
+    await context.createBlock();
+
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
-    expect(registeredBitcoinPair.refundAddress).eq(refund);
-    expect(registeredBitcoinPair.vaultAddress).eq(vault);
+    expect(registeredBitcoinPair.vaultAddress).eq('Pending');
+    expect(Object.keys(registeredBitcoinPair.pubKeys).length).eq(1);
+    expect(registeredBitcoinPair.pubKeys[alithRelayer.address]).eq(pubKey);
   });
 
-  it('should fail to join bitcoin registration pool due to invalid signature - legacy refund', async function () {
-    const refund = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2';
-    const vault = 'bc1qjh8tkutv2t9ka46rxz5phzx6r2fdklm5tmv362'
-    const signature = '0x79b8b95ec6eae5124038904ccd3b11689f4ccff136b4c5bf1e991999c75b707b0590825ad027896983e0fd8c1c0c288499e590f84d1c734ca6a87b9aab9befac11';
+  it('should fail to submit a key due to already submitted authority', async function () {
+    const pubKey = '0x0200c708c3eef9658fd000b3262a5ddc4821f2adcd3f777eb3b2d002dcc04efb87';
+    const keySubmission = {
+      authorityId: alithRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x282bb4f02c01570de8cde8f9d86459eedc622143822c70f720560a94d3dd5b401e8ef18e11377e142dd6995817d9f971d19ba83d7e96e9434111d68b15b15f0f1c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(ethan);
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'register');
-    expect(extrinsicResult).eq('InvalidSignature');
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitKey');
+    expect(extrinsicResult).eq('AuthorityAlreadySubmittedPubKey');
   });
 
-  it('should successfully join bitcoin registration pool - legacy refund', async function () {
-    const refund = '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2';
-    const vault = 'bc1qjh8tkutv2t9ka46rxz5phzx6r2fdklm5tmv362'
-    const signature = '0x79b8b95ec6eae5124038904ccd3b11689f4ccff136b4c5bf1e991999c75b707b0590825ad027896983e0fd8c1c0c288499e590f84d1c734ca6a87b9aab9befac1b';
+  it('should fail to submit a key due to already submitted key', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: charlethRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x29c01893855199ee261ed2754d2676c6c611eb9eb2612e663c526ed097fd7d5e7349ae5794aa22f4befd3bb372430e007878920e175665dacdec995968f94c781b';
 
-    await context.polkadotApi.tx.btcRegistrationPool.register(refund, vault, signature).signAndSend(ethan);
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
     await context.createBlock();
 
-    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
-    expect(rawBondedVault.toJSON()).eq(ethan.address);
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitKey');
+    expect(extrinsicResult).eq('VaultAddressAlreadyContainsPubKey');
+  });
 
-    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
-    expect(rawBondedRefund.toJSON()).eq(ethan.address);
+  it('should fail to submit a key due unknown user', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: charlethRelayer.address,
+      who: alith.address,
+      pubKey,
+    };
+    const signature = '0x8964b849d29c912b3f6402f780eb5243bab7129f9e6782e4f5457509460f2c795669f53f14fa8846211f20a22c026a3d8ef680fcc75e6ed57e64a4c52deb2e3c1c';
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(ethan.address);
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitKey');
+    expect(extrinsicResult).eq('UserDNE');
+  });
+
+  it('should successfully submit public key', async function () {
+    const pubKey = '0x03495cb39c9c8a5c20f78e7eb33569bc12f583af7ed956b5f171edefaa5b1e5bd3';
+    const keySubmission = {
+      authorityId: charlethRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x28d6e5dedddfc98b598ace3128c7df6bb595566d3ae5724d3964804487a4b77773c2b82f4c6be892a57c2c58f845b6f9df888d168cd4458450a2d3018088c3ca1b';
+
+    await context.polkadotApi.tx.btcRegistrationPool.submitKey(keySubmission, signature).send();
+    await context.createBlock();
+
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
-    expect(registeredBitcoinPair.refundAddress).eq(refund);
-    expect(registeredBitcoinPair.vaultAddress).eq(vault);
+
+    const vault = registeredBitcoinPair.vaultAddress['Generated'];
+    expect(vault).is.exist;
+    expect(vault.address).is.exist;
+    expect(Number(vault.m)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredM()));
+    expect(Number(vault.n)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
+
+    expect(Object.keys(registeredBitcoinPair.pubKeys).length).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
+    expect(registeredBitcoinPair.pubKeys[charlethRelayer.address]).eq(pubKey);
   });
 });
