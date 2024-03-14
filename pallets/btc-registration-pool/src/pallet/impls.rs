@@ -2,10 +2,10 @@ use miniscript::bitcoin::{
 	opcodes::all::OP_CHECKMULTISIG, script::Builder, Address, Network, Opcode, PublicKey,
 };
 
-use scale_info::{prelude::string::String, prelude::string::ToString};
+use scale_info::prelude::string::ToString;
 use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
-use sp_std::{str::FromStr, vec, vec::Vec};
+use sp_std::{str, str::FromStr, vec, vec::Vec};
 
 use crate::BoundedBitcoinAddress;
 
@@ -13,10 +13,10 @@ use super::pallet::*;
 
 impl<T: Config> Pallet<T> {
 	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
-	fn sort_pub_keys(raw_pub_keys: Vec<String>) -> Result<Vec<PublicKey>, DispatchError> {
+	fn sort_pub_keys(raw_pub_keys: Vec<[u8; 33]>) -> Result<Vec<PublicKey>, DispatchError> {
 		let mut pub_keys = vec![];
 		for raw_key in raw_pub_keys.iter() {
-			let key = PublicKey::from_str(&raw_key).map_err(|_| Error::<T>::InvalidPublicKey)?;
+			let key = PublicKey::from_slice(raw_key).map_err(|_| Error::<T>::InvalidPublicKey)?;
 			pub_keys.push(key);
 		}
 		pub_keys.sort();
@@ -39,7 +39,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Generate a multi-sig vault address.
 	pub fn generate_vault_address(
-		raw_pub_keys: Vec<String>,
+		raw_pub_keys: Vec<[u8; 33]>,
 	) -> Result<BoundedBitcoinAddress, DispatchError> {
 		let sorted_pub_keys = Self::sort_pub_keys(raw_pub_keys)?;
 		let redeem_script = Self::build_redeem_script(sorted_pub_keys);
@@ -54,6 +54,23 @@ impl<T: Config> Pallet<T> {
 		.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
 	}
 
+	/// Check if the given address is valid on the target Bitcoin network. Then returns the checked address.
+	pub fn get_checked_bitcoin_address(
+		address: &Vec<u8>,
+	) -> Result<BoundedBitcoinAddress, DispatchError> {
+		let raw_address = str::from_utf8(address).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+		let unchecked_address =
+			Address::from_str(raw_address).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+		let checked_address = unchecked_address
+			.require_network(Self::get_bitcoin_network())
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?
+			.to_string();
+
+		Ok(BoundedVec::try_from(checked_address.as_bytes().to_vec())
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
+	}
+
+	/// Get the Bitcoin network of the current runtime.
 	fn get_bitcoin_network() -> Network {
 		match T::IsBitcoinMainnet::get() {
 			true => Network::Bitcoin,

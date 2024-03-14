@@ -12,7 +12,7 @@ use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 
 use frame_support::traits::SortedMembers;
 use parity_scale_codec::{Decode, Encode};
-use scale_info::{prelude::string::String, TypeInfo};
+use scale_info::TypeInfo;
 
 /// The maximum length of a valid Bitcoin address in characters (~62 alphanumeric characters).
 pub const ADDRESS_MAX_LENGTH: u32 = 62;
@@ -51,7 +51,7 @@ pub struct BitcoinAddressPair<AccountId> {
 	/// For inbound.
 	pub vault_address: VaultAddress,
 	/// Public keys that the vault address contains.
-	pub pub_keys: BTreeMap<AccountId, String>,
+	pub pub_keys: BTreeMap<AccountId, [u8; 33]>,
 }
 
 impl<AccountId: PartialEq + Clone + Ord> BitcoinAddressPair<AccountId> {
@@ -67,11 +67,11 @@ impl<AccountId: PartialEq + Clone + Ord> BitcoinAddressPair<AccountId> {
 		T::Executives::count() == self.pub_keys.len()
 	}
 
-	pub fn is_key_submitted(&self, pub_key: &String) -> bool {
-		self.pub_keys.values().cloned().collect::<Vec<String>>().contains(pub_key)
+	pub fn is_key_submitted(&self, pub_key: &[u8; 33]) -> bool {
+		self.pub_keys.values().cloned().collect::<Vec<[u8; 33]>>().contains(pub_key)
 	}
 
-	pub fn insert_pub_key(&mut self, authority_id: AccountId, pub_key: String) {
+	pub fn insert_pub_key(&mut self, authority_id: AccountId, pub_key: [u8; 33]) {
 		self.pub_keys.insert(authority_id, pub_key);
 	}
 }
@@ -84,5 +84,5 @@ pub struct KeySubmission<AccountId> {
 	/// The target Ethereum address.
 	pub who: AccountId,
 	/// The generated public key. (33 bytes)
-	pub pub_key: String,
+	pub pub_key: [u8; 33],
 }

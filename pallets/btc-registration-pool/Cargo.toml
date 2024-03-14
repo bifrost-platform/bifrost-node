@@ -12,6 +12,7 @@ repository = { workspace = true }
 # General
 log = { workspace = true }
 miniscript = { workspace = true }
+array-bytes = { workspace = true }
 
 # Substrate
 scale-info = { workspace = true }

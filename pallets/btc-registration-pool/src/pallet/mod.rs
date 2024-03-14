@@ -13,7 +13,7 @@ use frame_system::pallet_prelude::*;
 
 use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str::FromStr, vec, vec::Vec};
+use sp_std::{str, vec, vec::Vec};
 
 use miniscript::bitcoin::PublicKey;
 
@@ -177,7 +177,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			let refund_address: BoundedBitcoinAddress =
-				refund_address.try_into().map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+				Self::get_checked_bitcoin_address(&refund_address)?;
 
 			ensure!(
 				!<BondedRefund<T>>::contains_key(&refund_address),
@@ -222,7 +222,7 @@ pub mod pallet {
 				!registered.is_key_submitted(&pub_key),
 				Error::<T>::VaultAddressAlreadyContainsPubKey
 			);
-			ensure!(PublicKey::from_str(&pub_key).is_ok(), Error::<T>::InvalidPublicKey);
+			ensure!(PublicKey::from_slice(&pub_key).is_ok(), Error::<T>::InvalidPublicKey);
 
 			registered.insert_pub_key(authority_id, pub_key);
 
@@ -261,7 +261,12 @@ pub mod pallet {
 				}
 
 				// verify if the signature was originated from the authority.
-				let message = format!("{:?}:{:?}:{}", authority_id, who, pub_key);
+				let message = format!(
+					"{:?}:{:?}:{}",
+					authority_id,
+					who,
+					array_bytes::bytes2hex("0x", pub_key)
+				);
 				if !signature.verify(message.as_bytes(), authority_id) {
 					return InvalidTransaction::BadProof.into();
 				}
