@@ -10,7 +10,6 @@ use sp_core::{ConstU32, RuntimeDebug};
 use sp_runtime::BoundedVec;
 use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 
-use frame_support::traits::SortedMembers;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
@@ -64,7 +63,7 @@ impl<AccountId: PartialEq + Clone + Ord> BitcoinAddressPair<AccountId> {
 	}
 
 	pub fn is_generation_ready<T: Config>(&self) -> bool {
-		T::Executives::count() == self.pub_keys.len()
+		<RequiredN<T>>::get() as usize == self.pub_keys.len()
 	}
 
 	pub fn is_key_submitted(&self, pub_key: &[u8; 33]) -> bool {
