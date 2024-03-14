@@ -31,6 +31,8 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		/// Required origin for setting or resetting the configuration.
+		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
@@ -43,10 +45,10 @@ pub mod pallet {
 		type Executives: SortedMembers<Self::AccountId>;
 		/// The required number of public keys to generate a vault address.
 		#[pallet::constant]
-		type DefaultRequiredPubKeys: Get<u8>;
+		type DefaultRequiredM: Get<u8>;
 		/// The required number of signatures to send a transaction with the vault account.
 		#[pallet::constant]
-		type DefaultRequiredSignatures: Get<u8>;
+		type DefaultRequiredN: Get<u8>;
 		/// The flag that represents whether the target Bitcoin network is the mainnet.
 		#[pallet::constant]
 		type IsBitcoinMainnet: Get<bool>;
@@ -74,6 +76,8 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// The user does not exist.
 		UserDNE,
+		/// The vault is out of range.
+		OutOfRange,
 	}
 
 	#[pallet::event]
@@ -87,6 +91,8 @@ pub mod pallet {
 			refund_address: BoundedBitcoinAddress,
 			vault_address: BoundedBitcoinAddress,
 		},
+		/// A new vault configuration has been set.
+		VaultConfigSet { m: u8, n: u8 },
 	}
 
 	#[pallet::storage]
@@ -109,19 +115,19 @@ pub mod pallet {
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn required_pub_keys)]
+	#[pallet::getter(fn required_m)]
 	/// The required number of public keys to generate a vault address.
-	pub type RequiredPubKeys<T: Config> = StorageValue<_, u8, ValueQuery>;
+	pub type RequiredM<T: Config> = StorageValue<_, u8, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn required_signatures)]
+	#[pallet::getter(fn required_n)]
 	/// The required number of signatures to send a transaction with the vault account.
-	pub type RequiredSignatures<T: Config> = StorageValue<_, u8, ValueQuery>;
+	pub type RequiredN<T: Config> = StorageValue<_, u8, ValueQuery>;
 
 	#[pallet::genesis_config]
 	pub struct GenesisConfig<T> {
-		pub required_pub_keys: u8,
-		pub required_signatures: u8,
+		pub required_m: u8,
+		pub required_n: u8,
 		#[serde(skip)]
 		pub _config: PhantomData<T>,
 	}
@@ -129,8 +135,8 @@ pub mod pallet {
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
 			Self {
-				required_pub_keys: T::DefaultRequiredPubKeys::get(),
-				required_signatures: T::DefaultRequiredSignatures::get(),
+				required_m: T::DefaultRequiredM::get(),
+				required_n: T::DefaultRequiredN::get(),
 				_config: Default::default(),
 			}
 		}
@@ -139,14 +145,30 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			RequiredPubKeys::<T>::put(self.required_pub_keys);
-			RequiredSignatures::<T>::put(self.required_signatures);
+			RequiredM::<T>::put(self.required_m);
+			RequiredN::<T>::put(self.required_n);
 		}
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_vault_config())]
+		pub fn set_vault_config(origin: OriginFor<T>, m: u8, n: u8) -> DispatchResultWithPostInfo {
+			T::SetOrigin::ensure_origin(origin)?;
+
+			ensure!(n >= 1 && n <= 16, Error::<T>::OutOfRange);
+			ensure!(m >= 1 && m <= n, Error::<T>::OutOfRange);
+
+			Self::deposit_event(Event::VaultConfigSet { m, n });
+
+			<RequiredM<T>>::put(m);
+			<RequiredN<T>>::put(n);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
@@ -177,7 +199,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(1)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_key(

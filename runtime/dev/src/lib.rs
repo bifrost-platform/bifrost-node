@@ -969,11 +969,12 @@ impl pallet_base_fee::Config for Runtime {
 
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
-	type DefaultRequiredPubKeys = ConstU8<1>;
-	type DefaultRequiredSignatures = ConstU8<1>;
+	type DefaultRequiredM = ConstU8<1>;
+	type DefaultRequiredN = ConstU8<1>;
 	type IsBitcoinMainnet = ConstBool<false>;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }

@@ -25,15 +25,15 @@ impl<T: Config> Pallet<T> {
 
 	/// Build the script for p2wsh address creation.
 	fn build_redeem_script(pub_keys: Vec<PublicKey>) -> Builder {
-		let mut redeem_script = Builder::new()
-			.push_opcode(Opcode::from(<RequiredSignatures<T>>::get().saturating_add(80))); // m
+		let mut redeem_script =
+			Builder::new().push_opcode(Opcode::from(<RequiredM<T>>::get().saturating_add(80))); // m
 
 		for key in pub_keys.into_iter() {
 			redeem_script = redeem_script.push_key(&key);
 		}
 
 		redeem_script
-			.push_opcode(Opcode::from(<RequiredPubKeys<T>>::get().saturating_add(80))) // n
+			.push_opcode(Opcode::from(<RequiredN<T>>::get().saturating_add(80))) // n
 			.push_opcode(OP_CHECKMULTISIG)
 	}
 
@@ -46,17 +46,18 @@ impl<T: Config> Pallet<T> {
 
 		// generate vault address
 		Ok(BoundedVec::try_from(
-			Address::p2wsh(
-				redeem_script.as_script(),
-				match T::IsBitcoinMainnet::get() {
-					true => Network::Bitcoin,
-					_ => Network::Testnet,
-				},
-			)
-			.to_string()
-			.as_bytes()
-			.to_vec(),
+			Address::p2wsh(redeem_script.as_script(), Self::get_bitcoin_network())
+				.to_string()
+				.as_bytes()
+				.to_vec(),
 		)
 		.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
+	}
+
+	fn get_bitcoin_network() -> Network {
+		match T::IsBitcoinMainnet::get() {
+			true => Network::Bitcoin,
+			_ => Network::Testnet,
+		}
 	}
 }

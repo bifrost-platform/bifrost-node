@@ -30,7 +30,7 @@ pub struct MultiSigAddress {
 
 impl MultiSigAddress {
 	pub fn new<T: Config>(address: BoundedBitcoinAddress) -> Self {
-		Self { address, m: <RequiredSignatures<T>>::get(), n: <RequiredPubKeys<T>>::get() }
+		Self { address, m: <RequiredM<T>>::get(), n: <RequiredN<T>>::get() }
 	}
 }
 
