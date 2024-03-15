@@ -104,6 +104,10 @@ impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 	pub fn set_address(&mut self, address: BoundedBitcoinAddress) {
 		self.address = AddressState::Generated(address)
 	}
+
+	pub fn pub_keys(&self) -> Vec<Public> {
+		self.pub_keys.values().cloned().collect()
+	}
 }
 
 #[derive(Decode, Encode, TypeInfo, MaxEncodedLen)]
@@ -136,11 +140,20 @@ impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// The payload used for public key submission.
-pub struct KeySubmission<AccountId> {
+pub struct VaultKeySubmission<AccountId> {
 	/// The authority Ethereum address. (Relay executive)
 	pub authority_id: AccountId,
 	/// The target Ethereum address.
 	pub who: AccountId,
+	/// The generated public key. (33 bytes)
+	pub pub_key: Public,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// The payload used for public key submission.
+pub struct SystemVaultKeySubmission<AccountId> {
+	/// The authority Ethereum address. (Relay executive)
+	pub authority_id: AccountId,
 	/// The generated public key. (33 bytes)
 	pub pub_key: Public,
 }

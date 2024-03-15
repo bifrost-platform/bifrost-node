@@ -1,7 +1,8 @@
 mod impls;
 
 use crate::{
-	BitcoinRelayTarget, BoundedBitcoinAddress, KeySubmission, MultiSigAccount, WeightInfo,
+	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, SystemVaultKeySubmission,
+	VaultKeySubmission, WeightInfo,
 };
 
 use frame_support::{
@@ -73,6 +74,8 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// The user does not exist.
 		UserDNE,
+		/// The system vault does not exist.
+		SystemVaultDNE,
 		/// The vault is out of range.
 		OutOfRange,
 	}
@@ -80,8 +83,12 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// A new system vault has been requested.
+		SystemVaultPending,
 		/// A new user registered its credentials and received a pending vault address.
 		VaultPending { who: T::AccountId, refund_address: BoundedBitcoinAddress },
+		/// The system vault address has been successfully generated.
+		SystemVaultGenerated { vault_address: BoundedBitcoinAddress },
 		/// A user's vault address has been successfully generated.
 		VaultGenerated {
 			who: T::AccountId,
@@ -217,21 +224,26 @@ pub mod pallet {
 		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
+			ensure!(<SystemVault<T>>::get().is_none(), Error::<T>::VaultAlreadyGenerated);
+
+			<SystemVault<T>>::put(MultiSigAccount::new::<T>());
+			Self::deposit_event(Event::SystemVaultPending);
+
 			Ok(().into())
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_key())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
-		pub fn submit_key(
+		pub fn submit_vault_key(
 			origin: OriginFor<T>,
-			key_submission: KeySubmission<T::AccountId>,
+			key_submission: VaultKeySubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			// make sure this cannot be executed by a signed transaction.
 			ensure_none(origin)?;
 
-			let KeySubmission { authority_id, who, pub_key } = key_submission;
+			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 			let mut relay_target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
 
 			ensure!(relay_target.vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
@@ -249,9 +261,7 @@ pub mod pallet {
 
 			if relay_target.vault.is_generation_ready::<T>() {
 				// generate vault address
-				let vault_address = Self::generate_vault_address(
-					relay_target.vault.pub_keys.values().cloned().collect(),
-				)?;
+				let vault_address = Self::generate_vault_address(relay_target.vault.pub_keys())?;
 				relay_target.set_vault_address(vault_address.clone());
 
 				<BondedVault<T>>::insert(&vault_address, who.clone());
@@ -266,6 +276,50 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
+		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
+		pub fn submit_system_vault_key(
+			origin: OriginFor<T>,
+			key_submission: SystemVaultKeySubmission<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			// make sure this cannot be executed by a signed transaction.
+			ensure_none(origin)?;
+
+			let SystemVaultKeySubmission { authority_id, pub_key } = key_submission;
+			if let Some(mut system_vault) = <SystemVault<T>>::get() {
+				ensure!(system_vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
+				ensure!(
+					!system_vault.is_authority_submitted(&authority_id),
+					Error::<T>::AuthorityAlreadySubmittedPubKey
+				);
+				ensure!(
+					!system_vault.is_key_submitted(&pub_key),
+					Error::<T>::VaultAlreadyContainsPubKey
+				);
+				ensure!(
+					PublicKey::from_slice(pub_key.as_ref()).is_ok(),
+					Error::<T>::InvalidPublicKey
+				);
+
+				system_vault.insert_pub_key::<T>(authority_id, pub_key)?;
+
+				if system_vault.is_generation_ready::<T>() {
+					// generate vault address
+					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
+					system_vault.set_address(vault_address.clone());
+
+					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
+				}
+				<SystemVault<T>>::put(system_vault);
+			} else {
+				return Err(Error::<T>::SystemVaultDNE)?;
+			}
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -273,32 +327,54 @@ pub mod pallet {
 		type Call = Call<T>;
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-			if let Call::submit_key { key_submission, signature } = call {
-				let KeySubmission { authority_id, who, pub_key } = key_submission;
+			match call {
+				Call::submit_vault_key { key_submission, signature } => {
+					let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 
-				// verify if the authority is a relay executive member.
-				if !T::Executives::contains(&authority_id) {
-					return InvalidTransaction::BadSigner.into();
-				}
+					// verify if the authority is a relay executive member.
+					if !T::Executives::contains(&authority_id) {
+						return InvalidTransaction::BadSigner.into();
+					}
 
-				// verify if the signature was originated from the authority.
-				let message = format!(
-					"{:?}:{:?}:{}",
-					authority_id,
-					who,
-					array_bytes::bytes2hex("0x", pub_key)
-				);
-				if !signature.verify(message.as_bytes(), authority_id) {
-					return InvalidTransaction::BadProof.into();
-				}
+					// verify if the signature was originated from the authority.
+					let message = format!(
+						"{:?}:{:?}:{}",
+						authority_id,
+						who,
+						array_bytes::bytes2hex("0x", pub_key)
+					);
+					if !signature.verify(message.as_bytes(), authority_id) {
+						return InvalidTransaction::BadProof.into();
+					}
 
-				ValidTransaction::with_tag_prefix("RegPoolKeySubmission")
-					.priority(TransactionPriority::MAX)
-					.and_provides((authority_id, who))
-					.propagate(true)
-					.build()
-			} else {
-				InvalidTransaction::Call.into()
+					ValidTransaction::with_tag_prefix("RegPoolKeySubmission")
+						.priority(TransactionPriority::MAX)
+						.and_provides((authority_id, who))
+						.propagate(true)
+						.build()
+				},
+				Call::submit_system_vault_key { key_submission, signature } => {
+					let SystemVaultKeySubmission { authority_id, pub_key } = key_submission;
+
+					// verify if the authority is a relay executive member.
+					if !T::Executives::contains(&authority_id) {
+						return InvalidTransaction::BadSigner.into();
+					}
+
+					// verify if the signature was originated from the authority.
+					let message =
+						format!("{:?}:{}", authority_id, array_bytes::bytes2hex("0x", pub_key));
+					if !signature.verify(message.as_bytes(), authority_id) {
+						return InvalidTransaction::BadProof.into();
+					}
+
+					ValidTransaction::with_tag_prefix("SystemKeySubmission")
+						.priority(TransactionPriority::MAX)
+						.and_provides(authority_id)
+						.propagate(true)
+						.build()
+				},
+				_ => InvalidTransaction::Call.into(),
 			}
 		}
 	}
