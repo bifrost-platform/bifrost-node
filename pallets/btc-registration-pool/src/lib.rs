@@ -21,57 +21,78 @@ pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_LENGTH>>;
 
 #[derive(Decode, Encode, TypeInfo)]
 /// A m-of-n multi signature based Bitcoin address.
-pub struct MultiSigAddress {
-	pub address: BoundedBitcoinAddress,
+pub struct MultiSigAccount<AccountId> {
+	/// The vault address.
+	pub address: AddressState,
+	/// Public keys that the vault address contains.
+	pub pub_keys: BTreeMap<AccountId, [u8; 33]>,
+	/// The m value of the multi-sig address.
 	pub m: u8,
+	/// The n value of the multi-sig address.
 	pub n: u8,
 }
 
-impl MultiSigAddress {
-	pub fn new<T: Config>(address: BoundedBitcoinAddress) -> Self {
-		Self { address, m: <RequiredM<T>>::get(), n: <RequiredN<T>>::get() }
+impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
+	pub fn new<T: Config>() -> Self {
+		Self {
+			address: AddressState::Pending,
+			pub_keys: Default::default(),
+			m: <RequiredM<T>>::get(),
+			n: <RequiredN<T>>::get(),
+		}
 	}
 }
 
 #[derive(Decode, Encode, TypeInfo)]
-/// The vault address.
-pub enum VaultAddress {
+/// The vault address state.
+pub enum AddressState {
 	/// Required number of public keys has not been submitted yet.
 	Pending,
 	/// n public keys has been submitted and address generation done.
-	Generated(MultiSigAddress),
+	Generated(BoundedBitcoinAddress),
 }
 
 #[derive(Decode, Encode, TypeInfo)]
-/// The registered Bitcoin address pair.
-pub struct BitcoinAddressPair<AccountId> {
+/// The registered Bitcoin relay target information.
+pub struct BitcoinRelayTarget<AccountId> {
 	/// For outbound.
 	pub refund_address: BoundedBitcoinAddress,
 	/// For inbound.
-	pub vault_address: VaultAddress,
-	/// Public keys that the vault address contains.
-	pub pub_keys: BTreeMap<AccountId, [u8; 33]>,
+	pub vault: MultiSigAccount<AccountId>,
 }
 
-impl<AccountId: PartialEq + Clone + Ord> BitcoinAddressPair<AccountId> {
-	pub fn new(refund_address: BoundedBitcoinAddress) -> Self {
-		Self { refund_address, vault_address: VaultAddress::Pending, pub_keys: Default::default() }
+impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
+	pub fn new<T: Config>(refund_address: BoundedBitcoinAddress) -> Self {
+		Self { refund_address, vault: MultiSigAccount::new::<T>() }
 	}
 
 	pub fn is_pending(&self) -> bool {
-		matches!(self.vault_address, VaultAddress::Pending)
+		matches!(self.vault.address, AddressState::Pending)
 	}
 
 	pub fn is_generation_ready<T: Config>(&self) -> bool {
-		<RequiredN<T>>::get() as usize == self.pub_keys.len()
+		<RequiredN<T>>::get() as usize == self.vault.pub_keys.len()
 	}
 
 	pub fn is_key_submitted(&self, pub_key: &[u8; 33]) -> bool {
-		self.pub_keys.values().cloned().collect::<Vec<[u8; 33]>>().contains(pub_key)
+		self.vault
+			.pub_keys
+			.values()
+			.cloned()
+			.collect::<Vec<[u8; 33]>>()
+			.contains(pub_key)
+	}
+
+	pub fn is_authority_submitted(&self, authority_id: &AccountId) -> bool {
+		self.vault.pub_keys.contains_key(authority_id)
 	}
 
 	pub fn insert_pub_key(&mut self, authority_id: AccountId, pub_key: [u8; 33]) {
-		self.pub_keys.insert(authority_id, pub_key);
+		self.vault.pub_keys.insert(authority_id, pub_key);
+	}
+
+	pub fn set_vault_address(&mut self, address: BoundedBitcoinAddress) {
+		self.vault.address = AddressState::Generated(address);
 	}
 }
 

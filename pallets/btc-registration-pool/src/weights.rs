@@ -12,6 +12,7 @@ pub trait WeightInfo {
 	fn set_vault_config() -> Weight;
 	fn submit_key() -> Weight;
 	fn request_vault() -> Weight;
+	fn request_system_vault() -> Weight;
 }
 
 /// Weights for `pallet_btc_registration_pool` using the Substrate node and recommended hardware.
@@ -32,6 +33,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
+	fn request_system_vault() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(T::DbWeight::get().reads(6 as u64))
+			.saturating_add(T::DbWeight::get().writes(4 as u64))
+	}
 }
 
 // For backwards compatibility and tests
@@ -47,6 +53,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
 	fn request_vault() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(6 as u64))
+			.saturating_add(RocksDbWeight::get().writes(4 as u64))
+	}
+	fn request_system_vault() -> Weight {
 		Weight::from_parts(18_178_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))

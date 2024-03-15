@@ -1,9 +1,6 @@
 mod impls;
 
-use crate::{
-	BitcoinAddressPair, BoundedBitcoinAddress, KeySubmission, MultiSigAddress, VaultAddress,
-	WeightInfo,
-};
+use crate::{BitcoinRelayTarget, BoundedBitcoinAddress, KeySubmission, WeightInfo};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -58,14 +55,12 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		/// The Bifrost address is already registered.
-		UserBfcAddressAlreadyRegistered,
-		/// The refund Bitcoin address is already registered.
-		RefundAddressAlreadyRegistered,
+		/// This address is already registered or used.
+		AddressAlreadyRegistered,
 		/// The vault address has already been generated.
-		VaultAddressAlreadyGenerated,
+		VaultAlreadyGenerated,
 		/// The vault address already contains the given public key.
-		VaultAddressAlreadyContainsPubKey,
+		VaultAlreadyContainsPubKey,
 		/// The authority has already submitted a public key for a vault.
 		AuthorityAlreadySubmittedPubKey,
 		/// The given bitcoin address is invalid.
@@ -96,11 +91,16 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
+	#[pallet::getter(fn system_vault)]
+	/// The system vault account that is used for fee refunds.
+	pub type SystemVault<T: Config> = StorageValue<_, BoundedBitcoinAddress, OptionQuery>;
+
+	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn registration_pool)]
 	/// Registered addresses that are permitted to relay Bitcoin.
 	pub type RegistrationPool<T: Config> =
-		StorageMap<_, Twox64Concat, T::AccountId, BitcoinAddressPair<T::AccountId>>;
+		StorageMap<_, Twox64Concat, T::AccountId, BitcoinRelayTarget<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
@@ -179,19 +179,26 @@ pub mod pallet {
 			let refund_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&refund_address)?;
 
+			if let Some(system_vault) = <SystemVault<T>>::get() {
+				ensure!(system_vault != refund_address, Error::<T>::AddressAlreadyRegistered);
+			}
 			ensure!(
 				!<BondedRefund<T>>::contains_key(&refund_address),
-				Error::<T>::RefundAddressAlreadyRegistered
+				Error::<T>::AddressAlreadyRegistered
+			);
+			ensure!(
+				!<BondedVault<T>>::contains_key(&refund_address),
+				Error::<T>::AddressAlreadyRegistered
 			);
 			ensure!(
 				!<RegistrationPool<T>>::contains_key(&who),
-				Error::<T>::UserBfcAddressAlreadyRegistered
+				Error::<T>::AddressAlreadyRegistered
 			);
 
 			<BondedRefund<T>>::insert(&refund_address, &who);
 			<RegistrationPool<T>>::insert(
 				who.clone(),
-				BitcoinAddressPair::new(refund_address.clone()),
+				BitcoinRelayTarget::new::<T>(refund_address.clone()),
 			);
 
 			Self::deposit_event(Event::VaultPending { who, refund_address });
@@ -200,6 +207,14 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
+		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
+		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			T::SetOrigin::ensure_origin(origin)?;
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_key(
@@ -213,25 +228,22 @@ pub mod pallet {
 			let KeySubmission { authority_id, who, pub_key } = key_submission;
 			let mut registered = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
 
-			ensure!(registered.is_pending(), Error::<T>::VaultAddressAlreadyGenerated);
+			ensure!(registered.is_pending(), Error::<T>::VaultAlreadyGenerated);
 			ensure!(
-				!registered.pub_keys.contains_key(&authority_id),
+				!registered.is_authority_submitted(&authority_id),
 				Error::<T>::AuthorityAlreadySubmittedPubKey
 			);
-			ensure!(
-				!registered.is_key_submitted(&pub_key),
-				Error::<T>::VaultAddressAlreadyContainsPubKey
-			);
+			ensure!(!registered.is_key_submitted(&pub_key), Error::<T>::VaultAlreadyContainsPubKey);
 			ensure!(PublicKey::from_slice(&pub_key).is_ok(), Error::<T>::InvalidPublicKey);
 
 			registered.insert_pub_key(authority_id, pub_key);
 
 			if registered.is_generation_ready::<T>() {
 				// generate vault address
-				let vault_address =
-					Self::generate_vault_address(registered.pub_keys.values().cloned().collect())?;
-				registered.vault_address =
-					VaultAddress::Generated(MultiSigAddress::new::<T>(vault_address.clone()));
+				let vault_address = Self::generate_vault_address(
+					registered.vault.pub_keys.values().cloned().collect(),
+				)?;
+				registered.set_vault_address(vault_address.clone());
 
 				<BondedVault<T>>::insert(&vault_address, who.clone());
 				Self::deposit_event(Event::VaultGenerated {

@@ -3,7 +3,7 @@
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
 use pallet_btc_registration_pool::{
-	BoundedBitcoinAddress, Call as BtcRegistrationPoolCall, VaultAddress,
+	AddressState, BoundedBitcoinAddress, Call as BtcRegistrationPoolCall,
 };
 use pallet_evm::AddressMapping;
 
@@ -47,14 +47,14 @@ where
 		let mut vault_addresses: Vec<BitcoinAddressString> = vec![];
 
 		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
-			|(bfc_address, btc_pair)| {
+			|(bfc_address, relay_target)| {
 				user_bfc_addresses.push(Address(bfc_address.into()));
 				refund_addresses
-					.push(BitcoinAddressString::from(btc_pair.refund_address.into_inner()));
+					.push(BitcoinAddressString::from(relay_target.refund_address.into_inner()));
 
-				let vault_address = match btc_pair.vault_address {
-					VaultAddress::Pending => BoundedVec::default(),
-					VaultAddress::Generated(vault) => vault.address,
+				let vault_address = match relay_target.vault.address {
+					AddressState::Pending => BoundedVec::default(),
+					AddressState::Generated(address) => address,
 				};
 				vault_addresses.push(BitcoinAddressString::from(vault_address.into_inner()));
 			},
@@ -70,10 +70,10 @@ where
 
 		let vault_addresses: Vec<BitcoinAddressString> =
 			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter()
-				.filter_map(|(_, btc_pair)| match btc_pair.vault_address {
-					VaultAddress::Pending => None,
-					VaultAddress::Generated(vault) => {
-						Some(BitcoinAddressString::from(vault.address.into_inner()))
+				.filter_map(|(_, relay_target)| match relay_target.vault.address {
+					AddressState::Pending => None,
+					AddressState::Generated(address) => {
+						Some(BitcoinAddressString::from(address.into_inner()))
 					},
 				})
 				.collect();
@@ -92,10 +92,10 @@ where
 
 		let vault_address =
 			match BtcRegistrationPoolOf::<Runtime>::registration_pool(user_bfc_address) {
-				Some(btc_pair) => match btc_pair.vault_address {
-					VaultAddress::Pending => BitcoinAddressString::from(vec![]),
-					VaultAddress::Generated(vault) => {
-						BitcoinAddressString::from(vault.address.into_inner())
+				Some(btc_pair) => match btc_pair.vault.address {
+					AddressState::Pending => BitcoinAddressString::from(vec![]),
+					AddressState::Generated(address) => {
+						BitcoinAddressString::from(address.into_inner())
 					},
 				},
 				None => BitcoinAddressString::from(vec![]),
@@ -113,8 +113,8 @@ where
 
 		let refund_addresses: Vec<BitcoinAddressString> =
 			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter()
-				.map(|(_, btc_pair)| {
-					BitcoinAddressString::from(btc_pair.refund_address.into_inner())
+				.map(|(_, relay_target)| {
+					BitcoinAddressString::from(relay_target.refund_address.into_inner())
 				})
 				.collect();
 		Ok(refund_addresses)
@@ -132,7 +132,9 @@ where
 
 		let refund_address =
 			match BtcRegistrationPoolOf::<Runtime>::registration_pool(user_bfc_address) {
-				Some(btc_pair) => BitcoinAddressString::from(btc_pair.refund_address.into_inner()),
+				Some(relay_target) => {
+					BitcoinAddressString::from(relay_target.refund_address.into_inner())
+				},
 				None => BitcoinAddressString::from(vec![]),
 			};
 		Ok(refund_address)
