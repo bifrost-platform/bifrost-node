@@ -1,6 +1,8 @@
 mod impls;
 
-use crate::{BitcoinRelayTarget, BoundedBitcoinAddress, KeySubmission, WeightInfo};
+use crate::{
+	BitcoinRelayTarget, BoundedBitcoinAddress, KeySubmission, MultiSigAccount, WeightInfo,
+};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -93,7 +95,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn system_vault)]
 	/// The system vault account that is used for fee refunds.
-	pub type SystemVault<T: Config> = StorageValue<_, BoundedBitcoinAddress, OptionQuery>;
+	pub type SystemVault<T: Config> = StorageValue<_, MultiSigAccount<T::AccountId>, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -180,7 +182,10 @@ pub mod pallet {
 				Self::get_checked_bitcoin_address(&refund_address)?;
 
 			if let Some(system_vault) = <SystemVault<T>>::get() {
-				ensure!(system_vault != refund_address, Error::<T>::AddressAlreadyRegistered);
+				ensure!(
+					!system_vault.is_address(&refund_address),
+					Error::<T>::AddressAlreadyRegistered
+				);
 			}
 			ensure!(
 				!<BondedRefund<T>>::contains_key(&refund_address),
@@ -208,6 +213,7 @@ pub mod pallet {
 
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
+		/// Request a system vault address. Initially, the vault address will be in pending state.
 		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
@@ -226,34 +232,37 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			let KeySubmission { authority_id, who, pub_key } = key_submission;
-			let mut registered = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+			let mut relay_target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
 
-			ensure!(registered.is_pending(), Error::<T>::VaultAlreadyGenerated);
+			ensure!(relay_target.vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
 			ensure!(
-				!registered.is_authority_submitted(&authority_id),
+				!relay_target.vault.is_authority_submitted(&authority_id),
 				Error::<T>::AuthorityAlreadySubmittedPubKey
 			);
-			ensure!(!registered.is_key_submitted(&pub_key), Error::<T>::VaultAlreadyContainsPubKey);
-			ensure!(PublicKey::from_slice(&pub_key).is_ok(), Error::<T>::InvalidPublicKey);
+			ensure!(
+				!relay_target.vault.is_key_submitted(&pub_key),
+				Error::<T>::VaultAlreadyContainsPubKey
+			);
+			ensure!(PublicKey::from_slice(pub_key.as_ref()).is_ok(), Error::<T>::InvalidPublicKey);
 
-			registered.insert_pub_key(authority_id, pub_key);
+			relay_target.vault.insert_pub_key::<T>(authority_id, pub_key)?;
 
-			if registered.is_generation_ready::<T>() {
+			if relay_target.vault.is_generation_ready::<T>() {
 				// generate vault address
 				let vault_address = Self::generate_vault_address(
-					registered.vault.pub_keys.values().cloned().collect(),
+					relay_target.vault.pub_keys.values().cloned().collect(),
 				)?;
-				registered.set_vault_address(vault_address.clone());
+				relay_target.set_vault_address(vault_address.clone());
 
 				<BondedVault<T>>::insert(&vault_address, who.clone());
 				Self::deposit_event(Event::VaultGenerated {
 					who: who.clone(),
-					refund_address: registered.refund_address.clone(),
+					refund_address: relay_target.refund_address.clone(),
 					vault_address,
 				});
 			}
 
-			<RegistrationPool<T>>::insert(&who, registered);
+			<RegistrationPool<T>>::insert(&who, relay_target);
 
 			Ok(().into())
 		}

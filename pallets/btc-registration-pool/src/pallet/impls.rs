@@ -7,16 +7,17 @@ use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::{str, str::FromStr, vec, vec::Vec};
 
-use crate::BoundedBitcoinAddress;
+use crate::{BoundedBitcoinAddress, Public};
 
 use super::pallet::*;
 
 impl<T: Config> Pallet<T> {
 	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
-	fn sort_pub_keys(raw_pub_keys: Vec<[u8; 33]>) -> Result<Vec<PublicKey>, DispatchError> {
+	fn sort_pub_keys(raw_pub_keys: Vec<Public>) -> Result<Vec<PublicKey>, DispatchError> {
 		let mut pub_keys = vec![];
 		for raw_key in raw_pub_keys.iter() {
-			let key = PublicKey::from_slice(raw_key).map_err(|_| Error::<T>::InvalidPublicKey)?;
+			let key = PublicKey::from_slice(raw_key.as_ref())
+				.map_err(|_| Error::<T>::InvalidPublicKey)?;
 			pub_keys.push(key);
 		}
 		pub_keys.sort();
@@ -39,7 +40,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Generate a multi-sig vault address.
 	pub fn generate_vault_address(
-		raw_pub_keys: Vec<[u8; 33]>,
+		raw_pub_keys: Vec<Public>,
 	) -> Result<BoundedBitcoinAddress, DispatchError> {
 		let sorted_pub_keys = Self::sort_pub_keys(raw_pub_keys)?;
 		let redeem_script = Self::build_redeem_script(sorted_pub_keys);
