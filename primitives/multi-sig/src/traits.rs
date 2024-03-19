@@ -6,7 +6,7 @@ use miniscript::bitcoin::{
 use crate::Public;
 
 pub trait MultiSigManager {
-	fn is_multi_signed(m: u8) -> bool;
+	fn is_finalizable(m: u8) -> bool;
 
 	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
 	fn sort_pub_keys(raw_pub_keys: Vec<Public>) -> Result<Vec<PublicKey>, Error> {

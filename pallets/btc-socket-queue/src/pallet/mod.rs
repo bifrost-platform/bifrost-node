@@ -1,9 +1,6 @@
 mod impls;
 
-use crate::{
-	ReqId, SignStatus, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo, MAX_QUEUE_SIZE,
-	MULTI_SIG_MAX_ACCOUNTS,
-};
+use crate::{OutboundRequests, ReqId, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -12,13 +9,12 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::traits::MultiSigManager;
+use miniscript::bitcoin::Psbt;
+use sp_core::{keccak_256, H256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
 #[frame_support::pallet]
 pub mod pallet {
-	use miniscript::bitcoin::Psbt;
-	use sp_core::{keccak_256, H256};
-
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -50,7 +46,11 @@ pub mod pallet {
 	pub enum Error<T> {
 		AuthorityAlreadySubmittedSignedPsbt,
 		RequestAlreadySubmitted,
+		RequestAlreadyAccepted,
+		RequestAlreadyRejected,
 		RequestDNE,
+		InvalidPsbt,
+		InvalidSocketStatus,
 		OutOfRange,
 	}
 
@@ -58,6 +58,8 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		UnsignedPsbtSubmitted { req_id: ReqId },
+		SignedPsbtSubmitted { req_id: ReqId, authority_id: T::AccountId },
+		RequestAccepted { req_id: ReqId },
 	}
 
 	#[pallet::storage]
@@ -67,42 +69,15 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn queue)]
-	pub type Queue<T: Config> = StorageValue<
-		_,
-		BoundedVec<UnsignedPsbtMessage<T::AccountId>, ConstU32<MAX_QUEUE_SIZE>>,
-		ValueQuery,
-	>;
+	#[pallet::getter(fn pending_requests)]
+	pub type PendingRequests<T: Config> =
+		StorageMap<_, Twox64Concat, ReqId, OutboundRequests<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn pending_psbt)]
-	pub type PendingPsbt<T: Config> = StorageMap<
-		_,
-		Twox64Concat,
-		ReqId,
-		BoundedVec<SignedPsbtMessage<T::AccountId>, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
-	>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
-	#[pallet::getter(fn accepted_psbt)]
-	pub type AcceptedPsbt<T: Config> = StorageMap<
-		_,
-		Twox64Concat,
-		ReqId,
-		BoundedVec<SignedPsbtMessage<T::AccountId>, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
-	>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
-	#[pallet::getter(fn rejected_psbt)]
-	pub type RejectedPsbt<T: Config> = StorageMap<
-		_,
-		Twox64Concat,
-		ReqId,
-		BoundedVec<SignedPsbtMessage<T::AccountId>, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
-	>;
+	#[pallet::getter(fn accepted_requests)]
+	pub type AcceptedRequests<T: Config> =
+		StorageMap<_, Twox64Concat, ReqId, OutboundRequests<T::AccountId>>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -110,21 +85,27 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::submit_unsigned_psbt())]
 		pub fn submit_unsigned_psbt(
 			origin: OriginFor<T>,
-			unsigned_psbt: UnsignedPsbtMessage<T::AccountId>,
+			msg: UnsignedPsbtMessage<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { req_id, .. } = unsigned_psbt;
+			let UnsignedPsbtMessage { req_id, psbt, .. } = msg;
 
-			ensure!(!<PendingPsbt<T>>::contains_key(req_id), Error::<T>::RequestAlreadySubmitted);
-			ensure!(!<AcceptedPsbt<T>>::contains_key(req_id), Error::<T>::RequestAlreadySubmitted);
-			ensure!(!<RejectedPsbt<T>>::contains_key(req_id), Error::<T>::RequestAlreadySubmitted);
+			ensure!(
+				!<PendingRequests<T>>::contains_key(req_id),
+				Error::<T>::RequestAlreadySubmitted
+			);
+			ensure!(
+				!<AcceptedRequests<T>>::contains_key(req_id),
+				Error::<T>::RequestAlreadyAccepted
+			);
 
-			let mut queue = <Queue<T>>::get();
-			queue.try_push(unsigned_psbt).map_err(|_| Error::<T>::OutOfRange)?;
-			<Queue<T>>::put(queue);
-			<PendingPsbt<T>>::insert(req_id, BoundedVec::default());
+			if Psbt::deserialize(&psbt).is_err() {
+				return Err(Error::<T>::InvalidPsbt)?;
+			}
+
+			<PendingRequests<T>>::insert(req_id, OutboundRequests::new(psbt));
 
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { req_id });
 
@@ -135,34 +116,44 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_psbt())]
 		pub fn submit_signed_psbt(
 			origin: OriginFor<T>,
-			signed_psbt: SignedPsbtMessage<T::AccountId>,
+			msg: SignedPsbtMessage<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SignedPsbtMessage { authority_id, req_id, .. } = &signed_psbt;
+			let SignedPsbtMessage { authority_id, req_id, origin_psbt, signed_psbt } = msg;
 
-			let mut pending_psbt = <PendingPsbt<T>>::get(req_id).ok_or(Error::<T>::RequestDNE)?;
+			let mut pending_request =
+				<PendingRequests<T>>::get(&req_id).ok_or(Error::<T>::RequestDNE)?;
+
 			ensure!(
-				!pending_psbt.iter().any(|p| &p.authority_id == authority_id),
-				Error::<T>::AuthorityAlreadySubmittedSignedPsbt // TODO: allow change?
+				!pending_request.signed_psbts.contains_key(&authority_id),
+				Error::<T>::AuthorityAlreadySubmittedSignedPsbt
 			);
-			pending_psbt.try_push(signed_psbt).map_err(|_| Error::<T>::OutOfRange)?;
+			ensure!(pending_request.origin_psbt == origin_psbt, Error::<T>::InvalidPsbt);
+			ensure!(pending_request.origin_psbt != signed_psbt, Error::<T>::InvalidPsbt);
 
-			let accepted_len = pending_psbt
-				.iter()
-				.filter(|p| matches!(p.status, SignStatus::Accepted))
-				.collect::<Vec<_>>()
-				.len();
+			let mut de_origin_psbt =
+				Psbt::deserialize(&origin_psbt).map_err(|_| Error::<T>::InvalidPsbt)?;
+			let de_signed_psbt =
+				Psbt::deserialize(&signed_psbt).map_err(|_| Error::<T>::InvalidPsbt)?;
+			if de_origin_psbt.combine(de_signed_psbt).is_err() {
+				return Err(Error::<T>::InvalidPsbt)?;
+			}
 
-			let rejected_len = pending_psbt
-				.iter()
-				.filter(|p| matches!(p.status, SignStatus::Rejected))
-				.collect::<Vec<_>>()
-				.len();
-			// if T::MultiSig::is_multi_signed(
-			// 	,
-			// ) {}
+			pending_request
+				.signed_psbts
+				.try_insert(authority_id.clone(), signed_psbt)
+				.map_err(|_| Error::<T>::OutOfRange)?;
+
+			if T::MultiSig::is_finalizable(pending_request.signed_psbts.len() as u8) {
+				<AcceptedRequests<T>>::insert(req_id, pending_request);
+				<PendingRequests<T>>::remove(req_id);
+				Self::deposit_event(Event::RequestAccepted { req_id });
+			} else {
+				<PendingRequests<T>>::insert(req_id, pending_request);
+				Self::deposit_event(Event::SignedPsbtSubmitted { req_id, authority_id });
+			}
 
 			Ok(().into())
 		}
@@ -174,8 +165,8 @@ pub mod pallet {
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
-				Call::submit_unsigned_psbt { unsigned_psbt, signature } => {
-					let UnsignedPsbtMessage { submitter, req_id, psbt } = unsigned_psbt;
+				Call::submit_unsigned_psbt { msg, signature } => {
+					let UnsignedPsbtMessage { submitter, req_id, psbt } = msg;
 
 					if let Some(s) = <UnsignedSubmitter<T>>::get() {
 						if s.into_account() != *submitter {
@@ -183,10 +174,6 @@ pub mod pallet {
 						}
 					} else {
 						return InvalidTransaction::BadSigner.into();
-					}
-
-					if Psbt::deserialize(&psbt).is_err() {
-						return InvalidTransaction::BadProof.into();
 					}
 
 					let message = format!("{:?}:{}:{}", submitter, req_id, H256(keccak_256(&psbt)));
@@ -200,28 +187,24 @@ pub mod pallet {
 						.propagate(true)
 						.build()
 				},
-				Call::submit_signed_psbt { signed_psbt, signature } => {
-					let SignedPsbtMessage { authority_id, req_id, psbt, status } = signed_psbt;
+				Call::submit_signed_psbt { msg, signature } => {
+					let SignedPsbtMessage { authority_id, req_id, origin_psbt, .. } = msg;
 
 					// verify if the authority is a relay executive member.
 					if !T::Executives::contains(&authority_id) {
 						return InvalidTransaction::BadSigner.into();
 					}
 
-					if Psbt::deserialize(&psbt).is_err() {
-						return InvalidTransaction::BadProof.into();
-					}
-
 					// verify if the signature was originated from the authority.
 					let message =
-						format!("{:?}:{}:{}", authority_id, req_id, H256(keccak_256(&psbt)));
+						format!("{:?}:{}:{}", authority_id, req_id, H256(keccak_256(&origin_psbt)));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
 					ValidTransaction::with_tag_prefix("SignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides((authority_id, req_id, status))
+						.and_provides((authority_id, req_id))
 						.propagate(true)
 						.build()
 				},
