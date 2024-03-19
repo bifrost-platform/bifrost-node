@@ -12,7 +12,7 @@ use super::pallet::*;
 
 impl<T: Config> MultiSigManager for Pallet<T> {
 	fn is_multi_signed(m: u8) -> bool {
-		<RequiredM<T>>::get() == m
+		<RequiredM<T>>::get() <= m
 	}
 }
 

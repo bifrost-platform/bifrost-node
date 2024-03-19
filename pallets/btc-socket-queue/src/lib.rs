@@ -4,6 +4,7 @@ mod pallet;
 pub use pallet::pallet::*;
 
 pub mod weights;
+use sp_core::RuntimeDebug;
 use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};
@@ -17,20 +18,22 @@ pub const MULTI_SIG_MAX_ACCOUNTS: u32 = 16;
 
 pub type ReqId = u128;
 
-#[derive(Decode, Encode, TypeInfo)]
-pub struct UnsignedPsbtMessage {
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct UnsignedPsbtMessage<AccountId> {
+	pub submitter: AccountId,
 	pub req_id: ReqId,
 	pub psbt: Vec<u8>,
 }
 
-#[derive(Decode, Encode, TypeInfo)]
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct SignedPsbtMessage<AccountId> {
-	pub psbt: Vec<u8>,
 	pub authority_id: AccountId,
+	pub req_id: ReqId,
+	pub psbt: Vec<u8>,
 	pub status: SignStatus,
 }
 
-#[derive(Decode, Encode, TypeInfo)]
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub enum SignStatus {
 	Accepted,
 	Rejected,
