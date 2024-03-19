@@ -1,4 +1,4 @@
-use pallet_btc_registration_pool::ADDRESS_MAX_LENGTH;
+use bp_multi_sig::ADDRESS_MAX_LENGTH;
 
 use precompile_utils::prelude::{Address, BoundedString};
 use sp_core::ConstU32;

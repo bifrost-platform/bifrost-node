@@ -226,7 +226,10 @@ pub mod pallet {
 
 			ensure!(<SystemVault<T>>::get().is_none(), Error::<T>::VaultAlreadyGenerated);
 
-			<SystemVault<T>>::put(MultiSigAccount::new::<T>());
+			<SystemVault<T>>::put(MultiSigAccount::new(
+				<RequiredM<T>>::get(),
+				<RequiredN<T>>::get(),
+			));
 			Self::deposit_event(Event::SystemVaultPending);
 
 			Ok(().into())
@@ -257,9 +260,12 @@ pub mod pallet {
 			);
 			ensure!(PublicKey::from_slice(pub_key.as_ref()).is_ok(), Error::<T>::InvalidPublicKey);
 
-			relay_target.vault.insert_pub_key::<T>(authority_id, pub_key)?;
+			relay_target
+				.vault
+				.insert_pub_key(authority_id, pub_key)
+				.map_err(|_| Error::<T>::OutOfRange)?;
 
-			if relay_target.vault.is_generation_ready::<T>() {
+			if relay_target.vault.is_key_generation_ready() {
 				// generate vault address
 				let vault_address = Self::generate_vault_address(relay_target.vault.pub_keys())?;
 				relay_target.set_vault_address(vault_address.clone());
@@ -304,9 +310,11 @@ pub mod pallet {
 					Error::<T>::InvalidPublicKey
 				);
 
-				system_vault.insert_pub_key::<T>(authority_id, pub_key)?;
+				system_vault
+					.insert_pub_key(authority_id, pub_key)
+					.map_err(|_| Error::<T>::OutOfRange)?;
 
-				if system_vault.is_generation_ready::<T>() {
+				if system_vault.is_key_generation_ready() {
 					// generate vault address
 					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());

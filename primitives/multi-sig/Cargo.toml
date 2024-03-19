@@ -1,7 +1,7 @@
 [package]
-name = "pallet-btc-registration-pool"
-version = "1.0.0"
-description = "A pallet for btc address registration"
+name = "bp-multi-sig"
+version = "0.0.1"
+description = "Primitives for multi-signature accounts"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
@@ -9,32 +9,22 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-# General
-log = { workspace = true }
 miniscript = { workspace = true }
-array-bytes = { workspace = true }
 
-# Substrate
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
-frame-support = { workspace = true }
-frame-system = { workspace = true }
-sp-runtime = { workspace = true }
-sp-core = { workspace = true }
-sp-std = { workspace = true }
 
-# Bifrost
-bp-multi-sig = { workspace = true }
+frame-support = { workspace = true }
+sp-std = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
 	"scale-info/std",
 	"parity-scale-codec/std",
-	"frame-support/std",
-	"frame-system/std",
-	"sp-runtime/std",
 	"sp-std/std",
 	"sp-core/std",
-	"bp-multi-sig/std",
+	"sp-runtime/std",
 ]

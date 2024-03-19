@@ -2,13 +2,12 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
-use pallet_btc_registration_pool::{
-	AddressState, BoundedBitcoinAddress, Call as BtcRegistrationPoolCall,
-};
+use pallet_btc_registration_pool::Call as BtcRegistrationPoolCall;
 use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
+use bp_multi_sig::{AddressState, BoundedBitcoinAddress};
 use fp_account::EthereumSignature;
 use sp_core::H160;
 use sp_runtime::{traits::Dispatchable, BoundedVec};

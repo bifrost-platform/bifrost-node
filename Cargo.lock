@@ -1400,6 +1400,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bp-multi-sig"
+version = "0.0.1"
+dependencies = [
+ "frame-support",
+ "miniscript",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "bp-staking"
 version = "0.0.1"
 dependencies = [
@@ -6186,6 +6199,7 @@ name = "pallet-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.2",
+ "bp-multi-sig",
  "frame-support",
  "frame-system",
  "log",
@@ -6201,6 +6215,7 @@ dependencies = [
 name = "pallet-btc-socket-queue"
 version = "1.0.0"
 dependencies = [
+ "bp-multi-sig",
  "frame-support",
  "frame-system",
  "miniscript",
@@ -7027,6 +7042,7 @@ dependencies = [
 name = "precompile-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
+ "bp-multi-sig",
  "fp-account",
  "fp-evm",
  "frame-support",
