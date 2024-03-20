@@ -1,4 +1,8 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 pub mod traits;
+
+pub use miniscript::bitcoin::Psbt;
 
 use sp_core::{ConstU32, RuntimeDebug};
 use sp_runtime::{BoundedBTreeMap, BoundedVec};
@@ -15,6 +19,9 @@ pub const ADDRESS_MAX_LENGTH: u32 = 62;
 
 /// The Bitcoin address type (length bounded).
 pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_LENGTH>>;
+
+/// PSBT in bytes.
+pub type PsbtBytes = Vec<u8>;
 
 #[derive(
 	Clone,

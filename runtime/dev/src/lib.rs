@@ -967,6 +967,15 @@ impl pallet_base_fee::Config for Runtime {
 	type DefaultElasticity = DefaultElasticity;
 }
 
+impl pallet_btc_socket_queue::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
+	type MultiSig = BtcRegistrationPool;
+	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
@@ -1029,7 +1038,8 @@ construct_runtime!(
 		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
 
 		// Bitcoin
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
+		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>} = 60,
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,

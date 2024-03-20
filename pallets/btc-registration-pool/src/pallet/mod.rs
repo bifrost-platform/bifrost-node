@@ -11,6 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
+use bp_multi_sig::MULTI_SIG_MAX_ACCOUNTS;
 use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec, vec::Vec};
@@ -166,7 +167,7 @@ pub mod pallet {
 		pub fn set_vault_config(origin: OriginFor<T>, m: u8, n: u8) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			ensure!(n >= 1 && n <= 16, Error::<T>::OutOfRange);
+			ensure!(n >= 1 && u32::from(n) <= MULTI_SIG_MAX_ACCOUNTS, Error::<T>::OutOfRange);
 			ensure!(m >= 1 && m <= n, Error::<T>::OutOfRange);
 
 			Self::deposit_event(Event::VaultConfigSet { m, n });

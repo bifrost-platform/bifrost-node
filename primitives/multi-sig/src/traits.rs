@@ -3,6 +3,8 @@ use miniscript::bitcoin::{
 	PublicKey, Script,
 };
 
+use sp_std::{vec, vec::Vec};
+
 use crate::Public;
 
 pub trait MultiSigManager {

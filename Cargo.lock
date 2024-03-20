@@ -823,6 +823,7 @@ dependencies = [
  "pallet-bfc-staking",
  "pallet-bfc-utility",
  "pallet-btc-registration-pool",
+ "pallet-btc-socket-queue",
  "pallet-collective",
  "pallet-democracy",
  "pallet-ethereum",
@@ -1403,7 +1404,6 @@ dependencies = [
 name = "bp-multi-sig"
 version = "0.0.1"
 dependencies = [
- "frame-support",
  "miniscript",
  "parity-scale-codec",
  "scale-info",
@@ -6218,10 +6218,10 @@ dependencies = [
  "bp-multi-sig",
  "frame-support",
  "frame-system",
- "miniscript",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]

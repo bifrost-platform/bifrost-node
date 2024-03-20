@@ -87,6 +87,7 @@ pallet-bfc-staking = { workspace = true }
 pallet-bfc-utility = { workspace = true }
 pallet-bfc-offences = { workspace = true }
 pallet-relay-manager = { workspace = true }
+pallet-btc-socket-queue = { workspace = true }
 pallet-btc-registration-pool = { workspace = true }
 
 # Precompiled Contracts
@@ -139,6 +140,7 @@ std = [
 	"pallet-bfc-utility/std",
 	"pallet-bfc-offences/std",
 	"pallet-relay-manager/std",
+	"pallet-btc-socket-queue/std",
 	"pallet-btc-registration-pool/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
