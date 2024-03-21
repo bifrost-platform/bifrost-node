@@ -202,7 +202,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the submitter.
-					let message = format!("{:?}:{}:{}", submitter, req_id, Self::hash_psbt(psbt));
+					let message = format!("{:?}:{}:{:?}", submitter, req_id, Self::hash_psbt(psbt));
 					if !signature.verify(message.as_bytes(), submitter) {
 						return InvalidTransaction::BadProof.into();
 					}
@@ -214,7 +214,7 @@ pub mod pallet {
 						.build()
 				},
 				Call::submit_signed_psbt { msg, signature } => {
-					let SignedPsbtMessage { authority_id, req_id, unsigned_psbt, .. } = msg;
+					let SignedPsbtMessage { authority_id, req_id, signed_psbt, .. } = msg;
 
 					// verify if the authority is a relay executive member.
 					if !T::Executives::contains(&authority_id) {
@@ -223,7 +223,7 @@ pub mod pallet {
 
 					// verify if the signature was originated from the authority.
 					let message =
-						format!("{:?}:{}:{}", authority_id, req_id, Self::hash_psbt(unsigned_psbt));
+						format!("{:?}:{}:{:?}", authority_id, req_id, Self::hash_psbt(signed_psbt));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
