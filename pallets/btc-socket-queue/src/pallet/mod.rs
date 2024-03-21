@@ -26,6 +26,8 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		/// Required origin for setting or resetting the configuration.
+		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
@@ -54,6 +56,8 @@ pub mod pallet {
 		InvalidPsbt,
 		/// The value is out of range.
 		OutOfRange,
+		/// Cannot overwrite to the same value.
+		NoWritingSameValue,
 	}
 
 	#[pallet::event]
@@ -65,6 +69,8 @@ pub mod pallet {
 		SignedPsbtSubmitted { req_id: ReqId, authority_id: T::AccountId },
 		/// An outbound request has been finalized.
 		RequestFinalized { req_id: ReqId },
+		/// A submitter has been set.
+		SubmitterSet { new: T::Signer },
 	}
 
 	#[pallet::storage]
@@ -89,6 +95,21 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_submitter())]
+		pub fn set_submitter(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
+			T::SetOrigin::ensure_origin(origin)?;
+
+			if let Some(old) = <UnsignedPsbtSubmitter<T>>::get() {
+				ensure!(old != new, Error::<T>::NoWritingSameValue);
+			}
+
+			<UnsignedPsbtSubmitter<T>>::put(new.clone());
+			Self::deposit_event(Event::SubmitterSet { new });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_unsigned_psbt())]
 		/// Submit an unsigned PSBT of an outbound request.
 		/// This extrinsic can only be executed by the `UnsignedPsbtSubmitter`.
@@ -119,7 +140,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(1)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_psbt())]
 		/// Submit a signed PSBT of a pending outbound request.
 		/// This extrinsic can only be executed by relay executives.
