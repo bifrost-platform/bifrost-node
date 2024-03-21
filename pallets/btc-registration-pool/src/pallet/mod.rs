@@ -337,12 +337,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!(
-						"{:?}:{:?}:{}",
-						authority_id,
-						who,
-						array_bytes::bytes2hex("0x", pub_key)
-					);
+					let message = format!("{:?}", array_bytes::bytes2hex("0x", pub_key));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
@@ -362,8 +357,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message =
-						format!("{:?}:{}", authority_id, array_bytes::bytes2hex("0x", pub_key));
+					let message = format!("{:?}", array_bytes::bytes2hex("0x", pub_key));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
