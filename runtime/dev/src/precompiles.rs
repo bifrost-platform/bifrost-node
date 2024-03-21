@@ -8,6 +8,7 @@ use pallet_evm_precompile_simple::{ECRecover, Identity, Ripemd160, Sha256};
 use precompile_balance::BalancePrecompile;
 use precompile_bfc_offences::BfcOffencesPrecompile;
 use precompile_bfc_staking::BfcStakingPrecompile;
+use precompile_btc_registration_pool::BtcRegistrationPoolPrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
@@ -31,6 +32,7 @@ pub type BifrostPrecompilesAt<R> = (
 	PrecompileAt<AddressU64<8>, Bn128Pairing, EthereumPrecompilesChecks>,
 	PrecompileAt<AddressU64<9>, Blake2F, EthereumPrecompilesChecks>,
 	// BIFROST specific precompiles:
+	PrecompileAt<AddressU64<256>, BtcRegistrationPoolPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<1280>, BfcOffencesPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<2048>, GovernancePrecompile<R>, BifrostPrecompilesChecks>,
