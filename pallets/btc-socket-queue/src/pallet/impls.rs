@@ -18,6 +18,7 @@ impl<T: Config> Pallet<T> {
 		Ok(o.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
+	/// Hash the PSBT bytes with keccak256.
 	pub fn hash_psbt(psbt: &PsbtBytes) -> H256 {
 		H256(keccak_256(psbt))
 	}
