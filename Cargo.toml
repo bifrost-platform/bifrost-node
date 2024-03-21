@@ -60,7 +60,9 @@ serde = { version = "1.0.101", default-features = false }
 jsonrpsee = { version = "0.16.3", default-features = false }
 rustc-hex = { version = "2.0.1", default-features = false }
 log = { version = "0.4.20", default-features = false }
-miniscript = "11.0.0"
+miniscript = { version = "11.0.0", default-features = false, features = [
+	"no-std",
+] }
 impl-trait-for-tuples = "0.2.2"
 similar-asserts = "1.1.0"
 prettyplease = "0.1.18"
