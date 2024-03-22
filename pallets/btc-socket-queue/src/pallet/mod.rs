@@ -48,6 +48,8 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// The authority has already submitted a signed PSBT.
 		AuthorityAlreadySubmitted,
+		/// The signed PSBT is already submitted by an authority.
+		SignedPsbtAlreadySubmitted,
 		/// The request has already been finalized or exists.
 		RequestAlreadyExists,
 		/// The request hasn't been submitted yet.
@@ -160,9 +162,15 @@ pub mod pallet {
 				!pending_request.is_authority_submitted(&authority_id),
 				Error::<T>::AuthorityAlreadySubmitted
 			);
+			ensure!(
+				!pending_request.is_signed_psbt_submitted(&signed_psbt),
+				Error::<T>::SignedPsbtAlreadySubmitted
+			);
 			ensure!(pending_request.is_unsigned_psbt(&unsigned_psbt), Error::<T>::InvalidPsbt);
 			ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
 			Self::verify_signed_psbt(&unsigned_psbt, &signed_psbt)?;
+
+			// TODO: verify signed psbt with socket message
 
 			pending_request
 				.insert_signed_psbt(authority_id.clone(), signed_psbt)

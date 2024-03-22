@@ -12,6 +12,7 @@ use scale_info::TypeInfo;
 use bp_multi_sig::{PsbtBytes, MULTI_SIG_MAX_ACCOUNTS};
 use sp_core::{ConstU32, RuntimeDebug};
 use sp_runtime::BoundedBTreeMap;
+use sp_std::vec::Vec;
 
 /// The outbound request sequence index.
 pub type ReqId = u128;
@@ -34,6 +35,11 @@ impl<AccountId: PartialEq + Clone + Ord> OutboundRequest<AccountId> {
 	/// Check if the given authority has already submitted a signed PSBT.
 	pub fn is_authority_submitted(&self, authority_id: &AccountId) -> bool {
 		self.signed_psbts.contains_key(authority_id)
+	}
+
+	/// Check if the given signed PSBT is already submitted by an authority.
+	pub fn is_signed_psbt_submitted(&self, psbt: &PsbtBytes) -> bool {
+		self.signed_psbts.values().cloned().collect::<Vec<PsbtBytes>>().contains(psbt)
 	}
 
 	/// Check if the given PSBT matches with the initial unsigned PSBT.
