@@ -2,7 +2,7 @@
 
 pub mod traits;
 
-pub use miniscript::bitcoin::Psbt;
+pub use miniscript::bitcoin::{Address, Psbt};
 
 use sp_core::{ConstU32, RuntimeDebug};
 use sp_runtime::{BoundedBTreeMap, BoundedVec};

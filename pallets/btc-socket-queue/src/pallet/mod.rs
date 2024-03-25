@@ -1,18 +1,18 @@
 mod impls;
 
-use crate::{OutboundRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
+use crate::{PsbtRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
 
 use frame_support::{
 	pallet_prelude::*,
 	traits::{SortedMembers, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
-
-use bp_multi_sig::traits::MultiSigManager;
 use scale_info::prelude::format;
-use sp_core::{H160, H256, U256};
+
+use bp_multi_sig::traits::{MultiSigManager, PoolManager};
+use sp_core::{H160, H256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::vec::Vec;
+use sp_std::{str, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -40,8 +40,8 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
-		/// The multi signature account manager.
-		type MultiSig: MultiSigManager;
+		/// The Bitcon registration pool pallet.
+		type RegistrationPool: MultiSigManager + PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -57,6 +57,8 @@ pub mod pallet {
 		SubmitterDNE,
 		SocketDNE,
 		SocketMessageDNE,
+		UserDNE,
+		SystemVaultDne,
 		/// The request hasn't been submitted yet.
 		RequestDNE,
 		/// The submitted PSBT is invalid.
@@ -98,26 +100,27 @@ pub mod pallet {
 	#[pallet::getter(fn pending_requests)]
 	/// Pending outbound requests that are not ready to be finalized.
 	pub type PendingRequests<T: Config> =
-		StorageMap<_, Twox64Concat, H256, OutboundRequest<T::AccountId>>;
+		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn accepted_requests)]
 	/// Accepted outbound requests that are ready to be combined and finalized.
 	pub type AcceptedRequests<T: Config> =
-		StorageMap<_, Twox64Concat, H256, OutboundRequest<T::AccountId>>;
+		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn finalized_requests)]
 	/// Finalized outbound requests that has been finalized and broadcasted to the Bitcoin network.
 	pub type FinalizedRequests<T: Config> =
-		StorageMap<_, Twox64Concat, H256, OutboundRequest<T::AccountId>>;
+		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T>
 	where
 		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_submitter())]
@@ -148,27 +151,6 @@ pub mod pallet {
 
 			let UnsignedPsbtMessage { socket_messages, psbt, .. } = msg;
 
-			if socket_messages.is_empty() {
-				return Err(Error::<T>::InvalidSocketMessage)?;
-			}
-			// TODO: check bound?
-			for msg in socket_messages {
-				let msg_hash = Self::hash_bytes(&msg);
-				let socket_message = Self::try_decode_socket_message(&msg)
-					.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-				let request_info = Self::try_get_request(&socket_message.encode_req_id())?;
-
-				// the socket message should be valid
-				ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::InvalidSocketMessage);
-				ensure!(socket_message.is_accepted(), Error::<T>::InvalidSocketMessage);
-			}
-
-			// the psbt (in bytes) should be valid
-			if Self::try_get_checked_psbt(&psbt).is_err() {
-				return Err(Error::<T>::InvalidPsbt)?;
-			}
-			// TODO: check psbt tx outputs
-
 			let psbt_hash = Self::hash_bytes(&psbt);
 
 			// the request shouldn't been handled yet
@@ -185,7 +167,12 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 
-			<PendingRequests<T>>::insert(&psbt_hash, OutboundRequest::new(psbt.clone()));
+			Self::try_psbt_output_verification(
+				&psbt,
+				Self::try_build_psbt_outputs(socket_messages)?,
+			)?;
+
+			<PendingRequests<T>>::insert(&psbt_hash, PsbtRequest::new(psbt.clone()));
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { psbt });
 
 			Ok(().into())
@@ -242,6 +229,7 @@ pub mod pallet {
 	impl<T: Config> ValidateUnsigned for Pallet<T>
 	where
 		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
 	{
 		type Call = Call<T>;
 

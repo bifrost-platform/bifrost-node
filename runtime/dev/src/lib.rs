@@ -973,7 +973,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
-	type MultiSig = BtcRegistrationPool;
+	type RegistrationPool = BtcRegistrationPool;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 }
 

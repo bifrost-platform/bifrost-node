@@ -5,7 +5,7 @@ use miniscript::bitcoin::{
 
 use sp_std::{vec, vec::Vec};
 
-use crate::Public;
+use crate::{BoundedBitcoinAddress, Public};
 
 pub trait MultiSigManager {
 	fn is_finalizable(m: u8) -> bool;
@@ -38,4 +38,12 @@ pub trait MultiSigManager {
 	fn generate_address(script: &Script, network: Network) -> Address {
 		Address::p2wsh(script, network)
 	}
+}
+
+pub trait PoolManager<AccountId> {
+	fn get_refund_address(who: &AccountId) -> Option<BoundedBitcoinAddress>;
+
+	fn get_system_vault() -> Option<BoundedBitcoinAddress>;
+
+	fn get_bitcoin_network() -> Network;
 }

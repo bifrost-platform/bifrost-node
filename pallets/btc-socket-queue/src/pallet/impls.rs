@@ -1,19 +1,24 @@
 use ethabi_decode::{ParamKind, Token};
 
-use bp_multi_sig::Psbt;
-use scale_info::prelude::string::String;
+use bp_multi_sig::{traits::PoolManager, Address, BoundedBitcoinAddress, Psbt};
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{traits::IdentifyAccount, DispatchError};
-use sp_std::{boxed::Box, prelude::ToOwned, vec, vec::Vec};
+use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
 
 use pallet_evm::Runner;
+use scale_info::prelude::string::String;
 
-use crate::{RequestInfo, SocketMessage};
+use crate::{PsbtOutput, RequestInfo, SocketMessage};
 
 use super::pallet::*;
 
-impl<T: Config> Pallet<T> {
+impl<T> Pallet<T>
+where
+	T: Config,
+	T::AccountId: Into<H160>,
+	H160: Into<T::AccountId>,
+{
 	/// Try to deserialize the given bytes to a `PSBT` instance.
 	pub fn try_get_checked_psbt(psbt: &Vec<u8>) -> Result<Psbt, DispatchError> {
 		Ok(Psbt::deserialize(psbt).map_err(|_| Error::<T>::InvalidPsbt)?)
@@ -26,17 +31,92 @@ impl<T: Config> Pallet<T> {
 		Ok(o.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
+	pub fn try_psbt_output_verification(
+		psbt: &Vec<u8>,
+		outputs: Vec<PsbtOutput>,
+	) -> Result<(), DispatchError> {
+		let origin = Self::try_get_checked_psbt(&psbt)?.unsigned_tx.output;
+		if origin.len() != outputs.len() {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
+		// at least 2 outputs required. one for refund and one for system vault.
+		if origin.len() < 2 {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
+		let system_vault = Address::from_script(
+			origin[0].script_pubkey.as_script(),
+			T::RegistrationPool::get_bitcoin_network(),
+		)
+		.map_err(|_| Error::<T>::InvalidPsbt)?;
+		if system_vault != outputs[0].to {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
+		for i in 1..origin.len() {
+			let to = Address::from_script(
+				origin[i].script_pubkey.as_script(),
+				T::RegistrationPool::get_bitcoin_network(),
+			)
+			.map_err(|_| Error::<T>::InvalidPsbt)?;
+
+			let amount = U256::from(origin[i].value.to_sat());
+
+			if to != outputs[i].to {
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
+			if amount != outputs[i].amount {
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
+		}
+		Ok(())
+	}
+
+	pub fn try_build_psbt_outputs(
+		socket_messages: Vec<Vec<u8>>,
+	) -> Result<Vec<PsbtOutput>, DispatchError> {
+		let system_vault =
+			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDne)?;
+
+		// TODO: check length bound
+		if socket_messages.is_empty() {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		let mut outputs = vec![];
+
+		let to_address = |addr: BoundedBitcoinAddress| {
+			// we assume all the registered addresses are valid and checked.
+			let addr = str::from_utf8(&addr).expect("Must be valid");
+			Address::from_str(addr).expect("Must be valid").assume_checked()
+		};
+
+		// we assume the first output to be the utxo repayment
+		outputs.push(PsbtOutput { to: to_address(system_vault), amount: Default::default() });
+		for msg in socket_messages {
+			let msg_hash = Self::hash_bytes(&msg);
+			let msg = Self::try_decode_socket_message(&msg)
+				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+			let request_info = Self::try_get_request(&msg.encode_req_id())?;
+
+			// the socket message should be valid
+			if !request_info.is_msg_hash(msg_hash) {
+				return Err(Error::<T>::InvalidSocketMessage.into());
+			}
+			if !msg.is_accepted() {
+				return Err(Error::<T>::InvalidSocketMessage.into());
+			}
+
+			// the user must exist in the pool
+			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
+				.ok_or(Error::<T>::UserDNE)?;
+			outputs.push(PsbtOutput { to: to_address(to), amount: msg.params.amount });
+		}
+		Ok(outputs)
+	}
+
 	pub fn hash_bytes(bytes: &Vec<u8>) -> H256 {
 		H256(keccak_256(bytes))
 	}
-}
 
-impl<T> Pallet<T>
-where
-	T: Config,
-	T::AccountId: Into<H160>,
-{
-	/// Try to get the `SocketMessage` by the given `req_id`.
+	/// Try to get the `RequestInfo` by the given `req_id`.
 	pub fn try_get_request(req_id: &Vec<u8>) -> Result<RequestInfo, DispatchError> {
 		let caller = <UnsignedPsbtSubmitter<T>>::get().ok_or(Error::<T>::SubmitterDNE)?;
 		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;

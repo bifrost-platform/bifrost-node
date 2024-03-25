@@ -10,21 +10,22 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use bp_multi_sig::{BoundedBitcoinAddress, MULTI_SIG_MAX_ACCOUNTS};
-use sp_core::{keccak_256, ConstU32, RuntimeDebug, H160, H256, U256};
+use bp_multi_sig::{Address, BoundedBitcoinAddress, MULTI_SIG_MAX_ACCOUNTS};
+use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
+use sp_io::hashing::keccak_256;
 use sp_runtime::{BoundedBTreeMap, DispatchError};
-use sp_std::vec::Vec;
+use sp_std::{vec, vec::Vec};
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-/// The submitted PSBT information of a single outbound request.
-pub struct OutboundRequest<AccountId> {
+/// The submitted PSBT information of a outbound request(s).
+pub struct PsbtRequest<AccountId> {
 	/// The submitted initial unsigned PSBT (in bytes).
 	pub unsigned_psbt: Vec<u8>,
 	/// The submitted signed PSBT's (in bytes).
 	pub signed_psbts: BoundedBTreeMap<AccountId, Vec<u8>, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 }
 
-impl<AccountId: PartialEq + Clone + Ord> OutboundRequest<AccountId> {
+impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	/// Instantiates a new `OutboundRequest` instance.
 	pub fn new(unsigned_psbt: Vec<u8>) -> Self {
 		Self { unsigned_psbt, signed_psbts: BoundedBTreeMap::default() }
@@ -186,6 +187,6 @@ impl TryFrom<Vec<Token>> for RequestInfo {
 }
 
 pub struct PsbtOutput {
-	pub to: BoundedBitcoinAddress,
+	pub to: Address,
 	pub amount: U256, // TODO: 단위 체크 필요 (sat? wei?)
 }
