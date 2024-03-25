@@ -1,6 +1,6 @@
 mod impls;
 
-use crate::{OutboundRequest, ReqId, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
+use crate::{OutboundRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -10,7 +10,9 @@ use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::traits::MultiSigManager;
 use scale_info::prelude::format;
+use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -23,7 +25,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_evm::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Required origin for setting or resetting the configuration.
@@ -52,10 +54,16 @@ pub mod pallet {
 		SignedPsbtAlreadySubmitted,
 		/// The request has already been finalized or exists.
 		RequestAlreadyExists,
+		SubmitterDNE,
+		SocketDNE,
+		SocketMessageDNE,
 		/// The request hasn't been submitted yet.
 		RequestDNE,
 		/// The submitted PSBT is invalid.
 		InvalidPsbt,
+		InvalidCalldata,
+		InvalidSocketMessage,
+		InvalidRequestInfo,
 		/// The value is out of range.
 		OutOfRange,
 		/// Cannot overwrite to the same value.
@@ -66,14 +74,19 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// An unsigned PSBT for an outbound request has been submitted.
-		UnsignedPsbtSubmitted { req_id: ReqId },
+		UnsignedPsbtSubmitted { psbt: Vec<u8> },
 		/// A signed PSBT for an outbound request has been submitted.
-		SignedPsbtSubmitted { req_id: ReqId, authority_id: T::AccountId },
+		SignedPsbtSubmitted { req_id: Vec<u8>, authority_id: T::AccountId },
 		/// An outbound request has been finalized.
-		RequestFinalized { req_id: ReqId },
+		RequestFinalized { req_id: Vec<u8> },
 		/// A submitter has been set.
 		SubmitterSet { new: T::Signer },
 	}
+
+	#[pallet::storage]
+	#[pallet::getter(fn socket)]
+	/// The Socket contract address.
+	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn unsigned_psbt_submitter)]
@@ -85,19 +98,30 @@ pub mod pallet {
 	#[pallet::getter(fn pending_requests)]
 	/// Pending outbound requests that are not ready to be finalized.
 	pub type PendingRequests<T: Config> =
-		StorageMap<_, Twox64Concat, ReqId, OutboundRequest<T::AccountId>>;
+		StorageMap<_, Twox64Concat, H256, OutboundRequest<T::AccountId>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn accepted_requests)]
+	/// Accepted outbound requests that are ready to be combined and finalized.
+	pub type AcceptedRequests<T: Config> =
+		StorageMap<_, Twox64Concat, H256, OutboundRequest<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn finalized_requests)]
-	/// Finalized outbound requests that has been finalized.
+	/// Finalized outbound requests that has been finalized and broadcasted to the Bitcoin network.
 	pub type FinalizedRequests<T: Config> =
-		StorageMap<_, Twox64Concat, ReqId, OutboundRequest<T::AccountId>>;
+		StorageMap<_, Twox64Concat, H256, OutboundRequest<T::AccountId>>;
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {
+	impl<T: Config> Pallet<T>
+	where
+		T::AccountId: Into<H160>,
+	{
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_submitter())]
+		/// Set the unsigned PSBT submitter.
 		pub fn set_submitter(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
@@ -122,22 +146,47 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { req_id, psbt, .. } = msg;
+			let UnsignedPsbtMessage { socket_messages, psbt, .. } = msg;
 
-			// the request shouldn't been handled yet
-			ensure!(!<PendingRequests<T>>::contains_key(req_id), Error::<T>::RequestAlreadyExists);
-			ensure!(
-				!<FinalizedRequests<T>>::contains_key(req_id),
-				Error::<T>::RequestAlreadyExists
-			);
+			if socket_messages.is_empty() {
+				return Err(Error::<T>::InvalidSocketMessage)?;
+			}
+			// TODO: check bound?
+			for msg in socket_messages {
+				let msg_hash = Self::hash_bytes(&msg);
+				let socket_message = Self::try_decode_socket_message(&msg)
+					.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+				let request_info = Self::try_get_request(&socket_message.encode_req_id())?;
+
+				// the socket message should be valid
+				ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::InvalidSocketMessage);
+				ensure!(socket_message.is_accepted(), Error::<T>::InvalidSocketMessage);
+			}
 
 			// the psbt (in bytes) should be valid
 			if Self::try_get_checked_psbt(&psbt).is_err() {
 				return Err(Error::<T>::InvalidPsbt)?;
 			}
+			// TODO: check psbt tx outputs
 
-			<PendingRequests<T>>::insert(req_id, OutboundRequest::new(psbt));
-			Self::deposit_event(Event::UnsignedPsbtSubmitted { req_id });
+			let psbt_hash = Self::hash_bytes(&psbt);
+
+			// the request shouldn't been handled yet
+			ensure!(
+				!<PendingRequests<T>>::contains_key(&psbt_hash),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<AcceptedRequests<T>>::contains_key(&psbt_hash),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<FinalizedRequests<T>>::contains_key(&psbt_hash),
+				Error::<T>::RequestAlreadyExists
+			);
+
+			<PendingRequests<T>>::insert(&psbt_hash, OutboundRequest::new(psbt.clone()));
+			Self::deposit_event(Event::UnsignedPsbtSubmitted { psbt });
 
 			Ok(().into())
 		}
@@ -153,52 +202,53 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SignedPsbtMessage { authority_id, req_id, unsigned_psbt, signed_psbt } = msg;
+			let SignedPsbtMessage { authority_id, unsigned_psbt, signed_psbt } = msg;
 
-			let mut pending_request =
-				<PendingRequests<T>>::get(&req_id).ok_or(Error::<T>::RequestDNE)?;
+			// let mut pending_request =
+			// 	<PendingRequests<T>>::get(&req_id).ok_or(Error::<T>::RequestDNE)?;
 
-			ensure!(
-				!pending_request.is_authority_submitted(&authority_id),
-				Error::<T>::AuthorityAlreadySubmitted
-			);
-			ensure!(
-				!pending_request.is_signed_psbt_submitted(&signed_psbt),
-				Error::<T>::SignedPsbtAlreadySubmitted
-			);
-			ensure!(pending_request.is_unsigned_psbt(&unsigned_psbt), Error::<T>::InvalidPsbt);
-			ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
-			Self::verify_signed_psbt(&unsigned_psbt, &signed_psbt)?;
+			// ensure!(
+			// 	!pending_request.is_authority_submitted(&authority_id),
+			// 	Error::<T>::AuthorityAlreadySubmitted
+			// );
+			// ensure!(
+			// 	!pending_request.is_signed_psbt_submitted(&signed_psbt),
+			// 	Error::<T>::SignedPsbtAlreadySubmitted
+			// );
+			// ensure!(pending_request.is_unsigned_psbt(&unsigned_psbt), Error::<T>::InvalidPsbt);
+			// ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
+			// Self::verify_signed_psbt(&unsigned_psbt, &signed_psbt)?;
 
-			// TODO: verify signed psbt with socket message
+			// pending_request
+			// 	.insert_signed_psbt(authority_id.clone(), signed_psbt)
+			// 	.map_err(|_| Error::<T>::OutOfRange)?;
 
-			pending_request
-				.insert_signed_psbt(authority_id.clone(), signed_psbt)
-				.map_err(|_| Error::<T>::OutOfRange)?;
-
-			if T::MultiSig::is_finalizable(pending_request.signed_psbts.len() as u8) {
-				// if finalizable (quorum reached m), then accept the request
-				<FinalizedRequests<T>>::insert(req_id, pending_request);
-				<PendingRequests<T>>::remove(req_id);
-				Self::deposit_event(Event::RequestFinalized { req_id });
-			} else {
-				// if not, remain as pending
-				<PendingRequests<T>>::insert(req_id, pending_request);
-				Self::deposit_event(Event::SignedPsbtSubmitted { req_id, authority_id });
-			}
+			// if T::MultiSig::is_finalizable(pending_request.signed_psbts.len() as u8) {
+			// 	// if finalizable (quorum reached m), then accept the request
+			// 	<FinalizedRequests<T>>::insert(&req_id, pending_request);
+			// 	<PendingRequests<T>>::remove(&req_id);
+			// 	Self::deposit_event(Event::RequestFinalized { req_id });
+			// } else {
+			// 	// if not, remain as pending
+			// 	<PendingRequests<T>>::insert(&req_id, pending_request);
+			// 	Self::deposit_event(Event::SignedPsbtSubmitted { req_id, authority_id });
+			// }
 
 			Ok(().into())
 		}
 	}
 
 	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T> {
+	impl<T: Config> ValidateUnsigned for Pallet<T>
+	where
+		T::AccountId: Into<H160>,
+	{
 		type Call = Call<T>;
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::submit_unsigned_psbt { msg, signature } => {
-					let UnsignedPsbtMessage { submitter, req_id, psbt } = msg;
+					let UnsignedPsbtMessage { submitter, psbt, .. } = msg;
 
 					// verify if the submitter is valid
 					if let Some(s) = <UnsignedPsbtSubmitter<T>>::get() {
@@ -210,19 +260,19 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the submitter.
-					let message = format!("{:?}:{}:{:?}", submitter, req_id, Self::hash_psbt(psbt));
+					let message = format!("{:?}", Self::hash_bytes(psbt));
 					if !signature.verify(message.as_bytes(), submitter) {
 						return InvalidTransaction::BadProof.into();
 					}
 
 					ValidTransaction::with_tag_prefix("UnsignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides((submitter, req_id))
+						.and_provides(submitter)
 						.propagate(true)
 						.build()
 				},
 				Call::submit_signed_psbt { msg, signature } => {
-					let SignedPsbtMessage { authority_id, req_id, signed_psbt, .. } = msg;
+					let SignedPsbtMessage { authority_id, signed_psbt, .. } = msg;
 
 					// verify if the authority is a relay executive member.
 					if !T::Executives::contains(&authority_id) {
@@ -230,15 +280,14 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message =
-						format!("{:?}:{}:{:?}", authority_id, req_id, Self::hash_psbt(signed_psbt));
+					let message = format!("{:?}", Self::hash_bytes(signed_psbt));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
 					ValidTransaction::with_tag_prefix("SignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides((authority_id, req_id))
+						.and_provides(authority_id)
 						.propagate(true)
 						.build()
 				},

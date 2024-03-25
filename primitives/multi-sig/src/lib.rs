@@ -20,9 +20,6 @@ pub const ADDRESS_MAX_LENGTH: u32 = 62;
 /// The Bitcoin address type (length bounded).
 pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_LENGTH>>;
 
-/// PSBT in bytes.
-pub type PsbtBytes = Vec<u8>;
-
 #[derive(
 	Clone,
 	Copy,
