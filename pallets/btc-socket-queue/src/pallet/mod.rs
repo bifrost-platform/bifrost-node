@@ -133,6 +133,27 @@ pub mod pallet {
 	pub type FinalizedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
+	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
+	pub struct GenesisConfig<T: Config> {
+		pub authority: Option<T::AccountId>,
+		#[serde(skip)]
+		pub _config: PhantomData<T>,
+	}
+
+	#[pallet::genesis_build]
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T>
+	where
+		T::Signer: From<[u8; 20]>,
+		T::AccountId: AsRef<[u8; 20]>,
+	{
+		fn build(&self) {
+			if let Some(a) = &self.authority {
+				Authority::<T>::put(T::Signer::from(*a.as_ref()));
+			}
+		}
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T>
 	where

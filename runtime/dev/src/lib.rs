@@ -1039,7 +1039,7 @@ construct_runtime!(
 		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
 
 		// Bitcoin
-		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>} = 60,
+		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
 		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
 
 		// Temporary
