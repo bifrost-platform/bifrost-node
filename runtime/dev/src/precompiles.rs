@@ -1,4 +1,4 @@
-use crate::{CouncilInstance, TechCommitteeInstance};
+use crate::{CouncilInstance, RelayExecutiveInstance, TechCommitteeInstance};
 
 use pallet_evm_precompile_blake2::Blake2F;
 use pallet_evm_precompile_bn128::{Bn128Add, Bn128Mul, Bn128Pairing};
@@ -46,6 +46,11 @@ pub type BifrostPrecompilesAt<R> = (
 	PrecompileAt<
 		AddressU64<2050>,
 		CollectivePrecompile<R, TechCommitteeInstance>,
+		BifrostPrecompilesChecks,
+	>,
+	PrecompileAt<
+		AddressU64<2051>,
+		CollectivePrecompile<R, RelayExecutiveInstance>,
 		BifrostPrecompilesChecks,
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
