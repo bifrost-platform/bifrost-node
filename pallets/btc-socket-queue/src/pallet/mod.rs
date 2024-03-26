@@ -1,6 +1,6 @@
 mod impls;
 
-use crate::{PsbtRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
+use crate::{FinalizePsbtMessage, PsbtRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -54,11 +54,11 @@ pub mod pallet {
 		SignedPsbtAlreadySubmitted,
 		/// The request has already been finalized or exists.
 		RequestAlreadyExists,
-		SubmitterDNE,
+		AuthorityDNE,
 		SocketDNE,
 		SocketMessageDNE,
 		UserDNE,
-		SystemVaultDne,
+		SystemVaultDNE,
 		/// The request hasn't been submitted yet.
 		RequestDNE,
 		/// The submitted PSBT is invalid.
@@ -76,26 +76,41 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// An unsigned PSBT for an outbound request has been submitted.
-		UnsignedPsbtSubmitted { psbt: Vec<u8> },
+		UnsignedPsbtSubmitted {
+			psbt: Vec<u8>,
+		},
 		/// A signed PSBT for an outbound request has been submitted.
-		SignedPsbtSubmitted { psbt_hash: H256, authority_id: T::AccountId, signed_psbt: Vec<u8> },
+		SignedPsbtSubmitted {
+			psbt_hash: H256,
+			authority_id: T::AccountId,
+			signed_psbt: Vec<u8>,
+		},
 		/// An outbound request has been accepted.
-		RequestAccepted { psbt_hash: H256 },
+		RequestAccepted {
+			psbt_hash: H256,
+		},
 		/// An outbound request has been finalized.
-		RequestFinalized { psbt_hash: H256 },
-		/// A submitter has been set.
-		SubmitterSet { new: T::Signer },
+		RequestFinalized {
+			psbt_hash: H256,
+		},
+		/// An authority has been set.
+		AuthoritySet {
+			new: T::Signer,
+		},
+		SocketSet {
+			new: T::AccountId,
+		},
 	}
 
 	#[pallet::storage]
-	#[pallet::getter(fn socket)]
+	#[pallet::getter(fn socket_contract)]
 	/// The Socket contract address.
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn unsigned_psbt_submitter)]
-	/// The unsigned PSBT submitter address.
-	pub type UnsignedPsbtSubmitter<T: Config> = StorageValue<_, T::Signer, OptionQuery>;
+	#[pallet::getter(fn authority)]
+	/// The core authority address.
+	pub type Authority<T: Config> = StorageValue<_, T::Signer, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -125,22 +140,38 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_submitter())]
-		/// Set the unsigned PSBT submitter.
-		pub fn set_submitter(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
+		#[pallet::weight(<T as Config>::WeightInfo::set_authority())]
+		/// Set the authority address.
+		pub fn set_authority(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			if let Some(old) = <UnsignedPsbtSubmitter<T>>::get() {
+			if let Some(old) = <Authority<T>>::get() {
 				ensure!(old != new, Error::<T>::NoWritingSameValue);
 			}
 
-			<UnsignedPsbtSubmitter<T>>::put(new.clone());
-			Self::deposit_event(Event::SubmitterSet { new });
+			<Authority<T>>::put(new.clone());
+			Self::deposit_event(Event::AuthoritySet { new });
 
 			Ok(().into())
 		}
 
 		#[pallet::call_index(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_socket())]
+		/// Set the authority address.
+		pub fn set_socket(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
+			T::SetOrigin::ensure_origin(origin)?;
+
+			if let Some(old) = <Socket<T>>::get() {
+				ensure!(old != new, Error::<T>::NoWritingSameValue);
+			}
+
+			<Socket<T>>::put(new.clone());
+			Self::deposit_event(Event::SocketSet { new });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_unsigned_psbt())]
 		/// Submit an unsigned PSBT of an outbound request.
 		/// This extrinsic can only be executed by the `UnsignedPsbtSubmitter`.
@@ -169,18 +200,19 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 
-			Self::try_psbt_output_verification(
-				&psbt,
-				Self::try_build_psbt_outputs(socket_messages)?,
-			)?;
+			let unchecked = Self::try_build_unchecked_outputs(&socket_messages)?;
+			Self::try_psbt_output_verification(&psbt, unchecked)?;
 
-			<PendingRequests<T>>::insert(&psbt_hash, PsbtRequest::new(psbt.clone()));
+			<PendingRequests<T>>::insert(
+				&psbt_hash,
+				PsbtRequest::new(psbt.clone(), socket_messages),
+			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { psbt });
 
 			Ok(().into())
 		}
 
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_psbt())]
 		/// Submit a signed PSBT of a pending outbound request.
 		/// This extrinsic can only be executed by relay executives.
@@ -230,6 +262,25 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::finalize_request())]
+		pub fn finalize_request(
+			origin: OriginFor<T>,
+			msg: FinalizePsbtMessage<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let FinalizePsbtMessage { psbt_hash, .. } = msg;
+
+			let request = <AcceptedRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
+			<AcceptedRequests<T>>::remove(&psbt_hash);
+			<FinalizedRequests<T>>::insert(&psbt_hash, request);
+			Self::deposit_event(Event::RequestFinalized { psbt_hash });
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -243,26 +294,26 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::submit_unsigned_psbt { msg, signature } => {
-					let UnsignedPsbtMessage { submitter, psbt, .. } = msg;
+					let UnsignedPsbtMessage { authority_id, psbt, .. } = msg;
 
-					// verify if the submitter is valid
-					if let Some(s) = <UnsignedPsbtSubmitter<T>>::get() {
-						if s.into_account() != *submitter {
+					// verify if the authority_id is valid
+					if let Some(a) = <Authority<T>>::get() {
+						if a.into_account() != *authority_id {
 							return InvalidTransaction::BadSigner.into();
 						}
 					} else {
 						return InvalidTransaction::BadSigner.into();
 					}
 
-					// verify if the signature was originated from the submitter.
+					// verify if the signature was originated from the authority_id.
 					let message = format!("{:?}", Self::hash_bytes(psbt));
-					if !signature.verify(message.as_bytes(), submitter) {
+					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
 					ValidTransaction::with_tag_prefix("UnsignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(submitter)
+						.and_provides(authority_id)
 						.propagate(true)
 						.build()
 				},
@@ -281,6 +332,30 @@ pub mod pallet {
 					}
 
 					ValidTransaction::with_tag_prefix("SignedPsbtSubmission")
+						.priority(TransactionPriority::MAX)
+						.and_provides(authority_id)
+						.propagate(true)
+						.build()
+				},
+				Call::finalize_request { msg, signature } => {
+					let FinalizePsbtMessage { authority_id, psbt_hash } = msg;
+
+					// verify if the authority_id is valid
+					if let Some(a) = <Authority<T>>::get() {
+						if a.into_account() != *authority_id {
+							return InvalidTransaction::BadSigner.into();
+						}
+					} else {
+						return InvalidTransaction::BadSigner.into();
+					}
+
+					// verify if the signature was originated from the authority_id.
+					let message = format!("{:?}", psbt_hash);
+					if !signature.verify(message.as_bytes(), authority_id) {
+						return InvalidTransaction::BadProof.into();
+					}
+
+					ValidTransaction::with_tag_prefix("FinalizePsbtSubmission")
 						.priority(TransactionPriority::MAX)
 						.and_provides(authority_id)
 						.propagate(true)

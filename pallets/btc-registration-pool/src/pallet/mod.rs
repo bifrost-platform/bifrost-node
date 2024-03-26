@@ -164,6 +164,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_vault_config())]
+		/// (Re-)set the vault configurations.
 		pub fn set_vault_config(origin: OriginFor<T>, m: u8, n: u8) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
@@ -346,7 +347,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{:?}", array_bytes::bytes2hex("0x", pub_key));
+					let message = format!("{}", array_bytes::bytes2hex("0x", pub_key));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
@@ -366,7 +367,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{:?}", array_bytes::bytes2hex("0x", pub_key));
+					let message = format!("{}", array_bytes::bytes2hex("0x", pub_key));
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}

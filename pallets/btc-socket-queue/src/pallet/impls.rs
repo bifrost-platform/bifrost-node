@@ -9,7 +9,7 @@ use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
 use pallet_evm::Runner;
 use scale_info::prelude::string::String;
 
-use crate::{PsbtOutput, RequestInfo, SocketMessage};
+use crate::{RequestInfo, SocketMessage, UncheckedOutput};
 
 use super::pallet::*;
 
@@ -34,12 +34,13 @@ where
 		Ok(origin.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
+	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
 	pub fn try_psbt_output_verification(
 		psbt: &Vec<u8>,
-		outputs: Vec<PsbtOutput>,
+		unchecked: Vec<UncheckedOutput>,
 	) -> Result<(), DispatchError> {
 		let origin = Self::try_get_checked_psbt(&psbt)?.unsigned_tx.output;
-		if origin.len() != outputs.len() {
+		if origin.len() != unchecked.len() {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 		// at least 2 outputs required. one for refund and one for system vault.
@@ -51,7 +52,7 @@ where
 			T::RegistrationPool::get_bitcoin_network(),
 		)
 		.map_err(|_| Error::<T>::InvalidPsbt)?;
-		if system_vault != outputs[0].to {
+		if system_vault != unchecked[0].to {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 		for i in 1..origin.len() {
@@ -63,21 +64,22 @@ where
 
 			let amount = U256::from(origin[i].value.to_sat());
 
-			if to != outputs[i].to {
+			if to != unchecked[i].to {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
-			if amount != outputs[i].amount {
+			if amount != unchecked[i].amount {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
 		}
 		Ok(())
 	}
 
-	pub fn try_build_psbt_outputs(
-		socket_messages: Vec<Vec<u8>>,
-	) -> Result<Vec<PsbtOutput>, DispatchError> {
+	/// Try to verify the submitted socket messages and build unchecked outputs.
+	pub fn try_build_unchecked_outputs(
+		socket_messages: &Vec<Vec<u8>>,
+	) -> Result<Vec<UncheckedOutput>, DispatchError> {
 		let system_vault =
-			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDne)?;
+			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDNE)?;
 
 		// TODO: check length bound
 		if socket_messages.is_empty() {
@@ -92,10 +94,10 @@ where
 		};
 
 		// we assume the first output to be the utxo repayment
-		outputs.push(PsbtOutput { to: to_address(system_vault), amount: Default::default() });
+		outputs.push(UncheckedOutput { to: to_address(system_vault), amount: Default::default() });
 		for msg in socket_messages {
-			let msg_hash = Self::hash_bytes(&msg);
-			let msg = Self::try_decode_socket_message(&msg)
+			let msg_hash = Self::hash_bytes(msg);
+			let msg = Self::try_decode_socket_message(msg)
 				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 			let request_info = Self::try_get_request(&msg.encode_req_id())?;
 
@@ -103,25 +105,29 @@ where
 			if !request_info.is_msg_hash(msg_hash) {
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
-			if !msg.is_accepted() {
+			if !request_info.is_accepted() || !msg.is_accepted() {
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
+			// TODO: check if request is outbound sequence
+			// TODO: check if asset is unified btc
+			// TODO: check if duplicate request id
 
 			// the user must exist in the pool
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
 				.ok_or(Error::<T>::UserDNE)?;
-			outputs.push(PsbtOutput { to: to_address(to), amount: msg.params.amount });
+			outputs.push(UncheckedOutput { to: to_address(to), amount: msg.params.amount });
 		}
 		Ok(outputs)
 	}
 
+	/// Hash the given bytes.
 	pub fn hash_bytes(bytes: &Vec<u8>) -> H256 {
 		H256(keccak_256(bytes))
 	}
 
 	/// Try to get the `RequestInfo` by the given `req_id`.
 	pub fn try_get_request(req_id: &Vec<u8>) -> Result<RequestInfo, DispatchError> {
-		let caller = <UnsignedPsbtSubmitter<T>>::get().ok_or(Error::<T>::SubmitterDNE)?;
+		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
 		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
 
 		let mut calldata: String = "8dac2204".to_owned(); // get_request()
@@ -149,6 +155,7 @@ where
 			.map_err(|_| Error::<T>::InvalidRequestInfo)?)
 	}
 
+	/// Try to decode the given `RequestInfo`.
 	pub fn try_decode_request_info(info: &Vec<u8>) -> Result<RequestInfo, ()> {
 		match ethabi_decode::decode(
 			&[
@@ -163,6 +170,7 @@ where
 		}
 	}
 
+	/// Try to decode the given `SocketMessage`.
 	pub fn try_decode_socket_message(msg: &Vec<u8>) -> Result<SocketMessage, ()> {
 		match ethabi_decode::decode(
 			&[ParamKind::Tuple(vec![
