@@ -78,9 +78,11 @@ pub mod pallet {
 		/// An unsigned PSBT for an outbound request has been submitted.
 		UnsignedPsbtSubmitted { psbt: Vec<u8> },
 		/// A signed PSBT for an outbound request has been submitted.
-		SignedPsbtSubmitted { req_id: Vec<u8>, authority_id: T::AccountId },
+		SignedPsbtSubmitted { psbt_hash: H256, authority_id: T::AccountId, signed_psbt: Vec<u8> },
+		/// An outbound request has been accepted.
+		RequestAccepted { psbt_hash: H256 },
 		/// An outbound request has been finalized.
-		RequestFinalized { req_id: Vec<u8> },
+		RequestFinalized { psbt_hash: H256 },
 		/// A submitter has been set.
 		SubmitterSet { new: T::Signer },
 	}
@@ -191,35 +193,40 @@ pub mod pallet {
 
 			let SignedPsbtMessage { authority_id, unsigned_psbt, signed_psbt } = msg;
 
-			// let mut pending_request =
-			// 	<PendingRequests<T>>::get(&req_id).ok_or(Error::<T>::RequestDNE)?;
+			let psbt_hash = Self::hash_bytes(&unsigned_psbt);
 
-			// ensure!(
-			// 	!pending_request.is_authority_submitted(&authority_id),
-			// 	Error::<T>::AuthorityAlreadySubmitted
-			// );
-			// ensure!(
-			// 	!pending_request.is_signed_psbt_submitted(&signed_psbt),
-			// 	Error::<T>::SignedPsbtAlreadySubmitted
-			// );
-			// ensure!(pending_request.is_unsigned_psbt(&unsigned_psbt), Error::<T>::InvalidPsbt);
-			// ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
-			// Self::verify_signed_psbt(&unsigned_psbt, &signed_psbt)?;
+			let mut pending_request =
+				<PendingRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
 
-			// pending_request
-			// 	.insert_signed_psbt(authority_id.clone(), signed_psbt)
-			// 	.map_err(|_| Error::<T>::OutOfRange)?;
+			ensure!(
+				!pending_request.is_authority_submitted(&authority_id),
+				Error::<T>::AuthorityAlreadySubmitted
+			);
+			ensure!(
+				!pending_request.is_signed_psbt_submitted(&signed_psbt),
+				Error::<T>::SignedPsbtAlreadySubmitted
+			);
+			ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
+			Self::try_signed_psbt_verification(&unsigned_psbt, &signed_psbt)?;
 
-			// if T::MultiSig::is_finalizable(pending_request.signed_psbts.len() as u8) {
-			// 	// if finalizable (quorum reached m), then accept the request
-			// 	<FinalizedRequests<T>>::insert(&req_id, pending_request);
-			// 	<PendingRequests<T>>::remove(&req_id);
-			// 	Self::deposit_event(Event::RequestFinalized { req_id });
-			// } else {
-			// 	// if not, remain as pending
-			// 	<PendingRequests<T>>::insert(&req_id, pending_request);
-			// 	Self::deposit_event(Event::SignedPsbtSubmitted { req_id, authority_id });
-			// }
+			pending_request
+				.insert_signed_psbt(authority_id.clone(), signed_psbt.clone())
+				.map_err(|_| Error::<T>::OutOfRange)?;
+
+			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
+				// if finalizable (quorum reached m), then accept the request
+				<AcceptedRequests<T>>::insert(&psbt_hash, pending_request);
+				<PendingRequests<T>>::remove(&psbt_hash);
+				Self::deposit_event(Event::RequestAccepted { psbt_hash });
+			} else {
+				// if not, remain as pending
+				<PendingRequests<T>>::insert(&psbt_hash, pending_request);
+				Self::deposit_event(Event::SignedPsbtSubmitted {
+					psbt_hash,
+					authority_id,
+					signed_psbt,
+				});
+			}
 
 			Ok(().into())
 		}

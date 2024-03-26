@@ -25,10 +25,13 @@ where
 	}
 
 	/// Try to combine the signed PSBT with the origin. If fails, the given PSBT is considered as invalid.
-	pub fn verify_signed_psbt(origin: &Vec<u8>, signed: &Vec<u8>) -> Result<(), DispatchError> {
-		let mut o = Self::try_get_checked_psbt(origin)?;
+	pub fn try_signed_psbt_verification(
+		origin: &Vec<u8>,
+		signed: &Vec<u8>,
+	) -> Result<(), DispatchError> {
+		let mut origin = Self::try_get_checked_psbt(origin)?;
 		let s = Self::try_get_checked_psbt(signed)?;
-		Ok(o.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?)
+		Ok(origin.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
 	pub fn try_psbt_output_verification(
