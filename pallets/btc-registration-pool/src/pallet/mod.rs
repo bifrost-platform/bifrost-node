@@ -11,12 +11,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_multi_sig::{PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec};
-
-use miniscript::bitcoin::PublicKey;
 
 #[frame_support::pallet]
 pub mod pallet {

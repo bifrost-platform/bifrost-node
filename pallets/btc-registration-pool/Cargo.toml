@@ -10,8 +10,6 @@ repository = { workspace = true }
 
 [dependencies]
 # General
-log = { workspace = true }
-miniscript = { workspace = true }
 array-bytes = { workspace = true }
 
 # Substrate

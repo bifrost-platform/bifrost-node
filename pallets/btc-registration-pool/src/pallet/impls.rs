@@ -1,8 +1,6 @@
-use miniscript::bitcoin::{Address, Network};
-
 use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
-	AddressState, UnboundedBytes,
+	Address, AddressState, Network, UnboundedBytes,
 };
 use scale_info::prelude::string::ToString;
 use sp_core::Get;
