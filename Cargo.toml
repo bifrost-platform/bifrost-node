@@ -23,6 +23,7 @@ members = [
 	"precompiles/collective",
 	"precompiles/balance",
 	"precompiles/btc-registration-pool",
+	"precompiles/btc-socket-queue",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/multi-sig",
@@ -117,6 +118,7 @@ precompile-governance = { default-features = false, path = "precompiles/governan
 precompile-collective = { default-features = false, path = "precompiles/collective" }
 precompile-balance = { default-features = false, path = "precompiles/balance" }
 precompile-btc-registration-pool = { default-features = false, path = "precompiles/btc-registration-pool" }
+precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }

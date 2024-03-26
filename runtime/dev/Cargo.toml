@@ -103,6 +103,7 @@ precompile-governance = { workspace = true }
 precompile-collective = { workspace = true }
 precompile-balance = { workspace = true }
 precompile-btc-registration-pool = { workspace = true }
+precompile-btc-socket-queue = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }

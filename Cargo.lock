@@ -852,6 +852,7 @@ dependencies = [
  "precompile-bfc-offences",
  "precompile-bfc-staking",
  "precompile-btc-registration-pool",
+ "precompile-btc-socket-queue",
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
@@ -7077,6 +7078,25 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-btc-registration-pool",
+ "pallet-evm",
+ "parity-scale-codec",
+ "precompile-utils",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-btc-socket-queue"
+version = "1.0.0"
+dependencies = [
+ "bp-multi-sig",
+ "fp-account",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-btc-socket-queue",
  "pallet-evm",
  "parity-scale-codec",
  "precompile-utils",
