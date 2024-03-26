@@ -9,7 +9,10 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use scale_info::prelude::format;
 
-use bp_multi_sig::traits::{MultiSigManager, PoolManager};
+use bp_multi_sig::{
+	traits::{MultiSigManager, PoolManager},
+	UnboundedBytes,
+};
 use sp_core::{H160, H256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec, vec::Vec};
@@ -77,13 +80,13 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// An unsigned PSBT for an outbound request has been submitted.
 		UnsignedPsbtSubmitted {
-			psbt: Vec<u8>,
+			psbt: UnboundedBytes,
 		},
 		/// A signed PSBT for an outbound request has been submitted.
 		SignedPsbtSubmitted {
 			psbt_hash: H256,
 			authority_id: T::AccountId,
-			signed_psbt: Vec<u8>,
+			signed_psbt: UnboundedBytes,
 		},
 		/// An outbound request has been accepted.
 		RequestAccepted {

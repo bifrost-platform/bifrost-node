@@ -11,10 +11,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::MULTI_SIG_MAX_ACCOUNTS;
+use bp_multi_sig::{UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str, vec, vec::Vec};
+use sp_std::{str, vec};
 
 use miniscript::bitcoin::PublicKey;
 
@@ -184,7 +184,7 @@ pub mod pallet {
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
 			origin: OriginFor<T>,
-			refund_address: Vec<u8>,
+			refund_address: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			let refund_address: BoundedBitcoinAddress =

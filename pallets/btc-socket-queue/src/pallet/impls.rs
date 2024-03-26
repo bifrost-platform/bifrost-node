@@ -1,6 +1,6 @@
 use ethabi_decode::{ParamKind, Token};
 
-use bp_multi_sig::{traits::PoolManager, Address, BoundedBitcoinAddress, Psbt};
+use bp_multi_sig::{traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, UnboundedBytes};
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{traits::IdentifyAccount, DispatchError};
@@ -20,14 +20,14 @@ where
 	H160: Into<T::AccountId>,
 {
 	/// Try to deserialize the given bytes to a `PSBT` instance.
-	pub fn try_get_checked_psbt(psbt: &Vec<u8>) -> Result<Psbt, DispatchError> {
+	pub fn try_get_checked_psbt(psbt: &UnboundedBytes) -> Result<Psbt, DispatchError> {
 		Ok(Psbt::deserialize(psbt).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
 	/// Try to combine the signed PSBT with the origin. If fails, the given PSBT is considered as invalid.
 	pub fn try_signed_psbt_verification(
-		origin: &Vec<u8>,
-		signed: &Vec<u8>,
+		origin: &UnboundedBytes,
+		signed: &UnboundedBytes,
 	) -> Result<(), DispatchError> {
 		let mut origin = Self::try_get_checked_psbt(origin)?;
 		let s = Self::try_get_checked_psbt(signed)?;
@@ -36,7 +36,7 @@ where
 
 	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
 	pub fn try_psbt_output_verification(
-		psbt: &Vec<u8>,
+		psbt: &UnboundedBytes,
 		unchecked: Vec<UncheckedOutput>,
 	) -> Result<(), DispatchError> {
 		let origin = Self::try_get_checked_psbt(&psbt)?.unsigned_tx.output;
@@ -76,7 +76,7 @@ where
 
 	/// Try to verify the submitted socket messages and build unchecked outputs.
 	pub fn try_build_unchecked_outputs(
-		socket_messages: &Vec<Vec<u8>>,
+		socket_messages: &Vec<UnboundedBytes>,
 	) -> Result<Vec<UncheckedOutput>, DispatchError> {
 		let system_vault =
 			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDNE)?;
@@ -121,12 +121,12 @@ where
 	}
 
 	/// Hash the given bytes.
-	pub fn hash_bytes(bytes: &Vec<u8>) -> H256 {
+	pub fn hash_bytes(bytes: &UnboundedBytes) -> H256 {
 		H256(keccak_256(bytes))
 	}
 
 	/// Try to get the `RequestInfo` by the given `req_id`.
-	pub fn try_get_request(req_id: &Vec<u8>) -> Result<RequestInfo, DispatchError> {
+	pub fn try_get_request(req_id: &UnboundedBytes) -> Result<RequestInfo, DispatchError> {
 		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
 		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
 
@@ -156,7 +156,7 @@ where
 	}
 
 	/// Try to decode the given `RequestInfo`.
-	pub fn try_decode_request_info(info: &Vec<u8>) -> Result<RequestInfo, ()> {
+	pub fn try_decode_request_info(info: &UnboundedBytes) -> Result<RequestInfo, ()> {
 		match ethabi_decode::decode(
 			&[
 				ParamKind::FixedArray(Box::new(ParamKind::Uint(8)), 32),
@@ -171,7 +171,7 @@ where
 	}
 
 	/// Try to decode the given `SocketMessage`.
-	pub fn try_decode_socket_message(msg: &Vec<u8>) -> Result<SocketMessage, ()> {
+	pub fn try_decode_socket_message(msg: &UnboundedBytes) -> Result<SocketMessage, ()> {
 		match ethabi_decode::decode(
 			&[ParamKind::Tuple(vec![
 				Box::new(ParamKind::Tuple(vec![

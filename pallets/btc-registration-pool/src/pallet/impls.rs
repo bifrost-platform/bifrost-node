@@ -2,7 +2,7 @@ use miniscript::bitcoin::{Address, Network};
 
 use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
-	AddressState,
+	AddressState, UnboundedBytes,
 };
 use scale_info::prelude::string::ToString;
 use sp_core::Get;
@@ -69,7 +69,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Check if the given address is valid on the target Bitcoin network. Then returns the checked address.
 	pub fn get_checked_bitcoin_address(
-		address: &Vec<u8>,
+		address: &UnboundedBytes,
 	) -> Result<BoundedBitcoinAddress, DispatchError> {
 		let raw_address = str::from_utf8(address).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 		let unchecked_address =
