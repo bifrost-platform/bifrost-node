@@ -50,15 +50,6 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	pub fn is_unsigned_psbt(&self, psbt: &UnboundedBytes) -> bool {
 		self.unsigned_psbt.eq(psbt)
 	}
-
-	/// Insert the signed PSBT submitted by the authority.
-	pub fn insert_signed_psbt(
-		&mut self,
-		authority_id: AccountId,
-		psbt: UnboundedBytes,
-	) -> Result<Option<UnboundedBytes>, (AccountId, UnboundedBytes)> {
-		self.signed_psbts.try_insert(authority_id, psbt)
-	}
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]

@@ -266,7 +266,8 @@ pub mod pallet {
 			Self::try_signed_psbt_verification(&unsigned_psbt, &signed_psbt)?;
 
 			pending_request
-				.insert_signed_psbt(authority_id.clone(), signed_psbt.clone())
+				.signed_psbts
+				.try_insert(authority_id.clone(), signed_psbt.clone())
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
 			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
