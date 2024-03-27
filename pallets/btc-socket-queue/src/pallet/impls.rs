@@ -1,6 +1,8 @@
 use ethabi_decode::{ParamKind, Token};
 
-use bp_multi_sig::{traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, UnboundedBytes};
+use bp_multi_sig::{
+	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, Script, UnboundedBytes,
+};
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{traits::IdentifyAccount, DispatchError};
@@ -47,21 +49,19 @@ where
 		if origin.len() < 2 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
-		let system_vault = Address::from_script(
-			origin[0].script_pubkey.as_script(),
-			T::RegistrationPool::get_bitcoin_network(),
-		)
-		.map_err(|_| Error::<T>::InvalidPsbt)?;
+
+		let convert_to_address = |script: &Script| {
+			Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
+		};
+
+		let system_vault = convert_to_address(origin[0].script_pubkey.as_script())
+			.map_err(|_| Error::<T>::InvalidPsbt)?;
 		if system_vault != unchecked[0].to {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 		for i in 1..origin.len() {
-			let to = Address::from_script(
-				origin[i].script_pubkey.as_script(),
-				T::RegistrationPool::get_bitcoin_network(),
-			)
-			.map_err(|_| Error::<T>::InvalidPsbt)?;
-
+			let to = convert_to_address(origin[i].script_pubkey.as_script())
+				.map_err(|_| Error::<T>::InvalidPsbt)?;
 			let amount = U256::from(origin[i].value.to_sat());
 
 			if to != unchecked[i].to {
