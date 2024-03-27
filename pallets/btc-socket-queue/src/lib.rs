@@ -244,6 +244,6 @@ impl TryFrom<Vec<Token>> for RequestInfo {
 pub struct UncheckedOutput {
 	/// The target Bitcoin address.
 	pub to: Address,
-	/// The amount to be transferred.
-	pub amount: U256, // TODO: 단위 체크 필요 (sat? wei?)
+	/// The amount to be transferred. (unit: sat)
+	pub amount: U256,
 }

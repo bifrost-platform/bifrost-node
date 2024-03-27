@@ -87,14 +87,17 @@ where
 		}
 		let mut outputs = vec![];
 
-		let to_address = |addr: BoundedBitcoinAddress| {
+		let convert_to_address = |addr: BoundedBitcoinAddress| {
 			// we assume all the registered addresses are valid and checked.
 			let addr = str::from_utf8(&addr).expect("Must be valid");
 			Address::from_str(addr).expect("Must be valid").assume_checked()
 		};
 
 		// we assume the first output to be the utxo repayment
-		outputs.push(UncheckedOutput { to: to_address(system_vault), amount: Default::default() });
+		outputs.push(UncheckedOutput {
+			to: convert_to_address(system_vault),
+			amount: Default::default(),
+		});
 		for msg in socket_messages {
 			let msg_hash = Self::hash_bytes(msg);
 			let msg = Self::try_decode_socket_message(msg)
@@ -115,7 +118,7 @@ where
 			// the user must exist in the pool
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
 				.ok_or(Error::<T>::UserDNE)?;
-			outputs.push(UncheckedOutput { to: to_address(to), amount: msg.params.amount });
+			outputs.push(UncheckedOutput { to: convert_to_address(to), amount: msg.params.amount });
 		}
 		Ok(outputs)
 	}
