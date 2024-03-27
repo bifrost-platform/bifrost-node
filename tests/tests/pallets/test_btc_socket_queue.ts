@@ -13,8 +13,13 @@ import { describeDevNode, INodeContext } from '../set_dev_node';
 
 const SOCKET_MESSAGE_SEQ_ID = 4657;
 
+// finalize_request()
+const VALID_FINALIZE_REQUEST_SIG = '0x2812412ba6d41de42adbdae1c9c193c59e3a8ca20085d38316a442b588f23bfd750f876762efd22ad82245efee5745c73f33501625b185ada4bf4f48b4b5743b1b';
+const INVALID_FINALIZE_REQUEST_SIG = '0xf45facd8aabcd0db50daca4a001562b09d2c7adaf8d7d11f7286d94eef43697241ad047021a6617c13344372b7e3edd69d1b6a07b573bc5c9f69d41b103129cc1c';
+
 // submit_unsigned_psbt()
 const VALID_UNSIGNED_PSBT_HASH = '0xde0e3eaca967df97ad1c347b2d87d855bb813b0619d8a3beaf31f70212380227';
+const INVALID_UNSIGNED_PSBT_HASH = '0x0e0e3eaca967df97ad1c347b2d87d855bb813b0619d8a3beaf31f70212380227';
 const VALID_UNSIGNED_PSBT = '0x70736274ff010089020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200e1f5050000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e95842848000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
 const INVALID_UNSIGNED_PSBT = '0x00736274ff010089020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff02958428480000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e95842848000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
 const INVALID_UNSIGNED_PSBT_WITHOUT_REFUND = '0x70736274ff01005e020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0100e1f505000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
@@ -560,5 +565,112 @@ describeDevNode('pallet_btc_socket_queue - submit signed pbst', (context) => {
     expect(acceptedRequest.unsignedPsbt).is.eq(VALID_UNSIGNED_PSBT);
     expect(acceptedRequest.signedPsbts[alithRelayer.address]).is.eq(VALID_SIGNED_PSBT);
     expect(acceptedRequest.socketMessages).contains(VALID_SOCKET_MESSAGE);
+  });
+});
+
+describeDevNode('pallet_btc_socket_queue - finalize request', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+
+  before('it should successfully initialize', async function () {
+    await requestSystemVault(context);
+    await submitSystemVaultKey(context);
+
+    await joinRegistrationPool(context);
+    await submitVaultKey(context);
+
+    const socket = await deployDemoSocket(context, VALID_DEMO_SOCKET_BYTE_CODE);
+    if (socket) {
+      await setSocket(context, socket);
+    }
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const msg2 = {
+      authorityId: alithRelayer.address,
+      unsignedPsbt: VALID_UNSIGNED_PSBT,
+      signedPsbt: VALID_SIGNED_PSBT,
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg2, VALID_SIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+  });
+
+  it('should fail to finalize request - invalid authority', async function () {
+    const msg = {
+      authorityId: alithRelayer.address,
+      psbtHash: VALID_UNSIGNED_PSBT_HASH,
+    };
+
+    let errorMsg = '';
+    await context.polkadotApi.tx.btcSocketQueue.finalizeRequest(msg, INVALID_FINALIZE_REQUEST_SIG).send().catch(err => {
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+    });
+    await context.createBlock();
+
+    expect(errorMsg).eq('1010: Invalid Transaction: Invalid signing address');
+  });
+
+  it('should fail to finalize request - invalid authority', async function () {
+    const msg = {
+      authorityId: alith.address,
+      psbtHash: VALID_UNSIGNED_PSBT_HASH,
+    };
+
+    let errorMsg = '';
+    await context.polkadotApi.tx.btcSocketQueue.finalizeRequest(msg, INVALID_FINALIZE_REQUEST_SIG).send().catch(err => {
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+    });
+    await context.createBlock();
+
+    expect(errorMsg).eq('1010: Invalid Transaction: Transaction has a bad signature');
+  });
+
+  it('should fail to finalize request - unknown request', async function () {
+    const msg = {
+      authorityId: alith.address,
+      psbtHash: INVALID_UNSIGNED_PSBT_HASH,
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.finalizeRequest(msg, INVALID_FINALIZE_REQUEST_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'finalizeRequest');
+    expect(extrinsicResult).eq('RequestDNE');
+  });
+
+  it('should successfully finalize accepted request', async function () {
+    const msg = {
+      authorityId: alith.address,
+      psbtHash: VALID_UNSIGNED_PSBT_HASH,
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.finalizeRequest(msg, VALID_FINALIZE_REQUEST_SIG).send();
+    await context.createBlock();
+
+    const rawAcceptedRequest: any = await context.polkadotApi.query.btcSocketQueue.acceptedRequests(VALID_UNSIGNED_PSBT_HASH);
+    const acceptedRequest = rawAcceptedRequest.toHuman();
+
+    expect(acceptedRequest).is.null;
+
+    const rawFinalizedRequest: any = await context.polkadotApi.query.btcSocketQueue.finalizedRequests(VALID_UNSIGNED_PSBT_HASH);
+    const finalizedRequest = rawFinalizedRequest.toHuman();
+
+    expect(finalizedRequest).is.ok;
+    expect(finalizedRequest.unsignedPsbt).is.eq(VALID_UNSIGNED_PSBT);
+    expect(finalizedRequest.signedPsbts[alithRelayer.address]).is.eq(VALID_SIGNED_PSBT);
+    expect(finalizedRequest.socketMessages).contains(VALID_SOCKET_MESSAGE);
   });
 });
