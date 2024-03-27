@@ -98,7 +98,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0x57d23044a8da46ad8be01497332c8797f6369dabec84a5be6bac5a8d41d766c52cc82839ad99d12c46bfd65aaff20ff58aadbd71b4011697a378b26a94a2dde511';
+    const signature = '0x012088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
     let errorMsg = '';
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send().catch(err => {
@@ -118,7 +118,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0x57d23044a8da46ad8be01497332c8797f6369dabec84a5be6bac5a8d41d766c52cc82839ad99d12c46bfd65aaff20ff58aadbd71b4011697a378b26a94a2dde511';
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
     let errorMsg = '';
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send().catch(err => {
@@ -138,7 +138,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0xd14ca16f2cc2f960ce31bb4199b6f7a3434794d316d8792b0c1f934be7ebd7ce28b07c4dbf2c07d3ec3731fdf97c4dfd3d5b6c9edf7d36abc42067a98c41b1741c';
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
@@ -156,13 +156,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
   });
 
   it('should fail to submit a key due to vault address already generated', async function () {
-    const pubKey = '0x0248033c224979a9a190cfb147488d84b153a3352273dfac63fd895baefffb1697';
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
       authorityId: alithRelayer.address,
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0x57d23044a8da46ad8be01497332c8797f6369dabec84a5be6bac5a8d41d766c52cc82839ad99d12c46bfd65aaff20ff58aadbd71b4011697a378b26a94a2dde51b';
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
@@ -216,7 +216,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0xd14ca16f2cc2f960ce31bb4199b6f7a3434794d316d8792b0c1f934be7ebd7ce28b07c4dbf2c07d3ec3731fdf97c4dfd3d5b6c9edf7d36abc42067a98c41b1741c';
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
@@ -235,7 +235,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0x282bb4f02c01570de8cde8f9d86459eedc622143822c70f720560a94d3dd5b401e8ef18e11377e142dd6995817d9f971d19ba83d7e96e9434111d68b15b15f0f1c';
+    const signature = '0xa1446489cfe7890ae4283f0a46993741025876a090858834f6a34fb0f9483517299c096cb6542aa790a26155f00292b5b17dd813033310cd46bf61833c4611041c';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
@@ -251,7 +251,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0x29c01893855199ee261ed2754d2676c6c611eb9eb2612e663c526ed097fd7d5e7349ae5794aa22f4befd3bb372430e007878920e175665dacdec995968f94c781b';
+    const signature = '0xbd0acef6dab6157ce6f3992b450c59c81265adcb09d006f9062ff9fe36c227ca4001cd6929aee93166baf6e2ff057fbe57473274c70d563de99d4ee1217e7de41b';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
@@ -267,7 +267,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
       who: alith.address,
       pubKey,
     };
-    const signature = '0x8964b849d29c912b3f6402f780eb5243bab7129f9e6782e4f5457509460f2c795669f53f14fa8846211f20a22c026a3d8ef680fcc75e6ed57e64a4c52deb2e3c1c';
+    const signature = '0xbd0acef6dab6157ce6f3992b450c59c81265adcb09d006f9062ff9fe36c227ca4001cd6929aee93166baf6e2ff057fbe57473274c70d563de99d4ee1217e7de41b';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
@@ -283,7 +283,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
       who: baltathar.address,
       pubKey,
     };
-    const signature = '0x28d6e5dedddfc98b598ace3128c7df6bb595566d3ae5724d3964804487a4b77773c2b82f4c6be892a57c2c58f845b6f9df888d168cd4458450a2d3018088c3ca1b';
+    const signature = '0x97f5cebf5e669c81c3cb3cdc34519d9e7455235e40ffba92d3cf555d7523c7ca5e1d6d6895adbbeb936d1791753dbd70fdab4ae33f604a8857853b3fa02671771c';
 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
