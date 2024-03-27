@@ -30,7 +30,7 @@ where
 	Runtime: pallet_btc_registration_pool::Config<Signature = EthereumSignature>
 		+ pallet_evm::Config
 		+ frame_system::Config,
-	Runtime::AccountId: Into<H160>,
+	Runtime::AccountId: Into<H160> + From<H160>,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcRegistrationPoolCall<Runtime>>,

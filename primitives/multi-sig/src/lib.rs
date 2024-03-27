@@ -86,14 +86,6 @@ impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 		self.pub_keys.contains_key(authority_id)
 	}
 
-	pub fn insert_pub_key(
-		&mut self,
-		authority_id: AccountId,
-		pub_key: Public,
-	) -> Result<Option<Public>, (AccountId, Public)> {
-		self.pub_keys.try_insert(authority_id, pub_key)
-	}
-
 	pub fn set_address(&mut self, address: BoundedBitcoinAddress) {
 		self.address = AddressState::Generated(address)
 	}

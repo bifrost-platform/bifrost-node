@@ -11,8 +11,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_multi_sig::{Public, PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use scale_info::prelude::format;
+use sp_core::H160;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec};
 
@@ -123,6 +124,12 @@ pub mod pallet {
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
 	#[pallet::storage]
+	#[pallet::getter(fn bonded_pub_key)]
+	/// Mapped public keys used for vault account generation. The key is the public key and the value is user's Bifrost address.
+	/// For system vault, the value will be set to the zero address.
+	pub type BondedPubKey<T: Config> = StorageMap<_, Twox64Concat, Public, T::AccountId>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn required_m)]
 	/// The required number of public keys to generate a vault address.
 	pub type RequiredM<T: Config> = StorageValue<_, u8, ValueQuery>;
@@ -159,7 +166,10 @@ pub mod pallet {
 	}
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {
+	impl<T: Config> Pallet<T>
+	where
+		H160: Into<T::AccountId>,
+	{
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_vault_config())]
 		/// (Re-)set the vault configurations.
@@ -259,10 +269,15 @@ pub mod pallet {
 				Error::<T>::VaultAlreadyContainsPubKey
 			);
 			ensure!(PublicKey::from_slice(pub_key.as_ref()).is_ok(), Error::<T>::InvalidPublicKey);
+			ensure!(
+				<BondedPubKey<T>>::get(&pub_key).is_none(),
+				Error::<T>::VaultAlreadyContainsPubKey
+			);
 
 			relay_target
 				.vault
-				.insert_pub_key(authority_id, pub_key)
+				.pub_keys
+				.try_insert(authority_id, pub_key)
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
 			if relay_target.vault.is_key_generation_ready() {
@@ -278,6 +293,7 @@ pub mod pallet {
 				});
 			}
 
+			<BondedPubKey<T>>::insert(&pub_key, who.clone());
 			<RegistrationPool<T>>::insert(&who, relay_target);
 
 			Ok(().into())
@@ -309,9 +325,14 @@ pub mod pallet {
 					PublicKey::from_slice(pub_key.as_ref()).is_ok(),
 					Error::<T>::InvalidPublicKey
 				);
+				ensure!(
+					<BondedPubKey<T>>::get(&pub_key).is_none(),
+					Error::<T>::VaultAlreadyContainsPubKey
+				);
 
 				system_vault
-					.insert_pub_key(authority_id, pub_key)
+					.pub_keys
+					.try_insert(authority_id, pub_key)
 					.map_err(|_| Error::<T>::OutOfRange)?;
 
 				if system_vault.is_key_generation_ready() {
@@ -321,6 +342,7 @@ pub mod pallet {
 
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
+				<BondedPubKey<T>>::insert(&pub_key, H160::default().into());
 				<SystemVault<T>>::put(system_vault);
 			} else {
 				return Err(Error::<T>::SystemVaultDNE)?;
@@ -331,7 +353,10 @@ pub mod pallet {
 	}
 
 	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T> {
+	impl<T: Config> ValidateUnsigned for Pallet<T>
+	where
+		H160: Into<T::AccountId>,
+	{
 		type Call = Call<T>;
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
