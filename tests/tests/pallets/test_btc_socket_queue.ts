@@ -1,35 +1,138 @@
 import { expect } from 'chai';
+import { TransactionReceiptAPI } from 'web3';
 
 import { Keyring } from '@polkadot/api';
 
+import {
+  DEMO_SOCKET_ABI, INVALID_DEMO_SOCKET_BYTE_CODE,
+  INVALID_STATUS_DEMO_SOCKET_BYTE_CODE, VALID_DEMO_SOCKET_BYTE_CODE
+} from '../../constants/demo_contract';
 import { TEST_CONTROLLERS, TEST_RELAYERS } from '../../constants/keys';
 import { getExtrinsicResult } from '../extrinsics';
-import { describeDevNode } from '../set_dev_node';
+import { describeDevNode, INodeContext } from '../set_dev_node';
 
-describeDevNode('pallet_btc_socket_queue - submit unsigned psbt', (context) => {
+const SOCKET_MESSAGE_SEQ_ID = 4657;
+
+// submit_unsigned_psbt()
+const VALID_UNSIGNED_PSBT_HASH = '0xde0e3eaca967df97ad1c347b2d87d855bb813b0619d8a3beaf31f70212380227';
+const VALID_UNSIGNED_PSBT = '0x70736274ff010089020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200e1f5050000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e95842848000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
+const INVALID_UNSIGNED_PSBT = '0x00736274ff010089020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff02958428480000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e95842848000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
+const INVALID_UNSIGNED_PSBT_WITHOUT_REFUND = '0x70736274ff01005e020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0100e1f505000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
+const INVALID_UNSIGNED_PSBT_WITH_OUTPUT_WRONG_ORDER = '0x70736274ff010089020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200e1f505000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28008d380c0100000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
+const INVALID_UNSIGNED_PSBT_WITH_WRONG_AMOUNT = '0x70736274ff010089020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200e1f5050000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e94842848000000002251202d4b1f0e2a5e77e026e763f239006c8531d2ca14765db6963dec4976c0710e28000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
+const VALID_SOCKET_MESSAGE = '0x000000000000000000000000000000000000000000000000000000000000002000000bfc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000036c000000000000000000000000000000000000000000000000000000000000123100000000000000000000000000000000000000000000000000000000000000050000008900000000000000000000000000000000000000000000000000000000040207030100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000080000000300000bfc7e3a761afcec9f3e2fb7e853ffc45a62319143fa00000000000000000000000000000000000000000000000000000000000000000000000000000000000000003cd0a705a2dc65e5b1e1205896baa2be8a07c6e00000000000000000000000003cd0a705a2dc65e5b1e1205896baa2be8a07c6e0000000000000000000000000000000000000000000000000000000004828849500000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000000';
+const INVALID_SOCKET_MESSAGE = '0x100000000000000000000000000000000000000000000000000000000000002000000bfc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000036c000000000000000000000000000000000000000000000000000000000000123100000000000000000000000000000000000000000000000000000000000000050000008900000000000000000000000000000000000000000000000000000000040207030100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000080000000300000bfc7e3a761afcec9f3e2fb7e853ffc45a62319143fa00000000000000000000000000000000000000000000000000000000000000000000000000000000000000003cd0a705a2dc65e5b1e1205896baa2be8a07c6e00000000000000000000000003cd0a705a2dc65e5b1e1205896baa2be8a07c6e0000000000000000000000000000000000000000000000000000000004828849500000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000000';
+const VALID_UNSIGNED_PSBT_SUBMISSION_SIG = '0x2812412ba6d41de42adbdae1c9c193c59e3a8ca20085d38316a442b588f23bfd750f876762efd22ad82245efee5745c73f33501625b185ada4bf4f48b4b5743b1b';
+const INVALID_UNSIGNED_PSBT_SUBMISSION_SIG = '0x0d40659d2fe9c6c4ebc4083afd6a46e9450387a06d3e64187dea72c5fb5595b921cf41c642587342077d592fa465d1ae0c0262b2250b43c031349a6773e1b7f91c';
+
+// submit_system_vault_key()
+const SYSTEM_VAULT_PUBKEY = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+const SYSTEM_VAULT_PUBKEY_SUBMISSION_SIG = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
+
+// submit_vault_key()
+const VAULT_PUBKEY = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+const VAULT_PUBKEY_SUBMISSION_SIG = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+async function joinRegistrationPool(context: INodeContext) {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
+
+  await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
+  await context.createBlock();
+}
+
+async function submitVaultKey(context: INodeContext) {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+
+  const keySubmission = {
+    authorityId: alithRelayer.address,
+    who: baltathar.address,
+    pubKey: VAULT_PUBKEY,
+  };
+
+  await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, VAULT_PUBKEY_SUBMISSION_SIG).send();
+  await context.createBlock();
+}
+
+async function setSocket(context: INodeContext, address: string) {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const sudo = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  await context.polkadotApi.tx.sudo.sudo(
+    context.polkadotApi.tx.btcSocketQueue.setSocket(address)
+  ).signAndSend(sudo);
+  await context.createBlock();
+}
+
+async function deployDemoSocket(context: INodeContext, bytecode: string) {
+  const deployTx = ((new context.web3.eth.Contract(DEMO_SOCKET_ABI) as any).deploy({
+    data: bytecode
+  }));
+  const receipt = await deployDemo(context, deployTx);
+  return receipt?.contractAddress;
+}
+
+const deployDemo = async (context: INodeContext, deployTx: any): Promise<TransactionReceiptAPI | undefined> => {
+  const signedTx = (await context.web3.eth.accounts.signTransaction({
+    from: TEST_CONTROLLERS[3].public,
+    data: deployTx.encodeABI(),
+    gasPrice: context.web3.utils.toWei(1000, 'gwei'),
+    gas: 3000000
+  }, TEST_CONTROLLERS[3].private)).rawTransaction;
+
+  // send transaction
+  const txHash = await context.web3.requestManager.send({ method: 'eth_sendRawTransaction', params: [signedTx] });
+  expect(txHash).is.ok;
+
+  await context.createBlock();
+
+  const receipt = await context.web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
+  expect(receipt).is.ok;
+  expect(receipt?.status).equal('0x1');
+  expect(receipt?.contractAddress).is.ok;
+
+  return receipt;
+};
+
+async function requestSystemVault(context: INodeContext) {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const sudo = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  await context.polkadotApi.tx.sudo.sudo(
+    context.polkadotApi.tx.btcRegistrationPool.requestSystemVault()
+  ).signAndSend(sudo);
+  await context.createBlock();
+}
+
+async function submitSystemVaultKey(context: INodeContext) {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const relayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+  const submit = {
+    authorityId: relayer.address,
+    pubKey: SYSTEM_VAULT_PUBKEY
+  };
+
+  await context.polkadotApi.tx.btcRegistrationPool.submitSystemVaultKey(submit, SYSTEM_VAULT_PUBKEY_SUBMISSION_SIG).send();
+  await context.createBlock();
+}
+
+describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
   const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
 
-  before('should successfully set submitter', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcSocketQueue.setSubmitter(alith.address)
-    ).signAndSend(alith);
-    await context.createBlock();
-  });
-
-  it('should fail to submit unsigned psbt - invalid submitter', async function () {
-    const reqId = 1;
-    const psbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x00aa9f5ec6c9c5bbb9ea648e1b95cfb9f599afba18461bf877e2c0ad9af2ddfc79195ea646dd7e4a85df502480519e61b2708631d2aea0c136e696803653ce461b';
+  it('should fail to submit unsigned psbt - invalid authority', async function () {
     const msg = {
-      submitter: baltathar.address,
-      reqId,
-      psbt,
+      authorityId: baltathar.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
     };
 
     let errorMsg = '';
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send().catch(err => {
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send().catch(err => {
       if (err instanceof Error) {
         errorMsg = err.message;
       }
@@ -40,17 +143,14 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned psbt', (context) => {
   });
 
   it('should fail to submit unsigned psbt - invalid signature', async function () {
-    const reqId = 1;
-    const psbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x14c3e9a6e696f8792aeaa2ca4e452194ab12ba3afa6317731e255fe6fa28600d15c19f595de32e0a35925a2fe58248a399c8fa00b0dcbdab36b880f0f57d541e1c';
     const msg = {
-      submitter: alith.address,
-      reqId,
-      psbt,
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
     };
 
     let errorMsg = '';
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send().catch(err => {
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, INVALID_UNSIGNED_PSBT_SUBMISSION_SIG).send().catch(err => {
       if (err instanceof Error) {
         errorMsg = err.message;
       }
@@ -60,16 +160,165 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned psbt', (context) => {
     expect(errorMsg).eq('1010: Invalid Transaction: Transaction has a bad signature');
   });
 
-  it('should fail to submit unsigned psbt - invalid psbt', async function () {
-    const reqId = 1;
-    const psbt = '70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0xe868b3002efa908c81993dca60d616ad99b3eca6bc485ab4084fa81718c8ad6e77a25a10fd2298d0636c67bdcf815b69e8cc5e14d30e0bf909ed0387508cea811c';
+  it('should fail to submit unsigned psbt - system vault is not requested', async function () {
     const msg = {
-      submitter: alith.address,
-      reqId,
-      psbt,
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
     };
 
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('SystemVaultDNE');
+  });
+
+  it('should fail to submit unsigned psbt - system vault is not generated', async function () {
+    await requestSystemVault(context);
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('SystemVaultDNE');
+  });
+
+  it('should fail to submit unsigned psbt - empty socket message submitted', async function () {
+    await submitSystemVaultKey(context);
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidSocketMessage');
+  });
+
+  it('should fail to submit unsigned psbt - invalid socket message bytes', async function () {
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [INVALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidSocketMessage');
+  });
+
+  it('should fail to submit unsigned psbt - socket contract is not set', async function () {
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('SocketDNE');
+  });
+
+  it('should fail to submit unsigned psbt - invalid request info response', async function () {
+    await setSocket(context, ZERO_ADDRESS); // set socket to wrong address
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidRequestInfo');
+  });
+
+  it('should fail to submit unsigned psbt - socket message hash does not match', async function () {
+    const socket = await deployDemoSocket(context, INVALID_DEMO_SOCKET_BYTE_CODE);
+    if (socket) {
+      await setSocket(context, socket);
+    }
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidSocketMessage');
+  });
+
+  it('should fail to submit unsigned psbt - message status is not accepted', async function () {
+    const socket = await deployDemoSocket(context, INVALID_STATUS_DEMO_SOCKET_BYTE_CODE);
+    if (socket) {
+      await setSocket(context, socket);
+    }
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidSocketMessage');
+  });
+
+  it('should fail to submit unsigned psbt - user is not registered', async function () {
+    const socket = await deployDemoSocket(context, VALID_DEMO_SOCKET_BYTE_CODE);
+    if (socket) {
+      await setSocket(context, socket);
+    }
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('UserDNE');
+  });
+
+  it('should fail to submit unsigned psbt - invalid psbt bytes', async function () {
+    await joinRegistrationPool(context);
+    await submitVaultKey(context);
+
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: INVALID_UNSIGNED_PSBT
+    };
+
+    const signature = '0xb705f5b89d60394b4cadd2c92cd278d0542666a5a4db4f3df8945c086dc3be90001db99698e9b46144be7656fc0fb0f5ae4a1e5cf5e812ab25bcb1dc1cbf467f1b';
     await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
     await context.createBlock();
 
@@ -77,366 +326,85 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned psbt', (context) => {
     expect(extrinsicResult).eq('InvalidPsbt');
   });
 
-  it('should successfully submit unsigned psbt', async function () {
-    const reqId = 1;
-    const psbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x77dd1160dbc69633905186fe59847c2eeda41e81a0772d04ee6802ed45a1c69e60ed42bce52f11c50a70a8807056cb4e57b69c7ad45da4bb47ba79cb8261e1c51b';
+  it('should fail to submit unsigned psbt - socket message duplication', async function () {
     const msg = {
-      submitter: alith.address,
-      reqId,
-      psbt,
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE, VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
     };
 
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidSocketMessage');
+  });
+
+  it('should fail to submit unsigned psbt - missing refund tx output', async function () {
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: INVALID_UNSIGNED_PSBT_WITHOUT_REFUND
+    };
+
+    const signature = '0x957ca7141ee7dd273ef3726048da2bd08291e02038e426fedeba652e6ec200ba2320f230df12abd8f32649a4f4651904a754d968960c760fc19ccd9304d980e81c';
     await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
     await context.createBlock();
 
-    const rawPendingRequest: any = await context.polkadotApi.query.btcSocketQueue.pendingRequests(reqId);
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidPsbt');
+  });
+
+  it('should fail to submit unsigned psbt - first tx output is not refund', async function () {
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: INVALID_UNSIGNED_PSBT_WITH_OUTPUT_WRONG_ORDER
+    };
+
+    const signature = '0x4cb32a71f925dfa14e18fce9b789f8e3fc2e71be231fc6062f2d53ad49e1abc56fa127f0e82179829e0b4fb6bea592a1f7c81312bc8e0c468b7ee9ea8c0fcd841c';
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidPsbt');
+  });
+
+  it('should fail to submit unsigned psbt - tx output with wrong amount', async function () {
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: INVALID_UNSIGNED_PSBT_WITH_WRONG_AMOUNT
+    };
+
+    const signature = '0x2941ca5cc2e72c07996f1c9da60d1c598c9a5efff013ffd926dfce1adc68d2a76e78e2b5f15a0f89c84786fb0a3bb99d9732263caa9cebd9d78721f59c0b135b1c';
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
+    expect(extrinsicResult).eq('InvalidPsbt');
+  });
+
+  it('should successfully submit an unsigned psbt', async function () {
+    const msg = {
+      authorityId: alith.address,
+      socketMessages: [VALID_SOCKET_MESSAGE],
+      psbt: VALID_UNSIGNED_PSBT
+    };
+
+    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send();
+    await context.createBlock();
+
+    const rawPendingRequest: any = await context.polkadotApi.query.btcSocketQueue.pendingRequests(VALID_UNSIGNED_PSBT_HASH);
     const pendingRequest = rawPendingRequest.toHuman();
-    expect(pendingRequest.unsignedPsbt).eq(psbt);
+
+    expect(pendingRequest).is.ok;
+    expect(pendingRequest.unsignedPsbt).is.eq(VALID_UNSIGNED_PSBT);
     expect(pendingRequest.signedPsbts).is.empty;
-  });
+    expect(pendingRequest.socketMessages).contains(VALID_SOCKET_MESSAGE);
 
-  it('should fail to submit unsigned psbt - request already exists', async function () {
-    const reqId = 1;
-    const psbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x77dd1160dbc69633905186fe59847c2eeda41e81a0772d04ee6802ed45a1c69e60ed42bce52f11c50a70a8807056cb4e57b69c7ad45da4bb47ba79cb8261e1c51b';
-    const msg = {
-      submitter: alith.address,
-      reqId,
-      psbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
-    expect(extrinsicResult).eq('RequestAlreadyExists');
-  });
-});
-
-describeDevNode('pallet_btc_socket_queue - submit signed psbt (1-of-1)', (context) => {
-  const keyring = new Keyring({ type: 'ethereum' });
-  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
-  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
-  const baltatharRelayer = keyring.addFromUri(TEST_RELAYERS[1].private);
-
-  before('should successfully set submitter', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcSocketQueue.setSubmitter(alith.address)
-    ).signAndSend(alith);
-    await context.createBlock();
-  });
-
-  before('should successfully submit unsigned psbt', async function () {
-    const reqId = 1;
-    const psbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x77dd1160dbc69633905186fe59847c2eeda41e81a0772d04ee6802ed45a1c69e60ed42bce52f11c50a70a8807056cb4e57b69c7ad45da4bb47ba79cb8261e1c51b';
-    const msg = {
-      submitter: alith.address,
-      reqId,
-      psbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
-    await context.createBlock();
-  });
-
-  it('should fail to submit signed psbt - invalid relayer', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x082f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: baltatharRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    let errorMsg = '';
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send().catch(err => {
-      if (err instanceof Error) {
-        errorMsg = err.message;
-      }
-    });
-    await context.createBlock();
-
-    expect(errorMsg).eq('1010: Invalid Transaction: Invalid signing address');
-  });
-
-  it('should fail to submit signed psbt - invalid signature', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x182f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    let errorMsg = '';
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send().catch(err => {
-      if (err instanceof Error) {
-        errorMsg = err.message;
-      }
-    });
-    await context.createBlock();
-
-    expect(errorMsg).eq('1010: Invalid Transaction: Transaction has a bad signature');
-  });
-
-  it('should fail to submit signed psbt - unknown request index', async function () {
-    const reqId = 2;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x3bd01e505fa667f5e8fac92df8cf2dceb068f485ec2022cd150ceacf477e94917f57312067437008f07214b17ca41454baa3af6a445aed07233dbd1af2f49c681c';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('RequestDNE');
-  });
-
-  it('should fail to submit signed psbt - unsigned psbt does not match', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x082f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('InvalidPsbt');
-  });
-
-  it('should fail to submit signed psbt - signed psbt matches with submitted unsigned psbt', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0xb380acb52257db0477d5389059a295f4d30048837f037200245fcf3318e71fee21112c74db06f8dc76988523df3b9551e4e98e8cb8b076937f037e0417edfd371c';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('InvalidPsbt');
-  });
-
-  it('should fail to submit signed psbt - invalid signed psbt', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x80736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x83e3e457fbc7ace1117551201d2a7fdbc19c679bc42d03823c9555829cf6b3a47adbc35bc67eda2b35e3e7c7f42729c40f698e594545b3084eb59e14b900d23b1c';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('InvalidPsbt');
-  });
-
-  it('should successfully submit signed psbt', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x082f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const rawFinalizedRequest: any = await context.polkadotApi.query.btcSocketQueue.finalizedRequests(reqId);
-    const finalizedRequest = rawFinalizedRequest.toHuman();
-    expect(finalizedRequest.unsignedPsbt).eq(unsignedPsbt);
-    expect(finalizedRequest.signedPsbts[alithRelayer.address]).eq(signedPsbt);
-
-    const rawPendingRequest: any = await context.polkadotApi.query.btcSocketQueue.pendingRequests(reqId);
-    const pendingRequest = rawPendingRequest.toHuman();
-    expect(pendingRequest).is.null;
-  });
-
-  it('should fail to submit signed psbt - request already finalized', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x082f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('RequestDNE');
-  });
-});
-
-describeDevNode('pallet_btc_socket_queue - submit signed psbt (1-of-3)', (context) => {
-  const keyring = new Keyring({ type: 'ethereum' });
-  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
-  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
-  const baltatharRelayer = keyring.addFromUri(TEST_RELAYERS[1].private);
-  const charlethRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
-
-  before('should successfully set vault config', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcRegistrationPool.setVaultConfig(2, 3)
-    ).signAndSend(alith);
-    await context.createBlock();
-  });
-
-  before('should successfully add relay executive member', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.relayExecutiveMembership.addMember(baltatharRelayer.address)
-    ).signAndSend(alith);
-    await context.createBlock();
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.relayExecutiveMembership.addMember(charlethRelayer.address)
-    ).signAndSend(alith);
-    await context.createBlock();
-  });
-
-  before('should successfully set submitter', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcSocketQueue.setSubmitter(alith.address)
-    ).signAndSend(alith);
-    await context.createBlock();
-  });
-
-  before('should successfully submit unsigned psbt', async function () {
-    const reqId = 1;
-    const psbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x77dd1160dbc69633905186fe59847c2eeda41e81a0772d04ee6802ed45a1c69e60ed42bce52f11c50a70a8807056cb4e57b69c7ad45da4bb47ba79cb8261e1c51b';
-    const msg = {
-      submitter: alith.address,
-      reqId,
-      psbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, signature).send();
-    await context.createBlock();
-  });
-
-  it('should successfully submit signed psbt - alith', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x082f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const rawPendingRequest: any = await context.polkadotApi.query.btcSocketQueue.pendingRequests(reqId);
-    const pendingRequest = rawPendingRequest.toHuman();
-    expect(pendingRequest.unsignedPsbt).eq(unsignedPsbt);
-    expect(pendingRequest.signedPsbts[alithRelayer.address]).eq(signedPsbt);
-  });
-
-  it('should fail to submit signed psbt - authority already submitted', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x082f08668dcbd915580d0e9714b5fd4107d35a8167b1897369617df981c2fa5279d64e9ac8149e18c980961138bc401c9a297ceac85fa89eead967962ae6165a1b';
-    const msg = {
-      authorityId: alithRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('AuthorityAlreadySubmitted');
-  });
-
-  it('should fail to submit signed psbt - signed psbt already submitted', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076647304402204298a884e4c8e8a4763fd6c19f623f844c59df23ccbfec8a2fe93cd3cc5801fc0220551d913958519ffcf2ff0363ba79871718528f365c08e47751859055d1c36aaa010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0xe3a2727310808a1cf71234763919085d691959e28142a107a58b7c7f118095db160cf12bacfe1b2255edcfeb9016886e43f72b44e2d1261ee58e864b3ce175371b';
-    const msg = {
-      authorityId: baltatharRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitSignedPsbt');
-    expect(extrinsicResult).eq('SignedPsbtAlreadySubmitted');
-  });
-
-  it('should successfully submit signed psbt - baltathar', async function () {
-    const reqId = 1;
-    const unsignedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signedPsbt = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01008d380c01000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be220202531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33747304402204654597ef4b780c8dc1dcf3509b9a17dc2c072da622032eb818d08a8b6bd3b710220123631c6bf73d42342f9c6d93aab182bed89d69354b553c1e6590d29772748b9010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-    const signature = '0x025f90b774db56ce484f7b3742a218cf33a8d682d44c78f0b97978fa5d46c4fc7afd41823c6d3b09777c7e1faeee0e4855167ade199fb1056e56abc12f3431821c';
-    const msg = {
-      authorityId: baltatharRelayer.address,
-      reqId,
-      unsignedPsbt,
-      signedPsbt,
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitSignedPsbt(msg, signature).send();
-    await context.createBlock();
-
-    const rawFinalizedRequest: any = await context.polkadotApi.query.btcSocketQueue.finalizedRequests(reqId);
-    const finalizedRequest = rawFinalizedRequest.toHuman();
-    expect(finalizedRequest.unsignedPsbt).eq(unsignedPsbt);
-    expect(Object.keys(finalizedRequest.signedPsbts).length).eq(2);
-    expect(finalizedRequest.signedPsbts[baltatharRelayer.address]).eq(signedPsbt);
-
-    const rawPendingRequest: any = await context.polkadotApi.query.btcSocketQueue.pendingRequests(reqId);
-    const pendingRequest = rawPendingRequest.toHuman();
-    expect(pendingRequest).is.null;
+    const rawSocketMessage: any = await context.polkadotApi.query.btcSocketQueue.socketMessages(SOCKET_MESSAGE_SEQ_ID);
+    const socketMessage = rawSocketMessage.toHuman();
+    expect(socketMessage).is.ok;
   });
 });
