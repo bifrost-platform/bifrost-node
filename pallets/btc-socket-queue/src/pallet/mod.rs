@@ -57,17 +57,25 @@ pub mod pallet {
 		SignedPsbtAlreadySubmitted,
 		/// The request has already been finalized or exists.
 		RequestAlreadyExists,
+		/// The authority account does not exist.
 		AuthorityDNE,
+		/// The socket contract does not exist.
 		SocketDNE,
+		/// The socket message does not exist.
 		SocketMessageDNE,
+		/// The user does not exist.
 		UserDNE,
+		/// The system vault does not exist.
 		SystemVaultDNE,
 		/// The request hasn't been submitted yet.
 		RequestDNE,
 		/// The submitted PSBT is invalid.
 		InvalidPsbt,
+		/// The contract calldata is invalid.
 		InvalidCalldata,
+		/// The socket message is invalid.
 		InvalidSocketMessage,
+		/// The request information is invalid.
 		InvalidRequestInfo,
 		/// The value is out of range.
 		OutOfRange,
@@ -79,9 +87,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// An unsigned PSBT for an outbound request has been submitted.
-		UnsignedPsbtSubmitted {
-			psbt: UnboundedBytes,
-		},
+		UnsignedPsbtSubmitted { psbt: UnboundedBytes },
 		/// A signed PSBT for an outbound request has been submitted.
 		SignedPsbtSubmitted {
 			psbt_hash: H256,
@@ -89,20 +95,13 @@ pub mod pallet {
 			signed_psbt: UnboundedBytes,
 		},
 		/// An outbound request has been accepted.
-		RequestAccepted {
-			psbt_hash: H256,
-		},
+		RequestAccepted { psbt_hash: H256 },
 		/// An outbound request has been finalized.
-		RequestFinalized {
-			psbt_hash: H256,
-		},
+		RequestFinalized { psbt_hash: H256 },
 		/// An authority has been set.
-		AuthoritySet {
-			new: T::Signer,
-		},
-		SocketSet {
-			new: T::AccountId,
-		},
+		AuthoritySet { new: T::Signer },
+		/// A socket contract has been set.
+		SocketSet { new: T::AccountId },
 	}
 
 	#[pallet::storage]
@@ -290,6 +289,7 @@ pub mod pallet {
 
 		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::finalize_request())]
+		/// Finalize an accepted PSBT.
 		pub fn finalize_request(
 			origin: OriginFor<T>,
 			msg: FinalizePsbtMessage<T::AccountId>,
