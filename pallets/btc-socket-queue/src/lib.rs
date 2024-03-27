@@ -106,6 +106,9 @@ impl TryFrom<Vec<Token>> for RequestID {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
+		if token.len() < 2 {
+			return Err(());
+		}
 		Ok(Self {
 			chain: token[0].clone().to_fixed_bytes().ok_or(())?,
 			round_id: token[1].clone().to_uint().ok_or(())?,
@@ -126,6 +129,9 @@ impl TryFrom<Vec<Token>> for Instruction {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
+		if token.len() < 1 {
+			return Err(());
+		}
 		Ok(Self {
 			chain: token[0].clone().to_fixed_bytes().ok_or(())?,
 			method: token[1].clone().to_fixed_bytes().ok_or(())?,
@@ -153,6 +159,9 @@ impl TryFrom<Vec<Token>> for TaskParams {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
+		if token.len() < 5 {
+			return Err(());
+		}
 		Ok(TaskParams {
 			token_idx0: token[0].clone().to_fixed_bytes().ok_or(())?,
 			token_idx1: token[1].clone().to_fixed_bytes().ok_or(())?,
@@ -215,6 +224,9 @@ impl TryFrom<Vec<Token>> for RequestInfo {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
+		if token.len() < 2 {
+			return Err(());
+		}
 		let tokenized_field = token[0].clone().to_fixed_array().ok_or(())?;
 		let mut field = vec![];
 		for token in tokenized_field {
