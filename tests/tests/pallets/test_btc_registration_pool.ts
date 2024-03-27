@@ -6,6 +6,49 @@ import { TEST_CONTROLLERS, TEST_RELAYERS } from '../../constants/keys';
 import { getExtrinsicResult } from '../extrinsics';
 import { describeDevNode } from '../set_dev_node';
 
+describeDevNode('pallet_btc_registration_pool - request_system_vault', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+
+  it('should successfully request system vault', async function () {
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcRegistrationPool.requestSystemVault()
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
+    const systemVault = rawSystemVault.toHuman();
+
+    expect(systemVault.address).is.eq('Pending');
+    expect(systemVault.pubKeys).is.empty;
+    expect(systemVault.m).is.eq('1');
+    expect(systemVault.n).is.eq('1');
+  });
+
+  it('should successfully submit pub key', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const submit = {
+      authorityId: alithRelayer.address,
+      pubKey
+    };
+
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
+    await context.polkadotApi.tx.btcRegistrationPool.submitSystemVaultKey(submit, signature).send();
+    await context.createBlock();
+
+    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
+    const systemVault = rawSystemVault.toHuman();
+
+    expect(systemVault.address['Generated']).is.ok;
+    expect(systemVault.pubKeys[alithRelayer.address]).is.eq(pubKey);
+
+    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
+    const bondedPubKey = rawBondedPubKey.toHuman();
+    expect(bondedPubKey).is.eq('0x0000000000000000000000000000000000000000');
+  });
+});
+
 describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
   const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
