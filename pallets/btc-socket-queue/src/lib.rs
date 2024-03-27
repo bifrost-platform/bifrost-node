@@ -84,6 +84,7 @@ pub struct FinalizePsbtMessage<AccountId> {
 }
 
 /// The `SocketMessage`'s request ID.
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct RequestID {
 	/// The source chain.
 	pub chain: UnboundedBytes,
@@ -109,6 +110,7 @@ impl TryFrom<Vec<Token>> for RequestID {
 }
 
 /// The `SocketMessage`'s instruction.
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct Instruction {
 	/// The destination chain.
 	pub chain: UnboundedBytes,
@@ -131,6 +133,7 @@ impl TryFrom<Vec<Token>> for Instruction {
 }
 
 /// The `SocketMessage`'s params.
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct TaskParams {
 	/// The source chain token index.
 	pub token_idx0: UnboundedBytes,
@@ -165,6 +168,7 @@ impl TryFrom<Vec<Token>> for TaskParams {
 }
 
 /// The `SocketMessage`.
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct SocketMessage {
 	pub req_id: RequestID,
 	pub status: U256,

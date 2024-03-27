@@ -1,6 +1,9 @@
 mod impls;
 
-use crate::{FinalizePsbtMessage, PsbtRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo};
+use crate::{
+	FinalizePsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
+	WeightInfo,
+};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -13,7 +16,7 @@ use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
 	UnboundedBytes,
 };
-use sp_core::{H160, H256};
+use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec};
 
@@ -55,6 +58,8 @@ pub mod pallet {
 		AuthorityAlreadySubmitted,
 		/// The signed PSBT is already submitted by an authority.
 		SignedPsbtAlreadySubmitted,
+		/// The socket message is already submitted.
+		SocketMessageAlreadySubmitted,
 		/// The request has already been finalized or exists.
 		RequestAlreadyExists,
 		/// The authority account does not exist.
@@ -113,6 +118,12 @@ pub mod pallet {
 	#[pallet::getter(fn authority)]
 	/// The core authority address.
 	pub type Authority<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn socket_messages)]
+	/// The submitted `SocketMessage` instances.
+	pub type SocketMessages<T: Config> = StorageMap<_, Twox64Concat, U256, SocketMessage>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -222,9 +233,12 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 
-			let unchecked = Self::try_build_unchecked_outputs(&socket_messages)?;
+			let (unchecked, msgs) = Self::try_build_unchecked_outputs(&socket_messages)?;
 			Self::try_psbt_output_verification(&psbt, unchecked)?;
 
+			for msg in msgs {
+				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
+			}
 			<PendingRequests<T>>::insert(
 				&psbt_hash,
 				PsbtRequest::new(psbt.clone(), socket_messages),

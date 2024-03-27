@@ -77,7 +77,7 @@ where
 	/// Try to verify the submitted socket messages and build unchecked outputs.
 	pub fn try_build_unchecked_outputs(
 		socket_messages: &Vec<UnboundedBytes>,
-	) -> Result<Vec<UncheckedOutput>, DispatchError> {
+	) -> Result<(Vec<UncheckedOutput>, Vec<SocketMessage>), DispatchError> {
 		let system_vault =
 			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDNE)?;
 
@@ -98,6 +98,8 @@ where
 			to: convert_to_address(system_vault),
 			amount: Default::default(),
 		});
+
+		let mut msgs = vec![];
 		for msg in socket_messages {
 			let msg_hash = Self::hash_bytes(msg);
 			let msg = Self::try_decode_socket_message(msg)
@@ -111,16 +113,19 @@ where
 			if !request_info.is_accepted() || !msg.is_accepted() {
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
+			if Self::socket_messages(&msg.req_id.sequence).is_some() {
+				return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
+			}
 			// TODO: check if request is outbound sequence
 			// TODO: check if asset is unified btc
-			// TODO: check if duplicate request id
 
 			// the user must exist in the pool
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
 				.ok_or(Error::<T>::UserDNE)?;
 			outputs.push(UncheckedOutput { to: convert_to_address(to), amount: msg.params.amount });
+			msgs.push(msg);
 		}
-		Ok(outputs)
+		Ok((outputs, msgs))
 	}
 
 	/// Hash the given bytes.
