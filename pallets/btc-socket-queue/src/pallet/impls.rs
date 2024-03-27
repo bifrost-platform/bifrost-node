@@ -5,7 +5,7 @@ use bp_multi_sig::{
 };
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::{traits::IdentifyAccount, DispatchError};
+use sp_runtime::DispatchError;
 use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
 
 use pallet_evm::Runner;
@@ -137,7 +137,7 @@ where
 		calldata.push_str(&array_bytes::bytes2hex("", req_id));
 
 		let info = <T as pallet_evm::Config>::Runner::call(
-			caller.into_account().into(),
+			caller.into(),
 			socket.into(),
 			hex::decode(&calldata).map_err(|_| Error::<T>::InvalidCalldata)?,
 			U256::zero(),

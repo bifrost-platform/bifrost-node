@@ -99,7 +99,7 @@ pub mod pallet {
 		/// An outbound request has been finalized.
 		RequestFinalized { psbt_hash: H256 },
 		/// An authority has been set.
-		AuthoritySet { new: T::Signer },
+		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
 		SocketSet { new: T::AccountId },
 	}
@@ -112,7 +112,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn authority)]
 	/// The core authority address.
-	pub type Authority<T: Config> = StorageValue<_, T::Signer, OptionQuery>;
+	pub type Authority<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -144,14 +144,10 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> BuildGenesisConfig for GenesisConfig<T>
-	where
-		T::Signer: From<[u8; 20]>,
-		T::AccountId: AsRef<[u8; 20]>,
-	{
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			if let Some(a) = &self.authority {
-				Authority::<T>::put(T::Signer::from(*a.as_ref()));
+				Authority::<T>::put(a);
 			}
 		}
 	}
@@ -165,7 +161,10 @@ pub mod pallet {
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_authority())]
 		/// Set the authority address.
-		pub fn set_authority(origin: OriginFor<T>, new: T::Signer) -> DispatchResultWithPostInfo {
+		pub fn set_authority(
+			origin: OriginFor<T>,
+			new: T::AccountId,
+		) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
 			if let Some(old) = <Authority<T>>::get() {
@@ -323,7 +322,7 @@ pub mod pallet {
 
 					// verify if the authority_id is valid
 					if let Some(a) = <Authority<T>>::get() {
-						if a.into_account() != *authority_id {
+						if a != *authority_id {
 							return InvalidTransaction::BadSigner.into();
 						}
 					} else {
@@ -367,7 +366,7 @@ pub mod pallet {
 
 					// verify if the authority_id is valid
 					if let Some(a) = <Authority<T>>::get() {
-						if a.into_account() != *authority_id {
+						if a != *authority_id {
 							return InvalidTransaction::BadSigner.into();
 						}
 					} else {
