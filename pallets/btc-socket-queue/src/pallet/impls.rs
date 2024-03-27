@@ -100,8 +100,13 @@ where
 		});
 
 		let mut msgs = vec![];
+		let mut msg_hashes = vec![];
 		for msg in socket_messages {
 			let msg_hash = Self::hash_bytes(msg);
+			if msg_hashes.contains(&msg_hash) {
+				return Err(Error::<T>::InvalidSocketMessage.into());
+			}
+
 			let msg = Self::try_decode_socket_message(msg)
 				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 			let request_info = Self::try_get_request(&msg.encode_req_id())?;
@@ -123,7 +128,9 @@ where
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
 				.ok_or(Error::<T>::UserDNE)?;
 			outputs.push(UncheckedOutput { to: convert_to_address(to), amount: msg.params.amount });
+
 			msgs.push(msg);
+			msg_hashes.push(msg_hash);
 		}
 		Ok((outputs, msgs))
 	}
