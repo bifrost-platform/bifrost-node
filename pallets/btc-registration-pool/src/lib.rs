@@ -32,6 +32,10 @@ impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
 	pub fn set_vault_address(&mut self, address: BoundedBitcoinAddress) {
 		self.vault.set_address(address)
 	}
+
+	pub fn set_refund_address(&mut self, address: BoundedBitcoinAddress) {
+		self.refund_address = address;
+	}
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]

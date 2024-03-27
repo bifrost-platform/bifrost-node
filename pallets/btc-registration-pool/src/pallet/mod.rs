@@ -97,6 +97,8 @@ pub mod pallet {
 		},
 		/// A new vault configuration has been set.
 		VaultConfigSet { m: u8, n: u8 },
+		/// A user's refund address has been (re-)set.
+		RefundSet { who: T::AccountId, old: BoundedBitcoinAddress, new: BoundedBitcoinAddress },
 	}
 
 	#[pallet::storage]
@@ -114,6 +116,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
 	/// Mapped Bitcoin vault addresses. The key is the vault address and the value is the user's Bifrost address.
+	/// For system vault, the value will be set to the zero address.
 	pub type BondedVault<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
@@ -188,6 +191,31 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_refund())]
+		/// (Re-)set the user's refund address.
+		pub fn set_refund(origin: OriginFor<T>, new: UnboundedBytes) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			let new: BoundedBitcoinAddress = Self::get_checked_bitcoin_address(&new)?;
+
+			let mut relay_target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+			let old = relay_target.refund_address.clone();
+			ensure!(old != new, Error::<T>::NoWritingSameValue);
+
+			ensure!(!<BondedRefund<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
+			ensure!(!<BondedVault<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
+
+			<BondedRefund<T>>::remove(&old);
+			<BondedRefund<T>>::insert(&new, who.clone());
+
+			relay_target.set_refund_address(new.clone());
+			<RegistrationPool<T>>::insert(&who, relay_target);
+
+			Self::deposit_event(Event::RefundSet { who, old, new });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
@@ -198,12 +226,6 @@ pub mod pallet {
 			let refund_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&refund_address)?;
 
-			if let Some(system_vault) = <SystemVault<T>>::get() {
-				ensure!(
-					!system_vault.is_address(&refund_address),
-					Error::<T>::AddressAlreadyRegistered
-				);
-			}
 			ensure!(
 				!<BondedRefund<T>>::contains_key(&refund_address),
 				Error::<T>::AddressAlreadyRegistered
@@ -228,7 +250,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
 		/// Request a system vault address. Initially, the vault address will be in pending state.
 		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -245,7 +267,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_vault_key(
@@ -299,7 +321,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
@@ -340,6 +362,7 @@ pub mod pallet {
 					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());
 
+					<BondedVault<T>>::insert(&vault_address, H160::default().into());
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
 				<BondedPubKey<T>>::insert(&pub_key, H160::default().into());

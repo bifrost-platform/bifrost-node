@@ -10,6 +10,7 @@ use sp_std::marker::PhantomData;
 /// Weight functions needed for `pallet_btc_registration_pool`.
 pub trait WeightInfo {
 	fn set_vault_config() -> Weight;
+	fn set_refund() -> Weight;
 	fn submit_vault_key() -> Weight;
 	fn submit_system_vault_key() -> Weight;
 	fn request_vault() -> Weight;
@@ -20,6 +21,11 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn set_vault_config() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(T::DbWeight::get().reads(6 as u64))
+			.saturating_add(T::DbWeight::get().writes(4 as u64))
+	}
+	fn set_refund() -> Weight {
 		Weight::from_parts(18_178_000, 0)
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
@@ -49,6 +55,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 // For backwards compatibility and tests
 impl WeightInfo for () {
 	fn set_vault_config() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(6 as u64))
+			.saturating_add(RocksDbWeight::get().writes(4 as u64))
+	}
+	fn set_refund() -> Weight {
 		Weight::from_parts(18_178_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
