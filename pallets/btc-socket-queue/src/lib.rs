@@ -188,6 +188,31 @@ impl SocketMessage {
 	}
 }
 
+impl TryFrom<Vec<Token>> for SocketMessage {
+	type Error = ();
+
+	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
+		if token.len() < 3 {
+			return Err(());
+		}
+
+		let req_id = match &token[0] {
+			Token::Tuple(token) => token.clone().try_into()?,
+			_ => return Err(()),
+		};
+		let status = token[1].clone().to_uint().ok_or(())?;
+		let ins_code = match &token[2] {
+			Token::Tuple(token) => token.clone().try_into()?,
+			_ => return Err(()),
+		};
+		let params = match &token[3] {
+			Token::Tuple(token) => token.clone().try_into()?,
+			_ => return Err(()),
+		};
+		return Ok(SocketMessage { req_id, status, ins_code, params });
+	}
+}
+
 #[derive(Debug)]
 /// The request information. (Response for the `get_request()` function)
 pub struct RequestInfo {

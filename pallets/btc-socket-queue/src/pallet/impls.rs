@@ -199,25 +199,10 @@ where
 			msg,
 		) {
 			Ok(socket) => match &socket[0] {
-				Token::Tuple(msg) => {
-					let req_id = match &msg[0] {
-						Token::Tuple(token) => token.clone().try_into()?,
-						_ => return Err(()),
-					};
-					let status = msg[1].clone().to_uint().ok_or(())?;
-					let ins_code = match &msg[2] {
-						Token::Tuple(token) => token.clone().try_into()?,
-						_ => return Err(()),
-					};
-					let params = match &msg[3] {
-						Token::Tuple(token) => token.clone().try_into()?,
-						_ => return Err(()),
-					};
-					return Ok(SocketMessage { req_id, status, ins_code, params });
-				},
+				Token::Tuple(msg) => Ok(msg.clone().try_into()?),
 				_ => return Err(()),
 			},
 			Err(_) => return Err(()),
-		};
+		}
 	}
 }
