@@ -12,7 +12,6 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::{Public, PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
-use scale_info::prelude::format;
 use sp_core::H160;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec};
@@ -393,7 +392,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{}", array_bytes::bytes2hex("0x", pub_key));
+					let message = array_bytes::bytes2hex("0x", pub_key);
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
@@ -413,7 +412,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{}", array_bytes::bytes2hex("0x", pub_key));
+					let message = array_bytes::bytes2hex("0x", pub_key);
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
