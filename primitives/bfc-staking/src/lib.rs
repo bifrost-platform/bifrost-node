@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 pub mod traits;
 
 use parity_scale_codec::{Decode, Encode};

@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use crate::{Offence, RoundIndex, TierType, MAX_AUTHORITIES};
 use frame_support::{pallet_prelude::ConstU32, BoundedBTreeSet};
 
