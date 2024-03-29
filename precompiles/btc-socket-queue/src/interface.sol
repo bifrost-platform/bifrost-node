@@ -10,7 +10,7 @@ pragma solidity >=0.8.0;
 
 interface BtcSocketQueue {
     /// @dev Returns the current pending request's unsigned PSBT bytes
-    /// @custom:selector e9db6a30
+    /// @custom:selector 60b55f8f
     /// @return The list of the current pending request's unsigned PSBT bytes
-    function get_unsigned_psbts() external view returns (bytes[] memory);
+    function unsigned_psbts() external view returns (bytes[] memory);
 }

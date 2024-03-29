@@ -25,10 +25,10 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcSocketQueueCall<Runtime>>,
 {
-	#[precompile::public("getUnsignedPsbts()")]
-	#[precompile::public("get_unsigned_psbts()")]
+	#[precompile::public("unsignedPsbts()")]
+	#[precompile::public("unsigned_psbts()")]
 	#[precompile::view]
-	fn get_unsigned_psbts(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedBytes>> {
+	fn unsigned_psbts(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedBytes>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let mut psbts = vec![];
