@@ -10,21 +10,10 @@ pragma solidity >=0.8.0;
 
 interface BtcRegistrationPool {
     /// @dev A new user registered to the pool and requested a vault address.
-    /// @custom:selector
+    /// @custom:selector 74c27c8e12077f7a75a6835488f5eb938a8f9f8b66aaac0ebcf7dcbb6d1324f2
     /// @param user_bfc_address The registered Bifrost address.
     /// @param refund_address The registered refund address.
     event VaultPending(address user_bfc_address, string refund_address);
-
-    /// @dev A pending vault address has been generated.
-    /// @custom:selector
-    /// @param user_bfc_address The registered Bifrost address.
-    /// @param refund_address The registered refund address.
-    /// @param vault_address The generated vault address.
-    event VaultGenerated(
-        address user_bfc_address,
-        string refund_address,
-        string vault_address
-    );
 
     /// @dev Returns the current registration pool
     /// @custom:selector e9db6a30
@@ -33,6 +22,14 @@ interface BtcRegistrationPool {
         external
         view
         returns (address[] memory, string[] memory, string[] memory);
+
+    /// @dev Returns the current pending registrations
+    /// @custom:selector 867b8c31
+    /// @return The list of the current pending registrations (0: Bifrost addresses, 1: refund addresses)
+    function pending_registrations()
+        external
+        view
+        returns (address[] memory, string[] memory);
 
     /// @dev Returns the current bonded vault addresses
     /// @custom:selector 557bca49
@@ -61,7 +58,7 @@ interface BtcRegistrationPool {
     ) external view returns (string memory);
 
     /// @dev Join the registration pool and request a Bitcoin vault address.
-    /// @custom:selector
+    /// @custom:selector f65d6a74
     /// @param refund_address The Bitcoin refund address
     function request_vault(string memory refund_address) external;
 }

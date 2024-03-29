@@ -14,7 +14,7 @@ use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
 mod types;
-use types::{BitcoinAddressString, EvmRegistrationPoolOf};
+use types::{BitcoinAddressString, EvmPendingRegistrationsOf, EvmRegistrationPoolOf};
 
 type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
 
@@ -59,6 +59,28 @@ where
 			},
 		);
 		Ok((user_bfc_addresses, refund_addresses, vault_addresses))
+	}
+
+	#[precompile::public("pendingRegistrations()")]
+	#[precompile::public("pending_registrations()")]
+	fn pending_registrations(
+		handle: &mut impl PrecompileHandle,
+	) -> EvmResult<EvmPendingRegistrationsOf> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let mut user_bfc_addresses: Vec<Address> = vec![];
+		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
+
+		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
+			|(bfc_address, relay_target)| {
+				if matches!(relay_target.vault.address, AddressState::Pending) {
+					user_bfc_addresses.push(Address(bfc_address.into()));
+					refund_addresses
+						.push(BitcoinAddressString::from(relay_target.refund_address.into_inner()));
+				}
+			},
+		);
+		Ok((user_bfc_addresses, refund_addresses))
 	}
 
 	#[precompile::public("vaultAddresses()")]

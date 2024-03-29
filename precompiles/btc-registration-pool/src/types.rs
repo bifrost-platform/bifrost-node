@@ -10,3 +10,6 @@ pub type BitcoinAddressString = BoundedString<ConstU32<ADDRESS_MAX_LENGTH>>;
 /// The solidity type for `RegistrationPool`.
 pub type EvmRegistrationPoolOf =
 	(Vec<Address>, Vec<BitcoinAddressString>, Vec<BitcoinAddressString>);
+
+/// The solidity type for pending registrations.
+pub type EvmPendingRegistrationsOf = (Vec<Address>, Vec<BitcoinAddressString>);
