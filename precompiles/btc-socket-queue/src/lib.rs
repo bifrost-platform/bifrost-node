@@ -7,9 +7,11 @@ use pallet_btc_socket_queue::Call as BtcSocketQueueCall;
 use precompile_utils::prelude::*;
 
 use fp_account::EthereumSignature;
-use sp_core::H160;
+use sp_core::{H160, H256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::{marker::PhantomData, vec, vec::Vec};
+
+type BtcSocketQueueOf<Runtime> = pallet_btc_socket_queue::Pallet<Runtime>;
 
 /// A precompile to wrap the functionality from `pallet_btc_socket_queue`.
 pub struct BtcSocketQueuePrecompile<Runtime>(PhantomData<Runtime>);
@@ -37,5 +39,22 @@ where
 		});
 
 		Ok(psbts)
+	}
+
+	#[precompile::public("outboundTx(bytes32)")]
+	#[precompile::public("outbound_tx(bytes32)")]
+	#[precompile::view]
+	fn outbound_tx(
+		handle: &mut impl PrecompileHandle,
+		txid: H256,
+	) -> EvmResult<Vec<UnboundedBytes>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		Ok(match BtcSocketQueueOf::<Runtime>::bonded_outbound_tx(txid) {
+			Some(socket_messages) => {
+				socket_messages.into_iter().map(|m| UnboundedBytes::from(m)).collect()
+			},
+			None => vec![],
+		})
 	}
 }

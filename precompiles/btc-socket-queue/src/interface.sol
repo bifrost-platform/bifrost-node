@@ -13,4 +13,9 @@ interface BtcSocketQueue {
     /// @custom:selector 60b55f8f
     /// @return The list of the current pending request's unsigned PSBT bytes
     function unsigned_psbts() external view returns (bytes[] memory);
+
+    /// @dev Returns the socket messages used for the given transaction
+    /// @custom:selector
+    /// @return The list of the socket messages used for the given transaction
+    function outbound_tx(bytes32 txid) external view returns (bytes[] memory);
 }

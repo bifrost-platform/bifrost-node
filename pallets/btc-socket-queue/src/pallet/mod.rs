@@ -18,7 +18,7 @@ use bp_multi_sig::{
 };
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str, vec};
+use sp_std::{str, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -123,12 +123,16 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn socket_messages)]
 	/// The submitted `SocketMessage` instances.
+	/// key: Request sequence ID.
+	/// value: The socket message in bytes.
 	pub type SocketMessages<T: Config> = StorageMap<_, Twox64Concat, U256, SocketMessage>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn pending_requests)]
 	/// Pending outbound requests that are not ready to be finalized.
+	/// key: The unsigned PSBT hash.
+	/// value: The PSBT information.
 	pub type PendingRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
@@ -136,6 +140,8 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn accepted_requests)]
 	/// Accepted outbound requests that are ready to be combined and finalized.
+	/// key: The unsigned PSBT hash.
+	/// value: The PSBT information.
 	pub type AcceptedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
@@ -143,8 +149,15 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn finalized_requests)]
 	/// Finalized outbound requests that has been finalized and broadcasted to the Bitcoin network.
+	/// key: The unsigned PSBT hash.
+	/// value: The PSBT information.
 	pub type FinalizedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn bonded_outbound_tx)]
+	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
@@ -275,7 +288,7 @@ pub mod pallet {
 				Error::<T>::SignedPsbtAlreadySubmitted
 			);
 			ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
-			Self::try_signed_psbt_verification(&unsigned_psbt, &signed_psbt)?;
+			let txid = Self::try_signed_psbt_verification(&unsigned_psbt, &signed_psbt)?;
 
 			pending_request
 				.signed_psbts
@@ -284,6 +297,7 @@ pub mod pallet {
 
 			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
 				// if finalizable (quorum reached m), then accept the request
+				<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
 				<AcceptedRequests<T>>::insert(&psbt_hash, pending_request);
 				<PendingRequests<T>>::remove(&psbt_hash);
 				Self::deposit_event(Event::RequestAccepted { psbt_hash });

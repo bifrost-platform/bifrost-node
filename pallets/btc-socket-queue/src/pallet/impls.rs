@@ -27,13 +27,15 @@ where
 	}
 
 	/// Try to combine the signed PSBT with the origin. If fails, the given PSBT is considered as invalid.
+	/// On success, returns the transaction ID.
 	pub fn try_signed_psbt_verification(
 		origin: &UnboundedBytes,
 		signed: &UnboundedBytes,
-	) -> Result<(), DispatchError> {
+	) -> Result<H256, DispatchError> {
 		let mut origin = Self::try_get_checked_psbt(origin)?;
 		let s = Self::try_get_checked_psbt(signed)?;
-		Ok(origin.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?)
+		origin.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?;
+		Ok(H256::from(origin.unsigned_tx.txid().as_ref()))
 	}
 
 	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
