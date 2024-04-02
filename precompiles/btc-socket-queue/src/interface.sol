@@ -15,7 +15,7 @@ interface BtcSocketQueue {
     function unsigned_psbts() external view returns (bytes[] memory);
 
     /// @dev Returns the socket messages used for the given transaction
-    /// @custom:selector
+    /// @custom:selector d6da279c
     /// @return The list of the socket messages used for the given transaction
     function outbound_tx(bytes32 txid) external view returns (bytes[] memory);
 }

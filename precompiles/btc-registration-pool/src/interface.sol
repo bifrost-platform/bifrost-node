@@ -57,6 +57,16 @@ interface BtcRegistrationPool {
         address user_bfc_address
     ) external view returns (string memory);
 
+    /// @dev Returns the bonded user address mapped to the given bitcoin address
+    /// @custom:selector e26af161
+    /// @param vault_or_refund the vault or refund address
+    /// @param is_vault the flag that represents whether the given address is a vault or refund
+    /// @return The users Bifrost address
+    function user_address(
+        string memory vault_or_refund,
+        bool is_vault
+    ) external view returns (address);
+
     /// @dev Join the registration pool and request a Bitcoin vault address.
     /// @custom:selector f65d6a74
     /// @param refund_address The Bitcoin refund address

@@ -161,6 +161,30 @@ where
 		Ok(refund_address)
 	}
 
+	#[precompile::public("userAddress(string,bool)")]
+	#[precompile::public("user_address(string,bool)")]
+	#[precompile::view]
+	fn user_address(
+		handle: &mut impl PrecompileHandle,
+		vault_or_refund: BitcoinAddressString,
+		is_vault: bool,
+	) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let vault_or_refund =
+			Self::convert_string_to_bitcoin_address(vault_or_refund).in_field("vault_or_refund")?;
+		let user_address = if is_vault {
+			BtcRegistrationPoolOf::<Runtime>::bonded_vault(vault_or_refund)
+		} else {
+			BtcRegistrationPoolOf::<Runtime>::bonded_refund(vault_or_refund)
+		};
+
+		Ok(match user_address {
+			Some(address) => Address(address.into()),
+			None => Address::default(),
+		})
+	}
+
 	#[precompile::public("request_vault(string)")]
 	#[precompile::public("requestVault(string)")]
 	fn request_vault(
