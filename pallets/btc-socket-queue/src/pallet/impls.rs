@@ -11,7 +11,7 @@ use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
 use pallet_evm::Runner;
 use scale_info::prelude::string::String;
 
-use crate::{RequestInfo, SocketMessage, UncheckedOutput};
+use crate::{RequestInfo, SocketMessage, UncheckedOutput, CALL_FUNCTION_SELECTOR, CALL_GAS_LIMIT};
 
 use super::pallet::*;
 
@@ -137,7 +137,7 @@ where
 
 	/// Hash the given bytes.
 	pub fn hash_bytes(bytes: &UnboundedBytes) -> H256 {
-		H256(keccak_256(bytes))
+		H256::from(keccak_256(bytes))
 	}
 
 	/// Try to get the `RequestInfo` by the given `req_id`.
@@ -145,7 +145,7 @@ where
 		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
 		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
 
-		let mut calldata: String = "8dac2204".to_owned(); // get_request()
+		let mut calldata: String = CALL_FUNCTION_SELECTOR.to_owned(); // get_request()
 		calldata.push_str(&array_bytes::bytes2hex("", req_id));
 
 		let info = <T as pallet_evm::Config>::Runner::call(
@@ -153,7 +153,7 @@ where
 			socket.into(),
 			hex::decode(&calldata).map_err(|_| Error::<T>::InvalidCalldata)?,
 			U256::zero(),
-			1_000_000,
+			CALL_GAS_LIMIT,
 			None,
 			None,
 			None,

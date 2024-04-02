@@ -15,6 +15,12 @@ use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
 
+/// The gas limit used for `Socket::get_request()` function calls.
+const CALL_GAS_LIMIT: u64 = 1_000_000;
+
+/// The function selector of `Socket::get_request()`.
+const CALL_FUNCTION_SELECTOR: &str = "8dac2204";
+
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The submitted PSBT information for outbound request(s).
 pub struct PsbtRequest<AccountId> {
