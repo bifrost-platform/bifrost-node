@@ -11,7 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{Public, PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_multi_sig::{Network, Public, PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use sp_core::H160;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{str, vec};
@@ -49,8 +49,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type DefaultRequiredN: Get<u8>;
 		/// The flag that represents whether the target Bitcoin network is the mainnet.
-		#[pallet::constant]
-		type IsBitcoinMainnet: Get<bool>;
+		type BitcoinNetwork: Get<Network>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}

@@ -25,6 +25,7 @@ num_enum = { workspace = true }
 bifrost-common-runtime = { workspace = true }
 bifrost-dev-constants = { workspace = true }
 bp-core = { workspace = true }
+bp-multi-sig = { workspace = true }
 precompile-utils = { workspace = true }
 
 # FRAME dependencies

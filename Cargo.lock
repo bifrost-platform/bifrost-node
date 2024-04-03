@@ -799,6 +799,7 @@ dependencies = [
  "bifrost-common-runtime",
  "bifrost-dev-constants",
  "bp-core",
+ "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",

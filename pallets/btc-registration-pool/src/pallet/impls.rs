@@ -38,7 +38,7 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn get_bitcoin_network() -> Network {
-		Self::get_bitcoin_network()
+		T::BitcoinNetwork::get()
 	}
 }
 
@@ -57,7 +57,7 @@ impl<T: Config> Pallet<T> {
 
 		// generate vault address
 		Ok(BoundedVec::try_from(
-			Self::generate_address(redeem_script.as_script(), Self::get_bitcoin_network())
+			Self::generate_address(redeem_script.as_script(), T::BitcoinNetwork::get())
 				.to_string()
 				.as_bytes()
 				.to_vec(),
@@ -73,19 +73,11 @@ impl<T: Config> Pallet<T> {
 		let unchecked_address =
 			Address::from_str(raw_address).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 		let checked_address = unchecked_address
-			.require_network(Self::get_bitcoin_network())
+			.require_network(T::BitcoinNetwork::get())
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?
 			.to_string();
 
 		Ok(BoundedVec::try_from(checked_address.as_bytes().to_vec())
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
-	}
-
-	/// Get the Bitcoin network of the current runtime.
-	fn get_bitcoin_network() -> Network {
-		match T::IsBitcoinMainnet::get() {
-			true => Network::Bitcoin,
-			_ => Network::Testnet,
-		}
 	}
 }

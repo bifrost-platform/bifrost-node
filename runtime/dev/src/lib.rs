@@ -13,6 +13,7 @@ pub use bifrost_dev_constants::{
 };
 
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
+use bp_multi_sig::Network;
 use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
@@ -977,6 +978,10 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const BitcoinNetwork: Network = Network::Regtest;
+}
+
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
@@ -985,7 +990,7 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Executives = RelayExecutiveMembership;
 	type DefaultRequiredM = ConstU8<1>;
 	type DefaultRequiredN = ConstU8<1>;
-	type IsBitcoinMainnet = ConstBool<false>;
+	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }
 
