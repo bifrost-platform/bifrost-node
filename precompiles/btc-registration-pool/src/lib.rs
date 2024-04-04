@@ -14,7 +14,10 @@ use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
 mod types;
-use types::{BitcoinAddressString, EvmPendingRegistrationsOf, EvmRegistrationPoolOf};
+use types::{
+	BitcoinAddressString, EvmPendingRegistrationsOf, EvmRegistrationInfoOf, EvmRegistrationPoolOf,
+	PublicKeyString, RegistrationInfo,
+};
 
 type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
 
@@ -35,6 +38,40 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcRegistrationPoolCall<Runtime>>,
 {
+	#[precompile::public("registrationInfo(address)")]
+	#[precompile::public("registration_info(address)")]
+	#[precompile::view]
+	fn registration_info(
+		handle: &mut impl PrecompileHandle,
+		user_bfc_address: Address,
+	) -> EvmResult<EvmRegistrationInfoOf> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
+		let mut info = RegistrationInfo::default();
+
+		if let Some(relay_target) =
+			BtcRegistrationPoolOf::<Runtime>::registration_pool(&user_bfc_address)
+		{
+			info.user_bfc_address = Address(user_bfc_address.into());
+			info.refund_address =
+				BitcoinAddressString::from(relay_target.refund_address.into_inner());
+
+			for (authority_id, pub_key) in relay_target.vault.pub_keys.iter() {
+				info.authorities.push(Address(authority_id.clone().into()));
+				info.pub_keys.push(PublicKeyString::from(pub_key.as_ref()));
+			}
+
+			let vault_address = match relay_target.vault.address {
+				AddressState::Pending => BoundedVec::default(),
+				AddressState::Generated(address) => address,
+			};
+			info.vault_address = BitcoinAddressString::from(vault_address.into_inner());
+		}
+
+		Ok(info.into())
+	}
+
 	#[precompile::public("registrationPool()")]
 	#[precompile::public("registration_pool()")]
 	#[precompile::view]

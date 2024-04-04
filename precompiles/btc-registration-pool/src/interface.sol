@@ -15,6 +15,23 @@ interface BtcRegistrationPool {
     /// @param refund_address The registered refund address.
     event VaultPending(address user_bfc_address, string refund_address);
 
+    /// @dev Returns the registration information of the user.
+    /// @custom:selector e3fe1187
+    /// @param user_bfc_address the address that we want to check
+    /// @return The registration information
+    function registration_info(
+        address user_bfc_address
+    )
+        external
+        view
+        returns (
+            address,
+            string memory,
+            string memory,
+            address[] memory,
+            string[] memory
+        );
+
     /// @dev Returns the current registration pool
     /// @custom:selector e9db6a30
     /// @return The list of the current registration pool (0: Bifrost addresses, 1: refund addresses, 2: vault addresses)
