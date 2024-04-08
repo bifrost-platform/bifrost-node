@@ -29,7 +29,7 @@ interface BtcRegistrationPool {
             string memory,
             string memory,
             address[] memory,
-            string[] memory
+            bytes[] memory
         );
 
     /// @dev Returns the current registration pool

@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, SystemVaultKeySubmission,
-	VaultKeySubmission, WeightInfo,
+	VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -363,10 +363,13 @@ pub mod pallet {
 					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());
 
-					<BondedVault<T>>::insert(&vault_address, H160::default().into());
+					<BondedVault<T>>::insert(
+						&vault_address,
+						H160::from_low_u64_be(ADDRESS_U64).into(),
+					);
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
-				<BondedPubKey<T>>::insert(&pub_key, H160::default().into());
+				<BondedPubKey<T>>::insert(&pub_key, H160::from_low_u64_be(ADDRESS_U64).into());
 				<SystemVault<T>>::put(system_vault);
 			} else {
 				return Err(Error::<T>::SystemVaultDNE)?;
