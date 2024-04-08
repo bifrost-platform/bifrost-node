@@ -82,6 +82,8 @@ pub mod pallet {
 		InvalidSocketMessage,
 		/// The request information is invalid.
 		InvalidRequestInfo,
+		/// The submitted system vout is invalid.
+		InvalidSystemVout,
 		/// The value is out of range.
 		OutOfRange,
 		/// Cannot overwrite to the same value.
@@ -228,7 +230,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { socket_messages, psbt, .. } = msg;
+			let UnsignedPsbtMessage { system_vout, socket_messages, psbt, .. } = msg;
 
 			let psbt_hash = Self::hash_bytes(&psbt);
 
@@ -246,8 +248,11 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 
-			let (unchecked, msgs) = Self::try_build_unchecked_outputs(&socket_messages)?;
-			Self::try_psbt_output_verification(&psbt, unchecked)?;
+			let system_vout =
+				usize::try_from(system_vout).map_err(|_| Error::<T>::InvalidSystemVout)?;
+			let (unchecked, msgs) =
+				Self::try_build_unchecked_outputs(&socket_messages, system_vout)?;
+			Self::try_psbt_output_verification(&psbt, unchecked, system_vout)?;
 
 			for msg in msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);

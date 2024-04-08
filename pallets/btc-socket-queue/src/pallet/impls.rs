@@ -42,6 +42,7 @@ where
 	pub fn try_psbt_output_verification(
 		psbt: &UnboundedBytes,
 		unchecked: Vec<UncheckedOutput>,
+		system_vout: usize,
 	) -> Result<(), DispatchError> {
 		let origin = Self::try_get_checked_psbt(&psbt)?.unsigned_tx.output;
 		if origin.len() != unchecked.len() {
@@ -56,21 +57,20 @@ where
 			Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
 		};
 
-		let system_vault = convert_to_address(origin[0].script_pubkey.as_script())
-			.map_err(|_| Error::<T>::InvalidPsbt)?;
-		if system_vault != unchecked[0].to {
-			return Err(Error::<T>::InvalidPsbt.into());
-		}
-		for i in 1..origin.len() {
+		for i in 0..origin.len() {
 			let to = convert_to_address(origin[i].script_pubkey.as_script())
 				.map_err(|_| Error::<T>::InvalidPsbt)?;
-			let amount = U256::from(origin[i].value.to_sat());
-
 			if to != unchecked[i].to {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
-			if amount != unchecked[i].amount {
-				return Err(Error::<T>::InvalidPsbt.into());
+
+			if i == system_vout {
+				// TODO: check amount
+			} else {
+				let amount = U256::from(origin[i].value.to_sat());
+				if amount != unchecked[i].amount {
+					return Err(Error::<T>::InvalidPsbt.into());
+				}
 			}
 		}
 		Ok(())
@@ -79,6 +79,7 @@ where
 	/// Try to verify the submitted socket messages and build unchecked outputs.
 	pub fn try_build_unchecked_outputs(
 		socket_messages: &Vec<UnboundedBytes>,
+		system_vout: usize,
 	) -> Result<(Vec<UncheckedOutput>, Vec<SocketMessage>), DispatchError> {
 		let system_vault =
 			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDNE)?;
@@ -87,6 +88,9 @@ where
 		if socket_messages.is_empty() {
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
+		if socket_messages.len() < system_vout {
+			return Err(Error::<T>::InvalidSystemVout.into());
+		}
 		let mut outputs = vec![];
 
 		let convert_to_address = |addr: BoundedBitcoinAddress| {
@@ -94,12 +98,6 @@ where
 			let addr = str::from_utf8(&addr).expect("Must be valid");
 			Address::from_str(addr).expect("Must be valid").assume_checked()
 		};
-
-		// we assume the first output to be the utxo repayment
-		outputs.push(UncheckedOutput {
-			to: convert_to_address(system_vault),
-			amount: Default::default(),
-		});
 
 		let mut msgs = vec![];
 		let mut msg_hashes = vec![];
@@ -134,6 +132,11 @@ where
 			msgs.push(msg);
 			msg_hashes.push(msg_hash);
 		}
+		// we assume the utxo repayment output would be placed at `system_vout`
+		outputs.insert(
+			system_vout,
+			UncheckedOutput { to: convert_to_address(system_vault), amount: Default::default() },
+		);
 		Ok((outputs, msgs))
 	}
 

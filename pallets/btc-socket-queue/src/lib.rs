@@ -63,7 +63,10 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 pub struct UnsignedPsbtMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
+	/// The PSBT's system output index.
+	pub system_vout: u32,
 	/// The emitted `SocketMessage`'s (in bytes).
+	/// The order should match with the submitted PSBT's outputs order.
 	pub socket_messages: Vec<UnboundedBytes>,
 	/// The unsigned PSBT (in bytes).
 	pub psbt: UnboundedBytes,
