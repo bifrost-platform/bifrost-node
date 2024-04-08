@@ -219,6 +219,21 @@ impl SocketMessage {
 	pub fn is_accepted(&self) -> bool {
 		self.status == U256::from(5)
 	}
+
+	/// Check if the message is a Bifrost to Bitcoin outbound request.
+	pub fn is_outbound(&self, bifrost_chain_id: u64, bitcoin_chain_id: u64) -> bool {
+		if array_bytes::bytes2hex("", self.req_id.chain.clone())
+			!= array_bytes::bytes2hex("", bifrost_chain_id.to_be_bytes())
+		{
+			return false;
+		}
+		if array_bytes::bytes2hex("", self.ins_code.chain.clone())
+			!= array_bytes::bytes2hex("", bitcoin_chain_id.to_be_bytes())
+		{
+			return false;
+		}
+		true
+	}
 }
 
 impl TryFrom<Vec<Token>> for SocketMessage {

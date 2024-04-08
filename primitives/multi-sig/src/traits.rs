@@ -50,4 +50,7 @@ pub trait PoolManager<AccountId> {
 
 	/// Get the Bitcoin network of the current runtime.
 	fn get_bitcoin_network() -> Network;
+
+	/// Get the Bitcoin chain ID.
+	fn get_bitcoin_chain_id() -> u64;
 }

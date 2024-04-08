@@ -40,6 +40,10 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	fn get_bitcoin_network() -> Network {
 		T::BitcoinNetwork::get()
 	}
+
+	fn get_bitcoin_chain_id() -> u64 {
+		T::BitcoinChainId::get()
+	}
 }
 
 impl<T: Config> Pallet<T> {

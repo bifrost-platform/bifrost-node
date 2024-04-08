@@ -979,6 +979,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 }
 
 parameter_types! {
+	pub const BitcoinChainId: u64 = 10001;
 	pub const BitcoinNetwork: Network = Network::Regtest;
 }
 
@@ -990,6 +991,7 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Executives = RelayExecutiveMembership;
 	type DefaultRequiredM = ConstU8<1>;
 	type DefaultRequiredN = ConstU8<1>;
+	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }

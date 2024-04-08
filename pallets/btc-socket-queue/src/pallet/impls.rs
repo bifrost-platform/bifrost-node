@@ -4,7 +4,7 @@ use bp_multi_sig::{
 	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, PsbtExt, Script, Secp256k1,
 	UnboundedBytes,
 };
-use sp_core::{H160, H256, U256};
+use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::DispatchError;
 use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
@@ -120,11 +120,15 @@ where
 			if !request_info.is_accepted() || !msg.is_accepted() {
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
+			if !msg.is_outbound(
+				<T as pallet_evm::Config>::ChainId::get(),
+				T::RegistrationPool::get_bitcoin_chain_id(),
+			) {
+				return Err(Error::<T>::InvalidSocketMessage.into());
+			}
 			if Self::socket_messages(&msg.req_id.sequence).is_some() {
 				return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
 			}
-			// TODO: check if request is outbound sequence
-			// TODO: check if asset is unified btc
 
 			// the user must exist in the pool
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
