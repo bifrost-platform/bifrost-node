@@ -1,7 +1,8 @@
 use ethabi_decode::{ParamKind, Token};
 
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, Script, UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, PsbtExt, Script, Secp256k1,
+	UnboundedBytes,
 };
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
@@ -21,30 +22,31 @@ where
 	T::AccountId: Into<H160>,
 	H160: Into<T::AccountId>,
 {
+	/// Try to finalize the latest combined PSBT.
+	pub fn try_psbt_finalization(combined: Psbt) -> Result<Psbt, DispatchError> {
+		let secp = Secp256k1::new();
+		let finalized = combined.finalize(&secp).map_err(|_| Error::<T>::CannotFinalizePsbt)?;
+		Ok(finalized)
+	}
+
+	/// Try to combine the signed PSBT with the latest combined PSBT. If fails, the given PSBT is considered as invalid.
+	pub fn try_psbt_combination(combined: &mut Psbt, signed: &Psbt) -> Result<Psbt, DispatchError> {
+		combined.combine(signed.clone()).map_err(|_| Error::<T>::InvalidPsbt)?;
+		Ok(combined.clone())
+	}
+
 	/// Try to deserialize the given bytes to a `PSBT` instance.
 	pub fn try_get_checked_psbt(psbt: &UnboundedBytes) -> Result<Psbt, DispatchError> {
 		Ok(Psbt::deserialize(psbt).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
-	/// Try to combine the signed PSBT with the origin. If fails, the given PSBT is considered as invalid.
-	/// On success, returns the transaction ID.
-	pub fn try_signed_psbt_verification(
-		origin: &UnboundedBytes,
-		signed: &UnboundedBytes,
-	) -> Result<H256, DispatchError> {
-		let mut origin = Self::try_get_checked_psbt(origin)?;
-		let s = Self::try_get_checked_psbt(signed)?;
-		origin.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?;
-		Ok(H256::from(origin.unsigned_tx.txid().as_ref()))
-	}
-
 	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
 	pub fn try_psbt_output_verification(
-		psbt: &UnboundedBytes,
+		psbt: &Psbt,
 		unchecked: Vec<UncheckedOutput>,
 		system_vout: usize,
 	) -> Result<(), DispatchError> {
-		let origin = Self::try_get_checked_psbt(&psbt)?.unsigned_tx.output;
+		let origin = &psbt.unsigned_tx.output;
 		if origin.len() != unchecked.len() {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
