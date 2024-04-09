@@ -81,8 +81,14 @@ async function setNode() {
   console.log(`gran session_key: ${granSessionKey}`);
   console.log(`imonline session_key: ${imonSessionKey}`);
 
+  const payload: any = {
+    aura: auraSessionKey,
+    grandpa: granSessionKey,
+    imOnline: imonSessionKey
+  };
+
   // insert session key
-  const tx01 = await api.tx.session.setKeys(sessionKeys, '0x00').signAndSend(controller, { nonce: -1 });
+  const tx01 = await api.tx.session.setKeys(payload, '0x00').signAndSend(controller, { nonce: -1 });
 
   console.log(`[*] insert session key = ${tx01}`);
 
@@ -106,6 +112,8 @@ async function setNode() {
     ).signAndSend(stash, { nonce: -1 });
     console.log(`[*] join basic candidates = ${tx02}`);
   }
+
+  process.exit(1);
 }
 
 setNode().catch(error => {
