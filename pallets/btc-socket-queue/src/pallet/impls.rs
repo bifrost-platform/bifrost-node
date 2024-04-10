@@ -121,7 +121,7 @@ where
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
 			if !msg.is_outbound(
-				<T as pallet_evm::Config>::ChainId::get(),
+				<T as pallet_evm::Config>::ChainId::get() as u32,
 				T::RegistrationPool::get_bitcoin_chain_id(),
 			) {
 				return Err(Error::<T>::InvalidSocketMessage.into());

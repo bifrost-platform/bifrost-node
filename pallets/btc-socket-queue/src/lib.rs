@@ -40,8 +40,8 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	/// Instantiates a new `PsbtRequest` instance.
 	pub fn new(unsigned_psbt: UnboundedBytes, socket_messages: Vec<UnboundedBytes>) -> Self {
 		Self {
+			combined_psbt: unsigned_psbt.clone(),
 			unsigned_psbt,
-			combined_psbt: UnboundedBytes::default(),
 			finalized_psbt: UnboundedBytes::default(),
 			signed_psbts: BoundedBTreeMap::default(),
 			socket_messages,
@@ -221,15 +221,11 @@ impl SocketMessage {
 	}
 
 	/// Check if the message is a Bifrost to Bitcoin outbound request.
-	pub fn is_outbound(&self, bifrost_chain_id: u64, bitcoin_chain_id: u64) -> bool {
-		if array_bytes::bytes2hex("", self.req_id.chain.clone())
-			!= array_bytes::bytes2hex("", bifrost_chain_id.to_be_bytes())
-		{
+	pub fn is_outbound(&self, bifrost_chain_id: u32, bitcoin_chain_id: u32) -> bool {
+		if self.req_id.chain.clone().as_slice() != bifrost_chain_id.to_be_bytes() {
 			return false;
 		}
-		if array_bytes::bytes2hex("", self.ins_code.chain.clone())
-			!= array_bytes::bytes2hex("", bitcoin_chain_id.to_be_bytes())
-		{
+		if self.ins_code.chain.clone().as_slice() != bitcoin_chain_id.to_be_bytes() {
 			return false;
 		}
 		true

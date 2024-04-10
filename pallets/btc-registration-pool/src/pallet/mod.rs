@@ -50,7 +50,7 @@ pub mod pallet {
 		type DefaultRequiredN: Get<u8>;
 		/// The custom Bitcoin's chain ID for CCCP.
 		#[pallet::constant]
-		type BitcoinChainId: Get<u64>;
+		type BitcoinChainId: Get<u32>;
 		/// The flag that represents whether the target Bitcoin network is the mainnet.
 		type BitcoinNetwork: Get<Network>;
 		/// Weight information for extrinsics in this pallet.
