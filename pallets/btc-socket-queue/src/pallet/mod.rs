@@ -292,10 +292,6 @@ pub mod pallet {
 
 			// prevent storage duplications
 			ensure!(
-				!pending_request.is_authority_submitted(&authority_id),
-				Error::<T>::AuthorityAlreadySubmitted
-			);
-			ensure!(
 				!pending_request.is_signed_psbt_submitted(&signed_psbt),
 				Error::<T>::SignedPsbtAlreadySubmitted
 			);
