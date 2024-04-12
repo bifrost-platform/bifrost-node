@@ -171,6 +171,8 @@ pub mod pallet {
 		AlreadyPaired,
 		/// The given nominator is already leaving.
 		NominatorAlreadyLeaving,
+		/// The given nominator fo given candidate is already revoking.
+		NominatorAlreadyRevoking,
 		/// The given nominator is not leaving.
 		NominatorNotLeaving,
 		/// The given nominator cannot execute to leave yet.
@@ -321,6 +323,7 @@ pub mod pallet {
 			candidate: T::AccountId,
 			amount_to_decrease: BalanceOf<T>,
 			execute_round: RoundIndex,
+			in_top: bool,
 		},
 		/// Nomination increased.
 		NominationIncreased {
@@ -334,7 +337,6 @@ pub mod pallet {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
-			in_top: bool,
 		},
 		/// Nominator requested to leave the set of nominators.
 		NominatorExitScheduled {
@@ -1739,14 +1741,7 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
-			let (now, when) = state.schedule_revoke::<T>(validator.clone())?;
-			<NominatorState<T>>::insert(&nominator, state);
-			Self::deposit_event(Event::NominationRevocationScheduled {
-				round: now,
-				nominator,
-				candidate: validator,
-				scheduled_exit: when,
-			});
+			state.revoke_nomination::<T>(validator.clone())?;
 			Ok(().into())
 		}
 
@@ -1775,14 +1770,7 @@ pub mod pallet {
 			let caller = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&caller).ok_or(Error::<T>::NominatorDNE)?;
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
-			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
-			<NominatorState<T>>::insert(&caller, state);
-			Self::deposit_event(Event::NominationDecreaseScheduled {
-				nominator: caller,
-				candidate,
-				amount_to_decrease: less,
-				execute_round: when,
-			});
+			state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
 			Ok(().into())
 		}
 
@@ -1808,12 +1796,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			let request = state.cancel_pending_request::<T>(candidate)?;
-			<NominatorState<T>>::insert(&nominator, state);
-			Self::deposit_event(Event::CancelledNominationRequest {
-				nominator,
-				cancelled_request: request,
-			});
+			state.cancel_pending_request::<T>(candidate)?;
 			Ok(().into())
 		}
 	}

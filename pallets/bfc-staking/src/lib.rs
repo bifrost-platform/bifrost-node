@@ -433,11 +433,13 @@ pub struct Nominations<AccountId, Balance> {
 	pub nominations: Vec<Bond<AccountId, Balance>>,
 	/// The total nomination of top or bottom
 	pub total: Balance,
+	/// The total amounts of pending request
+	pub less_total: Balance,
 }
 
 impl<A, B: Default> Default for Nominations<A, B> {
 	fn default() -> Nominations<A, B> {
-		Nominations { nominations: Vec::new(), total: B::default() }
+		Nominations { nominations: Vec::new(), total: B::default(), less_total: B::default() }
 	}
 }
 
@@ -1288,6 +1290,10 @@ impl<
 					top_nominations.total.saturating_sub(new_bottom_nomination.amount);
 				bottom_nominations.insert_sorted_greatest_to_least(new_bottom_nomination);
 			}
+
+			// remove given nominator in bottom_nomination
+			bottom_nominations.nominations.retain(|x| x.owner == nominator);
+
 			// insert into top
 			top_nominations.insert_sorted_greatest_to_least(nomination);
 			self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
@@ -1316,6 +1322,149 @@ impl<
 		self.reset_bottom_data::<T>(&bottom_nominations);
 		<BottomNominations<T>>::insert(candidate, bottom_nominations);
 		Ok(in_top_after)
+	}
+
+	/// Increase nomination amount
+	pub fn schedule_decrease_nomination<T: Config>(
+		&mut self,
+		candidate: &T::AccountId,
+		nominator: T::AccountId,
+		bond: BalanceOf<T>,
+		amount: BalanceOf<T>,
+	) -> Result<bool, DispatchError>
+	where
+		BalanceOf<T>: Into<Balance> + From<Balance>,
+	{
+		let lowest_top_eq_highest_bottom =
+			self.lowest_top_nomination_amount == self.highest_bottom_nomination_amount;
+		let bond_geq_lowest_top = bond.into() >= self.lowest_top_nomination_amount;
+		let nomination_dne_err: DispatchError = Error::<T>::NominationDNE.into();
+		if bond_geq_lowest_top && !lowest_top_eq_highest_bottom {
+			// definitely in top
+			self.schedule_decrease_top_nomination::<T>(candidate, nominator.clone(), bond, amount)
+		} else if bond_geq_lowest_top && lowest_top_eq_highest_bottom {
+			// update top but if error then update bottom (because could be in bottom because
+			// lowest_top_eq_highest_bottom)
+			let result = self.schedule_decrease_top_nomination::<T>(
+				candidate,
+				nominator.clone(),
+				bond,
+				amount,
+			);
+			if result == Err(nomination_dne_err) {
+				self.schedule_decrease_bottom_nomination::<T>(candidate, nominator, amount)
+			} else {
+				result
+			}
+		} else {
+			self.schedule_decrease_bottom_nomination::<T>(candidate, nominator, amount)
+		}
+	}
+
+	/// Increase top nomination
+	pub fn schedule_decrease_bottom_nomination<T: Config>(
+		&mut self,
+		candidate: &T::AccountId,
+		nominator: T::AccountId,
+		less: BalanceOf<T>,
+	) -> Result<bool, DispatchError>
+	where
+		BalanceOf<T>: Into<Balance> + From<Balance>,
+	{
+		let mut bottom_nominations =
+			<BottomNominations<T>>::get(candidate).ok_or(Error::<T>::BottomNominationDNE)?;
+
+		let mut in_bottom = false;
+		bottom_nominations.nominations = bottom_nominations
+			.nominations
+			.into_iter()
+			.map(|d| {
+				if d.owner == nominator {
+					in_bottom = true;
+					Bond { owner: d.owner, amount: d.amount.saturating_sub(less) }
+				} else {
+					d
+				}
+			})
+			.collect();
+		ensure!(in_bottom, Error::<T>::NominationDNE);
+		bottom_nominations.total = bottom_nominations.total.saturating_sub(less);
+		bottom_nominations.sort_greatest_to_least();
+		self.reset_top_data::<T>(candidate.clone(), &bottom_nominations)?;
+		<BottomNominations<T>>::insert(candidate, bottom_nominations);
+		Ok(true)
+	}
+
+	/// Increase bottom nomination
+	pub fn schedule_decrease_top_nomination<T: Config>(
+		&mut self,
+		candidate: &T::AccountId,
+		nominator: T::AccountId,
+		bond: BalanceOf<T>,
+		less: BalanceOf<T>,
+	) -> Result<bool, DispatchError>
+	where
+		BalanceOf<T>: Into<Balance> + From<Balance>,
+	{
+		let mut top_nominations =
+			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
+
+		let mut nomination_option: Option<Bond<T::AccountId, BalanceOf<T>>> = None;
+		let in_bottom_after =
+			if self.highest_bottom_nomination_amount > bond.saturating_sub(less).into() {
+				// bump it from bottom
+				top_nominations.nominations = top_nominations
+					.nominations
+					.clone()
+					.into_iter()
+					.filter(|d| {
+						if d.owner != nominator {
+							true
+						} else {
+							nomination_option = Some(Bond {
+								owner: d.owner.clone(),
+								amount: d.amount.saturating_sub(less),
+							});
+							false
+						}
+					})
+					.collect();
+				let nomination = nomination_option.ok_or(Error::<T>::TopNominationDNE)?;
+				top_nominations.total = top_nominations.total.saturating_sub(bond);
+				// add it to top
+				let mut bottom_nominations = <BottomNominations<T>>::get(candidate)
+					.ok_or(Error::<T>::BottomNominationDNE)?;
+				bottom_nominations.insert_sorted_greatest_to_least(nomination);
+				// pop highest bottom nomination
+				let new_top_nomination = bottom_nominations.nominations.remove(0);
+				// insert into top
+				top_nominations.insert_sorted_greatest_to_least(new_top_nomination);
+				self.reset_top_data::<T>(candidate.clone(), &bottom_nominations)?;
+				<BottomNominations<T>>::insert(candidate, bottom_nominations);
+				true
+			} else {
+				let mut in_top = false;
+				// just increase the nomination
+				top_nominations.nominations = top_nominations
+					.nominations
+					.into_iter()
+					.map(|d| {
+						if d.owner == nominator {
+							in_top = true;
+							Bond { owner: d.owner, amount: d.amount.saturating_sub(less) }
+						} else {
+							d
+						}
+					})
+					.collect();
+				ensure!(in_top, Error::<T>::TopNominationDNE);
+				top_nominations.total = top_nominations.total.saturating_sub(less);
+				top_nominations.sort_greatest_to_least();
+				false
+			};
+		self.reset_bottom_data::<T>(&top_nominations);
+		<TopNominations<T>>::insert(candidate, top_nominations);
+		Ok(in_bottom_after)
 	}
 
 	/// Decrease nomination
@@ -1705,51 +1854,199 @@ impl<
 		Err(Error::<T>::NominationDNE.into())
 	}
 
+	pub fn increase_nomination_without_reserve<T: Config>(
+		&mut self,
+		candidate: AccountId,
+		amount: Balance,
+	) -> DispatchResult
+	where
+		BalanceOf<T>: From<Balance>,
+		T::AccountId: From<AccountId>,
+		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
+	{
+		let nominator_id: T::AccountId = self.id.clone().into();
+		let candidate_id: T::AccountId = candidate.clone().into();
+		let balance_amt: BalanceOf<T> = amount.into();
+		// increase nomination
+		if let Some(candidate_amount) = self.nominations.get_mut(&candidate) {
+			let before_amount = candidate_amount.clone();
+			*candidate_amount += amount;
+			self.total += amount;
+			// update validator state nomination
+			let mut validator_state =
+				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+			let in_top = validator_state.increase_nomination::<T>(
+				&candidate_id,
+				nominator_id.clone(),
+				before_amount.into(),
+				balance_amt,
+			)?;
+			let after = validator_state.voting_power;
+			Pallet::<T>::update_active(&candidate_id, after)?;
+			let new_total_staked = <Total<T>>::get().saturating_add(balance_amt);
+			let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+			<Total<T>>::put(new_total_staked);
+			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+			<NominatorState<T>>::insert(&nominator_id, nom_st);
+			Pallet::<T>::deposit_event(Event::NominationIncreased {
+				nominator: nominator_id,
+				candidate: candidate_id,
+				amount: balance_amt,
+				in_top,
+			});
+			return Ok(());
+		}
+		Err(Error::<T>::NominationDNE.into())
+	}
+
 	/// Schedule decrease nomination
 	pub fn schedule_decrease_nomination<T: Config>(
 		&mut self,
-		validator: AccountId,
-		less: Balance,
-	) -> Result<RoundIndex, DispatchError>
+		candidate: AccountId,
+		amount: Balance,
+	) -> DispatchResult
 	where
-		BalanceOf<T>: Into<Balance> + From<Balance>,
+		BalanceOf<T>: From<Balance>,
+		T::AccountId: From<AccountId>,
+		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
 	{
-		// get nomination amount
-		return if let Some(amount) = self.nominations.get(&validator) {
-			ensure!(*amount > less, Error::<T>::NominatorBondBelowMin);
-			let expected_amt: BalanceOf<T> = (*amount - less).into();
+		let nominator_id: T::AccountId = self.id.clone().into();
+		let candidate_id: T::AccountId = candidate.clone().into();
+		let balance_amt: BalanceOf<T> = amount.into();
+
+		//decrease nomination
+		if let Some(candidate_amount) = self.nominations.get(&candidate) {
+			ensure!(*candidate_amount > amount, Error::<T>::NominatorBondBelowMin);
+			let expected_amt: BalanceOf<T> = (*candidate_amount - amount).into();
 			ensure!(expected_amt >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
+
+			let before_amount = candidate_amount.clone();
+
 			// Net Total is total after pending orders are executed
-			let net_total = self.total - self.requests.less_total;
+			let net_total: BalanceOf<T> =
+				self.total.saturating_sub(self.requests.less_total).into();
 			// Net Total is always >= MinNominatorStk
-			let max_subtracted_amount = net_total - T::MinNominatorStk::get().into();
-			ensure!(less <= max_subtracted_amount, Error::<T>::NominatorBondBelowMin);
+			self.total = self.total.saturating_sub(amount);
+			let new_total: BalanceOf<T> = self.total.into();
+			ensure!(net_total >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
+			ensure!(new_total >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
+
+			let mut validator_state =
+				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+			let in_top = validator_state.decrease_nomination::<T>(
+				&candidate_id,
+				nominator_id.clone(),
+				before_amount.into(),
+				balance_amt,
+			)?;
+
 			let when = <Round<T>>::get().current_round_index + T::NominationBondLessDelay::get();
-			self.requests.bond_less::<T>(validator, less, when)?;
-			Ok(when)
-		} else {
-			Err(Error::<T>::NominationDNE.into())
-		};
+			self.requests.bond_less::<T>(candidate, amount, when)?;
+
+			let after = validator_state.voting_power;
+			Pallet::<T>::update_active(&candidate_id, after)?;
+
+			let new_total_staked = <Total<T>>::get().saturating_sub(balance_amt);
+
+			let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+			<Total<T>>::put(new_total_staked);
+			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+			<NominatorState<T>>::insert(&nominator_id, nom_st);
+			Pallet::<T>::deposit_event(Event::NominationDecreaseScheduled {
+				nominator: nominator_id,
+				candidate: candidate_id,
+				amount_to_decrease: balance_amt,
+				execute_round: when,
+				in_top,
+			});
+
+			return Ok(());
+		}
+		Err(Error::<T>::NominationDNE.into())
 	}
 
 	/// Schedule revocation for the given validator
-	pub fn schedule_revoke<T: Config>(
+	pub fn revoke_nomination<T: Config>(
 		&mut self,
-		validator: AccountId,
-	) -> Result<(RoundIndex, RoundIndex), DispatchError>
+		candidate: AccountId,
+		// ) -> Result<(RoundIndex, RoundIndex), DispatchError>
+	) -> DispatchResult
 	where
-		BalanceOf<T>: Into<Balance>,
+		BalanceOf<T>: From<Balance>,
+		T::AccountId: From<AccountId>,
+		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
 	{
+		let nominator_id: T::AccountId = self.id.clone().into();
+		let candidate_id: T::AccountId = candidate.clone().into();
+
 		// get nomination amount
-		return if let Some(amount) = self.nominations.get(&validator) {
+		if let Some(candidate_amount) = self.nominations.remove(&candidate) {
+			let leaving = self.check_nomination_leaving::<T>();
+			let total: BalanceOf<T> = self.total.into();
+			let expected_amt: BalanceOf<T> = candidate_amount.into();
+			let validator = candidate.clone();
+
+			ensure!(!self.is_revoking(&candidate), Error::<T>::NominatorAlreadyRevoking);
+
+			ensure!(
+				total - T::MinNominatorStk::get().into() >= expected_amt,
+				Error::<T>::NominatorBondBelowMin
+			);
+
+			ensure!(self.nominations.len() > 1usize, Error::<T>::NominatorBondBelowMin);
+
+			self.requests.revocations_count = self.requests.revocations_count.saturating_sub(1u32);
+
+			self.initial_nominations.remove(&validator);
+			self.awarded_tokens_per_candidate.remove(&validator);
+
+			self.total = self.total.saturating_sub(candidate_amount);
+
+			let mut validator_state =
+				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+
+			validator_state.rm_nomination_if_exists::<T>(
+				&candidate_id,
+				nominator_id.clone(),
+				expected_amt,
+			)?;
+
 			let now = <Round<T>>::get().current_round_index;
 			let when = now + T::RevokeNominationDelay::get();
-			// add revocation to pending requests
-			self.requests.revoke::<T>(validator, *amount, when)?;
-			Ok((now, when))
-		} else {
-			Err(Error::<T>::NominationDNE.into())
-		};
+
+			let after = validator_state.voting_power;
+			Pallet::<T>::update_active(&candidate_id, after)?;
+
+			self.requests.revoke::<T>(candidate, candidate_amount, when)?;
+
+			let new_total_staked = <Total<T>>::get().saturating_sub(expected_amt);
+
+			<Total<T>>::put(new_total_staked);
+			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+
+			if leaving {
+				<NominatorState<T>>::remove(&nominator_id);
+			} else {
+				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+				<NominatorState<T>>::insert(&nominator_id, nom_st);
+			}
+
+			Pallet::<T>::deposit_event(Event::NominationRevocationScheduled {
+				round: now,
+				nominator: nominator_id,
+				candidate: candidate_id,
+				scheduled_exit: when,
+			});
+
+			return Ok(());
+		}
+		Err(Error::<T>::NominationDNE.into())
+	}
+
+	pub fn check_nomination_leaving<T: Config>(&self) -> bool {
+		// revoking last nomination => leaving set of nominators
+		let leaving = if self.nominations.len() == 1usize { true } else { false };
+		leaving
 	}
 
 	/// Execute pending nomination change request
@@ -1771,116 +2068,111 @@ impl<
 		match action {
 			NominationChange::Revoke => {
 				// revoking last nomination => leaving set of nominators
-				let leaving = if self.nominations.len() == 1usize {
-					true
-				} else {
-					ensure!(
-						self.total - T::MinNominatorStk::get().into() >= amount,
-						Error::<T>::NominatorBondBelowMin
-					);
-					false
-				};
-				// remove from pending requests
-				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
-				self.requests.revocations_count =
-					self.requests.revocations_count.saturating_sub(1u32);
-				// remove nomination from nominator state
-				self.rm_nomination(&candidate);
-				// remove nomination from validator state nominations
-				Pallet::<T>::nominator_leaves_candidate(
-					candidate_id.clone(),
-					nominator_id.clone(),
-					balance_amt,
-				)?;
+				let leaving = self.check_nomination_leaving::<T>();
+
+				T::Currency::unreserve(&nominator_id, balance_amt);
+
 				Pallet::<T>::deposit_event(Event::NominationRevoked {
 					nominator: nominator_id.clone(),
 					candidate: candidate_id,
 					unstaked_amount: balance_amt,
 				});
 				if leaving {
-					<NominatorState<T>>::remove(&nominator_id);
 					Pallet::<T>::deposit_event(Event::NominatorLeft {
 						nominator: nominator_id,
 						unstaked_amount: balance_amt,
 					});
-				} else {
-					let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-					<NominatorState<T>>::insert(&nominator_id, nom_st);
 				}
-				Ok(())
+				return Ok(());
 			},
 			NominationChange::Decrease => {
 				// remove from pending requests
 				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
 				// decrease nomination
-				return if let Some(candidate_amount) = self.nominations.get_mut(&candidate) {
-					return if *candidate_amount > amount {
-						let amount_before = candidate_amount.clone();
-						*candidate_amount = candidate_amount.saturating_sub(amount);
-						self.total = self.total.saturating_sub(amount);
-						let new_total: BalanceOf<T> = self.total.into();
-						ensure!(
-							new_total >= T::MinNomination::get(),
-							Error::<T>::NominationBelowMin
-						);
-						ensure!(
-							new_total >= T::MinNominatorStk::get(),
-							Error::<T>::NominatorBondBelowMin
-						);
-						let mut validator = <CandidateInfo<T>>::get(&candidate_id)
-							.ok_or(Error::<T>::CandidateDNE)?;
-						T::Currency::unreserve(&nominator_id, balance_amt);
-						// need to go into decrease_nomination
-						let in_top = validator.decrease_nomination::<T>(
-							&candidate_id,
-							nominator_id.clone(),
-							amount_before.into(),
-							balance_amt,
-						)?;
-						<CandidateInfo<T>>::insert(&candidate_id, validator);
-						let new_total_staked = <Total<T>>::get().saturating_sub(balance_amt);
-						<Total<T>>::put(new_total_staked);
-						let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-						<NominatorState<T>>::insert(&nominator_id, nom_st);
-						Pallet::<T>::deposit_event(Event::NominationDecreased {
-							nominator: nominator_id,
-							candidate: candidate_id,
-							amount: balance_amt,
-							in_top,
-						});
-						Ok(())
-					} else {
-						// must rm entire nomination if x.amount <= less or cancel request
-						Err(Error::<T>::NominationBelowMin.into())
-					};
-				} else {
-					Err(Error::<T>::NominationDNE.into())
-				};
+				if let Some(_) = self.nominations.get(&candidate) {
+					T::Currency::unreserve(&nominator_id, balance_amt);
+					Pallet::<T>::deposit_event(Event::NominationDecreased {
+						nominator: nominator_id,
+						candidate: candidate_id,
+						amount: balance_amt,
+					});
+					return Ok(());
+				}
+				Err(Error::<T>::NominationDNE.into())
 			},
 		}
 	}
 
 	/// Cancel pending nomination change request
-	pub fn cancel_pending_request<T: Config>(
-		&mut self,
-		candidate: AccountId,
-	) -> Result<NominationRequest<AccountId, Balance>, DispatchError> {
+	pub fn cancel_pending_request<T: Config>(&mut self, candidate: AccountId) -> DispatchResult
+	where
+		BalanceOf<T>: From<Balance>,
+		T::AccountId: From<AccountId>,
+		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
+		NominationRequest<T::AccountId, BalanceOf<T>>: From<NominationRequest<AccountId, Balance>>,
+	{
 		let order = self
 			.requests
 			.requests
 			.remove(&candidate)
 			.ok_or(Error::<T>::PendingNominationRequestDNE)?;
+
+		let nominator_id: T::AccountId = self.id.clone().into();
+		let candidate_id: T::AccountId = candidate.clone().into();
+		let balance_amt: BalanceOf<T> = order.amount.into();
+
 		match order.action {
 			NominationChange::Revoke => {
+				self.add_nomination::<T>(candidate.clone(), order.amount);
+
 				self.requests.revocations_count =
 					self.requests.revocations_count.saturating_sub(1u32);
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+
+				// update validator state nomination
+				let mut validator_state =
+					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+
+				let (nominator_position, less_total_staked) = validator_state.add_nomination::<T>(
+					&candidate_id,
+					Bond { owner: nominator_id.clone(), amount: balance_amt },
+				)?;
+
+				let after = validator_state.voting_power;
+				Pallet::<T>::update_active(&candidate_id, after)?;
+				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+				let net_total_increase = if let Some(less) = less_total_staked {
+					balance_amt - less
+				} else {
+					balance_amt
+				};
+				<Total<T>>::mutate(|total_locked| {
+					*total_locked += net_total_increase;
+				});
+
+				<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+				<NominatorState<T>>::insert(&nominator_id, nom_st);
+				Pallet::<T>::deposit_event(Event::Nomination {
+					nominator: nominator_id.clone(),
+					locked_amount: Zero::zero(),
+					candidate: candidate_id,
+					nominator_position,
+				});
 			},
 			NominationChange::Decrease => {
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+
+				let _ =
+					self.increase_nomination_without_reserve::<T>(candidate.clone(), order.amount);
 			},
 		}
-		Ok(order)
+
+		Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
+			nominator: nominator_id,
+			cancelled_request: order.into(),
+		});
+
+		return Ok(());
 	}
 }
 
@@ -1914,7 +2206,7 @@ pub struct PendingNominationRequests<AccountId, Balance> {
 	pub revocations_count: u32,
 	/// Map from validator -> Request (enforces at most 1 pending request per nomination)
 	pub requests: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
-	/// Sum of pending revocation amounts + bond less amounts
+	/// Sum of pending revocation amounts + bond less amounts - execute
 	pub less_total: Balance,
 }
 
@@ -1983,6 +2275,7 @@ impl<
 			},
 		);
 		self.less_total += amount;
+
 		Ok(())
 	}
 
