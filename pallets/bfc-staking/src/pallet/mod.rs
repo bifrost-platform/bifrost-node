@@ -173,6 +173,8 @@ pub mod pallet {
 		NominatorAlreadyLeaving,
 		/// The given nominator fo given candidate is already revoking.
 		NominatorAlreadyRevoking,
+		/// The given nominator fo given candidate is already revoking.
+		NominatorAlreadyRevoking,
 		/// The given nominator is not leaving.
 		NominatorNotLeaving,
 		/// The given nominator cannot execute to leave yet.
