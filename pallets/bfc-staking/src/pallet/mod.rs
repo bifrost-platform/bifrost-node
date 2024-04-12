@@ -329,6 +329,7 @@ pub mod pallet {
 			execute_round: RoundIndex,
 			in_top: bool,
 			action: NominationChange,
+			in_top: bool,
 		},
 		/// Nomination increased.
 		NominationIncreased {

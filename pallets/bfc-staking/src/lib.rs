@@ -433,11 +433,13 @@ pub struct Nominations<AccountId, Balance> {
 	pub nominations: Vec<Bond<AccountId, Balance>>,
 	/// The total nomination of top or bottom
 	pub total: Balance,
+	/// The total amounts of pending request
+	pub less_total: Balance,
 }
 
 impl<A, B: Default> Default for Nominations<A, B> {
 	fn default() -> Nominations<A, B> {
-		Nominations { nominations: Vec::new(), total: B::default() }
+		Nominations { nominations: Vec::new(), total: B::default(), less_total: B::default() }
 	}
 }
 
@@ -1319,6 +1321,149 @@ impl<
 		self.reset_bottom_data::<T>(&bottom_nominations);
 		<BottomNominations<T>>::insert(candidate, bottom_nominations);
 		Ok(in_top_after_amount)
+	}
+
+	/// Increase nomination amount
+	pub fn schedule_decrease_nomination<T: Config>(
+		&mut self,
+		candidate: &T::AccountId,
+		nominator: T::AccountId,
+		bond: BalanceOf<T>,
+		amount: BalanceOf<T>,
+	) -> Result<bool, DispatchError>
+	where
+		BalanceOf<T>: Into<Balance> + From<Balance>,
+	{
+		let lowest_top_eq_highest_bottom =
+			self.lowest_top_nomination_amount == self.highest_bottom_nomination_amount;
+		let bond_geq_lowest_top = bond.into() >= self.lowest_top_nomination_amount;
+		let nomination_dne_err: DispatchError = Error::<T>::NominationDNE.into();
+		if bond_geq_lowest_top && !lowest_top_eq_highest_bottom {
+			// definitely in top
+			self.schedule_decrease_top_nomination::<T>(candidate, nominator.clone(), bond, amount)
+		} else if bond_geq_lowest_top && lowest_top_eq_highest_bottom {
+			// update top but if error then update bottom (because could be in bottom because
+			// lowest_top_eq_highest_bottom)
+			let result = self.schedule_decrease_top_nomination::<T>(
+				candidate,
+				nominator.clone(),
+				bond,
+				amount,
+			);
+			if result == Err(nomination_dne_err) {
+				self.schedule_decrease_bottom_nomination::<T>(candidate, nominator, amount)
+			} else {
+				result
+			}
+		} else {
+			self.schedule_decrease_bottom_nomination::<T>(candidate, nominator, amount)
+		}
+	}
+
+	/// Increase top nomination
+	pub fn schedule_decrease_bottom_nomination<T: Config>(
+		&mut self,
+		candidate: &T::AccountId,
+		nominator: T::AccountId,
+		less: BalanceOf<T>,
+	) -> Result<bool, DispatchError>
+	where
+		BalanceOf<T>: Into<Balance> + From<Balance>,
+	{
+		let mut bottom_nominations =
+			<BottomNominations<T>>::get(candidate).ok_or(Error::<T>::BottomNominationDNE)?;
+
+		let mut in_bottom = false;
+		bottom_nominations.nominations = bottom_nominations
+			.nominations
+			.into_iter()
+			.map(|d| {
+				if d.owner == nominator {
+					in_bottom = true;
+					Bond { owner: d.owner, amount: d.amount.saturating_sub(less) }
+				} else {
+					d
+				}
+			})
+			.collect();
+		ensure!(in_bottom, Error::<T>::NominationDNE);
+		bottom_nominations.total = bottom_nominations.total.saturating_sub(less);
+		bottom_nominations.sort_greatest_to_least();
+		self.reset_top_data::<T>(candidate.clone(), &bottom_nominations)?;
+		<BottomNominations<T>>::insert(candidate, bottom_nominations);
+		Ok(true)
+	}
+
+	/// Increase bottom nomination
+	pub fn schedule_decrease_top_nomination<T: Config>(
+		&mut self,
+		candidate: &T::AccountId,
+		nominator: T::AccountId,
+		bond: BalanceOf<T>,
+		less: BalanceOf<T>,
+	) -> Result<bool, DispatchError>
+	where
+		BalanceOf<T>: Into<Balance> + From<Balance>,
+	{
+		let mut top_nominations =
+			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
+
+		let mut nomination_option: Option<Bond<T::AccountId, BalanceOf<T>>> = None;
+		let in_bottom_after =
+			if self.highest_bottom_nomination_amount > bond.saturating_sub(less).into() {
+				// bump it from bottom
+				top_nominations.nominations = top_nominations
+					.nominations
+					.clone()
+					.into_iter()
+					.filter(|d| {
+						if d.owner != nominator {
+							true
+						} else {
+							nomination_option = Some(Bond {
+								owner: d.owner.clone(),
+								amount: d.amount.saturating_sub(less),
+							});
+							false
+						}
+					})
+					.collect();
+				let nomination = nomination_option.ok_or(Error::<T>::TopNominationDNE)?;
+				top_nominations.total = top_nominations.total.saturating_sub(bond);
+				// add it to top
+				let mut bottom_nominations = <BottomNominations<T>>::get(candidate)
+					.ok_or(Error::<T>::BottomNominationDNE)?;
+				bottom_nominations.insert_sorted_greatest_to_least(nomination);
+				// pop highest bottom nomination
+				let new_top_nomination = bottom_nominations.nominations.remove(0);
+				// insert into top
+				top_nominations.insert_sorted_greatest_to_least(new_top_nomination);
+				self.reset_top_data::<T>(candidate.clone(), &bottom_nominations)?;
+				<BottomNominations<T>>::insert(candidate, bottom_nominations);
+				true
+			} else {
+				let mut in_top = false;
+				// just increase the nomination
+				top_nominations.nominations = top_nominations
+					.nominations
+					.into_iter()
+					.map(|d| {
+						if d.owner == nominator {
+							in_top = true;
+							Bond { owner: d.owner, amount: d.amount.saturating_sub(less) }
+						} else {
+							d
+						}
+					})
+					.collect();
+				ensure!(in_top, Error::<T>::TopNominationDNE);
+				top_nominations.total = top_nominations.total.saturating_sub(less);
+				top_nominations.sort_greatest_to_least();
+				false
+			};
+		self.reset_bottom_data::<T>(&top_nominations);
+		<TopNominations<T>>::insert(candidate, top_nominations);
+		Ok(in_bottom_after)
 	}
 
 	/// Decrease nomination
