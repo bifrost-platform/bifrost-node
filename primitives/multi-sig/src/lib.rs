@@ -15,10 +15,10 @@ use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 /// The maximum amount of accounts a multi-sig account can consist.
-pub const MULTI_SIG_MAX_ACCOUNTS: u32 = 16;
+pub const MULTI_SIG_MAX_ACCOUNTS: u32 = 20;
 
-/// The maximum length of a valid Bitcoin address in characters (~64 alphanumeric characters).
-pub const ADDRESS_MAX_LENGTH: u32 = 64;
+/// The maximum length of a valid Bitcoin address in characters (~90 alphanumeric characters).
+pub const ADDRESS_MAX_LENGTH: u32 = 90;
 
 /// The maximum length of a valid public key in bytes (33 bytes).
 pub const PUBLIC_KEY_LENGTH: u32 = 33;
