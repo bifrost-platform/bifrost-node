@@ -1408,11 +1408,7 @@ impl<
 			// insert previous top into bottom
 			bottom_nominations.insert_sorted_greatest_to_least(nomination);
 
-			let new_top_nominations = bottom_nominations.clone();
-
 			self.reset_bottom_data::<T>(&bottom_nominations);
-			self.reset_top_data::<T>(candidate.clone(), &new_top_nominations)?;
-			<TopNominations<T>>::insert(candidate, new_top_nominations);
 			<BottomNominations<T>>::insert(candidate, bottom_nominations);
 			false
 		} else {
@@ -1840,77 +1836,6 @@ impl<
 		Err(Error::<T>::NominationDNE.into())
 	}
 
-	/// Schedule revocation for the given validator
-	pub fn revoke_nomination<T: Config>(
-		&mut self,
-		candidate: AccountId,
-		// ) -> Result<(RoundIndex, RoundIndex), DispatchError>
-	) -> DispatchResult
-	where
-		BalanceOf<T>: From<Balance>,
-		T::AccountId: From<AccountId>,
-		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
-	{
-		let nominator_id: T::AccountId = self.id.clone().into();
-		let candidate_id: T::AccountId = candidate.clone().into();
-
-		// get nomination amount
-		if let Some(candidate_amount) = self.nominations.remove(&candidate) {
-			let is_nominator_leaving = self.is_last_nominator::<T>();
-			let total: BalanceOf<T> = self.total.into();
-			let expected_amt: BalanceOf<T> = candidate_amount.into();
-			let validator = candidate.clone();
-
-			if !is_nominator_leaving {
-				ensure!(
-					total - T::MinNominatorStk::get().into() >= expected_amt,
-					Error::<T>::NominatorBondBelowMin
-				);
-			}
-
-			self.initial_nominations.remove(&validator);
-			self.awarded_tokens_per_candidate.remove(&validator);
-
-			self.total = self.total.saturating_sub(candidate_amount);
-
-			let mut validator_state =
-				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
-
-			let _ = validator_state.decrease_nomination::<T>(
-				&candidate_id,
-				nominator_id.clone(),
-				expected_amt.into(),
-				expected_amt,
-			)?;
-
-			let now = <Round<T>>::get().current_round_index;
-			let when = now + T::RevokeNominationDelay::get();
-
-			let after = validator_state.voting_power;
-			Pallet::<T>::update_active(&candidate_id, after)?;
-
-			self.requests.revoke::<T>(candidate, candidate_amount, when)?;
-
-			let new_total_staked = <Total<T>>::get().saturating_sub(expected_amt);
-
-			<Total<T>>::put(new_total_staked);
-			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
-
-			let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-			<NominatorState<T>>::insert(&nominator_id, nom_st);
-
-			Pallet::<T>::deposit_event(Event::NominationRevocationScheduled {
-				round: now,
-				nominator: nominator_id,
-				candidate: candidate_id,
-				scheduled_exit: when,
-			});
-
-			return Ok(());
-		}
-		Err(Error::<T>::NominationDNE.into())
-	}
-
 	pub fn ok_to_revoke<T: Config>(&self, candidate: AccountId) -> Result<(), DispatchError>
 	where
 		BalanceOf<T>: From<Balance>,
@@ -2115,7 +2040,7 @@ pub struct PendingNominationRequests<AccountId, Balance> {
 	pub revocations_count: u32,
 	/// Map from validator -> Request (enforces at most 1 pending request per nomination)
 	pub requests: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
-	/// Sum of pending revocation amounts + bond less amounts - execute
+	/// Sum of pending revocation amounts + bond less amounts
 	pub less_total: Balance,
 }
 
