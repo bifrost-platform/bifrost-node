@@ -821,9 +821,8 @@ impl<T: Config> Pallet<T> {
 			let bottom_nominations =
 				Self::bottom_nominations(&owner).expect("Candidate must have bottom nominations");
 
-			let top_nominations_active_amount = top_nominations.total - top_nominations.less_total;
-			let bottom_nominations_active_amount =
-				bottom_nominations.total - bottom_nominations.less_total;
+			let top_nominations_active_amount = top_nominations.total;
+			let bottom_nominations_active_amount = bottom_nominations.total;
 
 			if selected_candidates.contains(&owner) {
 				snapshot.increment_active_self_bond(state.bond);
