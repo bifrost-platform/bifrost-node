@@ -244,5 +244,9 @@ fn development_genesis(
 			required_n: 1u8,
 			..Default::default()
 		},
+		btc_socket_queue: devnet::BtcSocketQueueConfig {
+			authority: Some(root_key),
+			..Default::default()
+		},
 	}
 }

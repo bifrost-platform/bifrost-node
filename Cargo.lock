@@ -799,6 +799,7 @@ dependencies = [
  "bifrost-common-runtime",
  "bifrost-dev-constants",
  "bp-core",
+ "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",
@@ -823,6 +824,7 @@ dependencies = [
  "pallet-bfc-staking",
  "pallet-bfc-utility",
  "pallet-btc-registration-pool",
+ "pallet-btc-socket-queue",
  "pallet-collective",
  "pallet-democracy",
  "pallet-ethereum",
@@ -851,6 +853,7 @@ dependencies = [
  "precompile-bfc-offences",
  "precompile-bfc-staking",
  "precompile-btc-registration-pool",
+ "precompile-btc-socket-queue",
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
@@ -1237,6 +1240,7 @@ dependencies = [
  "bech32",
  "bitcoin-internals",
  "bitcoin_hashes",
+ "core2 0.3.3",
  "hex-conservative",
  "hex_lit",
  "secp256k1 0.28.2",
@@ -1255,6 +1259,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1930a4dabfebb8d7d9992db18ebe3ae2876f0a305fab206fd168df931ede293b"
 dependencies = [
  "bitcoin-internals",
+ "core2 0.3.3",
  "hex-conservative",
 ]
 
@@ -1397,6 +1402,18 @@ dependencies = [
  "fp-self-contained",
  "sp-core",
  "sp-runtime",
+]
+
+[[package]]
+name = "bp-multi-sig"
+version = "0.0.1"
+dependencies = [
+ "miniscript",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -1647,7 +1664,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9b68e3193982cd54187d71afdb2a271ad4cf8af157858e9cb911b91321de143"
 dependencies = [
- "core2",
+ "core2 0.4.0",
  "multibase",
  "multihash",
  "serde",
@@ -1854,6 +1871,15 @@ name = "core-foundation-sys"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
+
+[[package]]
+name = "core2"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "core2"
@@ -2628,6 +2654,16 @@ checksum = "a258e46cdc063eb8519c00b9fc845fc47bcfca4130e2f08e88665ceda8474245"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "ethabi-decode"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09d398648d65820a727d6a81e58b962f874473396a047e4c30bafe3240953417"
+dependencies = [
+ "ethereum-types",
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -4128,6 +4164,9 @@ name = "hex-conservative"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30ed443af458ccb6d81c1e7e661545f94d3176752fb1df2f543b902a1e0f51e2"
+dependencies = [
+ "core2 0.3.3",
+]
 
 [[package]]
 name = "hex-literal"
@@ -5630,7 +5669,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "blake3",
- "core2",
+ "core2 0.4.0",
  "digest 0.10.7",
  "multihash-derive",
  "sha2 0.10.8",
@@ -6186,13 +6225,31 @@ name = "pallet-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.2",
+ "bp-multi-sig",
  "frame-support",
  "frame-system",
- "log",
- "miniscript",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-btc-socket-queue"
+version = "1.0.0"
+dependencies = [
+ "array-bytes 6.2.2",
+ "bp-multi-sig",
+ "ethabi-decode",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "pallet-evm",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
@@ -7013,11 +7070,31 @@ dependencies = [
 name = "precompile-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
+ "bp-multi-sig",
  "fp-account",
  "fp-evm",
  "frame-support",
  "frame-system",
  "pallet-btc-registration-pool",
+ "pallet-evm",
+ "parity-scale-codec",
+ "precompile-utils",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-btc-socket-queue"
+version = "1.0.0"
+dependencies = [
+ "bp-multi-sig",
+ "fp-account",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-btc-socket-queue",
  "pallet-evm",
  "parity-scale-codec",
  "precompile-utils",

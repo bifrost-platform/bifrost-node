@@ -13,6 +13,7 @@ pub use bifrost_dev_constants::{
 };
 
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
+use bp_multi_sig::Network;
 use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
@@ -967,6 +968,21 @@ impl pallet_base_fee::Config for Runtime {
 	type DefaultElasticity = DefaultElasticity;
 }
 
+impl pallet_btc_socket_queue::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
+	type RegistrationPool = BtcRegistrationPool;
+	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const BitcoinChainId: u32 = 10001;
+	pub const BitcoinNetwork: Network = Network::Testnet;
+}
+
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
@@ -975,7 +991,8 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Executives = RelayExecutiveMembership;
 	type DefaultRequiredM = ConstU8<1>;
 	type DefaultRequiredN = ConstU8<1>;
-	type IsBitcoinMainnet = ConstBool<false>;
+	type BitcoinChainId = BitcoinChainId;
+	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1029,7 +1046,8 @@ construct_runtime!(
 		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
 
 		// Bitcoin
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
+		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,

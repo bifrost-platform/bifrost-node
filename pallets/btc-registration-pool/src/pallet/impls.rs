@@ -1,53 +1,67 @@
-use miniscript::bitcoin::{
-	opcodes::all::OP_CHECKMULTISIG, script::Builder, Address, Network, Opcode, PublicKey,
+use bp_multi_sig::{
+	traits::{MultiSigManager, PoolManager},
+	Address, AddressState, Network, UnboundedBytes,
 };
-
 use scale_info::prelude::string::ToString;
 use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
-use sp_std::{str, str::FromStr, vec, vec::Vec};
+use sp_std::{str, str::FromStr, vec::Vec};
 
 use crate::{BoundedBitcoinAddress, Public};
 
 use super::pallet::*;
 
+impl<T: Config> MultiSigManager for Pallet<T> {
+	fn is_finalizable(m: u8) -> bool {
+		<RequiredM<T>>::get() <= m
+	}
+}
+
+impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
+	fn get_refund_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
+		if let Some(relay_target) = Self::registration_pool(who) {
+			Some(relay_target.refund_address)
+		} else {
+			None
+		}
+	}
+
+	fn get_system_vault() -> Option<BoundedBitcoinAddress> {
+		if let Some(vault) = Self::system_vault() {
+			match vault.address {
+				AddressState::Pending => return None,
+				AddressState::Generated(address) => return Some(address),
+			};
+		} else {
+			None
+		}
+	}
+
+	fn get_bitcoin_network() -> Network {
+		T::BitcoinNetwork::get()
+	}
+
+	fn get_bitcoin_chain_id() -> u32 {
+		T::BitcoinChainId::get()
+	}
+}
+
 impl<T: Config> Pallet<T> {
-	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
-	fn sort_pub_keys(raw_pub_keys: Vec<Public>) -> Result<Vec<PublicKey>, DispatchError> {
-		let mut pub_keys = vec![];
-		for raw_key in raw_pub_keys.iter() {
-			let key = PublicKey::from_slice(raw_key.as_ref())
-				.map_err(|_| Error::<T>::InvalidPublicKey)?;
-			pub_keys.push(key);
-		}
-		pub_keys.sort();
-		Ok(pub_keys)
-	}
-
-	/// Build the script for p2wsh address creation.
-	fn build_redeem_script(pub_keys: Vec<PublicKey>) -> Builder {
-		let mut redeem_script =
-			Builder::new().push_opcode(Opcode::from(<RequiredM<T>>::get().saturating_add(80))); // m
-
-		for key in pub_keys.iter() {
-			redeem_script = redeem_script.push_key(&key);
-		}
-
-		redeem_script
-			.push_opcode(Opcode::from(<RequiredN<T>>::get().saturating_add(80))) // n
-			.push_opcode(OP_CHECKMULTISIG)
-	}
-
 	/// Generate a multi-sig vault address.
 	pub fn generate_vault_address(
 		raw_pub_keys: Vec<Public>,
 	) -> Result<BoundedBitcoinAddress, DispatchError> {
-		let sorted_pub_keys = Self::sort_pub_keys(raw_pub_keys)?;
-		let redeem_script = Self::build_redeem_script(sorted_pub_keys);
+		let sorted_pub_keys =
+			Self::sort_pub_keys(raw_pub_keys).map_err(|_| Error::<T>::InvalidPublicKey)?;
+		let redeem_script = Self::build_redeem_script(
+			sorted_pub_keys,
+			<RequiredM<T>>::get(),
+			<RequiredN<T>>::get(),
+		);
 
 		// generate vault address
 		Ok(BoundedVec::try_from(
-			Address::p2wsh(redeem_script.as_script(), Self::get_bitcoin_network())
+			Self::generate_address(redeem_script.as_script(), T::BitcoinNetwork::get())
 				.to_string()
 				.as_bytes()
 				.to_vec(),
@@ -57,25 +71,17 @@ impl<T: Config> Pallet<T> {
 
 	/// Check if the given address is valid on the target Bitcoin network. Then returns the checked address.
 	pub fn get_checked_bitcoin_address(
-		address: &Vec<u8>,
+		address: &UnboundedBytes,
 	) -> Result<BoundedBitcoinAddress, DispatchError> {
 		let raw_address = str::from_utf8(address).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 		let unchecked_address =
 			Address::from_str(raw_address).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 		let checked_address = unchecked_address
-			.require_network(Self::get_bitcoin_network())
+			.require_network(T::BitcoinNetwork::get())
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?
 			.to_string();
 
 		Ok(BoundedVec::try_from(checked_address.as_bytes().to_vec())
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
-	}
-
-	/// Get the Bitcoin network of the current runtime.
-	fn get_bitcoin_network() -> Network {
-		match T::IsBitcoinMainnet::get() {
-			true => Network::Bitcoin,
-			_ => Network::Testnet,
-		}
 	}
 }

@@ -25,6 +25,7 @@ num_enum = { workspace = true }
 bifrost-common-runtime = { workspace = true }
 bifrost-dev-constants = { workspace = true }
 bp-core = { workspace = true }
+bp-multi-sig = { workspace = true }
 precompile-utils = { workspace = true }
 
 # FRAME dependencies
@@ -87,6 +88,7 @@ pallet-bfc-staking = { workspace = true }
 pallet-bfc-utility = { workspace = true }
 pallet-bfc-offences = { workspace = true }
 pallet-relay-manager = { workspace = true }
+pallet-btc-socket-queue = { workspace = true }
 pallet-btc-registration-pool = { workspace = true }
 
 # Precompiled Contracts
@@ -102,6 +104,7 @@ precompile-governance = { workspace = true }
 precompile-collective = { workspace = true }
 precompile-balance = { workspace = true }
 precompile-btc-registration-pool = { workspace = true }
+precompile-btc-socket-queue = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -139,6 +142,7 @@ std = [
 	"pallet-bfc-utility/std",
 	"pallet-bfc-offences/std",
 	"pallet-relay-manager/std",
+	"pallet-btc-socket-queue/std",
 	"pallet-btc-registration-pool/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",

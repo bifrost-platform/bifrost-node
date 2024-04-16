@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, SystemVaultKeySubmission,
-	VaultKeySubmission, WeightInfo,
+	VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -11,11 +11,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use scale_info::prelude::format;
+use bp_multi_sig::{Network, Public, PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use sp_core::H160;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::vec::Vec;
-
-use miniscript::bitcoin::PublicKey;
+use sp_std::{str, vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -49,9 +48,11 @@ pub mod pallet {
 		/// The required number of signatures to send a transaction with the vault account.
 		#[pallet::constant]
 		type DefaultRequiredN: Get<u8>;
-		/// The flag that represents whether the target Bitcoin network is the mainnet.
+		/// The custom Bitcoin's chain ID for CCCP.
 		#[pallet::constant]
-		type IsBitcoinMainnet: Get<bool>;
+		type BitcoinChainId: Get<u32>;
+		/// The flag that represents whether the target Bitcoin network is the mainnet.
+		type BitcoinNetwork: Get<Network>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -97,6 +98,8 @@ pub mod pallet {
 		},
 		/// A new vault configuration has been set.
 		VaultConfigSet { m: u8, n: u8 },
+		/// A user's refund address has been (re-)set.
+		RefundSet { who: T::AccountId, old: BoundedBitcoinAddress, new: BoundedBitcoinAddress },
 	}
 
 	#[pallet::storage]
@@ -114,6 +117,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
 	/// Mapped Bitcoin vault addresses. The key is the vault address and the value is the user's Bifrost address.
+	/// For system vault, the value will be set to the zero address.
 	pub type BondedVault<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
@@ -122,6 +126,12 @@ pub mod pallet {
 	/// Mapped Bitcoin refund addresses. The key is the refund address and the value is the user's Bifrost address.
 	pub type BondedRefund<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn bonded_pub_key)]
+	/// Mapped public keys used for vault account generation. The key is the public key and the value is user's Bifrost address.
+	/// For system vault, the value will be set to the zero address.
+	pub type BondedPubKey<T: Config> = StorageMap<_, Twox64Concat, Public, T::AccountId>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn required_m)]
@@ -160,13 +170,17 @@ pub mod pallet {
 	}
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {
+	impl<T: Config> Pallet<T>
+	where
+		H160: Into<T::AccountId>,
+	{
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_vault_config())]
+		/// (Re-)set the vault configurations.
 		pub fn set_vault_config(origin: OriginFor<T>, m: u8, n: u8) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			ensure!(n >= 1 && n <= 16, Error::<T>::OutOfRange);
+			ensure!(n >= 1 && u32::from(n) <= MULTI_SIG_MAX_ACCOUNTS, Error::<T>::OutOfRange);
 			ensure!(m >= 1 && m <= n, Error::<T>::OutOfRange);
 
 			Self::deposit_event(Event::VaultConfigSet { m, n });
@@ -178,22 +192,41 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_refund())]
+		/// (Re-)set the user's refund address.
+		pub fn set_refund(origin: OriginFor<T>, new: UnboundedBytes) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+			let new: BoundedBitcoinAddress = Self::get_checked_bitcoin_address(&new)?;
+
+			let mut relay_target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+			let old = relay_target.refund_address.clone();
+			ensure!(old != new, Error::<T>::NoWritingSameValue);
+
+			ensure!(!<BondedRefund<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
+			ensure!(!<BondedVault<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
+
+			<BondedRefund<T>>::remove(&old);
+			<BondedRefund<T>>::insert(&new, who.clone());
+
+			relay_target.set_refund_address(new.clone());
+			<RegistrationPool<T>>::insert(&who, relay_target);
+
+			Self::deposit_event(Event::RefundSet { who, old, new });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
 			origin: OriginFor<T>,
-			refund_address: Vec<u8>,
+			refund_address: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 			let refund_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&refund_address)?;
 
-			if let Some(system_vault) = <SystemVault<T>>::get() {
-				ensure!(
-					!system_vault.is_address(&refund_address),
-					Error::<T>::AddressAlreadyRegistered
-				);
-			}
 			ensure!(
 				!<BondedRefund<T>>::contains_key(&refund_address),
 				Error::<T>::AddressAlreadyRegistered
@@ -218,7 +251,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
 		/// Request a system vault address. Initially, the vault address will be in pending state.
 		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -226,13 +259,16 @@ pub mod pallet {
 
 			ensure!(<SystemVault<T>>::get().is_none(), Error::<T>::VaultAlreadyGenerated);
 
-			<SystemVault<T>>::put(MultiSigAccount::new::<T>());
+			<SystemVault<T>>::put(MultiSigAccount::new(
+				<RequiredM<T>>::get(),
+				<RequiredN<T>>::get(),
+			));
 			Self::deposit_event(Event::SystemVaultPending);
 
 			Ok(().into())
 		}
 
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_vault_key(
@@ -256,10 +292,18 @@ pub mod pallet {
 				Error::<T>::VaultAlreadyContainsPubKey
 			);
 			ensure!(PublicKey::from_slice(pub_key.as_ref()).is_ok(), Error::<T>::InvalidPublicKey);
+			ensure!(
+				<BondedPubKey<T>>::get(&pub_key).is_none(),
+				Error::<T>::VaultAlreadyContainsPubKey
+			);
 
-			relay_target.vault.insert_pub_key::<T>(authority_id, pub_key)?;
+			relay_target
+				.vault
+				.pub_keys
+				.try_insert(authority_id, pub_key)
+				.map_err(|_| Error::<T>::OutOfRange)?;
 
-			if relay_target.vault.is_generation_ready::<T>() {
+			if relay_target.vault.is_key_generation_ready() {
 				// generate vault address
 				let vault_address = Self::generate_vault_address(relay_target.vault.pub_keys())?;
 				relay_target.set_vault_address(vault_address.clone());
@@ -272,12 +316,13 @@ pub mod pallet {
 				});
 			}
 
+			<BondedPubKey<T>>::insert(&pub_key, who.clone());
 			<RegistrationPool<T>>::insert(&who, relay_target);
 
 			Ok(().into())
 		}
 
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
@@ -303,16 +348,28 @@ pub mod pallet {
 					PublicKey::from_slice(pub_key.as_ref()).is_ok(),
 					Error::<T>::InvalidPublicKey
 				);
+				ensure!(
+					<BondedPubKey<T>>::get(&pub_key).is_none(),
+					Error::<T>::VaultAlreadyContainsPubKey
+				);
 
-				system_vault.insert_pub_key::<T>(authority_id, pub_key)?;
+				system_vault
+					.pub_keys
+					.try_insert(authority_id, pub_key)
+					.map_err(|_| Error::<T>::OutOfRange)?;
 
-				if system_vault.is_generation_ready::<T>() {
+				if system_vault.is_key_generation_ready() {
 					// generate vault address
 					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());
 
+					<BondedVault<T>>::insert(
+						&vault_address,
+						H160::from_low_u64_be(ADDRESS_U64).into(),
+					);
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
+				<BondedPubKey<T>>::insert(&pub_key, H160::from_low_u64_be(ADDRESS_U64).into());
 				<SystemVault<T>>::put(system_vault);
 			} else {
 				return Err(Error::<T>::SystemVaultDNE)?;
@@ -323,7 +380,10 @@ pub mod pallet {
 	}
 
 	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T> {
+	impl<T: Config> ValidateUnsigned for Pallet<T>
+	where
+		H160: Into<T::AccountId>,
+	{
 		type Call = Call<T>;
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
@@ -337,7 +397,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{:?}", array_bytes::bytes2hex("0x", pub_key));
+					let message = array_bytes::bytes2hex("0x", pub_key);
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
@@ -357,7 +417,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{:?}", array_bytes::bytes2hex("0x", pub_key));
+					let message = array_bytes::bytes2hex("0x", pub_key);
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}

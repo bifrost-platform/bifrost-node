@@ -2,20 +2,22 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
-use pallet_btc_registration_pool::{
-	AddressState, BoundedBitcoinAddress, Call as BtcRegistrationPoolCall,
-};
+use pallet_btc_registration_pool::Call as BtcRegistrationPoolCall;
 use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
+use bp_multi_sig::{AddressState, BoundedBitcoinAddress};
 use fp_account::EthereumSignature;
 use sp_core::H160;
 use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
 mod types;
-use types::{BitcoinAddressString, EvmRegistrationPoolOf};
+use types::{
+	BitcoinAddressString, EvmPendingRegistrationsOf, EvmRegistrationInfoOf, EvmRegistrationPoolOf,
+	PublicKeyBytes, RegistrationInfo,
+};
 
 type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
 
@@ -31,11 +33,60 @@ where
 	Runtime: pallet_btc_registration_pool::Config<Signature = EthereumSignature>
 		+ pallet_evm::Config
 		+ frame_system::Config,
-	Runtime::AccountId: Into<H160>,
+	Runtime::AccountId: Into<H160> + From<H160>,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcRegistrationPoolCall<Runtime>>,
 {
+	#[precompile::public("registrationInfo(address)")]
+	#[precompile::public("registration_info(address)")]
+	#[precompile::view]
+	fn registration_info(
+		handle: &mut impl PrecompileHandle,
+		user_bfc_address: Address,
+	) -> EvmResult<EvmRegistrationInfoOf> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let mut info = RegistrationInfo::default();
+
+		if user_bfc_address == Address(handle.context().address) {
+			if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault() {
+				info.user_bfc_address = Address(handle.context().address);
+				for (authority_id, pub_key) in system_vault.pub_keys.iter() {
+					info.submitted_authorities.push(Address(authority_id.clone().into()));
+					info.pub_keys.push(PublicKeyBytes::from(pub_key.as_ref()));
+				}
+				let vault_address = match system_vault.address {
+					AddressState::Pending => BoundedVec::default(),
+					AddressState::Generated(address) => address,
+				};
+				info.vault_address = BitcoinAddressString::from(vault_address.into_inner());
+			}
+		} else {
+			let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
+			if let Some(relay_target) =
+				BtcRegistrationPoolOf::<Runtime>::registration_pool(&user_bfc_address)
+			{
+				info.user_bfc_address = Address(user_bfc_address.into());
+				info.refund_address =
+					BitcoinAddressString::from(relay_target.refund_address.into_inner());
+
+				for (authority_id, pub_key) in relay_target.vault.pub_keys.iter() {
+					info.submitted_authorities.push(Address(authority_id.clone().into()));
+					info.pub_keys.push(PublicKeyBytes::from(pub_key.as_ref()));
+				}
+
+				let vault_address = match relay_target.vault.address {
+					AddressState::Pending => BoundedVec::default(),
+					AddressState::Generated(address) => address,
+				};
+				info.vault_address = BitcoinAddressString::from(vault_address.into_inner());
+			}
+		}
+
+		Ok(info.into())
+	}
+
 	#[precompile::public("registrationPool()")]
 	#[precompile::public("registration_pool()")]
 	#[precompile::view]
@@ -62,6 +113,35 @@ where
 		Ok((user_bfc_addresses, refund_addresses, vault_addresses))
 	}
 
+	#[precompile::public("pendingRegistrations()")]
+	#[precompile::public("pending_registrations()")]
+	fn pending_registrations(
+		handle: &mut impl PrecompileHandle,
+	) -> EvmResult<EvmPendingRegistrationsOf> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let mut user_bfc_addresses: Vec<Address> = vec![];
+		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
+
+		if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault() {
+			if matches!(system_vault.address, AddressState::Pending) {
+				user_bfc_addresses.push(Address(handle.context().address));
+				refund_addresses.push(BitcoinAddressString::from(vec![]));
+			}
+		}
+
+		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
+			|(bfc_address, relay_target)| {
+				if matches!(relay_target.vault.address, AddressState::Pending) {
+					user_bfc_addresses.push(Address(bfc_address.into()));
+					refund_addresses
+						.push(BitcoinAddressString::from(relay_target.refund_address.into_inner()));
+				}
+			},
+		);
+		Ok((user_bfc_addresses, refund_addresses))
+	}
+
 	#[precompile::public("vaultAddresses()")]
 	#[precompile::public("vault_addresses()")]
 	#[precompile::view]
@@ -77,6 +157,7 @@ where
 					},
 				})
 				.collect();
+
 		Ok(vault_addresses)
 	}
 
@@ -88,18 +169,31 @@ where
 		user_bfc_address: Address,
 	) -> EvmResult<BitcoinAddressString> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 
-		let vault_address =
+		let mut vault_address = BitcoinAddressString::from(vec![]);
+		if user_bfc_address == Address(handle.context().address) {
+			if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault() {
+				match system_vault.address {
+					AddressState::Pending => (),
+					AddressState::Generated(address) => {
+						vault_address = BitcoinAddressString::from(address.into_inner());
+					},
+				}
+			}
+		} else {
+			let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
+
 			match BtcRegistrationPoolOf::<Runtime>::registration_pool(user_bfc_address) {
 				Some(btc_pair) => match btc_pair.vault.address {
-					AddressState::Pending => BitcoinAddressString::from(vec![]),
+					AddressState::Pending => (),
 					AddressState::Generated(address) => {
-						BitcoinAddressString::from(address.into_inner())
+						vault_address = BitcoinAddressString::from(address.into_inner())
 					},
 				},
-				None => BitcoinAddressString::from(vec![]),
-			};
+				None => (),
+			}
+		}
+
 		Ok(vault_address)
 	}
 
@@ -138,6 +232,30 @@ where
 				None => BitcoinAddressString::from(vec![]),
 			};
 		Ok(refund_address)
+	}
+
+	#[precompile::public("userAddress(string,bool)")]
+	#[precompile::public("user_address(string,bool)")]
+	#[precompile::view]
+	fn user_address(
+		handle: &mut impl PrecompileHandle,
+		vault_or_refund: BitcoinAddressString,
+		is_vault: bool,
+	) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let vault_or_refund =
+			Self::convert_string_to_bitcoin_address(vault_or_refund).in_field("vault_or_refund")?;
+		let user_address = if is_vault {
+			BtcRegistrationPoolOf::<Runtime>::bonded_vault(vault_or_refund)
+		} else {
+			BtcRegistrationPoolOf::<Runtime>::bonded_refund(vault_or_refund)
+		};
+
+		Ok(match user_address {
+			Some(address) => Address(address.into()),
+			None => Address::default(),
+		})
 	}
 
 	#[precompile::public("request_vault(string)")]
