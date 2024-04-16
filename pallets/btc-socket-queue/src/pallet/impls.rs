@@ -11,6 +11,7 @@ use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
 
 use pallet_evm::Runner;
 use scale_info::prelude::string::String;
+use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
 
 use crate::{RequestInfo, SocketMessage, UncheckedOutput, CALL_FUNCTION_SELECTOR, CALL_GAS_LIMIT};
 
@@ -22,6 +23,20 @@ where
 	T::AccountId: Into<H160>,
 	H160: Into<T::AccountId>,
 {
+	/// Verify if the authority_id is valid
+	pub fn verify_authority(
+		authority_id: &T::AccountId,
+	) -> Result<(), TransactionValidityError> {
+		if let Some(a) = <Authority<T>>::get() {
+			if a != *authority_id {
+				return Err(InvalidTransaction::BadSigner.into());
+			}
+			return Ok(());
+		} else {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+	}
+
 	/// Try to finalize the latest combined PSBT.
 	pub fn try_psbt_finalization(combined: Psbt) -> Result<Psbt, DispatchError> {
 		let secp = Secp256k1::new();

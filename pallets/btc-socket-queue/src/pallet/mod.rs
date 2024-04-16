@@ -362,15 +362,7 @@ pub mod pallet {
 			match call {
 				Call::submit_unsigned_psbt { msg, signature } => {
 					let UnsignedPsbtMessage { authority_id, psbt, .. } = msg;
-
-					// verify if the authority_id is valid
-					if let Some(a) = <Authority<T>>::get() {
-						if a != *authority_id {
-							return InvalidTransaction::BadSigner.into();
-						}
-					} else {
-						return InvalidTransaction::BadSigner.into();
-					}
+					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = format!("{:?}", Self::hash_bytes(psbt));
@@ -406,15 +398,7 @@ pub mod pallet {
 				},
 				Call::finalize_request { msg, signature } => {
 					let FinalizePsbtMessage { authority_id, psbt_hash } = msg;
-
-					// verify if the authority_id is valid
-					if let Some(a) = <Authority<T>>::get() {
-						if a != *authority_id {
-							return InvalidTransaction::BadSigner.into();
-						}
-					} else {
-						return InvalidTransaction::BadSigner.into();
-					}
+					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = format!("{:?}", psbt_hash);
