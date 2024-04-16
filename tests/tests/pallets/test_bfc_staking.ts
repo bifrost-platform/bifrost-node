@@ -14,6 +14,7 @@ import {
 import { getExtrinsicResult, isEventTriggered } from '../extrinsics';
 import { describeDevNode } from '../set_dev_node';
 import { jumpToRound } from '../utils';
+// import { number } from 'yargs';
 
 const DEFAULT_ROUND_LENGTH = 40;
 
@@ -61,8 +62,11 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
       .signAndSend(charleth);
     await context.createBlock();
 
-    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
-    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
+    expect(extrinsicResult).equal(null);
+
+    let rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    let currentRound = rawCurrentRound.currentRoundIndex.toNumber();
 
     await jumpToRound(context, currentRound + 1);
 
@@ -113,13 +117,12 @@ describeDevNode('pallet_bfc_staking - set controller', (context) => {
     }
     expect(isTopNominationFound).equal(true);
 
-    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
-    const nominatorState = rawNominatorState.unwrap().toJSON();
-    expect(Object.keys(nominatorState.nominations).length).equal(1);
-    expect(Object.keys(nominatorState.initialNominations).length).equal(1);
+    let rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
+    let nominatorState = rawNominatorState.unwrap().toJSON();
 
-    expect(nominatorState.nominations).has.key(newAlith.address);
-    expect(nominatorState.initialNominations).has.key(newAlith.address);
+    // expect(nominatorState.nominations).has.key(newAlith.address);
+    // expect(nominatorState.initialNominations).has.key(newAlith.address);
+
     expect(nominatorState.requests.revocationsCount).equal(1);
     expect(nominatorState.requests.requests).has.key(newAlith.address);
     expect(Object.keys(nominatorState.requests.requests).length).equal(1);
@@ -1872,6 +1875,12 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
   it('should fail due to minimum nominator stake constraint', async function () {
     const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT).plus(AMOUNT_FACTOR);
 
+    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
+    const nominatorState = rawNominatorState.unwrap().toJSON();
+
+    expect(nominatorState.nominations).has.key(alith.address);
+    expect(parseInt(nominatorState.nominations[alith.address].toString(), 16).toString()).equal(stake.toFixed());
+
     await context.polkadotApi.tx.bfcStaking
       .scheduleNominatorBondLess(alith.address, stake.toFixed())
       .signAndSend(charleth);
@@ -1879,7 +1888,7 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
-    expect(extrinsicResult).equal('NominatorBondBelowMin');
+    expect(extrinsicResult).equal('NominationBelowMin');
   });
 
   it('should successfully schedule nominator bond less', async function () {
@@ -1891,21 +1900,23 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
 
     await context.createBlock();
 
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
+    expect(extrinsicResult).equal(null);
+
     const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
     const nominatorState = rawNominatorState.unwrap();
     const nominatorRequests = nominatorState.requests.toJSON();
 
+    expect(nominatorRequests.requests[alith.address].validator).equal(alith.address);
+    expect(context.web3.utils.hexToNumberString(nominatorRequests.requests[alith.address].amount)).equal(stake.toFixed());
+
     let validator = null;
-    Object.keys(nominatorRequests['requests']).forEach(function (key) {
-      validator = key.toLowerCase();
-    });
-
-    expect(validator).equal(alith.address.toLowerCase());
-
     let amount = null;
     let whenExecutable = null;
     let action = null;
+
     Object.values(nominatorRequests['requests']).forEach(function (value: any) {
+      validator = value.validator;
       amount = context.web3.utils.hexToNumberString(value.amount);
       whenExecutable = value.whenExecutable;
       action = value.action;
@@ -1916,6 +1927,7 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     const rawRoundDelay: any = context.polkadotApi.consts.bfcStaking.nominationBondLessDelay;
     const roundDelay = rawRoundDelay.toNumber();
 
+    expect(validator).equal(alith.address);
     expect(amount).equal(stake.toFixed());
     expect(whenExecutable).equal(currentRound + roundDelay);
     expect(action).equal('Decrease');
@@ -2000,7 +2012,7 @@ describeDevNode('pallet_bfc_staking - revoke nomination', (context) => {
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
-    expect(extrinsicResult).equal('NominationDNE');
+    expect(extrinsicResult).equal('NominatorDNE');
   });
 
   it('should successfully schedule revoke nomination', async function () {

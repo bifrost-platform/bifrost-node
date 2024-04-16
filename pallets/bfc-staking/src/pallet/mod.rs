@@ -1740,8 +1740,22 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
-			state.revoke_nomination::<T>(validator.clone())?;
+
+			let _ = state.ok_to_revoke::<T>(validator.clone())?;
+
+			let nominate_amount =
+				state.nominations.get(&validator.clone()).ok_or(Error::<T>::NominatorDNE)?;
+
+			let less = nominate_amount.clone();
+
+			let when = state.schedule_decrease_nomination::<T>(validator.clone(), less.clone())?;
+			// state.requests.bond_less::<T>(validator, less, when)?;
+			state.requests.revoke::<T>(validator, less, when)?;
+
+			let new_state = state.clone();
+
+			<NominatorState<T>>::insert(&state.id, new_state);
+			// state.revoke_nomination::<T>(validator.clone())?;
 			Ok(().into())
 		}
 
@@ -1769,8 +1783,16 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let caller = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&caller).ok_or(Error::<T>::NominatorDNE)?;
-			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
-			state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
+
+			let _ = state.ok_to_decrease::<T>(candidate.clone(), less)?;
+
+			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
+			state.requests.bond_less::<T>(candidate, less, when)?;
+
+			let new_state = state.clone();
+
+			<NominatorState<T>>::insert(&state.id, new_state);
+
 			Ok(().into())
 		}
 
