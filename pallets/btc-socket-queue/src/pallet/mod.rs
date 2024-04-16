@@ -46,7 +46,7 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
-		/// The Bitcon registration pool pallet.
+		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: MultiSigManager + PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
