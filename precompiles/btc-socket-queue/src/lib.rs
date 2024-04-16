@@ -33,11 +33,10 @@ where
 	fn unsigned_psbts(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedBytes>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let mut psbts = vec![];
-		pallet_btc_socket_queue::PendingRequests::<Runtime>::iter().for_each(|(_, request)| {
-			psbts.push(UnboundedBytes::from(request.unsigned_psbt));
-		});
-
+		let psbts: Vec<UnboundedBytes> =
+			pallet_btc_socket_queue::PendingRequests::<Runtime>::iter()
+				.map(|(_, request)| UnboundedBytes::from(request.unsigned_psbt))
+				.collect();
 		Ok(psbts)
 	}
 
