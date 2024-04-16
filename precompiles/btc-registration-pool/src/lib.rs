@@ -16,7 +16,7 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 mod types;
 use types::{
 	BitcoinAddressString, EvmPendingRegistrationsOf, EvmRegistrationInfoOf, EvmRegistrationPoolOf,
-	PublicKeyBytes, RegistrationInfo,
+	RegistrationInfo,
 };
 
 type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
@@ -54,7 +54,7 @@ where
 				info.user_bfc_address = Address(handle.context().address);
 				for (authority_id, pub_key) in system_vault.pub_keys.iter() {
 					info.submitted_authorities.push(Address(authority_id.clone().into()));
-					info.pub_keys.push(PublicKeyBytes::from(pub_key.as_ref()));
+					info.pub_keys.push(pub_key.0.into());
 				}
 				let vault_address = match system_vault.address {
 					AddressState::Pending => BoundedVec::default(),
@@ -73,7 +73,7 @@ where
 
 				for (authority_id, pub_key) in relay_target.vault.pub_keys.iter() {
 					info.submitted_authorities.push(Address(authority_id.clone().into()));
-					info.pub_keys.push(PublicKeyBytes::from(pub_key.as_ref()));
+					info.pub_keys.push(pub_key.0.into());
 				}
 
 				let vault_address = match relay_target.vault.address {
