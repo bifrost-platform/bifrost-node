@@ -1753,10 +1753,10 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 
-			let _ = state.ok_to_revoke::<T>(candidate.clone())?;
+			let _ = state.ok_to_revoke::<T>(validator.clone())?;
 
 			let nominate_amount =
-				state.nominations.get(&candidate.clone()).ok_or(Error::<T>::NominatorDNE)?;
+				state.nominations.get(&validator.clone()).ok_or(Error::<T>::NominatorDNE)?;
 
 			let less = nominate_amount.clone();
 
@@ -1766,7 +1766,8 @@ pub mod pallet {
 				NominationChange::Revoke,
 			)?;
 
-			<NominatorState<T>>::insert(&state.id, state.clone());
+			<NominatorState<T>>::insert(&state.id, new_state);
+			// state.revoke_nomination::<T>(validator.clone())?;
 			Ok(().into())
 		}
 
