@@ -27,7 +27,7 @@ pub(crate) const SELECTOR_LOG_VAULT_PENDING: [u8; 32] = keccak256!("VaultPending
 /// A precompile to wrap the functionality from `pallet_btc_registration_pool`.
 pub struct BtcRegistrationPoolPrecompile<Runtime>(PhantomData<Runtime>);
 
-#[precompile_utils::precompile]
+#[precompile]
 impl<Runtime> BtcRegistrationPoolPrecompile<Runtime>
 where
 	Runtime: pallet_btc_registration_pool::Config<Signature = EthereumSignature>

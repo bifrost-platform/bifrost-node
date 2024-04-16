@@ -16,7 +16,7 @@ type BtcSocketQueueOf<Runtime> = pallet_btc_socket_queue::Pallet<Runtime>;
 /// A precompile to wrap the functionality from `pallet_btc_socket_queue`.
 pub struct BtcSocketQueuePrecompile<Runtime>(PhantomData<Runtime>);
 
-#[precompile_utils::precompile]
+#[precompile]
 impl<Runtime> BtcSocketQueuePrecompile<Runtime>
 where
 	Runtime: pallet_btc_socket_queue::Config<Signature = EthereumSignature>
