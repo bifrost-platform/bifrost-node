@@ -13,7 +13,7 @@ use frame_system::pallet_prelude::*;
 
 use scale_info::prelude::format;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str, vec, vec::Vec};
+use sp_std::vec::Vec;
 
 use miniscript::bitcoin::PublicKey;
 
