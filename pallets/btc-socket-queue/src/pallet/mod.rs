@@ -18,7 +18,7 @@ use bp_multi_sig::{
 };
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str, vec, vec::Vec};
+use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
