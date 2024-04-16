@@ -55,11 +55,7 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 
 	/// Check if the given signed PSBT is already submitted by an authority.
 	pub fn is_signed_psbt_submitted(&self, psbt: &UnboundedBytes) -> bool {
-		self.signed_psbts
-			.values()
-			.cloned()
-			.collect::<Vec<UnboundedBytes>>()
-			.contains(psbt)
+		self.signed_psbts.values().into_iter().any(|x| x == psbt)
 	}
 
 	/// Check if the given PSBT matches with the initial unsigned PSBT.
