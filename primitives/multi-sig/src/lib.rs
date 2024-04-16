@@ -21,7 +21,7 @@ pub const MULTI_SIG_MAX_ACCOUNTS: u32 = 16;
 pub const ADDRESS_MAX_LENGTH: u32 = 64;
 
 /// The maximum length of a valid public key in bytes (33 bytes).
-pub const PUBLIC_KEY_MAX_LENGTH: u32 = 33;
+pub const PUBLIC_KEY_LENGTH: u32 = 33;
 
 /// The Bitcoin address type (length bounded).
 pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_LENGTH>>;
@@ -85,7 +85,7 @@ impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 	}
 
 	pub fn is_key_submitted(&self, pub_key: &Public) -> bool {
-		self.pub_keys.values().cloned().collect::<Vec<Public>>().contains(pub_key)
+		self.pub_keys.values().into_iter().any(|x| x == pub_key)
 	}
 
 	pub fn is_authority_submitted(&self, authority_id: &AccountId) -> bool {

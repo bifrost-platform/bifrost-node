@@ -1,4 +1,4 @@
-use bp_multi_sig::{ADDRESS_MAX_LENGTH, PUBLIC_KEY_MAX_LENGTH};
+use bp_multi_sig::{ADDRESS_MAX_LENGTH, PUBLIC_KEY_LENGTH};
 
 use precompile_utils::prelude::{Address, BoundedBytes, BoundedString};
 use sp_core::ConstU32;
@@ -8,7 +8,7 @@ use sp_std::{vec, vec::Vec};
 pub type BitcoinAddressString = BoundedString<ConstU32<ADDRESS_MAX_LENGTH>>;
 
 /// The length bounded bytes type for public keys. (33 bytes)
-pub type PublicKeyBytes = BoundedBytes<ConstU32<PUBLIC_KEY_MAX_LENGTH>>;
+pub type PublicKeyBytes = BoundedBytes<ConstU32<PUBLIC_KEY_LENGTH>>;
 
 /// The solidity type for `RegistrationPool`.
 pub type EvmRegistrationPoolOf =
