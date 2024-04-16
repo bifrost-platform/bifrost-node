@@ -6228,6 +6228,7 @@ dependencies = [
  "bp-multi-sig",
  "frame-support",
  "frame-system",
+ "miniscript",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
