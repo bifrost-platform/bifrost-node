@@ -2,7 +2,10 @@
 
 pub mod traits;
 
-pub use miniscript::bitcoin::{Address, Network, Psbt, PublicKey, Script};
+pub use miniscript::{
+	bitcoin::{secp256k1::Secp256k1, Address, Network, Psbt, PublicKey, Script},
+	psbt::PsbtExt,
+};
 
 use sp_core::{ConstU32, RuntimeDebug};
 use sp_runtime::{BoundedBTreeMap, BoundedVec};
@@ -17,8 +20,8 @@ pub const MULTI_SIG_MAX_ACCOUNTS: u32 = 16;
 /// The maximum length of a valid Bitcoin address in characters (~64 alphanumeric characters).
 pub const ADDRESS_MAX_LENGTH: u32 = 64;
 
-/// The maximum length of a valid public key in characters (~66 alphanumeric characters).
-pub const PUBLIC_KEY_MAX_LENGTH: u32 = 66;
+/// The maximum length of a valid public key in bytes (33 bytes).
+pub const PUBLIC_KEY_MAX_LENGTH: u32 = 33;
 
 /// The Bitcoin address type (length bounded).
 pub type BoundedBitcoinAddress = BoundedVec<u8, ConstU32<ADDRESS_MAX_LENGTH>>;

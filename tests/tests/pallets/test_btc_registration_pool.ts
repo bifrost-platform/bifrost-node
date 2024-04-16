@@ -45,7 +45,7 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
 
     const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
     const bondedPubKey = rawBondedPubKey.toHuman();
-    expect(bondedPubKey).is.eq('0x0000000000000000000000000000000000000000');
+    expect(bondedPubKey).is.eq('0x0000000000000000000000000000000000000100');
   });
 });
 

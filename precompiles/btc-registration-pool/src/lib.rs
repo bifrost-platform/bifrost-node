@@ -16,7 +16,7 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 mod types;
 use types::{
 	BitcoinAddressString, EvmPendingRegistrationsOf, EvmRegistrationInfoOf, EvmRegistrationPoolOf,
-	PublicKeyString, RegistrationInfo,
+	PublicKeyBytes, RegistrationInfo,
 };
 
 type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
@@ -47,26 +47,41 @@ where
 	) -> EvmResult<EvmRegistrationInfoOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 		let mut info = RegistrationInfo::default();
 
-		if let Some(relay_target) =
-			BtcRegistrationPoolOf::<Runtime>::registration_pool(&user_bfc_address)
-		{
-			info.user_bfc_address = Address(user_bfc_address.into());
-			info.refund_address =
-				BitcoinAddressString::from(relay_target.refund_address.into_inner());
-
-			for (authority_id, pub_key) in relay_target.vault.pub_keys.iter() {
-				info.authorities.push(Address(authority_id.clone().into()));
-				info.pub_keys.push(PublicKeyString::from(pub_key.as_ref()));
+		if user_bfc_address == Address(handle.context().address) {
+			if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault() {
+				info.user_bfc_address = Address(handle.context().address);
+				for (authority_id, pub_key) in system_vault.pub_keys.iter() {
+					info.submitted_authorities.push(Address(authority_id.clone().into()));
+					info.pub_keys.push(PublicKeyBytes::from(pub_key.as_ref()));
+				}
+				let vault_address = match system_vault.address {
+					AddressState::Pending => BoundedVec::default(),
+					AddressState::Generated(address) => address,
+				};
+				info.vault_address = BitcoinAddressString::from(vault_address.into_inner());
 			}
+		} else {
+			let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
+			if let Some(relay_target) =
+				BtcRegistrationPoolOf::<Runtime>::registration_pool(&user_bfc_address)
+			{
+				info.user_bfc_address = Address(user_bfc_address.into());
+				info.refund_address =
+					BitcoinAddressString::from(relay_target.refund_address.into_inner());
 
-			let vault_address = match relay_target.vault.address {
-				AddressState::Pending => BoundedVec::default(),
-				AddressState::Generated(address) => address,
-			};
-			info.vault_address = BitcoinAddressString::from(vault_address.into_inner());
+				for (authority_id, pub_key) in relay_target.vault.pub_keys.iter() {
+					info.submitted_authorities.push(Address(authority_id.clone().into()));
+					info.pub_keys.push(PublicKeyBytes::from(pub_key.as_ref()));
+				}
+
+				let vault_address = match relay_target.vault.address {
+					AddressState::Pending => BoundedVec::default(),
+					AddressState::Generated(address) => address,
+				};
+				info.vault_address = BitcoinAddressString::from(vault_address.into_inner());
+			}
 		}
 
 		Ok(info.into())
@@ -108,6 +123,13 @@ where
 		let mut user_bfc_addresses: Vec<Address> = vec![];
 		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
 
+		if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault() {
+			if matches!(system_vault.address, AddressState::Pending) {
+				user_bfc_addresses.push(Address(handle.context().address));
+				refund_addresses.push(BitcoinAddressString::from(vec![]));
+			}
+		}
+
 		pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter().for_each(
 			|(bfc_address, relay_target)| {
 				if matches!(relay_target.vault.address, AddressState::Pending) {
@@ -135,6 +157,7 @@ where
 					},
 				})
 				.collect();
+
 		Ok(vault_addresses)
 	}
 
@@ -146,18 +169,31 @@ where
 		user_bfc_address: Address,
 	) -> EvmResult<BitcoinAddressString> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 
-		let vault_address =
+		let mut vault_address = BitcoinAddressString::from(vec![]);
+		if user_bfc_address == Address(handle.context().address) {
+			if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault() {
+				match system_vault.address {
+					AddressState::Pending => (),
+					AddressState::Generated(address) => {
+						vault_address = BitcoinAddressString::from(address.into_inner());
+					},
+				}
+			}
+		} else {
+			let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
+
 			match BtcRegistrationPoolOf::<Runtime>::registration_pool(user_bfc_address) {
 				Some(btc_pair) => match btc_pair.vault.address {
-					AddressState::Pending => BitcoinAddressString::from(vec![]),
+					AddressState::Pending => (),
 					AddressState::Generated(address) => {
-						BitcoinAddressString::from(address.into_inner())
+						vault_address = BitcoinAddressString::from(address.into_inner())
 					},
 				},
-				None => BitcoinAddressString::from(vec![]),
-			};
+				None => (),
+			}
+		}
+
 		Ok(vault_address)
 	}
 

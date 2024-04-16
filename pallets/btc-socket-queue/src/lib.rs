@@ -24,8 +24,12 @@ const CALL_FUNCTION_SELECTOR: &str = "8dac2204";
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The submitted PSBT information for outbound request(s).
 pub struct PsbtRequest<AccountId> {
-	/// The submitted initial unsigned PSBT (in bytes).
+	/// The submitted origin unsigned PSBT (in bytes).
 	pub unsigned_psbt: UnboundedBytes,
+	/// The latest combined PSBT with the given signed PSBT's (in bytes).
+	pub combined_psbt: UnboundedBytes,
+	/// The finalized PSBT with the current combined PSBT (in bytes).
+	pub finalized_psbt: UnboundedBytes,
 	/// The submitted signed PSBT's (in bytes).
 	pub signed_psbts: BoundedBTreeMap<AccountId, UnboundedBytes, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 	/// The submitted `SocketMessage`'s of this request. It is ordered by the PSBT's tx outputs.
@@ -35,7 +39,13 @@ pub struct PsbtRequest<AccountId> {
 impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	/// Instantiates a new `PsbtRequest` instance.
 	pub fn new(unsigned_psbt: UnboundedBytes, socket_messages: Vec<UnboundedBytes>) -> Self {
-		Self { unsigned_psbt, signed_psbts: BoundedBTreeMap::default(), socket_messages }
+		Self {
+			combined_psbt: unsigned_psbt.clone(),
+			unsigned_psbt,
+			finalized_psbt: UnboundedBytes::default(),
+			signed_psbts: BoundedBTreeMap::default(),
+			socket_messages,
+		}
 	}
 
 	/// Check if the given authority has already submitted a signed PSBT.
@@ -56,6 +66,16 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	pub fn is_unsigned_psbt(&self, psbt: &UnboundedBytes) -> bool {
 		self.unsigned_psbt.eq(psbt)
 	}
+
+	/// Update the latest combined PSBT.
+	pub fn set_combined_psbt(&mut self, psbt: UnboundedBytes) {
+		self.combined_psbt = psbt;
+	}
+
+	/// Update the finalized PSBT.
+	pub fn set_finalized_psbt(&mut self, psbt: UnboundedBytes) {
+		self.finalized_psbt = psbt;
+	}
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
@@ -63,7 +83,10 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 pub struct UnsignedPsbtMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
+	/// The PSBT's system output index.
+	pub system_vout: u32,
 	/// The emitted `SocketMessage`'s (in bytes).
+	/// The order should match with the submitted PSBT's outputs order.
 	pub socket_messages: Vec<UnboundedBytes>,
 	/// The unsigned PSBT (in bytes).
 	pub psbt: UnboundedBytes,
@@ -195,6 +218,17 @@ impl SocketMessage {
 	/// Check if the message status is in `Accepted`.
 	pub fn is_accepted(&self) -> bool {
 		self.status == U256::from(5)
+	}
+
+	/// Check if the message is a Bifrost to Bitcoin outbound request.
+	pub fn is_outbound(&self, bifrost_chain_id: u32, bitcoin_chain_id: u32) -> bool {
+		if self.req_id.chain.clone().as_slice() != bifrost_chain_id.to_be_bytes() {
+			return false;
+		}
+		if self.ins_code.chain.clone().as_slice() != bitcoin_chain_id.to_be_bytes() {
+			return false;
+		}
+		true
 	}
 }
 

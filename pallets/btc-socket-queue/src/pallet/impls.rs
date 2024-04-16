@@ -1,9 +1,10 @@
 use ethabi_decode::{ParamKind, Token};
 
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, Script, UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, PsbtExt, Script, Secp256k1,
+	UnboundedBytes,
 };
-use sp_core::{H160, H256, U256};
+use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::DispatchError;
 use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
@@ -21,29 +22,31 @@ where
 	T::AccountId: Into<H160>,
 	H160: Into<T::AccountId>,
 {
+	/// Try to finalize the latest combined PSBT.
+	pub fn try_psbt_finalization(combined: Psbt) -> Result<Psbt, DispatchError> {
+		let secp = Secp256k1::new();
+		let finalized = combined.finalize(&secp).map_err(|_| Error::<T>::CannotFinalizePsbt)?;
+		Ok(finalized)
+	}
+
+	/// Try to combine the signed PSBT with the latest combined PSBT. If fails, the given PSBT is considered as invalid.
+	pub fn try_psbt_combination(combined: &mut Psbt, signed: &Psbt) -> Result<Psbt, DispatchError> {
+		combined.combine(signed.clone()).map_err(|_| Error::<T>::InvalidPsbt)?;
+		Ok(combined.clone())
+	}
+
 	/// Try to deserialize the given bytes to a `PSBT` instance.
 	pub fn try_get_checked_psbt(psbt: &UnboundedBytes) -> Result<Psbt, DispatchError> {
 		Ok(Psbt::deserialize(psbt).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
-	/// Try to combine the signed PSBT with the origin. If fails, the given PSBT is considered as invalid.
-	/// On success, returns the transaction ID.
-	pub fn try_signed_psbt_verification(
-		origin: &UnboundedBytes,
-		signed: &UnboundedBytes,
-	) -> Result<H256, DispatchError> {
-		let mut origin = Self::try_get_checked_psbt(origin)?;
-		let s = Self::try_get_checked_psbt(signed)?;
-		origin.combine(s).map_err(|_| Error::<T>::InvalidPsbt)?;
-		Ok(H256::from(origin.unsigned_tx.txid().as_ref()))
-	}
-
 	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
 	pub fn try_psbt_output_verification(
-		psbt: &UnboundedBytes,
+		psbt: &Psbt,
 		unchecked: Vec<UncheckedOutput>,
+		system_vout: usize,
 	) -> Result<(), DispatchError> {
-		let origin = Self::try_get_checked_psbt(&psbt)?.unsigned_tx.output;
+		let origin = &psbt.unsigned_tx.output;
 		if origin.len() != unchecked.len() {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
@@ -56,21 +59,20 @@ where
 			Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
 		};
 
-		let system_vault = convert_to_address(origin[0].script_pubkey.as_script())
-			.map_err(|_| Error::<T>::InvalidPsbt)?;
-		if system_vault != unchecked[0].to {
-			return Err(Error::<T>::InvalidPsbt.into());
-		}
-		for i in 1..origin.len() {
+		for i in 0..origin.len() {
 			let to = convert_to_address(origin[i].script_pubkey.as_script())
 				.map_err(|_| Error::<T>::InvalidPsbt)?;
-			let amount = U256::from(origin[i].value.to_sat());
-
 			if to != unchecked[i].to {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
-			if amount != unchecked[i].amount {
-				return Err(Error::<T>::InvalidPsbt.into());
+
+			if i == system_vout {
+				// TODO: check amount
+			} else {
+				let amount = U256::from(origin[i].value.to_sat());
+				if amount != unchecked[i].amount {
+					return Err(Error::<T>::InvalidPsbt.into());
+				}
 			}
 		}
 		Ok(())
@@ -79,6 +81,7 @@ where
 	/// Try to verify the submitted socket messages and build unchecked outputs.
 	pub fn try_build_unchecked_outputs(
 		socket_messages: &Vec<UnboundedBytes>,
+		system_vout: usize,
 	) -> Result<(Vec<UncheckedOutput>, Vec<SocketMessage>), DispatchError> {
 		let system_vault =
 			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDNE)?;
@@ -87,6 +90,9 @@ where
 		if socket_messages.is_empty() {
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
+		if socket_messages.len() < system_vout {
+			return Err(Error::<T>::InvalidSystemVout.into());
+		}
 		let mut outputs = vec![];
 
 		let convert_to_address = |addr: BoundedBitcoinAddress| {
@@ -94,12 +100,6 @@ where
 			let addr = str::from_utf8(&addr).expect("Must be valid");
 			Address::from_str(addr).expect("Must be valid").assume_checked()
 		};
-
-		// we assume the first output to be the utxo repayment
-		outputs.push(UncheckedOutput {
-			to: convert_to_address(system_vault),
-			amount: Default::default(),
-		});
 
 		let mut msgs = vec![];
 		let mut msg_hashes = vec![];
@@ -120,11 +120,15 @@ where
 			if !request_info.is_accepted() || !msg.is_accepted() {
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
+			if !msg.is_outbound(
+				<T as pallet_evm::Config>::ChainId::get() as u32,
+				T::RegistrationPool::get_bitcoin_chain_id(),
+			) {
+				return Err(Error::<T>::InvalidSocketMessage.into());
+			}
 			if Self::socket_messages(&msg.req_id.sequence).is_some() {
 				return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
 			}
-			// TODO: check if request is outbound sequence
-			// TODO: check if asset is unified btc
 
 			// the user must exist in the pool
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
@@ -134,6 +138,11 @@ where
 			msgs.push(msg);
 			msg_hashes.push(msg_hash);
 		}
+		// we assume the utxo repayment output would be placed at `system_vout`
+		outputs.insert(
+			system_vout,
+			UncheckedOutput { to: convert_to_address(system_vault), amount: Default::default() },
+		);
 		Ok((outputs, msgs))
 	}
 

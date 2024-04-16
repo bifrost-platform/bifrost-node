@@ -82,6 +82,10 @@ pub mod pallet {
 		InvalidSocketMessage,
 		/// The request information is invalid.
 		InvalidRequestInfo,
+		/// The submitted system vout is invalid.
+		InvalidSystemVout,
+		/// Cannot finalize the PSBT.
+		CannotFinalizePsbt,
 		/// The value is out of range.
 		OutOfRange,
 		/// Cannot overwrite to the same value.
@@ -92,13 +96,9 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// An unsigned PSBT for an outbound request has been submitted.
-		UnsignedPsbtSubmitted { psbt: UnboundedBytes },
+		UnsignedPsbtSubmitted { psbt_hash: H256 },
 		/// A signed PSBT for an outbound request has been submitted.
-		SignedPsbtSubmitted {
-			psbt_hash: H256,
-			authority_id: T::AccountId,
-			signed_psbt: UnboundedBytes,
-		},
+		SignedPsbtSubmitted { psbt_hash: H256, authority_id: T::AccountId },
 		/// An outbound request has been accepted.
 		RequestAccepted { psbt_hash: H256 },
 		/// An outbound request has been finalized.
@@ -228,11 +228,14 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { socket_messages, psbt, .. } = msg;
+			let UnsignedPsbtMessage { system_vout, socket_messages, psbt, .. } = msg;
 
 			let psbt_hash = Self::hash_bytes(&psbt);
 
-			// the request shouldn't been handled yet
+			// verify if psbt bytes are valid
+			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
+
+			// prevent storage duplication
 			ensure!(
 				!<PendingRequests<T>>::contains_key(&psbt_hash),
 				Error::<T>::RequestAlreadyExists
@@ -246,8 +249,12 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 
-			let (unchecked, msgs) = Self::try_build_unchecked_outputs(&socket_messages)?;
-			Self::try_psbt_output_verification(&psbt, unchecked)?;
+			// verify PSBT outputs
+			let system_vout =
+				usize::try_from(system_vout).map_err(|_| Error::<T>::InvalidSystemVout)?;
+			let (unchecked, msgs) =
+				Self::try_build_unchecked_outputs(&socket_messages, system_vout)?;
+			Self::try_psbt_output_verification(&psbt_obj, unchecked, system_vout)?;
 
 			for msg in msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
@@ -256,7 +263,7 @@ pub mod pallet {
 				&psbt_hash,
 				PsbtRequest::new(psbt.clone(), socket_messages),
 			);
-			Self::deposit_event(Event::UnsignedPsbtSubmitted { psbt });
+			Self::deposit_event(Event::UnsignedPsbtSubmitted { psbt_hash });
 
 			Ok(().into())
 		}
@@ -276,39 +283,47 @@ pub mod pallet {
 
 			let psbt_hash = Self::hash_bytes(&unsigned_psbt);
 
+			// verify if psbt bytes are valid
+			let _unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
+			let signed_psbt_obj = Self::try_get_checked_psbt(&signed_psbt)?;
+
 			let mut pending_request =
 				<PendingRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
 
-			ensure!(
-				!pending_request.is_authority_submitted(&authority_id),
-				Error::<T>::AuthorityAlreadySubmitted
-			);
+			// prevent storage duplications
 			ensure!(
 				!pending_request.is_signed_psbt_submitted(&signed_psbt),
 				Error::<T>::SignedPsbtAlreadySubmitted
 			);
 			ensure!(!pending_request.is_unsigned_psbt(&signed_psbt), Error::<T>::InvalidPsbt);
-			let txid = Self::try_signed_psbt_verification(&unsigned_psbt, &signed_psbt)?;
 
+			// combine signed PSBT
+			let combined_psbt_obj = Self::try_psbt_combination(
+				&mut Self::try_get_checked_psbt(&pending_request.combined_psbt)?,
+				&signed_psbt_obj,
+			)?;
+			pending_request.set_combined_psbt(combined_psbt_obj.serialize());
 			pending_request
 				.signed_psbts
 				.try_insert(authority_id.clone(), signed_psbt.clone())
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
+			// if finalizable (quorum reached m), then accept the request
 			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
-				// if finalizable (quorum reached m), then accept the request
+				let finalized_psbt_obj = Self::try_psbt_finalization(combined_psbt_obj)?;
+				let txid = H256::from(finalized_psbt_obj.unsigned_tx.txid().as_ref());
+				pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
+
+				// move pending to accepted
 				<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
 				<AcceptedRequests<T>>::insert(&psbt_hash, pending_request);
 				<PendingRequests<T>>::remove(&psbt_hash);
+
 				Self::deposit_event(Event::RequestAccepted { psbt_hash });
 			} else {
 				// if not, remain as pending
 				<PendingRequests<T>>::insert(&psbt_hash, pending_request);
-				Self::deposit_event(Event::SignedPsbtSubmitted {
-					psbt_hash,
-					authority_id,
-					signed_psbt,
-				});
+				Self::deposit_event(Event::SignedPsbtSubmitted { psbt_hash, authority_id });
 			}
 
 			Ok(().into())

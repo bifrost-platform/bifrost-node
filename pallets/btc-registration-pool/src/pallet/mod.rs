@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, SystemVaultKeySubmission,
-	VaultKeySubmission, WeightInfo,
+	VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -48,6 +48,9 @@ pub mod pallet {
 		/// The required number of signatures to send a transaction with the vault account.
 		#[pallet::constant]
 		type DefaultRequiredN: Get<u8>;
+		/// The custom Bitcoin's chain ID for CCCP.
+		#[pallet::constant]
+		type BitcoinChainId: Get<u32>;
 		/// The flag that represents whether the target Bitcoin network is the mainnet.
 		type BitcoinNetwork: Get<Network>;
 		/// Weight information for extrinsics in this pallet.
@@ -360,10 +363,13 @@ pub mod pallet {
 					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());
 
-					<BondedVault<T>>::insert(&vault_address, H160::default().into());
+					<BondedVault<T>>::insert(
+						&vault_address,
+						H160::from_low_u64_be(ADDRESS_U64).into(),
+					);
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
-				<BondedPubKey<T>>::insert(&pub_key, H160::default().into());
+				<BondedPubKey<T>>::insert(&pub_key, H160::from_low_u64_be(ADDRESS_U64).into());
 				<SystemVault<T>>::put(system_vault);
 			} else {
 				return Err(Error::<T>::SystemVaultDNE)?;

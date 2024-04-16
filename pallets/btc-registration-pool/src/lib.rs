@@ -12,6 +12,8 @@ use sp_core::RuntimeDebug;
 
 use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
+pub const ADDRESS_U64: u64 = 256;
+
 #[derive(Decode, Encode, TypeInfo)]
 /// The registered Bitcoin relay target information.
 pub struct BitcoinRelayTarget<AccountId> {
