@@ -50,18 +50,21 @@ impl<T: Config> Pallet<T> {
 	/// Generate a multi-sig vault address.
 	pub fn generate_vault_address(
 		raw_pub_keys: Vec<Public>,
-	) -> Result<BoundedBitcoinAddress, DispatchError> {
+	) -> Result<(BoundedBitcoinAddress, UnboundedBytes), DispatchError> {
 		let desc = Self::generate_descriptor(<RequiredM<T>>::get() as usize, raw_pub_keys)
 			.map_err(|_| Error::<T>::DescriptorGeneration)?;
 
 		// generate vault address
-		Ok(BoundedVec::try_from(
-			Self::generate_address(desc.script_pubkey().as_script(), T::BitcoinNetwork::get())
-				.to_string()
-				.as_bytes()
-				.to_vec(),
-		)
-		.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
+		Ok((
+			BoundedVec::try_from(
+				Self::generate_address(desc.script_pubkey().as_script(), T::BitcoinNetwork::get())
+					.to_string()
+					.as_bytes()
+					.to_vec(),
+			)
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
+			desc.to_string().as_bytes().to_vec(),
+		))
 	}
 
 	/// Check if the given address is valid on the target Bitcoin network. Then returns the checked address.

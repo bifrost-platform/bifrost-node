@@ -105,6 +105,7 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn system_vault)]
 	/// The system vault account that is used for fee refunds.
 	pub type SystemVault<T: Config> = StorageValue<_, MultiSigAccount<T::AccountId>, OptionQuery>;
@@ -307,8 +308,10 @@ pub mod pallet {
 
 			if relay_target.vault.is_key_generation_ready() {
 				// generate vault address
-				let vault_address = Self::generate_vault_address(relay_target.vault.pub_keys())?;
+				let (vault_address, descriptor) =
+					Self::generate_vault_address(relay_target.vault.pub_keys())?;
 				relay_target.set_vault_address(vault_address.clone());
+				relay_target.vault.set_descriptor(descriptor);
 
 				<BondedVault<T>>::insert(&vault_address, who.clone());
 				Self::deposit_event(Event::VaultGenerated {
@@ -362,8 +365,10 @@ pub mod pallet {
 
 				if system_vault.is_key_generation_ready() {
 					// generate vault address
-					let vault_address = Self::generate_vault_address(system_vault.pub_keys())?;
+					let (vault_address, descriptor) =
+						Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());
+					system_vault.set_descriptor(descriptor);
 
 					<BondedVault<T>>::insert(
 						&vault_address,

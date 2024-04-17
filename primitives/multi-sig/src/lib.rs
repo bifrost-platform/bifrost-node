@@ -51,11 +51,13 @@ impl AsRef<[u8]> for Public {
 	}
 }
 
-#[derive(Decode, Encode, TypeInfo, MaxEncodedLen)]
+#[derive(Decode, Encode, TypeInfo)]
 /// A m-of-n multi signature based Bitcoin address.
 pub struct MultiSigAccount<AccountId> {
 	/// The vault address.
 	pub address: AddressState,
+	/// The descriptor of the script.
+	pub descriptor: UnboundedBytes,
 	/// Public keys that the vault address contains.
 	pub pub_keys: BoundedBTreeMap<AccountId, Public, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 	/// The m value of the multi-sig address.
@@ -66,7 +68,13 @@ pub struct MultiSigAccount<AccountId> {
 
 impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 	pub fn new(m: u8, n: u8) -> Self {
-		Self { address: AddressState::Pending, pub_keys: BoundedBTreeMap::new(), m, n }
+		Self {
+			address: AddressState::Pending,
+			descriptor: UnboundedBytes::default(),
+			pub_keys: BoundedBTreeMap::new(),
+			m,
+			n,
+		}
 	}
 
 	pub fn is_pending(&self) -> bool {
@@ -94,6 +102,10 @@ impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 
 	pub fn set_address(&mut self, address: BoundedBitcoinAddress) {
 		self.address = AddressState::Generated(address)
+	}
+
+	pub fn set_descriptor(&mut self, descriptor: UnboundedBytes) {
+		self.descriptor = descriptor
 	}
 
 	pub fn pub_keys(&self) -> Vec<Public> {
