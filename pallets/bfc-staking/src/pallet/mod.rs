@@ -1755,7 +1755,6 @@ pub mod pallet {
 			let new_state = state.clone();
 
 			<NominatorState<T>>::insert(&state.id, new_state);
-			// state.revoke_nomination::<T>(validator.clone())?;
 			Ok(().into())
 		}
 

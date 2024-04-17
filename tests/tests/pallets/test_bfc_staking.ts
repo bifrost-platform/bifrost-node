@@ -1899,6 +1899,7 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
       .signAndSend(charleth);
 
     await context.createBlock();
+    await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
     expect(extrinsicResult).equal(null);
@@ -1931,6 +1932,16 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     expect(amount).equal(stake.toFixed());
     expect(whenExecutable).equal(currentRound + roundDelay);
     expect(action).equal('Decrease');
+
+    const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
+    const candidateState = rawCandidateState.unwrap();
+
+    expect(candidateState.nominationCount.toString()).equal('1');
+
+    const selfBond = new BigNumber(candidateState.bond.toString());
+    const expectedStake = selfBond.plus(stake.toFixed());
+    expect(candidateState.votingPower.toString()).equal(expectedStake.toFixed());
+
   });
 
   it('should fail due to wrong round to execute schedule nominator bond less', async function () {
