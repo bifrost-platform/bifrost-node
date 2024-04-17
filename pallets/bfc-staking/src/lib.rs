@@ -1885,7 +1885,12 @@ impl<
 
 	pub fn is_last_nominator<T: Config>(&self) -> bool {
 		// revoking last nomination => leaving set of nominators
-		let is_last_nominator = if self.nominations.len() == 1usize { true } else { false };
+		let is_last_nominator =
+			if (self.nominations.len() == 1usize || self.requests.requests.len() == 1usize) {
+				true
+			} else {
+				false
+			};
 		is_last_nominator
 	}
 
@@ -1987,11 +1992,40 @@ impl<
 			NominationChange::Revoke | NominationChange::Leave => {
 				self.requests.revocations_count =
 					self.requests.revocations_count.saturating_sub(1u32);
-			},
-			NominationChange::Decrease => {},
-		}
+				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
 
-		self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+				// update validator state nomination
+				let mut validator_state =
+					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+
+				let (nominator_position, less_total_staked) = validator_state.add_nomination::<T>(
+					&candidate_id,
+					Bond { owner: nominator_id.clone(), amount: balance_amt },
+				)?;
+
+				let after = validator_state.voting_power;
+				Pallet::<T>::update_active(&candidate_id, after)?;
+				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+				let net_total_increase = if let Some(less) = less_total_staked {
+					balance_amt - less
+				} else {
+					balance_amt
+				};
+				<Total<T>>::mutate(|total_locked| {
+					*total_locked += net_total_increase;
+				});
+
+				<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+				<NominatorState<T>>::insert(&nominator_id, nom_st);
+				Pallet::<T>::deposit_event(Event::Nomination {
+					nominator: nominator_id.clone(),
+					locked_amount: Zero::zero(),
+					candidate: candidate_id,
+					nominator_position,
+				});
+			},
+			NominationChange::Decrease => {
+				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
 
 		let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
 

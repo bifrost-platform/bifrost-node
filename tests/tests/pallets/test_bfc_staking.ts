@@ -1900,6 +1900,7 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
       .signAndSend(charleth);
 
     await context.createBlock();
+    await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
     expect(extrinsicResult).equal(null);
