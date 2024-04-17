@@ -40,6 +40,8 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
     const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
     const systemVault = rawSystemVault.toHuman();
 
+    expect(systemVault.descriptor).is.eq('wsh(sortedmulti(1,02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4))#0hzltyp0');
+
     expect(systemVault.address['Generated']).is.ok;
     expect(systemVault.pubKeys[alithRelayer.address]).is.eq(pubKey);
 
