@@ -1,4 +1,7 @@
-use miniscript::bitcoin::{key::Error, Address, Network, PublicKey, Script};
+use miniscript::{
+	bitcoin::{key::Error, Address, Network, PublicKey, Script},
+	Descriptor,
+};
 
 use sp_std::{vec, vec::Vec};
 
@@ -17,6 +20,17 @@ pub trait MultiSigManager {
 		}
 		pub_keys.sort();
 		Ok(pub_keys)
+	}
+
+	fn generate_descriptor(
+		m: usize,
+		raw_pub_keys: Vec<Public>,
+	) -> Result<Descriptor<PublicKey>, ()> {
+		let desc =
+			Descriptor::new_wsh_sortedmulti(m, Self::sort_pub_keys(raw_pub_keys).map_err(|_| ())?)
+				.map_err(|_| ())?;
+		desc.sanity_check().map_err(|_| ())?;
+		Ok(desc)
 	}
 
 	/// Creates a witness pay to script hash address.

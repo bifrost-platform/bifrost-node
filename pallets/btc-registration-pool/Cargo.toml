@@ -11,7 +11,6 @@ repository = { workspace = true }
 [dependencies]
 # General
 array-bytes = { workspace = true }
-miniscript = { workspace = true }
 
 # Substrate
 scale-info = { workspace = true }

@@ -2,7 +2,6 @@ use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
 	Address, AddressState, Network, UnboundedBytes,
 };
-use miniscript::Descriptor;
 use scale_info::prelude::string::ToString;
 use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
@@ -52,12 +51,8 @@ impl<T: Config> Pallet<T> {
 	pub fn generate_vault_address(
 		raw_pub_keys: Vec<Public>,
 	) -> Result<BoundedBitcoinAddress, DispatchError> {
-		let desc = Descriptor::new_wsh_sortedmulti(
-			<RequiredM<T>>::get() as usize,
-			Self::sort_pub_keys(raw_pub_keys).map_err(|_| Error::<T>::InvalidPublicKey)?,
-		)
-		.map_err(|_| Error::<T>::InvalidPublicKey)?;
-		desc.sanity_check().map_err(|_| Error::<T>::InvalidPublicKey)?;
+		let desc = Self::generate_descriptor(<RequiredM<T>>::get() as usize, raw_pub_keys)
+			.map_err(|_| Error::<T>::DescriptorGeneration)?;
 
 		// generate vault address
 		Ok(BoundedVec::try_from(

@@ -71,6 +71,8 @@ pub mod pallet {
 		InvalidBitcoinAddress,
 		/// The given public key is invalid.
 		InvalidPublicKey,
+		/// Descriptor generation error.
+		DescriptorGeneration,
 		/// Cannot set the value as identical to the previous value.
 		NoWritingSameValue,
 		/// The user does not exist.
