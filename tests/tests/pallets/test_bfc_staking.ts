@@ -1899,7 +1899,6 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
       .signAndSend(charleth);
 
     await context.createBlock();
-    await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
     expect(extrinsicResult).equal(null);
@@ -1984,6 +1983,9 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     await context.createBlock();
     await context.createBlock();
 
+    let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'executeNominationRequest');
+    expect(extrinsicResult).equal(null);
+
     const rawNominatorStateAfter: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
     const nominatorStateAfter = rawNominatorStateAfter.unwrap().toJSON();
     const nominatorRequestsAfter = nominatorStateAfter.requests;
@@ -1995,6 +1997,66 @@ describeDevNode('pallet_bfc_staking - nominator stake management', (context) => 
     expect(validatorAfter).to.be.null;
     expect(parseInt(nominatorStateAfter.nominations[alith.address].toString(), 16).toString()).equal(MIN_NOMINATOR_STAKING_AMOUNT);
   });
+
+  it('should successfully cancel scheduled nominator bond less', async function () {
+
+    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+    const stakeAfter = stake.multipliedBy(2);
+
+    const rawNominatorStateBefore: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
+    const nominatorStateBefore = rawNominatorStateBefore.unwrap();
+    const nominatorRequestsBefore = nominatorStateBefore.requests.toJSON();
+
+    let validator = null;
+    let amount = null;
+    let whenExecutable = null;
+    let action = null;
+
+    Object.values(nominatorRequestsBefore['requests']).forEach(function (value: any) {
+      validator = value.validator;
+      amount = context.web3.utils.hexToNumberString(value.amount);
+      whenExecutable = value.whenExecutable;
+      action = value.action;
+    });
+
+    expect(validator).equal(alith.address);
+    expect(amount).equal(stake.toFixed());
+    expect(whenExecutable).to.be.not.null;
+    expect(action).equal('Decrease');
+
+    await context.polkadotApi.tx.bfcStaking
+      .cancelNominationRequest(alith.address)
+      .signAndSend(charleth);
+
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'cancelNominationRequest');
+    expect(extrinsicResult).equal(null);
+
+    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
+    const nominatorState = rawNominatorState.unwrap().toJSON();
+
+    expect(nominatorState.nominations).has.key(alith.address);
+    expect(parseInt(nominatorState.nominations[alith.address].toString(), 16).toString()).equal(stakeAfter.toFixed());
+
+    const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
+    const candidateState = rawCandidateState.unwrap();
+
+    expect(candidateState.nominationCount.toString()).equal('1');
+
+    const selfBond = new BigNumber(candidateState.bond.toString());
+    const expectedStake = selfBond.plus(stakeAfter);
+    expect(candidateState.votingPower.toString()).equal(expectedStake.toFixed());
+
+    const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
+    const topNominations = rawTopNominations.unwrap();
+
+    expect(topNominations.nominations[0].owner.toString().toLowerCase()).equal(charleth.address.toLowerCase());
+    expect(topNominations.nominations[0].amount.toString()).equal(stakeAfter.toFixed());
+
+
+  });
+
 });
 
 describeDevNode('pallet_bfc_staking - revoke nomination', (context) => {
@@ -2233,4 +2295,22 @@ describeDevNode('pallet_bfc_staking - leave nominators', (context) => {
     const balanceAfter = new BigNumber((await context.web3.eth.getBalance(charleth.address)).toString());
     expect(balanceAfter.isGreaterThan(balanceBefore)).equal(true);
   });
+});
+
+describeDevNode('pallet_bfc_staking - nominator stake management', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
+
+  before('should successfully nominate to alith', async function () {
+    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+
+    await context.polkadotApi.tx.bfcStaking
+      .nominate(alith.address, stake.toFixed(), 0, 0)
+      .signAndSend(charleth);
+
+    await context.createBlock();
+  });
+
 });

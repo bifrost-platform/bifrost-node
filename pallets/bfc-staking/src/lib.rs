@@ -1764,18 +1764,26 @@ impl<
 		T::AccountId: From<AccountId>,
 		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
 	{
+		// None of candidate founded in nominator`s nominations
 		let nominate_amount =
 			self.nominations.get(&candidate.clone()).ok_or(Error::<T>::NominatorDNE)?;
 
 		let expected_amt: BalanceOf<T> = (*nominate_amount - amount).into();
 		let net_total: BalanceOf<T> = self.total.saturating_sub(amount).into();
 
+		// Requestment is already subjected
 		ensure!(
 			self.requests.requests.get(&candidate).is_none(),
 			Error::<T>::PendingNominationRequestAlreadyExists
 		);
+
+		// Given nominator is leaving
 		ensure!(!self.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
+
+		// Given amount is below than minimum stake amount required for each candidate
 		ensure!(expected_amt >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
+
+		// Given amount is below than minimum stake amount required totally
 		ensure!(net_total >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
 
 		Ok(())
@@ -1805,6 +1813,8 @@ impl<
 
 			let mut validator_state =
 				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+
+			// by the deep, decrease (TopNomination & BottomNomination)`s nomination, total
 			let in_top = validator_state.decrease_nomination::<T>(
 				&candidate_id,
 				nominator_id.clone(),
@@ -1815,11 +1825,16 @@ impl<
 			let when = <Round<T>>::get().current_round_index + T::NominationBondLessDelay::get();
 
 			let after = validator_state.voting_power;
-			Pallet::<T>::update_active(&candidate_id, after)?;
 
 			let new_total_staked = <Total<T>>::get().saturating_sub(balance_amt);
 
+			// update voting power
+			Pallet::<T>::update_active(&candidate_id, after)?;
+
+			// update total stake
 			<Total<T>>::put(new_total_staked);
+
+			// update candidate nominations
 			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
 			Pallet::<T>::deposit_event(Event::NominationDecreaseScheduled {
 				nominator: nominator_id,
@@ -1840,22 +1855,30 @@ impl<
 		T::AccountId: From<AccountId>,
 		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
 	{
+		// None of candidate founded in nominator`s nominations
 		let nominate_amount =
 			self.nominations.get(&candidate.clone()).ok_or(Error::<T>::NominatorDNE)?;
 
 		let net_total: BalanceOf<T> = self.total.saturating_sub(*nominate_amount).into();
 		let is_last_nominator = self.is_last_nominator::<T>();
 
+		// Requestment is already subjected
 		ensure!(
 			self.requests.requests.get(&candidate).is_none(),
 			Error::<T>::PendingNominationRequestAlreadyExists
 		);
+
+		// Given nominator is leaving
 		ensure!(!self.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
+
+		// Given nominator is revoking given candidate
 		ensure!(!self.is_revoking(&candidate.clone()), Error::<T>::NominatorAlreadyRevoking);
 
 		if !is_last_nominator {
+			// Given amount is below than minimum stake amount required totally
 			ensure!(net_total >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
 		} else {
+			// Given amount must be same as amount nominated under the last_nominator condition
 			ensure!(net_total == Zero::zero(), Error::<T>::NominationDNE);
 		}
 
