@@ -55,7 +55,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
 
   it('should fail to join registration pool due to invalid refund address - wrong format', async function () {
-    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h1';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q1';
 
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
@@ -85,7 +85,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
   });
 
   it('should successfully join registration pool', async function () {
-    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
 
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
@@ -101,7 +101,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
   });
 
   it('should fail to join registration pool due to duplicate refund address', async function () {
-    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
 
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(charleth);
     await context.createBlock();
@@ -111,7 +111,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
   });
 
   it('should fail to join registration pool due to duplicate user address', async function () {
-    const refund = 'tb1qm25npfj7a5dzewgz95l4cqy5vxpqyx7n3yqsjc';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
 
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
@@ -128,7 +128,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
   const charlethRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
 
   before('should successfully join registration pool', async function () {
-    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
 
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
@@ -246,7 +246,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
   });
 
   before('should successfully join registration pool', async function () {
-    const refund = 'tb1p94937r32tem7qfh8v0erjqrvs5ca9js5wewmd93aa3yhdsr3pc5qdtsy5h';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
 
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
