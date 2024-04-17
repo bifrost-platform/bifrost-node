@@ -258,6 +258,23 @@ where
 		})
 	}
 
+	#[precompile::public("descriptor(string)")]
+	#[precompile::view]
+	fn descriptor(
+		handle: &mut impl PrecompileHandle,
+		vault_address: BitcoinAddressString,
+	) -> EvmResult<UnboundedString> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let vault_address =
+			Self::convert_string_to_bitcoin_address(vault_address).in_field("vault_address")?;
+
+		Ok(match BtcRegistrationPoolOf::<Runtime>::bonded_descriptor(vault_address) {
+			Some(desc) => UnboundedString::from(desc),
+			None => UnboundedString::from(vec![]),
+		})
+	}
+
 	#[precompile::public("request_vault(string)")]
 	#[precompile::public("requestVault(string)")]
 	fn request_vault(

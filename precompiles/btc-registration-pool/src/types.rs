@@ -4,7 +4,7 @@ use precompile_utils::prelude::{Address, BoundedBytes, BoundedString};
 use sp_core::ConstU32;
 use sp_std::{vec, vec::Vec};
 
-/// The length bounded string type for Bitcoin addresses. (~64 alphanumeric characters)
+/// The length bounded string type for Bitcoin addresses. (~90 alphanumeric characters)
 pub type BitcoinAddressString = BoundedString<ConstU32<ADDRESS_MAX_LENGTH>>;
 
 /// The length bounded bytes type for public keys. (33 bytes)

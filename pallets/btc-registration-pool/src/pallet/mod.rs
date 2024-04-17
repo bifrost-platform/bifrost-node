@@ -137,6 +137,13 @@ pub mod pallet {
 	pub type BondedPubKey<T: Config> = StorageMap<_, Twox64Concat, Public, T::AccountId>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn bonded_descriptor)]
+	/// Mapped descriptors. The key is the vault address and the value is the descriptor.
+	pub type BondedDescriptor<T: Config> =
+		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, UnboundedBytes>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn required_m)]
 	/// The required number of public keys to generate a vault address.
 	pub type RequiredM<T: Config> = StorageValue<_, u8, ValueQuery>;
@@ -311,9 +318,10 @@ pub mod pallet {
 				let (vault_address, descriptor) =
 					Self::generate_vault_address(relay_target.vault.pub_keys())?;
 				relay_target.set_vault_address(vault_address.clone());
-				relay_target.vault.set_descriptor(descriptor);
+				relay_target.vault.set_descriptor(descriptor.clone());
 
 				<BondedVault<T>>::insert(&vault_address, who.clone());
+				<BondedDescriptor<T>>::insert(&vault_address, descriptor);
 				Self::deposit_event(Event::VaultGenerated {
 					who: who.clone(),
 					refund_address: relay_target.refund_address.clone(),
@@ -368,12 +376,13 @@ pub mod pallet {
 					let (vault_address, descriptor) =
 						Self::generate_vault_address(system_vault.pub_keys())?;
 					system_vault.set_address(vault_address.clone());
-					system_vault.set_descriptor(descriptor);
+					system_vault.set_descriptor(descriptor.clone());
 
 					<BondedVault<T>>::insert(
 						&vault_address,
 						H160::from_low_u64_be(ADDRESS_U64).into(),
 					);
+					<BondedDescriptor<T>>::insert(&vault_address, descriptor);
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
 				<BondedPubKey<T>>::insert(&pub_key, H160::from_low_u64_be(ADDRESS_U64).into());

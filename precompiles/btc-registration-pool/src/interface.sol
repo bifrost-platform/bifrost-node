@@ -84,6 +84,14 @@ interface BtcRegistrationPool {
         bool is_vault
     ) external view returns (address);
 
+    /// @dev Returns the bonded descriptor(string) mapped to the given vault address
+    /// @custom:selector 6dcc1eeb
+    /// @param vault_address the vault or refund address
+    /// @return The descriptor (in string)
+    function descriptor(
+        string memory vault_address
+    ) external view returns (string memory);
+
     /// @dev Join the registration pool and request a Bitcoin vault address.
     /// @custom:selector f65d6a74
     /// @param refund_address The Bitcoin refund address
