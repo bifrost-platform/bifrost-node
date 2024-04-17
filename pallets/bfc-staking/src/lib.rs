@@ -1864,12 +1864,7 @@ impl<
 
 	pub fn is_last_nominator<T: Config>(&self) -> bool {
 		// revoking last nomination => leaving set of nominators
-		let is_last_nominator =
-			if (self.nominations.len() == 1usize || self.requests.requests.len() == 1usize) {
-				true
-			} else {
-				false
-			};
+		let is_last_nominator = if self.nominations.len() == 1usize { true } else { false };
 		is_last_nominator
 	}
 
