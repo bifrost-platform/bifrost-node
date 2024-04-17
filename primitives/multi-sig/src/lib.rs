@@ -3,7 +3,7 @@
 pub mod traits;
 
 pub use miniscript::{
-	bitcoin::{secp256k1::Secp256k1, Address, Network, Psbt, PublicKey, Script},
+	bitcoin::{hashes::Hash, secp256k1::Secp256k1, Address, Network, Psbt, PublicKey, Script},
 	psbt::PsbtExt,
 };
 

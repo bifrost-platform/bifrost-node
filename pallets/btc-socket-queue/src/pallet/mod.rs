@@ -14,7 +14,7 @@ use scale_info::prelude::format;
 
 use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
-	UnboundedBytes,
+	Hash, UnboundedBytes,
 };
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
@@ -311,11 +311,15 @@ pub mod pallet {
 			// if finalizable (quorum reached m), then accept the request
 			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
 				let finalized_psbt_obj = Self::try_psbt_finalization(combined_psbt_obj)?;
-				let txid = H256::from(finalized_psbt_obj.unsigned_tx.txid().as_ref());
+				let mut txid = finalized_psbt_obj.unsigned_tx.txid().to_byte_array();
+				txid.reverse();
 				pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
 
 				// move pending to accepted
-				<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
+				<BondedOutboundTx<T>>::insert(
+					&H256::from(txid),
+					pending_request.socket_messages.clone(),
+				);
 				<AcceptedRequests<T>>::insert(&psbt_hash, pending_request);
 				<PendingRequests<T>>::remove(&psbt_hash);
 

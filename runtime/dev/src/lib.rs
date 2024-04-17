@@ -979,8 +979,8 @@ impl pallet_btc_socket_queue::Config for Runtime {
 }
 
 parameter_types! {
-	pub const BitcoinChainId: u32 = 10001;
-	pub const BitcoinNetwork: Network = Network::Testnet;
+	pub const BitcoinChainId: u32 = 10002;
+	pub const BitcoinNetwork: Network = Network::Regtest;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {

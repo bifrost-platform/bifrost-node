@@ -24,9 +24,7 @@ where
 	H160: Into<T::AccountId>,
 {
 	/// Verify if the authority_id is valid
-	pub fn verify_authority(
-		authority_id: &T::AccountId,
-	) -> Result<(), TransactionValidityError> {
+	pub fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
 		if let Some(a) = <Authority<T>>::get() {
 			if a != *authority_id {
 				return Err(InvalidTransaction::BadSigner.into());
