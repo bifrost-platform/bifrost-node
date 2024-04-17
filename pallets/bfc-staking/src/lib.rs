@@ -2003,35 +2003,8 @@ impl<
 					self.requests.revocations_count.saturating_sub(1u32);
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
 
-				// update validator state nomination
-				let mut validator_state =
-					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
-
-				let (nominator_position, less_total_staked) = validator_state.add_nomination::<T>(
-					&candidate_id,
-					Bond { owner: nominator_id.clone(), amount: balance_amt },
-				)?;
-
-				let after = validator_state.voting_power;
-				Pallet::<T>::update_active(&candidate_id, after)?;
-				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-				let net_total_increase = if let Some(less) = less_total_staked {
-					balance_amt - less
-				} else {
-					balance_amt
-				};
-				<Total<T>>::mutate(|total_locked| {
-					*total_locked += net_total_increase;
-				});
-
-				<CandidateInfo<T>>::insert(&candidate_id, validator_state);
-				<NominatorState<T>>::insert(&nominator_id, nom_st);
-				Pallet::<T>::deposit_event(Event::Nomination {
-					nominator: nominator_id.clone(),
-					locked_amount: Zero::zero(),
-					candidate: candidate_id,
-					nominator_position,
-				});
+				let _ =
+					self.increase_nomination_without_reserve::<T>(candidate.clone(), order.amount);
 			},
 			NominationChange::Decrease => {
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
