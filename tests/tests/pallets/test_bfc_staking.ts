@@ -6,7 +6,8 @@ import { Keyring } from '@polkadot/api';
 import {
   AMOUNT_FACTOR, DEFAULT_STAKING_AMOUNT, MIN_BASIC_CANDIDATE_STAKING_AMOUNT,
   MIN_BASIC_VALIDATOR_STAKING_AMOUNT, MIN_FULL_CANDIDATE_STAKING_AMOUNT,
-  MIN_FULL_VALIDATOR_STAKING_AMOUNT, MIN_NOMINATOR_STAKING_AMOUNT
+  MIN_FULL_VALIDATOR_STAKING_AMOUNT, MIN_NOMINATOR_STAKING_AMOUNT,
+  MIN_NOMINATOR_TOTAL_STAKING_AMOUNT
 } from '../../constants/currency';
 import {
   SESSION_KEYS, TEST_CONTROLLERS, TEST_RELAYERS, TEST_STASHES
@@ -2295,22 +2296,4 @@ describeDevNode('pallet_bfc_staking - leave nominators', (context) => {
     const balanceAfter = new BigNumber((await context.web3.eth.getBalance(charleth.address)).toString());
     expect(balanceAfter.isGreaterThan(balanceBefore)).equal(true);
   });
-});
-
-describeDevNode('pallet_bfc_staking - nominator stake management', (context) => {
-  const keyring = new Keyring({ type: 'ethereum' });
-  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
-  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
-  const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
-
-  before('should successfully nominate to alith', async function () {
-    const stake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
-
-    await context.polkadotApi.tx.bfcStaking
-      .nominate(alith.address, stake.toFixed(), 0, 0)
-      .signAndSend(charleth);
-
-    await context.createBlock();
-  });
-
 });

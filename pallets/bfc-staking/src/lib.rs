@@ -1780,7 +1780,7 @@ impl<
 		// Given nominator is leaving
 		ensure!(!self.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 
-		// Given amount is below than minimum stake amount required for each candidate
+		// Given amount is below than minimum stake amount required for given candidate
 		ensure!(expected_amt >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
 
 		// Given amount is below than minimum stake amount required totally
@@ -1871,9 +1871,6 @@ impl<
 		// Given nominator is leaving
 		ensure!(!self.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 
-		// Given nominator is revoking given candidate
-		ensure!(!self.is_revoking(&candidate.clone()), Error::<T>::NominatorAlreadyRevoking);
-
 		if !is_last_nominator {
 			// Given amount is below than minimum stake amount required totally
 			ensure!(net_total >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
@@ -1921,6 +1918,12 @@ impl<
 				self.initial_nominations.remove(&candidate.clone());
 				self.awarded_tokens_per_candidate.remove(&candidate.clone());
 
+				let mut validator_state =
+					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+
+				validator_state.nomination_count =
+					validator_state.nomination_count.saturating_sub(1u32);
+
 				if is_last_nominator {
 					<NominatorState<T>>::remove(&nominator_id);
 
@@ -1931,6 +1934,11 @@ impl<
 				}
 
 				T::Currency::unreserve(&nominator_id, balance_amt);
+
+				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+
+				<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+				<NominatorState<T>>::insert(&nominator_id, nom_st);
 
 				Pallet::<T>::deposit_event(Event::NominationRevoked {
 					nominator: nominator_id,
@@ -1944,16 +1952,17 @@ impl<
 				// remove from pending requests
 				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
 				// decrease nomination
-				if let Some(_) = self.nominations.get(&candidate) {
-					T::Currency::unreserve(&nominator_id, balance_amt);
-					Pallet::<T>::deposit_event(Event::NominationDecreased {
-						nominator: nominator_id,
-						candidate: candidate_id,
-						amount: balance_amt,
-					});
-					return Ok(());
-				}
-				Err(Error::<T>::NominationDNE.into())
+				T::Currency::unreserve(&nominator_id, balance_amt);
+
+				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+				<NominatorState<T>>::insert(&nominator_id, nom_st);
+
+				Pallet::<T>::deposit_event(Event::NominationDecreased {
+					nominator: nominator_id,
+					candidate: candidate_id,
+					amount: balance_amt,
+				});
+				return Ok(());
 			},
 		}
 	}

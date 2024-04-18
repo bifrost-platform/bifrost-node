@@ -750,8 +750,10 @@ parameter_types! {
 	pub const MinFullCandidateStk: u128 = 950 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a basic candidate.
 	pub const MinBasicCandidateStk: u128 = 100 * SUPPLY_FACTOR * BFC;
+	/// Minimum stake required to be reserved to be a nominator at given candidate.
+	pub const MinNominator: u128 = 1 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a nominator.
-	pub const MinNominatorStk: u128 = 1 * SUPPLY_FACTOR * BFC;
+	pub const MinNominatorStk: u128 = 3 * SUPPLY_FACTOR * BFC;
 }
 
 /// Minimal staking pallet that implements validator selection by total backed stake.
@@ -784,7 +786,7 @@ impl pallet_bfc_staking::Config for Runtime {
 	type MinBasicValidatorStk = MinBasicValidatorStk;
 	type MinFullCandidateStk = MinFullCandidateStk;
 	type MinBasicCandidateStk = MinBasicCandidateStk;
-	type MinNomination = MinNominatorStk;
+	type MinNomination = MinNominator;
 	type MinNominatorStk = MinNominatorStk;
 	type WeightInfo = pallet_bfc_staking::weights::SubstrateWeight<Runtime>;
 }
