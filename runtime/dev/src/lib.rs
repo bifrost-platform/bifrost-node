@@ -355,7 +355,7 @@ impl pallet_scheduler::Config for Runtime {
 }
 
 parameter_types! {
-	pub const SessionPeriod: u32 = 1 * MINUTES;
+	pub const SessionPeriod: u32 = 15 * MINUTES;
 	pub const Offset: u32 = 0;
 }
 
@@ -757,7 +757,7 @@ parameter_types! {
 	/// Minimum round length is 30 seconds (10 * 3 second block times).
 	pub const MinBlocksPerRound: u32 = 1;
 	/// Blocks per round.
-	pub const DefaultBlocksPerRound: u32 = 2 * MINUTES;
+	pub const DefaultBlocksPerRound: u32 = 6 * HOURS;
 	/// Rounds before the validator leaving the candidates request can be executed.
 	pub const LeaveCandidatesDelay: u32 = 1;
 	/// Rounds before the candidate bond increase/decrease can be executed.
@@ -989,8 +989,8 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
-	type DefaultRequiredM = ConstU8<1>;
-	type DefaultRequiredN = ConstU8<1>;
+	type DefaultRequiredM = ConstU8<2>;
+	type DefaultRequiredN = ConstU8<2>;
 	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
