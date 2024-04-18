@@ -28,8 +28,10 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
 
   it('should successfully submit pub key', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const who = '0x0000000000000000000000000000000000000100';
     const submit = {
       authorityId: alithRelayer.address,
+      who,
       pubKey
     };
 
@@ -47,7 +49,7 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
 
     const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
     const bondedPubKey = rawBondedPubKey.toHuman();
-    expect(bondedPubKey).is.eq('0x0000000000000000000000000000000000000100');
+    expect(bondedPubKey).is.eq(who);
   });
 });
 

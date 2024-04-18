@@ -50,12 +50,3 @@ pub struct VaultKeySubmission<AccountId> {
 	/// The generated public key. (33 bytes)
 	pub pub_key: Public,
 }
-
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-/// The payload used for public key submission.
-pub struct SystemVaultKeySubmission<AccountId> {
-	/// The authority Ethereum address. (Relay executive)
-	pub authority_id: AccountId,
-	/// The generated public key. (33 bytes)
-	pub pub_key: Public,
-}

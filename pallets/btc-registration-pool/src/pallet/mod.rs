@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, SystemVaultKeySubmission,
-	VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, VaultKeySubmission, WeightInfo,
+	ADDRESS_U64,
 };
 
 use frame_support::{
@@ -340,13 +340,17 @@ pub mod pallet {
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
-			key_submission: SystemVaultKeySubmission<T::AccountId>,
+			key_submission: VaultKeySubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			// make sure this cannot be executed by a signed transaction.
 			ensure_none(origin)?;
 
-			let SystemVaultKeySubmission { authority_id, pub_key } = key_submission;
+			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+
+			let precompile = H160::from_low_u64_be(ADDRESS_U64);
+			ensure!(precompile.into() == who, Error::<T>::SystemVaultDNE);
+
 			if let Some(mut system_vault) = <SystemVault<T>>::get() {
 				ensure!(system_vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
 				ensure!(
@@ -378,14 +382,11 @@ pub mod pallet {
 					system_vault.set_address(vault_address.clone());
 					system_vault.set_descriptor(descriptor.clone());
 
-					<BondedVault<T>>::insert(
-						&vault_address,
-						H160::from_low_u64_be(ADDRESS_U64).into(),
-					);
+					<BondedVault<T>>::insert(&vault_address, precompile.into());
 					<BondedDescriptor<T>>::insert(&vault_address, descriptor);
 					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
 				}
-				<BondedPubKey<T>>::insert(&pub_key, H160::from_low_u64_be(ADDRESS_U64).into());
+				<BondedPubKey<T>>::insert(&pub_key, precompile.into());
 				<SystemVault<T>>::put(system_vault);
 			} else {
 				return Err(Error::<T>::SystemVaultDNE)?;
@@ -425,7 +426,7 @@ pub mod pallet {
 						.build()
 				},
 				Call::submit_system_vault_key { key_submission, signature } => {
-					let SystemVaultKeySubmission { authority_id, pub_key } = key_submission;
+					let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 
 					// verify if the authority is a relay executive member.
 					if !T::Executives::contains(&authority_id) {
@@ -440,7 +441,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("SystemKeySubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, who))
 						.propagate(true)
 						.build()
 				},

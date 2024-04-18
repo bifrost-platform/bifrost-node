@@ -134,6 +134,7 @@ async function submitSystemVaultKey(context: INodeContext) {
   const relayer = keyring.addFromUri(TEST_RELAYERS[0].private);
   const submit = {
     authorityId: relayer.address,
+    who: '0x0000000000000000000000000000000000000100',
     pubKey: SYSTEM_VAULT_PUBKEY
   };
 
