@@ -94,6 +94,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
 					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
 				],
+				// Relay Executives
+				vec![AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58"))],
 				// Sudo account
 				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 				// Pre-funded accounts
@@ -167,6 +169,7 @@ fn development_genesis(
 	initial_nominators: Vec<(AccountId, AccountId, Balance)>,
 	initial_council_members: Vec<AccountId>,
 	initial_tech_committee_members: Vec<AccountId>,
+	initial_relay_executives: Vec<AccountId>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 ) -> devnet::RuntimeGenesisConfig {
@@ -219,6 +222,7 @@ fn development_genesis(
 		democracy: Default::default(),
 		council: Default::default(),
 		technical_committee: Default::default(),
+		relay_executive: Default::default(),
 		council_membership: devnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_council_members.clone())
@@ -229,6 +233,20 @@ fn development_genesis(
 			members: BoundedVec::try_from(initial_tech_committee_members.clone())
 				.expect("Membership must be initialized"),
 		},
+		relay_executive_membership: devnet::RelayExecutiveMembershipConfig {
+			phantom: Default::default(),
+			members: BoundedVec::try_from(initial_relay_executives.clone())
+				.expect("Membership must be initialized"),
+		},
 		treasury: Default::default(),
+		btc_registration_pool: devnet::BtcRegistrationPoolConfig {
+			required_m: 1u8,
+			required_n: 1u8,
+			..Default::default()
+		},
+		btc_socket_queue: devnet::BtcSocketQueueConfig {
+			authority: Some(root_key),
+			..Default::default()
+		},
 	}
 }
