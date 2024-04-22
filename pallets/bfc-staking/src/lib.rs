@@ -1559,6 +1559,15 @@ impl<
 	// 	false
 	// }
 
+	pub fn is_decreasing(&self, candidate: &AccountId) -> bool {
+		if let Some(request) = self.requests().get(candidate) {
+			if request.action == NominationChange::Decrease {
+				return true;
+			}
+		}
+		false
+	}
+
 	pub fn is_leaving(&self) -> bool {
 		matches!(self.status, NominatorStatus::Leaving(_))
 	}
@@ -1976,13 +1985,12 @@ impl<
 		BalanceOf<T>: From<Balance>,
 		T::AccountId: From<AccountId>,
 		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
-		NominationRequest<T::AccountId, BalanceOf<T>>: From<NominationRequest<AccountId, Balance>>,
+		NominationRequests<T::AccountId, BalanceOf<T>>:
+			From<NominationRequests<AccountId, Balance>>,
 	{
 		let order = self
 			.requests
 			.requests
-			.last()
-			.unwrap()
 			.remove(&candidate)
 			.ok_or(Error::<T>::PendingNominationRequestDNE)?;
 
@@ -2035,6 +2043,7 @@ impl<
 		Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
 			nominator: nominator_id,
 			cancelled_request: order.into(),
+			// cancelled_request: order,
 		});
 
 		return Ok(());
@@ -2067,8 +2076,8 @@ pub struct NominationRequest<AccountId, Balance> {
 #[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 /// The nomination unbonding request of a specific nominator
 pub struct NominationRequests<AccountId, Balance> {
-	/// Map from validator -> Request
-	pub validator_request: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
+	/// Map from candidate -> Request
+	pub candidate_request: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
 	/// The unbonding amount of given round
 	pub amount: Balance,
 	/// The round index when this request is executable
@@ -2090,6 +2099,7 @@ impl<A: Ord, B: Zero> Default for PendingNominationRequests<A, B> {
 	fn default() -> PendingNominationRequests<A, B> {
 		PendingNominationRequests {
 			revocations_count: 0u32,
+			requests: BoundedVec::new(),
 			requests: BoundedVec::new(),
 			less_total: B::zero(),
 		}
@@ -2113,56 +2123,6 @@ impl<
 		PendingNominationRequests::default()
 	}
 
-	/// Add bond less order to pending requests, only succeeds if returns true
-	/// - limit is the maximum amount allowed that can be subtracted from the nomination
-	/// before it would be below the minimum nomination amount
-	pub fn bond_less<T: Config>(
-		&mut self,
-		validator: A,
-		amount: B,
-		when_executable: RoundIndex,
-		action: NominationChange,
-	) -> DispatchResult {
-		let new_nomination_request =
-			NominationRequest { validator: validator.clone(), amount, action };
-
-		if let Some(last_requests) = self
-			.requests
-			.last_mut()
-			.filter(|last_requests| last_requests.when_executable == when_executable)
-		{
-			if let Some(validator_request) = last_requests.validator_request.get_mut(&validator) {
-				validator_request.amount -= amount;
-			} else {
-				last_requests
-					.validator_request
-					.insert(validator.clone(), new_nomination_request);
-			}
-		} else {
-			let mut validator_request = BTreeMap::new();
-			validator_request.insert(validator.clone(), new_nomination_request);
-
-			let new_requests = NominationRequests { validator_request, amount, when_executable };
-
-			self.requests
-				.try_push(new_requests)
-				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
-		}
-
-		self.requests.insert(
-			validator.clone(),
-			NominationRequest {
-				validator,
-				amount,
-				when_executable,
-				action: NominationChange::Decrease,
-			},
-		);
-		self.less_total += amount;
-
-		Ok(())
-	}
-
 	/// Add revoke order to pending requests
 	/// - limit is the maximum amount allowed that can be subtracted from the nomination
 	/// before it would be below the minimum nomination amount
@@ -2173,10 +2133,30 @@ impl<
 		when_executable: RoundIndex,
 		action: NominationChange,
 	) -> DispatchResult {
-		self.requests.insert(
-			validator.clone(),
-			NominationRequest { validator, amount, when_executable, action: action.clone() },
-		);
+		let new_nomination_request =
+			NominationRequest { validator: validator.clone(), amount, action };
+		if let Some(last_requests) = self
+			.requests
+			.last_mut()
+			.filter(|last_requests| last_requests.when_executable == when_executable)
+		{
+			if let Some(candidate_request) = last_requests.candidate_request.get_mut(&validator) {
+				candidate_request.amount -= amount;
+			} else {
+				last_requests
+					.candidate_request
+					.insert(validator.clone(), new_nomination_request);
+			}
+		} else {
+			let mut candidate_request = BTreeMap::new();
+			candidate_request.insert(validator.clone(), new_nomination_request);
+
+			let new_requests = NominationRequests { candidate_request, amount, when_executable };
+
+			self.requests
+				.try_push(new_requests)
+				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
+		}
 
 		match action {
 			NominationChange::Revoke | NominationChange::Leave => {
@@ -2186,10 +2166,6 @@ impl<
 		}
 
 		self.less_total += amount;
-
-		if action == NominationChange::Revoke {
-			self.revocations_count += 1u32;
-		}
 
 		Ok(())
 	}

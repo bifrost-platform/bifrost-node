@@ -1288,79 +1288,79 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(13)]
-		#[pallet::weight(
-			<T as Config>::WeightInfo::execute_leave_candidates(*candidate_nomination_count)
-		)]
-		/// Execute leave candidates request
-		/// - origin should be the stash account
-		pub fn execute_leave_candidates(
-			origin: OriginFor<T>,
-			candidate_nomination_count: u32,
-		) -> DispatchResultWithPostInfo {
-			let stash = ensure_signed(origin)?;
-			let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
-			let state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
-			ensure!(
-				state.nomination_count <= candidate_nomination_count,
-				Error::<T>::TooLowCandidateNominationCountToLeaveCandidates
-			);
-			state.can_leave::<T>()?;
-			let return_stake =
-				|bond: Bond<T::AccountId, BalanceOf<T>>,
-				 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
-					T::Currency::unreserve(&bond.owner, bond.amount);
-					// remove nomination from nominator state
-					if let Some(remaining) = nominator.rm_nomination(&controller) {
-						if remaining.is_zero() {
-							<NominatorState<T>>::remove(&bond.owner);
-						} else {
-							nominator.requests.remove_request(&controller);
-							<NominatorState<T>>::insert(&bond.owner, nominator);
-						}
-					}
-				};
-			// total backing stake is at least the candidate self bond
-			let mut total_backing = state.bond;
-			// return all top nominations
-			let top_nominations =
-				<TopNominations<T>>::take(&controller).ok_or(<Error<T>>::TopNominationDNE)?;
-			for bond in top_nominations.nominations {
-				return_stake(
-					bond.clone(),
-					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
-				);
-			}
-			total_backing += top_nominations.total;
-			// return all bottom nominations
-			let bottom_nominations =
-				<BottomNominations<T>>::take(&controller).ok_or(<Error<T>>::BottomNominationDNE)?;
-			for bond in bottom_nominations.nominations {
-				return_stake(
-					bond.clone(),
-					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
-				);
-			}
-			total_backing += bottom_nominations.total;
-			// return stake to stash account
-			T::Currency::unreserve(&stash, state.bond);
-			<CandidateInfo<T>>::remove(&controller);
-			<BondedStash<T>>::remove(&stash);
-			<TopNominations<T>>::remove(&controller);
-			<BottomNominations<T>>::remove(&controller);
-			let new_total_staked = <Total<T>>::get().saturating_sub(total_backing);
-			<Total<T>>::put(new_total_staked);
+		// #[pallet::call_index(13)]
+		// #[pallet::weight(
+		// 	<T as Config>::WeightInfo::execute_leave_candidates(*candidate_nomination_count)
+		// )]
+		// /// Execute leave candidates request
+		// /// - origin should be the stash account
+		// pub fn execute_leave_candidates(
+		// 	origin: OriginFor<T>,
+		// 	candidate_nomination_count: u32,
+		// ) -> DispatchResultWithPostInfo {
+		// 	let stash = ensure_signed(origin)?;
+		// 	let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+		// 	let state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
+		// 	ensure!(
+		// 		state.nomination_count <= candidate_nomination_count,
+		// 		Error::<T>::TooLowCandidateNominationCountToLeaveCandidates
+		// 	);
+		// 	state.can_leave::<T>()?;
+		// 	let return_stake =
+		// 		|bond: Bond<T::AccountId, BalanceOf<T>>,
+		// 		 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
+		// 			T::Currency::unreserve(&bond.owner, bond.amount);
+		// 			// remove nomination from nominator state
+		// 			if let Some(remaining) = nominator.rm_nomination(&controller) {
+		// 				if remaining.is_zero() {
+		// 					<NominatorState<T>>::remove(&bond.owner);
+		// 				} else {
+		// 					nominator.requests.remove_request(&controller);
+		// 					<NominatorState<T>>::insert(&bond.owner, nominator);
+		// 				}
+		// 			}
+		// 		};
+		// 	// total backing stake is at least the candidate self bond
+		// 	let mut total_backing = state.bond;
+		// 	// return all top nominations
+		// 	let top_nominations =
+		// 		<TopNominations<T>>::take(&controller).ok_or(<Error<T>>::TopNominationDNE)?;
+		// 	for bond in top_nominations.nominations {
+		// 		return_stake(
+		// 			bond.clone(),
+		// 			NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+		// 		);
+		// 	}
+		// 	total_backing += top_nominations.total;
+		// 	// return all bottom nominations
+		// 	let bottom_nominations =
+		// 		<BottomNominations<T>>::take(&controller).ok_or(<Error<T>>::BottomNominationDNE)?;
+		// 	for bond in bottom_nominations.nominations {
+		// 		return_stake(
+		// 			bond.clone(),
+		// 			NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+		// 		);
+		// 	}
+		// 	total_backing += bottom_nominations.total;
+		// 	// return stake to stash account
+		// 	T::Currency::unreserve(&stash, state.bond);
+		// 	<CandidateInfo<T>>::remove(&controller);
+		// 	<BondedStash<T>>::remove(&stash);
+		// 	<TopNominations<T>>::remove(&controller);
+		// 	<BottomNominations<T>>::remove(&controller);
+		// 	let new_total_staked = <Total<T>>::get().saturating_sub(total_backing);
+		// 	<Total<T>>::put(new_total_staked);
 
-			// remove relayer from pool
-			T::RelayManager::leave_relayers(&controller);
+		// 	// remove relayer from pool
+		// 	T::RelayManager::leave_relayers(&controller);
 
-			Self::deposit_event(Event::CandidateLeft {
-				ex_candidate: controller,
-				unlocked_amount: total_backing,
-				new_total_amt_locked: new_total_staked,
-			});
-			Ok(().into())
-		}
+		// 	Self::deposit_event(Event::CandidateLeft {
+		// 		ex_candidate: controller,
+		// 		unlocked_amount: total_backing,
+		// 		new_total_amt_locked: new_total_staked,
+		// 	});
+		// 	Ok(().into())
+		// }
 
 		#[pallet::call_index(14)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_candidates(*candidate_count))]
