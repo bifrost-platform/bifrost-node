@@ -1837,7 +1837,7 @@ impl<
 				action,
 			});
 
-			return Ok(when);
+			return Ok(());
 		}
 		Err(Error::<T>::NominationDNE.into())
 	}
@@ -2027,7 +2027,10 @@ impl<
 			NominationChange::Decrease => {
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
 
-		let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
+				let _ =
+					self.increase_nomination_without_reserve::<T>(candidate.clone(), order.amount);
+			},
+		}
 
 		Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
 			nominator: nominator_id,
@@ -2144,6 +2147,42 @@ impl<
 			self.requests
 				.try_push(new_requests)
 				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
+		}
+
+		self.requests.insert(
+			validator.clone(),
+			NominationRequest {
+				validator,
+				amount,
+				when_executable,
+				action: NominationChange::Decrease,
+			},
+		);
+		self.less_total += amount;
+
+		Ok(())
+	}
+
+	/// Add revoke order to pending requests
+	/// - limit is the maximum amount allowed that can be subtracted from the nomination
+	/// before it would be below the minimum nomination amount
+	pub fn insert_request<T: Config>(
+		&mut self,
+		validator: A,
+		amount: B,
+		when_executable: RoundIndex,
+		action: NominationChange,
+	) -> DispatchResult {
+		self.requests.insert(
+			validator.clone(),
+			NominationRequest { validator, amount, when_executable, action: action.clone() },
+		);
+
+		match action {
+			NominationChange::Revoke | NominationChange::Leave => {
+				self.revocations_count += 1u32;
+			},
+			NominationChange::Decrease => {},
 		}
 
 		self.less_total += amount;
