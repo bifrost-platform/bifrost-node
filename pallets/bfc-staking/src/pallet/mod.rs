@@ -237,6 +237,8 @@ pub mod pallet {
 		TooLowCandidateNominationCountToLeaveCandidates,
 		/// Cannot leave as a nominator due to too low nomination count.
 		TooLowNominationCountToLeaveNominators,
+		/// Cannot request as a nominator due to too many requests.
+		TooManyPendingRequests,
 		/// Pending(scheduled) candidate request does not exist.
 		PendingCandidateRequestsDNE,
 		/// A pending(scheduled) candidate request already exists.
