@@ -4,6 +4,33 @@ use frame_support::{pallet_prelude::*, storage_alias, traits::OnRuntimeUpgrade};
 #[storage_alias]
 pub type StorageVersion<T: Config> = StorageValue<Pallet<T>, Releases, ValueQuery>;
 
+/// Used to match mainnet pallet version
+pub mod v3_update {
+	use super::*;
+
+	pub struct MigrateToV3Update<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for MigrateToV3Update<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::current_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 3 && onchain == 0 {
+				current.put::<Pallet<T>>();
+				log!(info, "bfc-offences storage migration passes v3::update(2) ✅");
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+			} else {
+				log!(warn, "Skipping bfc-offences storage migration v3::update(2) 💤");
+				weight = weight.saturating_add(T::DbWeight::get().reads(1));
+			}
+
+			weight
+		}
+	}
+}
+
 pub mod v3 {
 	use super::*;
 	use frame_support::pallet_prelude::Weight;
@@ -18,9 +45,11 @@ pub mod v3 {
 			let mut weight = Weight::zero();
 
 			let current = Pallet::<T>::current_storage_version();
-			let onchain = StorageVersion::<T>::get();
+			// (previous) let onchain = StorageVersion::<T>::get();
+			let onchain = Pallet::<T>::on_chain_storage_version();
 
-			if current == 3 && onchain == Releases::V2_0_0 {
+			// (previous: if current == 3 && onchain == Releases::V2_0_0)
+			if current == 3 && onchain == 2 {
 				// migrate to new standard storage version
 				StorageVersion::<T>::kill();
 				current.put::<Pallet<T>>();
@@ -28,7 +57,7 @@ pub mod v3 {
 				log!(info, "bfc-offences storage migration passes v3 update ✅");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 2));
 			} else {
-				log!(warn, "Skipping v3, should be removed");
+				log!(warn, "Skipping bfc-offences storage migration v3 ✅");
 				weight = weight.saturating_add(T::DbWeight::get().reads(1));
 			}
 
