@@ -1554,9 +1554,18 @@ impl<
 		matches!(self.status, NominatorStatus::Active)
 	}
 
-	// pub fn is_revoking(&self, candidate: &AccountId) -> bool {
+	// // pub fn is_revoking(&self, candidate: &AccountId) -> bool {
 	// 	if let Some(request) = self.requests().get(candidate) {
 	// 		if request.action == NominationChange::Revoke {
+	// 			return true;
+	// 		}
+	// 	}
+	// 	false
+	// }
+
+	pub fn is_decreasing(&self, candidate: &AccountId) -> bool {
+	// 	if let Some(request) = self.requests().get(candidate) {
+	// 		if request.action == NominationChange::Decrease {
 	// 			return true;
 	// 		}
 	// 	}
@@ -1980,6 +1989,8 @@ impl<
 		let order = self
 			.requests
 			.requests
+			.last()
+			.unwrap()
 			.remove(&candidate)
 			.ok_or(Error::<T>::PendingNominationRequestDNE)?;
 
@@ -2036,17 +2047,6 @@ pub struct NominationRequest<AccountId, Balance> {
 	pub action: NominationChange,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-/// The nomination unbonding request of a specific nominator
-pub struct NominationRequests<AccountId, Balance> {
-	/// Map from candidate -> Request
-	pub candidate_request: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
-	/// The unbonding amount of given round
-	pub amount: Balance,
-	/// The round index when this request is executable
-	pub when_executable: RoundIndex,
-}
-
 #[derive(Clone, Encode, PartialEq, Decode, RuntimeDebug, TypeInfo)]
 /// Pending requests to mutate nominations for each nominator
 pub struct PendingNominationRequests<AccountId, Balance> {
@@ -2062,8 +2062,7 @@ impl<A: Ord, B: Zero> Default for PendingNominationRequests<A, B> {
 	fn default() -> PendingNominationRequests<A, B> {
 		PendingNominationRequests {
 			revocations_count: 0u32,
-			requests: BoundedVec::new(),
-			requests: BoundedVec::new(),
+			requests: BTreeMap::new(),
 			less_total: B::zero(),
 		}
 	}
@@ -2086,6 +2085,29 @@ impl<
 		PendingNominationRequests::default()
 	}
 
+	/// Add bond less order to pending requests, only succeeds if returns true
+	/// - limit is the maximum amount allowed that can be subtracted from the nomination
+	/// before it would be below the minimum nomination amount
+	pub fn bond_less<T: Config>(
+		&mut self,
+		validator: A,
+		amount: B,
+		when_executable: RoundIndex,
+	) -> DispatchResult {
+		self.requests.insert(
+			validator.clone(),
+			NominationRequest {
+				validator,
+				amount,
+				when_executable,
+				action: NominationChange::Decrease,
+			},
+		);
+		self.less_total += amount;
+
+		Ok(())
+	}
+
 	/// Add revoke order to pending requests
 	/// - limit is the maximum amount allowed that can be subtracted from the nomination
 	/// before it would be below the minimum nomination amount
@@ -2096,39 +2118,22 @@ impl<
 		when_executable: RoundIndex,
 		action: NominationChange,
 	) -> DispatchResult {
-		let new_nomination_request =
-			NominationRequest { validator: validator.clone(), amount, action };
-		if let Some(last_requests) = self
-			.requests
-			.last_mut()
-			.filter(|last_requests| last_requests.when_executable == when_executable)
-		{
-			if let Some(candidate_request) = last_requests.candidate_request.get_mut(&validator) {
-				candidate_request.amount -= amount;
-			} else {
-				last_requests
-					.candidate_request
-					.insert(validator.clone(), new_nomination_request);
-			}
-		} else {
-			let mut candidate_request = BTreeMap::new();
-			candidate_request.insert(validator.clone(), new_nomination_request);
-
-			let new_requests = NominationRequests { candidate_request, amount, when_executable };
+		self.requests.insert(
+			validator.clone(),
+			NominationRequest { validator, amount, when_executable, action: action.clone() },
+		);
 
 			self.requests
 				.try_push(new_requests)
 				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
 		}
 
-		match action {
-			NominationChange::Revoke | NominationChange::Leave => {
-				self.revocations_count += 1u32;
-			},
-			NominationChange::Decrease => {},
-		}
-
 		self.less_total += amount;
+
+
+		if action == NominationChange::Revoke {
+			self.revocations_count += 1u32;
+		}
 
 		Ok(())
 	}

@@ -2,9 +2,12 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
-	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
-	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	DelayedControllerSet, DelayedControllerSet, DelayedPayout, DelayedPayout, InflationInfo,
+	InflationInfo, NominationChange, NominationChange, NominationRequest, NominationRequest,
+	Nominations, Nominations, Nominator, Nominator, NominatorAdded, NominatorAdded, Range, Range,
+	RewardDestination, RewardDestination, RewardPoint, RewardPoint, RoundIndex, RoundIndex,
+	RoundInfo, RoundInfo, TierType, TierType, TotalSnapshot, TotalSnapshot, ValidatorSnapshot,
+	ValidatorSnapshot, WeightInfo, WeightInfo,
 };
 
 use bp_staking::{
