@@ -40,6 +40,19 @@ where
 		Ok(psbts)
 	}
 
+	#[precompile::public("finalizedPsbts()")]
+	#[precompile::public("finalized_psbts()")]
+	#[precompile::view]
+	fn finalized_psbts(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedBytes>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let psbts: Vec<UnboundedBytes> =
+			pallet_btc_socket_queue::FinalizedRequests::<Runtime>::iter()
+				.map(|(_, request)| UnboundedBytes::from(request.finalized_psbt))
+				.collect();
+		Ok(psbts)
+	}
+
 	#[precompile::public("outboundTx(bytes32)")]
 	#[precompile::public("outbound_tx(bytes32)")]
 	#[precompile::view]

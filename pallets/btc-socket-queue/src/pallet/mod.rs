@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	FinalizePsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
+	AcceptPsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
 	WeightInfo,
 };
 
@@ -99,10 +99,10 @@ pub mod pallet {
 		UnsignedPsbtSubmitted { psbt_hash: H256 },
 		/// A signed PSBT for an outbound request has been submitted.
 		SignedPsbtSubmitted { psbt_hash: H256, authority_id: T::AccountId },
-		/// An outbound request has been accepted.
-		RequestAccepted { psbt_hash: H256 },
 		/// An outbound request has been finalized.
 		RequestFinalized { psbt_hash: H256 },
+		/// An outbound request has been accepted.
+		RequestAccepted { psbt_hash: H256 },
 		/// An authority has been set.
 		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
@@ -138,20 +138,20 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn accepted_requests)]
-	/// Accepted outbound requests that are ready to be combined and finalized.
+	#[pallet::getter(fn finalized_requests)]
+	/// Finalized outbound requests.
 	/// key: The unsigned PSBT hash.
 	/// value: The PSBT information.
-	pub type AcceptedRequests<T: Config> =
+	pub type FinalizedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn finalized_requests)]
-	/// Finalized outbound requests that has been finalized and broadcasted to the Bitcoin network.
+	#[pallet::getter(fn accepted_requests)]
+	/// Outbound requests that has been broadcasted to the Bitcoin network.
 	/// key: The unsigned PSBT hash.
 	/// value: The PSBT information.
-	pub type FinalizedRequests<T: Config> =
+	pub type AcceptedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
 	#[pallet::storage]
@@ -315,15 +315,15 @@ pub mod pallet {
 				txid.reverse();
 				pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
 
-				// move pending to accepted
+				// move pending to finalized
 				<BondedOutboundTx<T>>::insert(
 					&H256::from(txid),
 					pending_request.socket_messages.clone(),
 				);
-				<AcceptedRequests<T>>::insert(&psbt_hash, pending_request);
+				<FinalizedRequests<T>>::insert(&psbt_hash, pending_request);
 				<PendingRequests<T>>::remove(&psbt_hash);
 
-				Self::deposit_event(Event::RequestAccepted { psbt_hash });
+				Self::deposit_event(Event::RequestFinalized { psbt_hash });
 			} else {
 				// if not, remain as pending
 				<PendingRequests<T>>::insert(&psbt_hash, pending_request);
@@ -334,21 +334,21 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::finalize_request())]
-		/// Finalize an accepted PSBT.
-		pub fn finalize_request(
+		#[pallet::weight(<T as Config>::WeightInfo::accept_request())]
+		/// Accept a finalized PSBT.
+		pub fn accept_request(
 			origin: OriginFor<T>,
-			msg: FinalizePsbtMessage<T::AccountId>,
+			msg: AcceptPsbtMessage<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let FinalizePsbtMessage { psbt_hash, .. } = msg;
+			let AcceptPsbtMessage { psbt_hash, .. } = msg;
 
-			let request = <AcceptedRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
-			<AcceptedRequests<T>>::remove(&psbt_hash);
-			<FinalizedRequests<T>>::insert(&psbt_hash, request);
-			Self::deposit_event(Event::RequestFinalized { psbt_hash });
+			let request = <FinalizedRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
+			<FinalizedRequests<T>>::remove(&psbt_hash);
+			<AcceptedRequests<T>>::insert(&psbt_hash, request);
+			Self::deposit_event(Event::RequestAccepted { psbt_hash });
 
 			Ok(().into())
 		}
@@ -400,8 +400,8 @@ pub mod pallet {
 						.propagate(true)
 						.build()
 				},
-				Call::finalize_request { msg, signature } => {
-					let FinalizePsbtMessage { authority_id, psbt_hash } = msg;
+				Call::accept_request { msg, signature } => {
+					let AcceptPsbtMessage { authority_id, psbt_hash } = msg;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
@@ -410,7 +410,7 @@ pub mod pallet {
 						return InvalidTransaction::BadProof.into();
 					}
 
-					ValidTransaction::with_tag_prefix("FinalizePsbtSubmission")
+					ValidTransaction::with_tag_prefix("AcceptPsbtSubmission")
 						.priority(TransactionPriority::MAX)
 						.and_provides(authority_id)
 						.propagate(true)
