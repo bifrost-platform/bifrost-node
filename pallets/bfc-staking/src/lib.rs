@@ -1413,8 +1413,6 @@ impl<
 				let new_top_nominations = bottom_nominations.clone();
 
 				self.reset_bottom_data::<T>(&bottom_nominations);
-				self.reset_top_data::<T>(candidate.clone(), &new_top_nominations)?;
-				<TopNominations<T>>::insert(candidate, new_top_nominations);
 				<BottomNominations<T>>::insert(candidate, bottom_nominations);
 				false
 			} else {
@@ -1852,7 +1850,7 @@ impl<
 				action,
 			});
 
-			return Ok(when);
+			return Ok(());
 		}
 		Err(Error::<T>::NominationDNE.into())
 	}
@@ -1926,7 +1924,7 @@ impl<
 		let (balance_amt, candidate_id, nominator_id): (BalanceOf<T>, T::AccountId, T::AccountId) =
 			(amount.into(), candidate.clone().into(), self.id.clone().into());
 		match action {
-			NominationChange::Revoke | NominationChange::Leave => {
+			NominationChange::Revoke | NominationChange::Leave | NominationChange::Leave => {
 				// revoking last nomination => leaving set of nominators
 				let is_last_nominator = self.is_last_nominator::<T>();
 
@@ -1953,7 +1951,8 @@ impl<
 				Pallet::<T>::deposit_event(Event::NominationRevoked {
 					nominator: nominator_id,
 					candidate: candidate_id,
-					unstaked_amount: balance_amt,
+					amount: balance_amt,
+					action,
 				});
 
 				return Ok(());
@@ -2003,8 +2002,7 @@ impl<
 					self.requests.revocations_count.saturating_sub(1u32);
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
 
-				let _ =
-					self.increase_nomination_without_reserve::<T>(candidate.clone(), order.amount);
+				let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
 			},
 			NominationChange::Decrease => {
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
