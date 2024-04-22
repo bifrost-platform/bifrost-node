@@ -566,19 +566,21 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         expect(extrinsicResult).equal(null);
 
         const rawNominatorStateAfter: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
-        const nominatorStateAfter = rawNominatorStateAfter.unwrap();
-        const nominatorRequestsAfter = nominatorStateAfter.requests.toJSON();
+        const nominatorStateAfter = rawNominatorStateAfter.toHuman();
+        expect(nominatorStateAfter).to.be.null;
+        // const nominatorStateAfter = rawNominatorStateAfter.unwrap();
+        // const nominatorRequestsAfter = nominatorStateAfter.requests.toJSON();
 
         const rawCandidateStateAfter: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
         const candidateStateAfter = rawCandidateStateAfter.unwrap();
 
         // Decrease less_total
         expect(context.web3.utils.hexToNumberString(nominatorRequestsBefore.lessTotal)).equal(extraTotalstake.toFixed());
-        expect(nominatorRequestsAfter.lessTotal).equal(0);
+        // expect(nominatorRequestsAfter.lessTotal).equal(0);
 
         // Decrease revocations count
         expect(nominatorRequestsBefore.revocationsCount).equal(1);
-        expect(nominatorRequestsAfter.revocationsCount).equal(0);
+        // expect(nominatorRequestsAfter.revocationsCount).equal(0);
 
         // Decrease nomination count
         expect(candidateStateBefore.nominationCount.toString()).equal('2');
@@ -586,15 +588,15 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
 
         // Remove nominations
         expect(nominatorStateBefore.toJSON().nominations).has.key(alith.address);
-        expect(nominatorStateAfter.toJSON().nominations).not.has.key(alith.address);
+        // expect(nominatorStateAfter.toJSON().nominations).not.has.key(alith.address);
 
         // Remove initial nominations
         expect(nominatorStateBefore.toJSON().initialNominations).has.key(alith.address);
-        expect(nominatorStateAfter.toJSON().initialNominations).not.has.key(alith.address);
+        // expect(nominatorStateAfter.toJSON().initialNominations).not.has.key(alith.address);
 
         // Remove awarded tokens per candidate
         expect(nominatorStateBefore.toJSON().awardedTokensPerCandidate).has.key(alith.address);
-        expect(nominatorStateAfter.toJSON().awardedTokensPerCandidate).not.has.key(alith.address);
+        // expect(nominatorStateAfter.toJSON().awardedTokensPerCandidate).not.has.key(alith.address);
 
         // Unreserve given amount
         account = await context.polkadotApi.query.system.account(charleth.address);
@@ -715,7 +717,7 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #cancel_pen
         const currentRound = rawCurrentRoundAfter.currentRoundIndex.toNumber();
 
         await jumpToRound(context, currentRound + 1);
-        const rawTotalSnapshotAfter: any = await context.polkadotApi.query.bfcStaking.totalAtStake(previousRound + 1);
+        const rawTotalSnapshotAfter: any = await context.polkadotApi.query.bfcStaking.totalAtStake(currentRound + 1);
         const totalSnapshotAfter = rawTotalSnapshotAfter.unwrap().toJSON();
 
         const selfBondBefore = new BigNumber(candidateStateBefore.bond.toString());
