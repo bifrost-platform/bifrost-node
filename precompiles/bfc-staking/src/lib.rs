@@ -929,7 +929,7 @@ where
 				when_executables.push(request.when_executable.into());
 
 				let action: u32 = match request.action {
-					NominationChange::Revoke => 1u32.into(),
+					NominationChange::Revoke | NominationChange::Leave => 1u32.into(),
 					NominationChange::Decrease => 2u32.into(),
 				};
 				actions.push(action.into());
@@ -1229,7 +1229,7 @@ where
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::schedule_revoke_nomination { validator: candidate };
+		let call = StakingCall::<Runtime>::schedule_revoke_nomination { candidate };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 

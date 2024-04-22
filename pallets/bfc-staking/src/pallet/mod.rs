@@ -2,9 +2,9 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, InflationInfo, NominationRequest, Nominations, Nominator,
-	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
-	TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
+	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
+	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -318,12 +318,13 @@ pub mod pallet {
 			new_total_amt_locked: BalanceOf<T>,
 		},
 		/// Nominator requested to decrease a bond for the validator candidate.
-		NominationDecreaseScheduled {
+		NominationScheduled {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount_to_decrease: BalanceOf<T>,
 			execute_round: RoundIndex,
 			in_top: bool,
+			action: NominationChange,
 		},
 		/// Nomination increased.
 		NominationIncreased {
@@ -332,11 +333,12 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 			in_top: bool,
 		},
-		/// Nomination decreased.
-		NominationDecreased {
+		/// Nomination Executed.
+		NominatorExecuted {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
+			action: NominationChange,
 		},
 		/// Nominator requested to leave the set of nominators.
 		NominatorExitScheduled {
@@ -1632,6 +1634,12 @@ pub mod pallet {
 					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
+
+				ensure!(
+					!state.nominations.contains_key(&candidate),
+					Error::<T>::AlreadyNominatedCandidate
+				);
+
 				state.add_nomination::<T>(candidate.clone(), amount)?;
 				state
 			} else {
@@ -1733,28 +1741,27 @@ pub mod pallet {
 		#[pallet::call_index(29)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_revoke_nomination())]
 		/// Request to revoke an existing nomination. If successful, the nomination is scheduled
-		/// to be allowed to be revoked via the `execute_nomination_request` extrinsic.
 		pub fn schedule_revoke_nomination(
 			origin: OriginFor<T>,
-			validator: T::AccountId,
+			candidate: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 
-			let _ = state.ok_to_revoke::<T>(validator.clone())?;
+			let _ = state.ok_to_revoke::<T>(candidate.clone())?;
 
 			let nominate_amount =
-				state.nominations.get(&validator.clone()).ok_or(Error::<T>::NominatorDNE)?;
+				state.nominations.get(&candidate.clone()).ok_or(Error::<T>::NominatorDNE)?;
 
 			let less = nominate_amount.clone();
 
-			let when = state.schedule_decrease_nomination::<T>(validator.clone(), less.clone())?;
-			// state.requests.bond_less::<T>(validator, less, when)?;
-			state.requests.revoke::<T>(validator, less, when)?;
+			let _ = state.schedule_decrease_nomination::<T>(
+				candidate.clone(),
+				less.clone(),
+				NominationChange::Revoke,
+			)?;
 
-			let new_state = state.clone();
-
-			<NominatorState<T>>::insert(&state.id, new_state);
+			<NominatorState<T>>::insert(&state.id, state.clone());
 			Ok(().into())
 		}
 
@@ -1768,7 +1775,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.increase_nomination::<T>(candidate.clone(), more)?;
+			state.increase_nomination::<T>(candidate.clone(), more, true)?;
 			Ok(().into())
 		}
 
@@ -1785,12 +1792,13 @@ pub mod pallet {
 
 			let _ = state.ok_to_decrease::<T>(candidate.clone(), less)?;
 
-			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
-			state.requests.bond_less::<T>(candidate, less, when)?;
+			let _ = state.schedule_decrease_nomination::<T>(
+				candidate.clone(),
+				less,
+				NominationChange::Decrease,
+			)?;
 
-			let new_state = state.clone();
-
-			<NominatorState<T>>::insert(&state.id, new_state);
+			<NominatorState<T>>::insert(&state.id, state.clone());
 
 			Ok(().into())
 		}
