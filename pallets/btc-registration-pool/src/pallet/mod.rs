@@ -90,9 +90,7 @@ pub mod pallet {
 		SystemVaultPending,
 		/// A new user registered its credentials and received a pending vault address.
 		VaultPending { who: T::AccountId, refund_address: BoundedBitcoinAddress },
-		/// The system vault address has been successfully generated.
-		SystemVaultGenerated { vault_address: BoundedBitcoinAddress },
-		/// A user's vault address has been successfully generated.
+		/// A vault address has been successfully generated.
 		VaultGenerated {
 			who: T::AccountId,
 			refund_address: BoundedBitcoinAddress,
@@ -348,8 +346,8 @@ pub mod pallet {
 
 			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 
-			let precompile = H160::from_low_u64_be(ADDRESS_U64);
-			ensure!(precompile.into() == who, Error::<T>::SystemVaultDNE);
+			let precompile: T::AccountId = H160::from_low_u64_be(ADDRESS_U64).into();
+			ensure!(precompile == who, Error::<T>::SystemVaultDNE);
 
 			if let Some(mut system_vault) = <SystemVault<T>>::get() {
 				ensure!(system_vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
@@ -382,11 +380,15 @@ pub mod pallet {
 					system_vault.set_address(vault_address.clone());
 					system_vault.set_descriptor(descriptor.clone());
 
-					<BondedVault<T>>::insert(&vault_address, precompile.into());
+					<BondedVault<T>>::insert(&vault_address, precompile.clone());
 					<BondedDescriptor<T>>::insert(&vault_address, descriptor);
-					Self::deposit_event(Event::SystemVaultGenerated { vault_address });
+					Self::deposit_event(Event::VaultGenerated {
+						who: precompile.clone(),
+						refund_address: Default::default(),
+						vault_address,
+					});
 				}
-				<BondedPubKey<T>>::insert(&pub_key, precompile.into());
+				<BondedPubKey<T>>::insert(&pub_key, precompile);
 				<SystemVault<T>>::put(system_vault);
 			} else {
 				return Err(Error::<T>::SystemVaultDNE)?;
