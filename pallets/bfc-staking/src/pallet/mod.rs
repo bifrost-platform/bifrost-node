@@ -326,11 +326,13 @@ pub mod pallet {
 		},
 		/// Nominator requested to decrease a bond for the validator candidate.
 		NominationScheduled {
+		NominationScheduled {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount_to_decrease: BalanceOf<T>,
 			execute_round: RoundIndex,
 			in_top: bool,
+			action: NominationChange,
 		},
 		/// Nomination increased.
 		NominationIncreased {
@@ -341,9 +343,12 @@ pub mod pallet {
 		},
 		/// Nomination Executed.
 		NominatorExecuted {
+		/// Nomination Executed.
+		NominatorExecuted {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
+			action: NominationChange,
 			action: NominationChange,
 		},
 		/// Nominator requested to leave the set of nominators.
@@ -1640,6 +1645,12 @@ pub mod pallet {
 					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
+
+				ensure!(
+					!state.nominations.contains_key(&candidate),
+					Error::<T>::AlreadyNominatedCandidate
+				);
+
 
 				ensure!(
 					!state.nominations.contains_key(&candidate),

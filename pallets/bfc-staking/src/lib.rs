@@ -1289,33 +1289,66 @@ impl<
 						top_nominations.total.saturating_sub(new_bottom_nomination.amount);
 					bottom_nominations.insert_sorted_greatest_to_least(new_bottom_nomination);
 				}
+		let in_top_after_amount =
+			if bond.saturating_add(more).into() > self.lowest_top_nomination_amount {
+				// bump it from bottom
+				bottom_nominations.nominations = bottom_nominations
+					.nominations
+					.clone()
+					.into_iter()
+					.filter(|d| {
+						if d.owner != nominator {
+							true
+						} else {
+							nomination_option = Some(Bond {
+								owner: d.owner.clone(),
+								amount: d.amount.saturating_add(more),
+							});
+							false
+						}
+					})
+					.collect();
+				let nomination = nomination_option.ok_or(Error::<T>::NominationDNE)?;
+				bottom_nominations.total = bottom_nominations.total.saturating_sub(bond);
+				// add it to top
+				let mut top_nominations =
+					<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
+				// if top is full, pop lowest top
+				if matches!(top_nominations.top_capacity::<T>(), CapacityStatus::Full) {
+					// pop lowest top nomination
+					let new_bottom_nomination =
+						top_nominations.nominations.pop().ok_or(<Error<T>>::TopNominationDNE)?;
+					top_nominations.total =
+						top_nominations.total.saturating_sub(new_bottom_nomination.amount);
+					bottom_nominations.insert_sorted_greatest_to_least(new_bottom_nomination);
+				}
 
-			top_nominations.insert_sorted_greatest_to_least(nomination);
+				top_nominations.insert_sorted_greatest_to_least(nomination);
 
-			// insert into top
-			self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
-			<TopNominations<T>>::insert(candidate, top_nominations);
-			true
-		} else {
-			let mut in_bottom = false;
-			// just increase the nomination
-			bottom_nominations.nominations = bottom_nominations
-				.nominations
-				.into_iter()
-				.map(|d| {
-					if d.owner == nominator {
-						in_bottom = true;
-						Bond { owner: d.owner, amount: d.amount.saturating_add(more) }
-					} else {
-						d
-					}
-				})
-				.collect();
-			ensure!(in_bottom, Error::<T>::NominationDNE);
-			bottom_nominations.total = bottom_nominations.total.saturating_add(more);
-			bottom_nominations.sort_greatest_to_least();
-			false
-		};
+				// insert into top
+				self.reset_top_data::<T>(candidate.clone(), &top_nominations)?;
+				<TopNominations<T>>::insert(candidate, top_nominations);
+				true
+			} else {
+				let mut in_bottom = false;
+				// just increase the nomination
+				bottom_nominations.nominations = bottom_nominations
+					.nominations
+					.into_iter()
+					.map(|d| {
+						if d.owner == nominator {
+							in_bottom = true;
+							Bond { owner: d.owner, amount: d.amount.saturating_add(more) }
+						} else {
+							d
+						}
+					})
+					.collect();
+				ensure!(in_bottom, Error::<T>::NominationDNE);
+				bottom_nominations.total = bottom_nominations.total.saturating_add(more);
+				bottom_nominations.sort_greatest_to_least();
+				false
+			};
 		self.reset_bottom_data::<T>(&bottom_nominations);
 		<BottomNominations<T>>::insert(candidate, bottom_nominations);
 		Ok(in_top_after_amount)
@@ -1461,7 +1494,7 @@ impl<
 			};
 		self.reset_bottom_data::<T>(&top_nominations);
 		<TopNominations<T>>::insert(candidate, top_nominations);
-		Ok(in_bottom_after)
+		Ok(in_bottom_after_amount)
 	}
 
 	/// Decrease nomination
@@ -2047,9 +2080,18 @@ impl<
 				action,
 			});
 
-			return Ok(when);
+			return Ok(());
 		}
 		Err(Error::<T>::NominationDNE.into())
+	}
+
+	fn fetch_delay_round<T: Config>(&self, action: NominationChange) -> RoundIndex {
+		match action {
+			NominationChange::Decrease => return T::NominationBondLessDelay::get(),
+			NominationChange::Revoke | NominationChange::Leave => {
+				return T::RevokeNominationDelay::get()
+			},
+		}
 	}
 
 	fn fetch_delay_round<T: Config>(&self, action: NominationChange) -> RoundIndex {
@@ -2188,10 +2230,20 @@ impl<
 
 				T::Currency::unreserve(&nominator_id, balance_amt);
 
-				Pallet::<T>::deposit_event(Event::NominationRevoked {
+				<CandidateInfo<T>>::insert(&candidate_id, candidate_state);
+
+				if is_last_nominator {
+					<NominatorState<T>>::remove(&nominator_id);
+				} else {
+					let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+
+					<NominatorState<T>>::insert(&nominator_id, nom_st);
+				}
+				Pallet::<T>::deposit_event(Event::NominatorExecuted {
 					nominator: nominator_id,
 					candidate: candidate_id,
-					unstaked_amount: balance_amt,
+					amount: balance_amt,
+					action,
 				});
 
 				return Ok(());
@@ -2365,6 +2417,42 @@ impl<
 			self.requests
 				.try_push(new_requests)
 				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
+		}
+
+		self.requests.insert(
+			validator.clone(),
+			NominationRequest {
+				validator,
+				amount,
+				when_executable,
+				action: NominationChange::Decrease,
+			},
+		);
+		self.less_total += amount;
+
+		Ok(())
+	}
+
+	/// Add revoke order to pending requests
+	/// - limit is the maximum amount allowed that can be subtracted from the nomination
+	/// before it would be below the minimum nomination amount
+	pub fn insert_request<T: Config>(
+		&mut self,
+		validator: A,
+		amount: B,
+		when_executable: RoundIndex,
+		action: NominationChange,
+	) -> DispatchResult {
+		self.requests.insert(
+			validator.clone(),
+			NominationRequest { validator, amount, when_executable, action: action.clone() },
+		);
+
+		match action {
+			NominationChange::Revoke | NominationChange::Leave => {
+				self.revocations_count += 1u32;
+			},
+			NominationChange::Decrease => {},
 		}
 
 		self.less_total += amount;
