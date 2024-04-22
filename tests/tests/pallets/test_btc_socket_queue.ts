@@ -13,8 +13,8 @@ import { describeDevNode, INodeContext } from '../set_dev_node';
 
 const SOCKET_MESSAGE_SEQ_ID = 4657;
 
-// finalize_request()
-const VALID_FINALIZE_REQUEST_SIG = '0xe0e6f6cf622c9ab93b5144de526482d4d2072d877f518dd95d6001bbea29c96222988301974919d4c4c95ade4a5f519b47e1f6653128bb7fc905962117277d021b';
+// accept_request()
+const VALID_ACCEPT_REQUEST_SIG = '0xe0e6f6cf622c9ab93b5144de526482d4d2072d877f518dd95d6001bbea29c96222988301974919d4c4c95ade4a5f519b47e1f6653128bb7fc905962117277d021b';
 
 // submit_unsigned_psbt()
 const VALID_SYSTEM_VAULT_VOUT = 0;
@@ -610,9 +610,9 @@ describeDevNode('pallet_btc_socket_queue - submit signed pbst', (context) => {
     const bondedOutboundTx = rawBondedOutboundTx.toHuman();
     expect(bondedOutboundTx[0]).is.eq(VALID_SOCKET_MESSAGE);
 
-    const rawAcceptedRequest: any = await context.polkadotApi.query.btcSocketQueue.acceptedRequests(VALID_UNSIGNED_PSBT_HASH);
-    const acceptedRequest = rawAcceptedRequest.toHuman();
-    expect(acceptedRequest).is.ok;
+    const rawFinalizedRequest: any = await context.polkadotApi.query.btcSocketQueue.finalizedRequests(VALID_UNSIGNED_PSBT_HASH);
+    const finalizedRequest = rawFinalizedRequest.toHuman();
+    expect(finalizedRequest).is.ok;
 
     const rawPendingRequest: any = await context.polkadotApi.query.btcSocketQueue.pendingRequests(VALID_UNSIGNED_PSBT_HASH);
     const pendingRequest = rawPendingRequest.toHuman();
@@ -620,7 +620,7 @@ describeDevNode('pallet_btc_socket_queue - submit signed pbst', (context) => {
   });
 });
 
-describeDevNode('pallet_btc_socket_queue - finalize request', (context) => {
+describeDevNode('pallet_btc_socket_queue - accept request', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
   const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
@@ -656,21 +656,21 @@ describeDevNode('pallet_btc_socket_queue - finalize request', (context) => {
     await context.createBlock();
   });
 
-  it('should successfully finalize request', async function () {
+  it('should successfully accept request', async function () {
     const msg = {
       authorityId: alith.address,
       psbtHash: VALID_UNSIGNED_PSBT_HASH,
     };
 
-    await context.polkadotApi.tx.btcSocketQueue.finalizeRequest(msg, VALID_FINALIZE_REQUEST_SIG).send();
+    await context.polkadotApi.tx.btcSocketQueue.acceptRequest(msg, VALID_ACCEPT_REQUEST_SIG).send();
     await context.createBlock();
-
-    const rawAcceptedRequest: any = await context.polkadotApi.query.btcSocketQueue.acceptedRequests(VALID_UNSIGNED_PSBT_HASH);
-    const acceptedRequest = rawAcceptedRequest.toHuman();
-    expect(acceptedRequest).is.null;
 
     const rawFinalizedRequest: any = await context.polkadotApi.query.btcSocketQueue.finalizedRequests(VALID_UNSIGNED_PSBT_HASH);
     const finalizedRequest = rawFinalizedRequest.toHuman();
-    expect(finalizedRequest).is.ok;
+    expect(finalizedRequest).is.null;
+
+    const rawAcceptedRequest: any = await context.polkadotApi.query.btcSocketQueue.acceptdRequests(VALID_UNSIGNED_PSBT_HASH);
+    const acceptedRequest = rawAcceptedRequest.toHuman();
+    expect(acceptedRequest).is.ok;
   });
 });
