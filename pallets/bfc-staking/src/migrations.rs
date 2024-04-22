@@ -38,11 +38,9 @@ pub mod v4 {
 			let mut weight = Weight::zero();
 
 			let current = Pallet::<T>::current_storage_version();
-			// (previous) let onchain = StorageVersion::<T>::get();
-			let onchain = Pallet::<T>::on_chain_storage_version();
+			let onchain = StorageVersion::<T>::get();
 
-			// (previous: if current == 4 && onchain == Releases::V3_0_0)
-			if current == 4 && onchain == 3 {
+			if current == 4 && onchain == Releases::V3_0_0 {
 				MinTotalSelected::<T>::kill();
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(0, 1));
 
@@ -167,7 +165,7 @@ pub mod v4 {
 				log!(info, "bfc-staking storage migration passes v4 update ✅");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 2));
 			} else {
-				log!(warn, "Skipping bfc-staking storage migration v4 💤");
+				log!(warn, "Skipping bfc-staking migration v4, should be removed");
 				weight = weight.saturating_add(T::DbWeight::get().reads(1));
 			}
 
