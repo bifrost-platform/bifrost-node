@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	AcceptPsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
+	ExecutedPsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
 	WeightInfo,
 };
 
@@ -101,8 +101,8 @@ pub mod pallet {
 		SignedPsbtSubmitted { psbt_hash: H256, authority_id: T::AccountId },
 		/// An outbound request has been finalized.
 		RequestFinalized { psbt_hash: H256 },
-		/// An outbound request has been accepted.
-		RequestAccepted { psbt_hash: H256 },
+		/// An outbound request has been executed.
+		RequestExecuted { psbt_hash: H256 },
 		/// An authority has been set.
 		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
@@ -147,11 +147,11 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn accepted_requests)]
+	#[pallet::getter(fn executed_requests)]
 	/// Outbound requests that has been broadcasted to the Bitcoin network.
 	/// key: The unsigned PSBT hash.
 	/// value: The PSBT information.
-	pub type AcceptedRequests<T: Config> =
+	pub type ExecutedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
 
 	#[pallet::storage]
@@ -241,11 +241,11 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 			ensure!(
-				!<AcceptedRequests<T>>::contains_key(&psbt_hash),
+				!<FinalizedRequests<T>>::contains_key(&psbt_hash),
 				Error::<T>::RequestAlreadyExists
 			);
 			ensure!(
-				!<FinalizedRequests<T>>::contains_key(&psbt_hash),
+				!<ExecutedRequests<T>>::contains_key(&psbt_hash),
 				Error::<T>::RequestAlreadyExists
 			);
 
@@ -334,21 +334,21 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::accept_request())]
-		/// Accept a finalized PSBT.
-		pub fn accept_request(
+		#[pallet::weight(<T as Config>::WeightInfo::submit_executed_request())]
+		/// Submit an executed PSBT request.
+		pub fn submit_executed_request(
 			origin: OriginFor<T>,
-			msg: AcceptPsbtMessage<T::AccountId>,
+			msg: ExecutedPsbtMessage<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let AcceptPsbtMessage { psbt_hash, .. } = msg;
+			let ExecutedPsbtMessage { psbt_hash, .. } = msg;
 
 			let request = <FinalizedRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
 			<FinalizedRequests<T>>::remove(&psbt_hash);
-			<AcceptedRequests<T>>::insert(&psbt_hash, request);
-			Self::deposit_event(Event::RequestAccepted { psbt_hash });
+			<ExecutedRequests<T>>::insert(&psbt_hash, request);
+			Self::deposit_event(Event::RequestExecuted { psbt_hash });
 
 			Ok(().into())
 		}
@@ -400,8 +400,8 @@ pub mod pallet {
 						.propagate(true)
 						.build()
 				},
-				Call::accept_request { msg, signature } => {
-					let AcceptPsbtMessage { authority_id, psbt_hash } = msg;
+				Call::submit_executed_request { msg, signature } => {
+					let ExecutedPsbtMessage { authority_id, psbt_hash } = msg;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
@@ -410,7 +410,7 @@ pub mod pallet {
 						return InvalidTransaction::BadProof.into();
 					}
 
-					ValidTransaction::with_tag_prefix("AcceptPsbtSubmission")
+					ValidTransaction::with_tag_prefix("ExecutedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
 						.and_provides(authority_id)
 						.propagate(true)

@@ -101,7 +101,7 @@ pub struct SignedPsbtMessage<AccountId> {
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for PSBT finalization.
-pub struct AcceptPsbtMessage<AccountId> {
+pub struct ExecutedPsbtMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
 	/// The unsigned PSBT hash.
