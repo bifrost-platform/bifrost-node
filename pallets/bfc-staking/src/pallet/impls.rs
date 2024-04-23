@@ -330,12 +330,11 @@ impl<T: Config> Pallet<T> {
 		nominator: T::AccountId,
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
-		if let Some(mut nominator_state) = Self::nominator_state(&nominator) {
-			// the nominator must be active and not revoking the current validator
-			if nominator_state.is_active() && !nominator_state.is_revoking(&controller) {
-				// mint rewards to the nominator account
-				Self::mint_reward(reward, nominator.clone());
+		// mint rewards to the nominator account
+		Self::mint_reward(reward, nominator.clone());
 
+		if let Some(mut nominator_state) = Self::nominator_state(&nominator) {
+			if nominator_state.is_active() && !nominator_state.is_revoking(&controller) {
 				// auto-compound round rewards if `reward_dst` is set to `Staked`
 				match nominator_state.reward_dst {
 					RewardDestination::Staked => {

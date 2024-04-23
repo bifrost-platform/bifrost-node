@@ -1385,8 +1385,6 @@ impl<
 					.filter(|d| {
 						if d.owner != nominator {
 							true
-						} else if d.amount == Zero::zero() {
-							false
 						} else {
 							top_nominations.total = top_nominations.total.saturating_sub(d.amount);
 							nomination_option = Some(Bond {

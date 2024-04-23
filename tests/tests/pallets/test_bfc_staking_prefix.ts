@@ -545,6 +545,10 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
         expect(extrinsicResult).equal(null);
 
+        // charleth
+        const accountBefore = await context.polkadotApi.query.system.account(charleth.address);
+        const accountFreeBefore = accountBefore['data'].free.toString();
+
         const rawNominatorStateBefore: any = await context.polkadotApi.query.bfcStaking.nominatorState(charleth.address);
         const nominatorStateBefore = rawNominatorStateBefore.unwrap();
         const nominatorRequestsBefore = nominatorStateBefore.requests.toJSON();
@@ -555,6 +559,9 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
         const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
         await jumpToRound(context, currentRound + 1);
+
+        const accountMiddle = await context.polkadotApi.query.system.account(charleth.address);
+        const accountFreeMiddle = accountMiddle['data'].free.toString();
 
         await context.polkadotApi.tx.bfcStaking
             .executeNominationRequest(alith.address)
@@ -573,6 +580,9 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
 
         const rawCandidateStateAfter: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
         const candidateStateAfter = rawCandidateStateAfter.unwrap();
+
+        const accountAfter = await context.polkadotApi.query.system.account(charleth.address);
+        const accountFreeAfter = accountAfter['data'].free.toString();
 
         // Decrease less_total
         expect(context.web3.utils.hexToNumberString(nominatorRequestsBefore.lessTotal)).equal(extraTotalstake.toFixed());
@@ -599,8 +609,13 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         // expect(nominatorStateAfter.toJSON().awardedTokensPerCandidate).not.has.key(alith.address);
 
         // Unreserve given amount
-        account = await context.polkadotApi.query.system.account(charleth.address);
-        expect(account['data'].reserved.toString()).equal('0');
+        expect(accountBefore['data'].reserved.toString()).equal(extraTotalstake.toFixed());
+        expect(accountMiddle['data'].reserved.toString()).equal(extraTotalstake.toFixed());
+        expect(accountAfter['data'].reserved.toString()).equal('0');
+
+        // Expect amount return
+        expect(BigNumber(accountFreeMiddle).isGreaterThan(BigNumber(accountFreeBefore))).equal(true);
+        expect(BigNumber(accountFreeAfter).isGreaterThan(BigNumber(accountFreeMiddle))).equal(true);
 
     });
 
