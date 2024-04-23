@@ -898,54 +898,54 @@ where
 		Ok(nominator_state.from_owner(Address(nominator.into())))
 	}
 
-	/// Returns the request state of the given `nominator`
-	/// @param: `nominator` the address for which to verify
-	/// @return: the request state of the given `nominator`
-	#[precompile::public("nominatorRequests(address)")]
-	#[precompile::public("nominator_requests(address)")]
-	#[precompile::view]
-	fn nominator_requests(
-		handle: &mut impl PrecompileHandle,
-		nominator: Address,
-	) -> EvmResult<EvmNominatorRequestsOf> {
-		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
+	// /// Returns the request state of the given `nominator`
+	// /// @param: `nominator` the address for which to verify
+	// /// @return: the request state of the given `nominator`
+	// #[precompile::public("nominatorRequests(address)")]
+	// #[precompile::public("nominator_requests(address)")]
+	// #[precompile::view]
+	// fn nominator_requests(
+	// 	handle: &mut impl PrecompileHandle,
+	// 	nominator: Address,
+	// ) -> EvmResult<EvmNominatorRequestsOf> {
+	// 	let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
 
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let zero = 0u32;
-		let mut revocations_count: u32 = zero.into();
-		let mut less_total: U256 = zero.into();
-		let mut candidates: Vec<Address> = vec![];
-		let mut amounts: Vec<U256> = vec![];
-		let mut when_executables: Vec<u32> = vec![];
-		let mut actions: Vec<u32> = vec![];
+	// 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	// 	let zero = 0u32;
+	// 	let mut revocations_count: u32 = zero.into();
+	// 	let mut less_total: U256 = zero.into();
+	// 	let mut candidates: Vec<Address> = vec![];
+	// 	let mut amounts: Vec<U256> = vec![];
+	// 	let mut when_executables: Vec<u32> = vec![];
+	// 	let mut actions: Vec<u32> = vec![];
 
-		if let Some(state) = <StakingOf<Runtime>>::nominator_state(&nominator) {
-			revocations_count = state.requests.revocations_count.into();
-			less_total = state.requests.less_total.into();
+	// 	if let Some(state) = <StakingOf<Runtime>>::nominator_state(&nominator) {
+	// 		revocations_count = state.requests.revocations_count.into();
+	// 		less_total = state.requests.less_total.into();
 
-			for (candidate, request) in state.requests.requests {
-				candidates.push(Address(candidate.into()));
-				amounts.push(request.amount.into());
-				when_executables.push(request.when_executable.into());
+	// 		for (candidate, request) in state.requests.requests {
+	// 			candidates.push(Address(candidate.into()));
+	// 			amounts.push(request.amount.into());
+	// 			when_executables.push(request.when_executable.into());
 
-				let action: u32 = match request.action {
-					NominationChange::Revoke | NominationChange::Leave => 1u32.into(),
-					NominationChange::Decrease => 2u32.into(),
-				};
-				actions.push(action.into());
-			}
-		}
+	// 			let action: u32 = match request.action {
+	// 				NominationChange::Revoke | NominationChange::Leave => 1u32.into(),
+	// 				NominationChange::Decrease => 2u32.into(),
+	// 			};
+	// 			actions.push(action.into());
+	// 		}
+	// 	}
 
-		Ok((
-			Address(nominator.into()),
-			revocations_count,
-			less_total,
-			candidates,
-			amounts.into(),
-			when_executables,
-			actions,
-		))
-	}
+	// 	Ok((
+	// 		Address(nominator.into()),
+	// 		revocations_count,
+	// 		less_total,
+	// 		candidates,
+	// 		amounts.into(),
+	// 		when_executables,
+	// 		actions,
+	// 	))
+	// }
 
 	/// Returns the count of nominations of the given `nominator`
 	/// @param: `nominator` the address for which to verify
@@ -1073,19 +1073,19 @@ where
 		Ok(())
 	}
 
-	#[precompile::public("executeLeaveCandidates(uint256)")]
-	#[precompile::public("execute_leave_candidates(uint256)")]
-	fn execute_leave_candidates(
-		handle: &mut impl PrecompileHandle,
-		candidate_nomination_count: u32,
-	) -> EvmResult {
-		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
+	// #[precompile::public("executeLeaveCandidates(uint256)")]
+	// #[precompile::public("execute_leave_candidates(uint256)")]
+	// fn execute_leave_candidates(
+	// 	handle: &mut impl PrecompileHandle,
+	// 	candidate_nomination_count: u32,
+	// ) -> EvmResult {
+	// 	let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+	// 	let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+	// 	RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
-		Ok(())
-	}
+	// 	Ok(())
+	// }
 
 	#[precompile::public("executeCandidateBondLess()")]
 	#[precompile::public("execute_candidate_bond_less()")]
@@ -1272,12 +1272,13 @@ where
 	#[precompile::public("execute_nomination_request(address)")]
 	fn execute_nomination_request(
 		handle: &mut impl PrecompileHandle,
+		execute_round: RoundIndex,
 		candidate: Address,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::execute_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::execute_nomination_request { execute_round, candidate };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
@@ -1299,12 +1300,13 @@ where
 	#[precompile::public("cancel_nomination_request(address)")]
 	fn cancel_nomination_request(
 		handle: &mut impl PrecompileHandle,
+		cancel_round: RoundIndex,
 		candidate: Address,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::cancel_nomination_request { cancel_round, candidate };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 

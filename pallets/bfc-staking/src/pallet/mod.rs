@@ -2,12 +2,9 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedControllerSet, DelayedPayout, DelayedPayout, InflationInfo,
-	InflationInfo, NominationChange, NominationChange, NominationRequest, NominationRequest,
-	Nominations, Nominations, Nominator, Nominator, NominatorAdded, NominatorAdded, Range, Range,
-	RewardDestination, RewardDestination, RewardPoint, RewardPoint, RoundIndex, RoundIndex,
-	RoundInfo, RoundInfo, TierType, TierType, TotalSnapshot, TotalSnapshot, ValidatorSnapshot,
-	ValidatorSnapshot, WeightInfo, WeightInfo,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
+	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
+	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -176,8 +173,6 @@ pub mod pallet {
 		NominatorAlreadyLeaving,
 		/// The given nominator fo given candidate is already revoking.
 		NominatorAlreadyRevoking,
-		/// The given nominator fo given candidate is already revoking.
-		NominatorAlreadyRevoking,
 		/// The given nominator is not leaving.
 		NominatorNotLeaving,
 		/// The given nominator cannot execute to leave yet.
@@ -326,7 +321,6 @@ pub mod pallet {
 		},
 		/// Nominator requested to decrease a bond for the validator candidate.
 		NominationScheduled {
-		NominationScheduled {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount_to_decrease: BalanceOf<T>,
@@ -343,12 +337,9 @@ pub mod pallet {
 		},
 		/// Nomination Executed.
 		NominatorExecuted {
-		/// Nomination Executed.
-		NominatorExecuted {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
-			action: NominationChange,
 			action: NominationChange,
 		},
 		/// Nominator requested to leave the set of nominators.
@@ -1651,7 +1642,6 @@ pub mod pallet {
 					Error::<T>::AlreadyNominatedCandidate
 				);
 
-
 				ensure!(
 					!state.nominations.contains_key(&candidate),
 					Error::<T>::AlreadyNominatedCandidate
@@ -1825,11 +1815,12 @@ pub mod pallet {
 		/// Execute pending request to change an existing nomination
 		pub fn execute_nomination_request(
 			origin: OriginFor<T>,
+			execute_round: RoundIndex,
 			candidate: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.execute_pending_request::<T>(candidate)?;
+			state.execute_pending_request::<T>(execute_round, candidate)?;
 			Ok(().into())
 		}
 
@@ -1838,11 +1829,12 @@ pub mod pallet {
 		/// Cancel request to change an existing nomination.
 		pub fn cancel_nomination_request(
 			origin: OriginFor<T>,
+			cancel_round: RoundIndex,
 			candidate: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.cancel_pending_request::<T>(candidate)?;
+			state.cancel_pending_request::<T>(cancel_round, candidate)?;
 			Ok(().into())
 		}
 	}
