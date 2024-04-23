@@ -258,6 +258,18 @@ where
 		})
 	}
 
+	#[precompile::public("descriptors()")]
+	#[precompile::view]
+	fn descriptors(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedString>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let descriptors: Vec<UnboundedString> =
+			pallet_btc_registration_pool::BondedDescriptor::<Runtime>::iter()
+				.map(|(_, desc)| UnboundedString::from(desc))
+				.collect();
+		Ok(descriptors)
+	}
+
 	#[precompile::public("descriptor(string)")]
 	#[precompile::view]
 	fn descriptor(

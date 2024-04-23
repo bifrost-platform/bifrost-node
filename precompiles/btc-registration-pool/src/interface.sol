@@ -53,6 +53,11 @@ interface BtcRegistrationPool {
     /// @return The list of the current bonded vault addresses
     function vault_addresses() external view returns (string[] memory);
 
+    /// @dev Returns the current bonded descriptors
+    /// @custom:selector 8f228ff1
+    /// @return The list of the current bonded descriptors
+    function descriptors() external view returns (string[] memory);
+
     /// @dev Returns the current bonded refund addresses
     /// @custom:selector 135ca504
     /// @return The list of the current bonded refund addresses
