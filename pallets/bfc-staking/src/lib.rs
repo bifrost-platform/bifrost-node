@@ -1957,20 +1957,15 @@ impl<
 
 		match order.action {
 			NominationChange::Revoke | NominationChange::Leave => {
-				let _ = self.add_nomination::<T>(candidate.clone(), order.amount);
-
 				self.requests.revocations_count =
 					self.requests.revocations_count.saturating_sub(1u32);
-				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
-
-				let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
 			},
-			NominationChange::Decrease => {
-				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
-
-				let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
-			},
+			NominationChange::Decrease => {},
 		}
+
+		self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+
+		let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
 
 		Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
 			nominator: nominator_id,
