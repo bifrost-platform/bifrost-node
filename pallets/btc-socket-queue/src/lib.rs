@@ -104,8 +104,8 @@ pub struct SignedPsbtMessage<AccountId> {
 pub struct ExecutedPsbtMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
-	/// The unsigned PSBT hash.
-	pub psbt_hash: H256,
+	/// The executed PSBT's txid.
+	pub txid: H256,
 }
 
 /// The `SocketMessage`'s request ID.
