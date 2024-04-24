@@ -1768,7 +1768,7 @@ pub mod pallet {
 				NominationChange::Revoke,
 			)?;
 
-			<NominatorState<T>>::insert(&state.id, new_state);
+			<NominatorState<T>>::insert(&state.id, state.clone());
 			Ok(().into())
 		}
 
