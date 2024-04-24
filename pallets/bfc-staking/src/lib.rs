@@ -1897,6 +1897,7 @@ impl<
 		NominationRequest<T::AccountId, BalanceOf<T>>: From<NominationRequest<AccountId, Balance>>,
 	{
 		let nominator_id: T::AccountId = self.id.clone().into();
+		let candidate_id: T::AccountId = candidate.clone().into();
 		let now = <Round<T>>::get().current_round_index;
 
 		if let Some(orders) = self
@@ -1907,39 +1908,69 @@ impl<
 		{
 			if orders.when_executable <= now {
 				if let Some(order) = orders.validator_request.remove(&candidate) {
+					let balance_amt: BalanceOf<T> = order.amount.into();
+
 					match order.action {
 						NominationChange::Revoke | NominationChange::Leave => {
-							let _ = self.add_nomination::<T>(candidate.clone(), order.amount);
+							// revoking last nomination => leaving set of nominators
+							let is_last_nominator = self.is_last_nominator::<T>();
+
+							self.requests.less_total =
+								self.requests.less_total.saturating_sub(order.amount);
 
 							self.requests.revocations_count =
 								self.requests.revocations_count.saturating_sub(1u32);
-							self.requests.less_total =
-								self.requests.less_total.saturating_sub(order.amount);
 
-							let _ = self.increase_nomination::<T>(
-								candidate.clone(),
-								order.amount,
-								false,
-							);
+							self.nominations.remove(&candidate.clone());
+							self.initial_nominations.remove(&candidate.clone());
+							self.awarded_tokens_per_candidate.remove(&candidate.clone());
+
+							let mut candidate_state = <CandidateInfo<T>>::get(&candidate_id)
+								.ok_or(Error::<T>::CandidateDNE)?;
+
+							candidate_state.nomination_count =
+								candidate_state.nomination_count.saturating_sub(1u32);
+
+							T::Currency::unreserve(&nominator_id, balance_amt);
+
+							<CandidateInfo<T>>::insert(&candidate_id, candidate_state);
+
+							if is_last_nominator {
+								<NominatorState<T>>::remove(&nominator_id);
+							} else {
+								let nom_st: Nominator<T::AccountId, BalanceOf<T>> =
+									self.clone().into();
+
+								<NominatorState<T>>::insert(&nominator_id, nom_st);
+							}
+							Pallet::<T>::deposit_event(Event::NominatorExecuted {
+								nominator: nominator_id,
+								candidate: candidate_id,
+								amount: balance_amt,
+								action: order.action,
+							});
+
+							return Ok(());
 						},
 						NominationChange::Decrease => {
+							// remove from pending requests
 							self.requests.less_total =
 								self.requests.less_total.saturating_sub(order.amount);
+							// decrease nomination
+							T::Currency::unreserve(&nominator_id, balance_amt);
 
-							let _ = self.increase_nomination::<T>(
-								candidate.clone(),
-								order.amount,
-								false,
-							);
+							let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+							<NominatorState<T>>::insert(&nominator_id, nom_st);
+
+							Pallet::<T>::deposit_event(Event::NominatorExecuted {
+								nominator: nominator_id,
+								candidate: candidate_id,
+								amount: balance_amt,
+								action: order.action,
+							});
+							return Ok(());
 						},
 					}
-
-					Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
-						nominator: nominator_id,
-						cancelled_request: order.into(),
-					});
-
-					return Ok(());
 				} else {
 					return Err(Error::<T>::CandidateDNE.into());
 				}
@@ -1996,8 +2027,7 @@ impl<
 
 			return Ok(());
 		} else {
-			// `find`나 `remove`에서 원하는 결과를 찾지 못했을 때의 에러 처리
-			return Err(Error::<T>::PendingCandidateRequestsDNE.into());
+			return Err(Error::<T>::PendingNominationRequestDNE.into());
 		}
 	}
 }

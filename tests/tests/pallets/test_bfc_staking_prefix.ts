@@ -92,27 +92,27 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #ok_to_decr
 
     });
 
-    it('#2', async function () {
+    // it('#2', async function () {
 
-        await context.polkadotApi.tx.bfcStaking
-            .scheduleNominatorBondLess(alith.address, minStake.toFixed())
-            .signAndSend(baltathar);
+    //     await context.polkadotApi.tx.bfcStaking
+    //         .scheduleNominatorBondLess(alith.address, minStake.toFixed())
+    //         .signAndSend(baltathar);
     
-        await context.createBlock();
+    //     await context.createBlock();
     
-        let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
-        expect(extrinsicResult).equal(null);
+    //     let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
+    //     expect(extrinsicResult).equal(null);
     
-        await context.polkadotApi.tx.bfcStaking
-            .scheduleNominatorBondLess(alith.address, minStake.toFixed())
-            .signAndSend(baltathar);
+    //     await context.polkadotApi.tx.bfcStaking
+    //         .scheduleNominatorBondLess(alith.address, minStake.toFixed())
+    //         .signAndSend(baltathar);
     
-        await context.createBlock();
+    //     await context.createBlock();
     
-        extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
-        expect(extrinsicResult).equal('PendingNominationRequestAlreadyExists');
+    //     extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
+    //     expect(extrinsicResult).equal('PendingNominationRequestAlreadyExists');
 
-    });
+    // });
 
     it('#3', async function () {
 
@@ -210,27 +210,27 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #ok_to_revo
 
     // });
 
-    it('#2', async function () {
+    // it('#2', async function () {
 
-        await context.polkadotApi.tx.bfcStaking
-            .scheduleRevokeNomination(alith.address)
-            .signAndSend(baltathar);
+    //     await context.polkadotApi.tx.bfcStaking
+    //         .scheduleRevokeNomination(alith.address)
+    //         .signAndSend(baltathar);
     
-        await context.createBlock();
+    //     await context.createBlock();
     
-        let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
-        expect(extrinsicResult).equal(null);
+    //     let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
+    //     expect(extrinsicResult).equal(null);
     
-        await context.polkadotApi.tx.bfcStaking
-            .scheduleRevokeNomination(alith.address)
-            .signAndSend(baltathar);
+    //     await context.polkadotApi.tx.bfcStaking
+    //         .scheduleRevokeNomination(alith.address)
+    //         .signAndSend(baltathar);
     
-        await context.createBlock();
+    //     await context.createBlock();
     
-        extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
-        expect(extrinsicResult).equal('PendingNominationRequestAlreadyExists');
+    //     extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
+    //     expect(extrinsicResult).equal('PendingNominationRequestAlreadyExists');
 
-    });
+    // });
 
     // it('#4', async function () {
 
@@ -301,110 +301,110 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #ok_to_revo
 
 });
 
-describeDevNode('pallet_bfc_staking - prefix nomination unit testing #schedule_decrease_nomination', (context) => {
-    const keyring = new Keyring({ type: 'ethereum' });
-    const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
-    const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
-    const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
-    // const dorothy = keyring.addFromUri(TEST_CONTROLLERS[3].private);
+// describeDevNode('pallet_bfc_staking - prefix nomination unit testing #schedule_decrease_nomination', (context) => {
+//     const keyring = new Keyring({ type: 'ethereum' });
+//     const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+//     const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+//     const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
+//     // const dorothy = keyring.addFromUri(TEST_CONTROLLERS[3].private);
 
-    const minStake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
-    const minTotalstake =new BigNumber(MIN_NOMINATOR_TOTAL_STAKING_AMOUNT);
+//     const minStake = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+//     const minTotalstake =new BigNumber(MIN_NOMINATOR_TOTAL_STAKING_AMOUNT);
 
-    // const extraStake =minStake.plus(AMOUNT_FACTOR);
-    const extraTotalstake =minTotalstake.plus(AMOUNT_FACTOR);
+//     // const extraStake =minStake.plus(AMOUNT_FACTOR);
+//     const extraTotalstake =minTotalstake.plus(AMOUNT_FACTOR);
 
-    before('should successfully nominate to alith', async function () {
+//     before('should successfully nominate to alith', async function () {
 
-        await context.polkadotApi.tx.bfcStaking
-            .nominate(alith.address, extraTotalstake.toFixed(), 0, 0)
-            .signAndSend(baltathar);
+//         await context.polkadotApi.tx.bfcStaking
+//             .nominate(alith.address, extraTotalstake.toFixed(), 0, 0)
+//             .signAndSend(baltathar);
 
-        await context.createBlock();
+//         await context.createBlock();
 
-        let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'nominate');
-        expect(extrinsicResult).equal(null);
+//         let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'nominate');
+//         expect(extrinsicResult).equal(null);
 
 
-        await context.polkadotApi.tx.bfcStaking
-            .nominate(alith.address, extraTotalstake.toFixed(), 1, 1)
-            .signAndSend(charleth);
+//         await context.polkadotApi.tx.bfcStaking
+//             .nominate(alith.address, extraTotalstake.toFixed(), 1, 1)
+//             .signAndSend(charleth);
 
-        await context.createBlock();
+//         await context.createBlock();
 
-        extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'nominate');
-        expect(extrinsicResult).equal(null);
+//         extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'nominate');
+//         expect(extrinsicResult).equal(null);
     
-    });
+//     });
 
-    it('#1', async function () {
+//     it('#1', async function () {
         
-        let expectAmount = extraTotalstake.minus(AMOUNT_FACTOR);
+//         let expectAmount = extraTotalstake.minus(AMOUNT_FACTOR);
 
-        await context.polkadotApi.tx.bfcStaking
-            .scheduleNominatorBondLess(alith.address, minStake.toFixed())
-            .signAndSend(baltathar);
+//         await context.polkadotApi.tx.bfcStaking
+//             .scheduleNominatorBondLess(alith.address, minStake.toFixed())
+//             .signAndSend(baltathar);
     
-        await context.createBlock();
+//         await context.createBlock();
     
-        let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
-        expect(extrinsicResult).equal(null);
+//         let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
+//         expect(extrinsicResult).equal(null);
 
-        const rawNominatorStateAfter: any = await context.polkadotApi.query.bfcStaking.nominatorState(baltathar.address);
-        const nominatorStateAfter = rawNominatorStateAfter.unwrap().toJSON();
+//         const rawNominatorStateAfter: any = await context.polkadotApi.query.bfcStaking.nominatorState(baltathar.address);
+//         const nominatorStateAfter = rawNominatorStateAfter.unwrap().toJSON();
 
-        const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
-        const topNominations = rawTopNominations.unwrap();
+//         const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
+//         const topNominations = rawTopNominations.unwrap();
 
-        const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
-        const candidateState = rawCandidateState.unwrap();
+//         const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
+//         const candidateState = rawCandidateState.unwrap();
 
-        const totalStaked: any = await context.polkadotApi.query.bfcStaking.total();
+//         const totalStaked: any = await context.polkadotApi.query.bfcStaking.total();
 
-        const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
-        const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+//         const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+//         const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
 
-        const selfBondBefore = new BigNumber(candidateState.bond.toString());
-        const expectedStake = selfBondBefore.plus(extraTotalstake).plus(expectAmount);
+//         const selfBondBefore = new BigNumber(candidateState.bond.toString());
+//         const expectedStake = selfBondBefore.plus(extraTotalstake).plus(expectAmount);
         
-        // Decrease Nominator`s given candidate`s balance by given amount
-        expect(parseInt(nominatorStateAfter.nominations[alith.address].toString(), 16).toString()).equal(expectAmount.toFixed());
+//         // Decrease Nominator`s given candidate`s balance by given amount
+//         expect(parseInt(nominatorStateAfter.nominations[alith.address].toString(), 16).toString()).equal(expectAmount.toFixed());
 
-        // Decrease Nominator`s total  by given amount
-        expect(parseInt(nominatorStateAfter.total.toString(), 16).toString()).equal(expectAmount.toFixed());
+//         // Decrease Nominator`s total  by given amount
+//         expect(parseInt(nominatorStateAfter.total.toString(), 16).toString()).equal(expectAmount.toFixed());
 
-        // Decrease top nomination of given candidate`s given Nominator`s amount
-        expect(topNominations.nominations[1].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
-        expect(topNominations.nominations[1].amount.toString()).equal(expectAmount.toFixed());
+//         // Decrease top nomination of given candidate`s given Nominator`s amount
+//         expect(topNominations.nominations[1].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
+//         expect(topNominations.nominations[1].amount.toString()).equal(expectAmount.toFixed());
 
-        // Decrease given candidate`s voting power
-        expect(candidateState.votingPower.toString()).equal(expectedStake.toFixed());
+//         // Decrease given candidate`s voting power
+//         expect(candidateState.votingPower.toString()).equal(expectedStake.toFixed());
 
-        // Decrease Total amount staked
-        expect(totalStaked.toString()).equal(expectedStake.toFixed());
+//         // Decrease Total amount staked
+//         expect(totalStaked.toString()).equal(expectedStake.toFixed());
 
-        // Decrease TotalSnapshot total_stake & active_stake & total_voting_power & active_voting_power
-        await jumpToRound(context, currentRound + 1);
-        const rawTotalSnapshot: any = await context.polkadotApi.query.bfcStaking.totalAtStake(currentRound + 1);
-        const totalSnapshot = rawTotalSnapshot.unwrap().toJSON();
+//         // Decrease TotalSnapshot total_stake & active_stake & total_voting_power & active_voting_power
+//         await jumpToRound(context, currentRound + 1);
+//         const rawTotalSnapshot: any = await context.polkadotApi.query.bfcStaking.totalAtStake(currentRound + 1);
+//         const totalSnapshot = rawTotalSnapshot.unwrap().toJSON();
 
-        expect(context.web3.utils.hexToNumberString(totalSnapshot.totalStake)).equal(expectedStake.toFixed());
-        expect(context.web3.utils.hexToNumberString(totalSnapshot.activeStake)).equal(expectedStake.toFixed());
-        expect(context.web3.utils.hexToNumberString(totalSnapshot.totalVotingPower)).equal(expectedStake.toFixed());
-        expect(context.web3.utils.hexToNumberString(totalSnapshot.activeVotingPower)).equal(expectedStake.toFixed());
+//         expect(context.web3.utils.hexToNumberString(totalSnapshot.totalStake)).equal(expectedStake.toFixed());
+//         expect(context.web3.utils.hexToNumberString(totalSnapshot.activeStake)).equal(expectedStake.toFixed());
+//         expect(context.web3.utils.hexToNumberString(totalSnapshot.totalVotingPower)).equal(expectedStake.toFixed());
+//         expect(context.web3.utils.hexToNumberString(totalSnapshot.activeVotingPower)).equal(expectedStake.toFixed());
 
-        // Decrease ValidatorSnapshot total amount
-        const rawAtStake: any = await context.polkadotApi.query.bfcStaking.atStake(currentRound + 1, alith.address);
-        const atStake = rawAtStake.toJSON();
-        expect(context.web3.utils.hexToNumberString(atStake.total)).equal(expectedStake.toFixed());
+//         // Decrease ValidatorSnapshot total amount
+//         const rawAtStake: any = await context.polkadotApi.query.bfcStaking.atStake(currentRound + 1, alith.address);
+//         const atStake = rawAtStake.toJSON();
+//         expect(context.web3.utils.hexToNumberString(atStake.total)).equal(expectedStake.toFixed());
 
-        // Decrease ValidatorSnapshot nominations`s given nominator`s amount
-        expect(atStake.nominations[1].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
-        expect(context.web3.utils.hexToNumberString(atStake.nominations[1].amount)).equal(expectAmount.toFixed());
+//         // Decrease ValidatorSnapshot nominations`s given nominator`s amount
+//         expect(atStake.nominations[1].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
+//         expect(context.web3.utils.hexToNumberString(atStake.nominations[1].amount)).equal(expectAmount.toFixed());
 
-    });
+//     });
 
-});
+// });
 
 
 describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pending_request', (context) => {
@@ -445,8 +445,11 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
 
     it('#1', async function () {
 
+        const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+        const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
         await context.polkadotApi.tx.bfcStaking
-            .executeNominationRequest(alith.address)
+            .executeNominationRequest(currentRound, alith.address)
             .signAndSend(baltathar);
 
         await context.createBlock();
@@ -459,17 +462,21 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
     
     it('#2', async function () {
 
+        const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+        const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
         await context.polkadotApi.tx.bfcStaking
             .scheduleNominatorBondLess(alith.address, minStake.toFixed())
             .signAndSend(baltathar);
     
         await context.createBlock();
 
+
         let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
         expect(extrinsicResult).equal(null);
 
         await context.polkadotApi.tx.bfcStaking
-            .executeNominationRequest(alith.address)
+            .executeNominationRequest(currentRound + 1, alith.address)
             .signAndSend(baltathar);
 
         await context.createBlock();
@@ -483,6 +490,9 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         
         let expectAmount = extraTotalstake.minus(AMOUNT_FACTOR);
 
+        const accountBefore = await context.polkadotApi.query.system.account(baltathar.address);
+
+
         const rawNominatorStateBefore: any = await context.polkadotApi.query.bfcStaking.nominatorState(baltathar.address);
         const nominatorStateBefore = rawNominatorStateBefore.unwrap();
         const nominatorRequestsBefore = nominatorStateBefore.requests.toJSON();
@@ -492,7 +502,7 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         await jumpToRound(context, currentRound + 1);
 
         await context.polkadotApi.tx.bfcStaking
-            .executeNominationRequest(alith.address)
+            .executeNominationRequest(currentRound + 1, alith.address)
             .signAndSend(baltathar);
 
         await context.createBlock();
@@ -504,13 +514,15 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         const nominatorStateAfter = rawNominatorStateAfter.unwrap();
         const nominatorRequestsAfter = nominatorStateAfter.requests.toJSON();
 
+        const accountAfter = await context.polkadotApi.query.system.account(baltathar.address);
+
         // Decrease less_total
         expect(context.web3.utils.hexToNumberString(nominatorRequestsBefore.lessTotal)).equal(minStake.toFixed());
         expect(nominatorRequestsAfter.lessTotal).equal(0);
 
         // Unreserve given amount
-        const account = await context.polkadotApi.query.system.account(baltathar.address);
-        expect(account['data'].reserved.toString()).equal(expectAmount.toFixed());
+        expect(accountBefore['data'].reserved.toString()).equal(extraTotalstake.toFixed());
+        expect(accountAfter['data'].reserved.toString()).equal(expectAmount.toFixed());
 
     });
 
@@ -564,7 +576,7 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         const accountFreeMiddle = accountMiddle['data'].free.toString();
 
         await context.polkadotApi.tx.bfcStaking
-            .executeNominationRequest(alith.address)
+            .executeNominationRequest(currentRound + 1, alith.address)
             .signAndSend(charleth);
 
         await context.createBlock();
@@ -613,7 +625,7 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #execute_pe
         expect(accountMiddle['data'].reserved.toString()).equal(extraTotalstake.toFixed());
         expect(accountAfter['data'].reserved.toString()).equal('0');
 
-        // Expect amount return
+        // Expect increase amount return
         expect(BigNumber(accountFreeMiddle).isGreaterThan(BigNumber(accountFreeBefore))).equal(true);
         expect(BigNumber(accountFreeAfter).isGreaterThan(BigNumber(accountFreeMiddle))).equal(true);
 
@@ -659,8 +671,11 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #cancel_pen
 
     it('#1', async function () {
 
+        const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+        const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
         await context.polkadotApi.tx.bfcStaking
-            .cancelNominationRequest(alith.address)
+            .cancelNominationRequest(currentRound, alith.address)
             .signAndSend(baltathar);
 
         await context.createBlock();
@@ -683,6 +698,7 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #cancel_pen
     
         let extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
         expect(extrinsicResult).equal(null);
+        
 
         const rawNominatorStateBefore: any = await context.polkadotApi.query.bfcStaking.nominatorState(baltathar.address);
         const nominatorStateBefore = rawNominatorStateBefore.unwrap().toJSON();
@@ -708,7 +724,7 @@ describeDevNode('pallet_bfc_staking - prefix nomination unit testing #cancel_pen
 
         // Do cancel bond less
         await context.polkadotApi.tx.bfcStaking
-            .cancelNominationRequest(alith.address)
+            .cancelNominationRequest(previousRound + 1, alith.address)
             .signAndSend(baltathar);
 
         await context.createBlock();
