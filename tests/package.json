@@ -27,8 +27,6 @@
     "web3": "4.3.0"
   },
   "devDependencies": {
-    "@stryker-mutator/jest-runner": "^8.2.6",
-    "@stryker-mutator/mocha-runner": "^8.2.6",
     "@types/chai": "4.3.11",
     "@types/mocha": "10.0.6",
     "@types/node": "20.10.8",
