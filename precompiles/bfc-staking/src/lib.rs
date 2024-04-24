@@ -923,11 +923,12 @@ where
 			revocations_count = state.requests.revocations_count.into();
 			less_total = state.requests.less_total.into();
 
-			for nomination_request in state.requests() {
-				for (candidate, request) in nomination_request.validator_request {
+			for (when_executable, nomination_requests) in state.requests() {
+				// for nomination_request in state.requests() {
+				for (candidate, request) in nomination_requests.validator_request {
 					candidates.push(Address(candidate.into()));
 					amounts.push(request.amount.into());
-					when_executables.push(nomination_request.when_executable.into());
+					when_executables.push(when_executable);
 
 					let action: u32 = match request.action {
 						NominationChange::Revoke | NominationChange::Leave => 1u32.into(),
