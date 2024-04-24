@@ -46,19 +46,18 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use bp_staking::{RoundIndex, TierType};
+use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
 use frame_support::{
 	pallet_prelude::*,
-	traits::{tokens::Balance, Currency, Get, ReservableCurrency},
+	traits::{Currency, Get, ReservableCurrency},
 };
 use sp_runtime::{
-	traits::{Convert, MaybeDisplay, One, Saturating, Zero},
-	FixedPointOperand, Perbill, RuntimeDebug,
+	traits::{Convert, One, Saturating, Zero},
+	Perbill, RuntimeDebug,
 };
 use sp_staking::SessionIndex;
 use sp_std::{
 	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
-	fmt::Debug,
 	prelude::*,
 };
 
@@ -662,6 +661,15 @@ impl<
 		matches!(self.status, ValidatorStatus::Active)
 	}
 
+	// pub fn is_revoking(&self, candidate: &AccountId) -> bool {
+	// 	if let Some(request) = self.requests().iter().get(candidate) {
+	// 		if request.action == NominationChange::Revoke {
+	// 			return true;
+	// 		}
+	// 	}
+	// 	false
+	// }
+
 	pub fn is_kicked_out(&self) -> bool {
 		matches!(self.status, ValidatorStatus::KickedOut)
 	}
@@ -1028,7 +1036,7 @@ impl<
 				.ok_or(<Error<T>>::NominatorDNE)?;
 			let leaving = nominator_state.nominations.len() == 1usize;
 			nominator_state.rm_nomination(candidate);
-			nominator_state.requests.remove_request(&candidate);
+			// nominator_state.requests.remove_request(&candidate);
 			Pallet::<T>::deposit_event(Event::NominationKicked {
 				nominator: lowest_bottom_to_be_kicked.owner.clone(),
 				candidate: candidate.clone(),
@@ -1542,7 +1550,9 @@ impl<
 		}
 	}
 
-	pub fn requests(&self) -> BTreeMap<AccountId, NominationRequest<AccountId, Balance>> {
+	pub fn requests(
+		&self,
+	) -> BoundedVec<NominationRequests<AccountId, Balance>, ConstU32<MAX_AUTHORITIES>> {
 		self.requests.requests.clone()
 	}
 
@@ -1551,12 +1561,16 @@ impl<
 	}
 
 	pub fn is_revoking(&self, candidate: &AccountId) -> bool {
-		if let Some(request) = self.requests().get(candidate) {
-			if request.action == NominationChange::Revoke {
-				return true;
-			}
-		}
-		false
+		self.requests().iter().any(
+			|NominationRequests { validator_request, amount: _, when_executable: _ }| {
+				if let Some(request) = validator_request.get(candidate) {
+					if request.action == NominationChange::Revoke {
+						return true;
+					}
+				}
+				false
+			},
+		)
 	}
 
 	pub fn is_leaving(&self) -> bool {
@@ -1567,25 +1581,25 @@ impl<
 		if let Some(amount) = self.nominations.remove(old) {
 			self.nominations.insert(new.clone(), amount);
 		}
-
 		if let Some(amount) = self.initial_nominations.remove(old) {
 			self.initial_nominations.insert(new.clone(), amount);
 		}
 	}
 
 	pub fn replace_requests(&mut self, old: &AccountId, new: &AccountId) {
-		if let Some(request) = self.requests.requests.get(old) {
-			let request_clone = request.clone();
-			self.requests.requests.remove(old);
-			self.requests.requests.insert(
-				new.clone(),
-				NominationRequest {
-					validator: new.clone(),
-					amount: request_clone.amount,
-					when_executable: request_clone.when_executable,
-					action: request_clone.action,
-				},
-			);
+		for nomination_request in self.requests().iter_mut() {
+			// validator_request가 특정 타입의 맵이라고 가정합니다.
+			if nomination_request.validator_request.contains_key(old) {
+				if let Some(value) = nomination_request.validator_request.remove(old) {
+					let new_value = NominationRequest {
+						validator: new.clone(),
+						amount: value.amount,
+						action: value.action,
+					};
+
+					nomination_request.validator_request.insert(new.clone(), new_value);
+				}
+			}
 		}
 	}
 
@@ -1732,10 +1746,10 @@ impl<
 		let net_total: BalanceOf<T> = self.total.saturating_sub(amount).into();
 
 		// Requestment is already subjected
-		ensure!(
-			self.requests.requests.get(&candidate).is_none(),
-			Error::<T>::PendingNominationRequestAlreadyExists
-		);
+		// ensure!(
+		// 	self.requests.requests.get(&candidate).is_none(),
+		// 	Error::<T>::PendingNominationRequestAlreadyExists
+		// );
 
 		// Given nominator is leaving
 		ensure!(!self.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
@@ -1830,27 +1844,23 @@ impl<
 		T::AccountId: From<AccountId>,
 		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
 	{
-		// None of candidate founded in nominator`s nominations
 		let nominate_amount =
 			self.nominations.get(&candidate.clone()).ok_or(Error::<T>::NominatorDNE)?;
 
 		let net_total: BalanceOf<T> = self.total.saturating_sub(*nominate_amount).into();
 		let is_last_nominator = self.is_last_nominator::<T>();
 
-		// Requestment is already subjected
-		ensure!(
-			self.requests.requests.get(&candidate).is_none(),
-			Error::<T>::PendingNominationRequestAlreadyExists
-		);
+		// ensure!(
+		// 	self.requests.requests.get(&candidate).is_none(),
+		// 	Error::<T>::PendingNominationRequestAlreadyExists
+		// );
 
-		// Given nominator is leaving
 		ensure!(!self.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
+		ensure!(!self.is_revoking(&candidate.clone()), Error::<T>::NominatorAlreadyRevoking);
 
 		if !is_last_nominator {
-			// Given amount is below than minimum stake amount required totally
 			ensure!(net_total >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
 		} else {
-			// Given amount must be same as amount nominated under the last_nominator condition
 			ensure!(net_total == Zero::zero(), Error::<T>::NominationDNE);
 		}
 
@@ -1859,120 +1869,160 @@ impl<
 
 	pub fn is_last_nominator<T: Config>(&self) -> bool {
 		// revoking last nomination => leaving set of nominators
-		let is_last_nominator = if self.nominations.len() == 1usize { true } else { false };
+		let is_last_nominator =
+			if self.nominations.len() == 1usize || self.requests.requests.len() == 1usize {
+				true
+			} else {
+				false
+			};
 		is_last_nominator
 	}
 
 	/// Execute pending nomination change request
-	pub fn execute_pending_request<T: Config>(&mut self, candidate: AccountId) -> DispatchResult
-	where
-		BalanceOf<T>: From<Balance> + Into<Balance>,
-		T::AccountId: From<AccountId>,
-		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
-	{
-		let now = <Round<T>>::get().current_round_index;
-		let NominationRequest { amount, action, when_executable, .. } = self
-			.requests
-			.requests
-			.remove(&candidate)
-			.ok_or(Error::<T>::PendingNominationRequestDNE)?;
-		ensure!(when_executable <= now, Error::<T>::PendingNominationRequestNotDueYet);
-		let (balance_amt, candidate_id, nominator_id): (BalanceOf<T>, T::AccountId, T::AccountId) =
-			(amount.into(), candidate.clone().into(), self.id.clone().into());
-		match action {
-			NominationChange::Revoke | NominationChange::Leave => {
-				// revoking last nomination => leaving set of nominators
-				let is_last_nominator = self.is_last_nominator::<T>();
-
-				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
-
-				self.requests.revocations_count =
-					self.requests.revocations_count.saturating_sub(1u32);
-
-				self.nominations.remove(&candidate.clone());
-				self.initial_nominations.remove(&candidate.clone());
-				self.awarded_tokens_per_candidate.remove(&candidate.clone());
-
-				let mut candidate_state =
-					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
-
-				candidate_state.nomination_count =
-					candidate_state.nomination_count.saturating_sub(1u32);
-
-				T::Currency::unreserve(&nominator_id, balance_amt);
-
-				<CandidateInfo<T>>::insert(&candidate_id, candidate_state);
-
-				if is_last_nominator {
-					<NominatorState<T>>::remove(&nominator_id);
-				} else {
-					let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-
-					<NominatorState<T>>::insert(&nominator_id, nom_st);
-				}
-				Pallet::<T>::deposit_event(Event::NominatorExecuted {
-					nominator: nominator_id,
-					candidate: candidate_id,
-					amount: balance_amt,
-					action,
-				});
-
-				return Ok(());
-			},
-			NominationChange::Decrease => {
-				// remove from pending requests
-				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
-				// decrease nomination
-				T::Currency::unreserve(&nominator_id, balance_amt);
-
-				let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-				<NominatorState<T>>::insert(&nominator_id, nom_st);
-
-				Pallet::<T>::deposit_event(Event::NominatorExecuted {
-					nominator: nominator_id,
-					candidate: candidate_id,
-					amount: balance_amt,
-					action,
-				});
-				return Ok(());
-			},
-		}
-	}
-
-	/// Cancel pending nomination change request
-	pub fn cancel_pending_request<T: Config>(&mut self, candidate: AccountId) -> DispatchResult
+	pub fn execute_pending_request<T: Config>(
+		&mut self,
+		execute_round: RoundIndex,
+		candidate: AccountId,
+	) -> DispatchResult
 	where
 		BalanceOf<T>: From<Balance>,
 		T::AccountId: From<AccountId>,
 		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
+		NominationRequests<T::AccountId, BalanceOf<T>>:
+			From<NominationRequests<AccountId, Balance>>,
 		NominationRequest<T::AccountId, BalanceOf<T>>: From<NominationRequest<AccountId, Balance>>,
 	{
-		let order = self
-			.requests
-			.requests
-			.remove(&candidate)
-			.ok_or(Error::<T>::PendingNominationRequestDNE)?;
+		let nominator_id: T::AccountId = self.id.clone().into();
+		let candidate_id: T::AccountId = candidate.clone().into();
+		let now = <Round<T>>::get().current_round_index;
 
+		if let Some(orders) = self
+			.requests
+			.requests
+			.iter_mut()
+			.find(|nomination_requests| nomination_requests.when_executable == execute_round)
+		{
+			if orders.when_executable <= now {
+				if let Some(order) = orders.validator_request.remove(&candidate) {
+					let balance_amt: BalanceOf<T> = order.amount.into();
+
+					match order.action {
+						NominationChange::Revoke | NominationChange::Leave => {
+							// revoking last nomination => leaving set of nominators
+							let is_last_nominator = self.is_last_nominator::<T>();
+
+							self.requests.less_total =
+								self.requests.less_total.saturating_sub(order.amount);
+
+							self.requests.revocations_count =
+								self.requests.revocations_count.saturating_sub(1u32);
+
+							self.nominations.remove(&candidate.clone());
+							self.initial_nominations.remove(&candidate.clone());
+							self.awarded_tokens_per_candidate.remove(&candidate.clone());
+
+							let mut candidate_state = <CandidateInfo<T>>::get(&candidate_id)
+								.ok_or(Error::<T>::CandidateDNE)?;
+
+							candidate_state.nomination_count =
+								candidate_state.nomination_count.saturating_sub(1u32);
+
+							T::Currency::unreserve(&nominator_id, balance_amt);
+
+							<CandidateInfo<T>>::insert(&candidate_id, candidate_state);
+
+							if is_last_nominator {
+								<NominatorState<T>>::remove(&nominator_id);
+							} else {
+								let nom_st: Nominator<T::AccountId, BalanceOf<T>> =
+									self.clone().into();
+
+								<NominatorState<T>>::insert(&nominator_id, nom_st);
+							}
+							Pallet::<T>::deposit_event(Event::NominatorExecuted {
+								nominator: nominator_id,
+								candidate: candidate_id,
+								amount: balance_amt,
+								action: order.action,
+							});
+
+							return Ok(());
+						},
+						NominationChange::Decrease => {
+							// remove from pending requests
+							self.requests.less_total =
+								self.requests.less_total.saturating_sub(order.amount);
+							// decrease nomination
+							T::Currency::unreserve(&nominator_id, balance_amt);
+
+							let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+							<NominatorState<T>>::insert(&nominator_id, nom_st);
+
+							Pallet::<T>::deposit_event(Event::NominatorExecuted {
+								nominator: nominator_id,
+								candidate: candidate_id,
+								amount: balance_amt,
+								action: order.action,
+							});
+							return Ok(());
+						},
+					}
+				} else {
+					return Err(Error::<T>::CandidateDNE.into());
+				}
+			} else {
+				return Err(Error::<T>::PendingNominationRequestNotDueYet.into());
+			}
+		} else {
+			return Err(Error::<T>::PendingNominationRequestDNE.into());
+		}
+	}
+
+	/// Cancel pending nomination change request
+	pub fn cancel_pending_request<T: Config>(
+		&mut self,
+		cancel_round: RoundIndex,
+		candidate: AccountId,
+	) -> Result<(), DispatchError>
+	where
+		BalanceOf<T>: From<Balance>,
+		T::AccountId: From<AccountId>,
+		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
+		NominationRequests<T::AccountId, BalanceOf<T>>:
+			From<NominationRequests<AccountId, Balance>>,
+		NominationRequest<T::AccountId, BalanceOf<T>>: From<NominationRequest<AccountId, Balance>>,
+	{
 		let nominator_id: T::AccountId = self.id.clone().into();
 
-		match order.action {
-			NominationChange::Revoke | NominationChange::Leave => {
-				self.requests.revocations_count =
-					self.requests.revocations_count.saturating_sub(1u32);
-			},
-			NominationChange::Decrease => {},
+		if let Some(order) = self
+			.requests
+			.requests
+			.iter_mut()
+			.find(|nomination_requests| nomination_requests.when_executable == cancel_round)
+			.and_then(|nomination_requests| {
+				nomination_requests.validator_request.remove(&candidate)
+			}) {
+			match order.action {
+				NominationChange::Revoke | NominationChange::Leave => {
+					self.requests.revocations_count =
+						self.requests.revocations_count.saturating_sub(1u32);
+				},
+				NominationChange::Decrease => {},
+			}
+
+			self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+
+			let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
+
+			Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
+				nominator: nominator_id,
+				cancelled_request: order.into(),
+			});
+
+			return Ok(());
+		} else {
+			return Err(Error::<T>::PendingNominationRequestDNE.into());
 		}
-
-		self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
-
-		let _ = self.increase_nomination::<T>(candidate.clone(), order.amount, false);
-
-		Pallet::<T>::deposit_event(Event::CancelledNominationRequest {
-			nominator: nominator_id,
-			cancelled_request: order.into(),
-		});
-
-		return Ok(());
 	}
 }
 
@@ -1995,10 +2045,19 @@ pub struct NominationRequest<AccountId, Balance> {
 	pub validator: AccountId,
 	/// The unbonding amount
 	pub amount: Balance,
-	/// The round index when this request is executable
-	pub when_executable: RoundIndex,
 	/// The requested unbonding action
 	pub action: NominationChange,
+}
+
+#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+/// The nomination unbonding request of a specific nominator
+pub struct NominationRequests<AccountId, Balance> {
+	/// Map from validator -> Request
+	pub validator_request: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
+	/// The unbonding amount of given round
+	pub amount: Balance,
+	/// The round index when this request is executable
+	pub when_executable: RoundIndex,
 }
 
 #[derive(Clone, Encode, PartialEq, Decode, RuntimeDebug, TypeInfo)]
@@ -2006,8 +2065,8 @@ pub struct NominationRequest<AccountId, Balance> {
 pub struct PendingNominationRequests<AccountId, Balance> {
 	/// Number of pending revocations (necessary for determining whether revoke is exit)
 	pub revocations_count: u32,
-	/// Map from validator -> Request (enforces at most 1 pending request per nomination)
-	pub requests: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
+	/// Map from round -> Requests
+	pub requests: BoundedVec<NominationRequests<AccountId, Balance>, ConstU32<MAX_AUTHORITIES>>,
 	/// Sum of pending revocation amounts + bond less amounts
 	pub less_total: Balance,
 }
@@ -2016,23 +2075,8 @@ impl<A: Ord, B: Zero> Default for PendingNominationRequests<A, B> {
 	fn default() -> PendingNominationRequests<A, B> {
 		PendingNominationRequests {
 			revocations_count: 0u32,
-			requests: BTreeMap::new(),
+			requests: BoundedVec::new(),
 			less_total: B::zero(),
-		}
-	}
-}
-
-impl<
-		A: Parameter + Member + MaybeSerializeDeserialize + Debug + MaybeDisplay + Ord + MaxEncodedLen,
-		B: Balance + MaybeSerializeDeserialize + Debug + MaxEncodedLen + FixedPointOperand,
-	> PendingNominationRequests<A, B>
-{
-	pub fn remove_request(&mut self, address: &A) {
-		if let Some(request) = self.requests.remove(address) {
-			self.less_total = self.less_total.saturating_sub(request.amount);
-			if matches!(request.action, NominationChange::Revoke) {
-				self.revocations_count = self.revocations_count.saturating_sub(1u32);
-			}
 		}
 	}
 }
@@ -2054,29 +2098,6 @@ impl<
 		PendingNominationRequests::default()
 	}
 
-	/// Add bond less order to pending requests, only succeeds if returns true
-	/// - limit is the maximum amount allowed that can be subtracted from the nomination
-	/// before it would be below the minimum nomination amount
-	pub fn bond_less<T: Config>(
-		&mut self,
-		validator: A,
-		amount: B,
-		when_executable: RoundIndex,
-	) -> DispatchResult {
-		self.requests.insert(
-			validator.clone(),
-			NominationRequest {
-				validator,
-				amount,
-				when_executable,
-				action: NominationChange::Decrease,
-			},
-		);
-		self.less_total += amount;
-
-		Ok(())
-	}
-
 	/// Add revoke order to pending requests
 	/// - limit is the maximum amount allowed that can be subtracted from the nomination
 	/// before it would be below the minimum nomination amount
@@ -2087,10 +2108,31 @@ impl<
 		when_executable: RoundIndex,
 		action: NominationChange,
 	) -> DispatchResult {
-		self.requests.insert(
-			validator.clone(),
-			NominationRequest { validator, amount, when_executable, action: action.clone() },
-		);
+		let new_nomination_request =
+			NominationRequest { validator: validator.clone(), amount, action: action.clone() };
+
+		if let Some(last_requests) = self
+			.requests
+			.last_mut()
+			.filter(|last_requests| last_requests.when_executable == when_executable)
+		{
+			if let Some(validator_request) = last_requests.validator_request.get_mut(&validator) {
+				validator_request.amount -= amount;
+			} else {
+				last_requests
+					.validator_request
+					.insert(validator.clone(), new_nomination_request);
+			}
+		} else {
+			let mut validator_request = BTreeMap::new();
+			validator_request.insert(validator.clone(), new_nomination_request);
+
+			let new_requests = NominationRequests { validator_request, amount, when_executable };
+
+			self.requests
+				.try_push(new_requests)
+				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
+		}
 
 		match action {
 			NominationChange::Revoke | NominationChange::Leave => {
@@ -2100,6 +2142,7 @@ impl<
 		}
 
 		self.less_total += amount;
+
 		Ok(())
 	}
 }

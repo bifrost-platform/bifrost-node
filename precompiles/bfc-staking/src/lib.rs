@@ -923,16 +923,18 @@ where
 			revocations_count = state.requests.revocations_count.into();
 			less_total = state.requests.less_total.into();
 
-			for (candidate, request) in state.requests.requests {
-				candidates.push(Address(candidate.into()));
-				amounts.push(request.amount.into());
-				when_executables.push(request.when_executable.into());
+			for nomination_request in state.requests() {
+				for (candidate, request) in nomination_request.validator_request {
+					candidates.push(Address(candidate.into()));
+					amounts.push(request.amount.into());
+					when_executables.push(nomination_request.when_executable.into());
 
-				let action: u32 = match request.action {
-					NominationChange::Revoke | NominationChange::Leave => 1u32.into(),
-					NominationChange::Decrease => 2u32.into(),
-				};
-				actions.push(action.into());
+					let action: u32 = match request.action {
+						NominationChange::Revoke | NominationChange::Leave => 1u32.into(),
+						NominationChange::Decrease => 2u32.into(),
+					};
+					actions.push(action.into());
+				}
 			}
 		}
 
@@ -1073,19 +1075,19 @@ where
 		Ok(())
 	}
 
-	#[precompile::public("executeLeaveCandidates(uint256)")]
-	#[precompile::public("execute_leave_candidates(uint256)")]
-	fn execute_leave_candidates(
-		handle: &mut impl PrecompileHandle,
-		candidate_nomination_count: u32,
-	) -> EvmResult {
-		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
+	// #[precompile::public("executeLeaveCandidates(uint256)")]
+	// #[precompile::public("execute_leave_candidates(uint256)")]
+	// fn execute_leave_candidates(
+	// 	handle: &mut impl PrecompileHandle,
+	// 	candidate_nomination_count: u32,
+	// ) -> EvmResult {
+	// 	let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+	// 	let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+	// 	RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
-		Ok(())
-	}
+	// 	Ok(())
+	// }
 
 	#[precompile::public("executeCandidateBondLess()")]
 	#[precompile::public("execute_candidate_bond_less()")]
@@ -1272,12 +1274,13 @@ where
 	#[precompile::public("execute_nomination_request(address)")]
 	fn execute_nomination_request(
 		handle: &mut impl PrecompileHandle,
+		execute_round: RoundIndex,
 		candidate: Address,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::execute_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::execute_nomination_request { execute_round, candidate };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
@@ -1299,12 +1302,13 @@ where
 	#[precompile::public("cancel_nomination_request(address)")]
 	fn cancel_nomination_request(
 		handle: &mut impl PrecompileHandle,
+		cancel_round: RoundIndex,
 		candidate: Address,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::cancel_nomination_request { cancel_round, candidate };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 

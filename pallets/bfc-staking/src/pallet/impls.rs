@@ -831,6 +831,11 @@ impl<T: Config> Pallet<T> {
 				);
 				snapshot.increment_active_top_nominations(top_nominations_active_amount);
 				snapshot.increment_active_bottom_nominations(bottom_nominations_active_amount);
+				snapshot.increment_active_nominations(
+					top_nominations_active_amount + bottom_nominations_active_amount,
+				);
+				snapshot.increment_active_top_nominations(top_nominations_active_amount);
+				snapshot.increment_active_bottom_nominations(bottom_nominations_active_amount);
 				snapshot.increment_active_nominators(
 					top_nominations.count() + bottom_nominations.count(),
 				);
