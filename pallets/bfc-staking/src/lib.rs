@@ -38,6 +38,7 @@ mod pallet;
 mod set;
 pub mod weights;
 
+// pub use frame_support::storage::bounded_btree_map::BTreeMap;
 pub use frame_system::pallet_prelude::BlockNumberFor;
 pub use inflation::{InflationInfo, Range};
 pub use pallet::pallet::*;
@@ -1550,9 +1551,7 @@ impl<
 		}
 	}
 
-	pub fn requests(
-		&self,
-	) -> BoundedVec<NominationRequests<AccountId, Balance>, ConstU32<MAX_AUTHORITIES>> {
+	pub fn requests(&self) -> BTreeMap<RoundIndex, NominationRequests<AccountId, Balance>> {
 		self.requests.requests.clone()
 	}
 
@@ -1561,16 +1560,14 @@ impl<
 	}
 
 	pub fn is_revoking(&self, candidate: &AccountId) -> bool {
-		self.requests().iter().any(
-			|NominationRequests { validator_request, amount: _, when_executable: _ }| {
-				if let Some(request) = validator_request.get(candidate) {
-					if request.action == NominationChange::Revoke {
-						return true;
-					}
+		for (_, nomination_requests) in self.requests() {
+			if let Some(nomination_request) = nomination_requests.validator_request.get(candidate) {
+				if nomination_request.action == NominationChange::Revoke {
+					return true;
 				}
-				false
-			},
-		)
+			}
+		}
+		false
 	}
 
 	pub fn is_leaving(&self) -> bool {
@@ -1587,17 +1584,16 @@ impl<
 	}
 
 	pub fn replace_requests(&mut self, old: &AccountId, new: &AccountId) {
-		for nomination_request in self.requests().iter_mut() {
-			// validator_request가 특정 타입의 맵이라고 가정합니다.
-			if nomination_request.validator_request.contains_key(old) {
-				if let Some(value) = nomination_request.validator_request.remove(old) {
+		for (_, mut nomination_requests) in self.requests() {
+			if nomination_requests.validator_request.contains_key(old) {
+				if let Some(value) = nomination_requests.validator_request.remove(old) {
 					let new_value = NominationRequest {
 						validator: new.clone(),
 						amount: value.amount,
 						action: value.action,
 					};
 
-					nomination_request.validator_request.insert(new.clone(), new_value);
+					nomination_requests.validator_request.insert(new.clone(), new_value);
 				}
 			}
 		}
@@ -1760,6 +1756,12 @@ impl<
 		// Given amount is below than minimum stake amount required totally
 		ensure!(net_total >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
 
+		// too many requests are pended currently
+		ensure!(
+			MAX_AUTHORITIES as usize >= self.requests().len(),
+			Error::<T>::TooManyPendingRequests
+		);
+
 		Ok(())
 	}
 
@@ -1797,12 +1799,18 @@ impl<
 				balance_amount,
 			)?;
 
-			let when =
-				<Round<T>>::get().current_round_index + self.fetch_delay_round::<T>(action.clone());
-
 			let after_voting_power = candidate_state.voting_power;
 
 			let new_total_staked = <Total<T>>::get().saturating_sub(balance_amount);
+
+			let when: u32 =
+				<Round<T>>::get().current_round_index + self.fetch_delay_round::<T>(action.clone());
+
+			let is_last_nominator = self.is_last_nominator::<T>();
+
+			if is_last_nominator && action == NominationChange::Revoke {
+				self.status = NominatorStatus::Leaving(when);
+			}
 
 			self.requests.insert_request::<T>(candidate, amount, when, action.clone())?;
 
@@ -1864,6 +1872,12 @@ impl<
 			ensure!(net_total == Zero::zero(), Error::<T>::NominationDNE);
 		}
 
+		// too many requests are pended currently
+		ensure!(
+			MAX_AUTHORITIES as usize >= self.requests().len(),
+			Error::<T>::TooManyPendingRequests
+		);
+
 		Ok(())
 	}
 
@@ -1896,15 +1910,16 @@ impl<
 		let candidate_id: T::AccountId = candidate.clone().into();
 		let now = <Round<T>>::get().current_round_index;
 
-		if let Some(orders) = self
-			.requests
-			.requests
-			.iter_mut()
-			.find(|nomination_requests| nomination_requests.when_executable == execute_round)
-		{
-			if orders.when_executable <= now {
+		if let Some(orders) = self.requests.requests.get_mut(&execute_round) {
+			if execute_round <= now {
 				if let Some(order) = orders.validator_request.remove(&candidate) {
 					let balance_amt: BalanceOf<T> = order.amount.into();
+
+					orders.amount = orders.amount.saturating_sub(order.amount);
+
+					if orders.amount.is_zero() && orders.validator_request.len().is_zero() {
+						self.requests.requests.remove(&execute_round);
+					}
 
 					match order.action {
 						NominationChange::Revoke | NominationChange::Leave => {
@@ -1994,12 +2009,8 @@ impl<
 	{
 		let nominator_id: T::AccountId = self.id.clone().into();
 
-		if let Some(order) = self
-			.requests
-			.requests
-			.iter_mut()
-			.find(|nomination_requests| nomination_requests.when_executable == cancel_round)
-			.and_then(|nomination_requests| {
+		if let Some(order) =
+			self.requests.requests.get_mut(&cancel_round).and_then(|nomination_requests| {
 				nomination_requests.validator_request.remove(&candidate)
 			}) {
 			match order.action {
@@ -2056,8 +2067,6 @@ pub struct NominationRequests<AccountId, Balance> {
 	pub validator_request: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
 	/// The unbonding amount of given round
 	pub amount: Balance,
-	/// The round index when this request is executable
-	pub when_executable: RoundIndex,
 }
 
 #[derive(Clone, Encode, PartialEq, Decode, RuntimeDebug, TypeInfo)]
@@ -2066,7 +2075,7 @@ pub struct PendingNominationRequests<AccountId, Balance> {
 	/// Number of pending revocations (necessary for determining whether revoke is exit)
 	pub revocations_count: u32,
 	/// Map from round -> Requests
-	pub requests: BoundedVec<NominationRequests<AccountId, Balance>, ConstU32<MAX_AUTHORITIES>>,
+	pub requests: BTreeMap<RoundIndex, NominationRequests<AccountId, Balance>>,
 	/// Sum of pending revocation amounts + bond less amounts
 	pub less_total: Balance,
 }
@@ -2075,7 +2084,7 @@ impl<A: Ord, B: Zero> Default for PendingNominationRequests<A, B> {
 	fn default() -> PendingNominationRequests<A, B> {
 		PendingNominationRequests {
 			revocations_count: 0u32,
-			requests: BoundedVec::new(),
+			requests: BTreeMap::new(),
 			less_total: B::zero(),
 		}
 	}
@@ -2111,13 +2120,11 @@ impl<
 		let new_nomination_request =
 			NominationRequest { validator: validator.clone(), amount, action: action.clone() };
 
-		if let Some(last_requests) = self
-			.requests
-			.last_mut()
-			.filter(|last_requests| last_requests.when_executable == when_executable)
-		{
+		if let Some(last_requests) = self.requests.get_mut(&when_executable) {
 			if let Some(validator_request) = last_requests.validator_request.get_mut(&validator) {
-				validator_request.amount -= amount;
+				last_requests.amount += amount;
+				validator_request.amount += amount;
+				validator_request.action = action.clone();
 			} else {
 				last_requests
 					.validator_request
@@ -2127,11 +2134,9 @@ impl<
 			let mut validator_request = BTreeMap::new();
 			validator_request.insert(validator.clone(), new_nomination_request);
 
-			let new_requests = NominationRequests { validator_request, amount, when_executable };
+			let new_requests = NominationRequests { validator_request, amount };
 
-			self.requests
-				.try_push(new_requests)
-				.map_err(|_| Error::<T>::TooManyPendingRequests)?;
+			self.requests.insert(when_executable, new_requests);
 		}
 
 		match action {
