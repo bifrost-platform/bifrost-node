@@ -14,7 +14,7 @@ use scale_info::prelude::format;
 
 use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
-	Hash, UnboundedBytes,
+	UnboundedBytes,
 };
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
@@ -96,13 +96,13 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// An unsigned PSBT for an outbound request has been submitted.
-		UnsignedPsbtSubmitted { psbt_hash: H256 },
+		UnsignedPsbtSubmitted { txid: H256 },
 		/// A signed PSBT for an outbound request has been submitted.
-		SignedPsbtSubmitted { psbt_hash: H256, authority_id: T::AccountId },
+		SignedPsbtSubmitted { txid: H256, authority_id: T::AccountId },
 		/// An outbound request has been finalized.
-		RequestFinalized { psbt_hash: H256 },
+		RequestFinalized { txid: H256 },
 		/// An outbound request has been executed.
-		RequestExecuted { psbt_hash: H256 },
+		RequestExecuted { txid: H256 },
 		/// An authority has been set.
 		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
@@ -131,7 +131,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn pending_requests)]
 	/// Pending outbound requests that are not ready to be finalized.
-	/// key: The unsigned PSBT hash.
+	/// key: The pending PSBT's txid.
 	/// value: The PSBT information.
 	pub type PendingRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
@@ -140,7 +140,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn finalized_requests)]
 	/// Finalized outbound requests.
-	/// key: The unsigned PSBT hash.
+	/// key: The finalized PSBT's txid.
 	/// value: The PSBT information.
 	pub type FinalizedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
@@ -149,7 +149,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	#[pallet::getter(fn executed_requests)]
 	/// Outbound requests that has been broadcasted to the Bitcoin network.
-	/// key: The unsigned PSBT hash.
+	/// key: The executed PSBT's txid.
 	/// value: The PSBT information.
 	pub type ExecutedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
@@ -157,6 +157,9 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_outbound_tx)]
+	/// Mapped txid's.
+	/// key: The PSBT's txid.
+	/// value: The composed socket messages.
 	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
 
 	#[pallet::genesis_config]
@@ -230,24 +233,14 @@ pub mod pallet {
 
 			let UnsignedPsbtMessage { system_vout, socket_messages, psbt, .. } = msg;
 
-			let psbt_hash = Self::hash_bytes(&psbt);
-
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
+			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
 
 			// prevent storage duplication
-			ensure!(
-				!<PendingRequests<T>>::contains_key(&psbt_hash),
-				Error::<T>::RequestAlreadyExists
-			);
-			ensure!(
-				!<FinalizedRequests<T>>::contains_key(&psbt_hash),
-				Error::<T>::RequestAlreadyExists
-			);
-			ensure!(
-				!<ExecutedRequests<T>>::contains_key(&psbt_hash),
-				Error::<T>::RequestAlreadyExists
-			);
+			ensure!(!<PendingRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
+			ensure!(!<FinalizedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
+			ensure!(!<ExecutedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 
 			// verify PSBT outputs
 			let system_vout =
@@ -259,11 +252,8 @@ pub mod pallet {
 			for msg in msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
 			}
-			<PendingRequests<T>>::insert(
-				&psbt_hash,
-				PsbtRequest::new(psbt.clone(), socket_messages),
-			);
-			Self::deposit_event(Event::UnsignedPsbtSubmitted { psbt_hash });
+			<PendingRequests<T>>::insert(&txid, PsbtRequest::new(psbt.clone(), socket_messages));
+			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
 			Ok(().into())
 		}
@@ -281,14 +271,14 @@ pub mod pallet {
 
 			let SignedPsbtMessage { authority_id, unsigned_psbt, signed_psbt } = msg;
 
-			let psbt_hash = Self::hash_bytes(&unsigned_psbt);
-
 			// verify if psbt bytes are valid
-			let _unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
+			let unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let signed_psbt_obj = Self::try_get_checked_psbt(&signed_psbt)?;
 
+			let txid = Self::convert_txid(unsigned_psbt_obj.unsigned_tx.txid());
+
 			let mut pending_request =
-				<PendingRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
+				<PendingRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
 
 			// prevent storage duplications
 			ensure!(
@@ -311,23 +301,18 @@ pub mod pallet {
 			// if finalizable (quorum reached m), then accept the request
 			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
 				let finalized_psbt_obj = Self::try_psbt_finalization(combined_psbt_obj)?;
-				let mut txid = finalized_psbt_obj.unsigned_tx.txid().to_byte_array();
-				txid.reverse();
 				pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
 
 				// move pending to finalized
-				<BondedOutboundTx<T>>::insert(
-					&H256::from(txid),
-					pending_request.socket_messages.clone(),
-				);
-				<FinalizedRequests<T>>::insert(&psbt_hash, pending_request);
-				<PendingRequests<T>>::remove(&psbt_hash);
+				<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
+				<FinalizedRequests<T>>::insert(&txid, pending_request);
+				<PendingRequests<T>>::remove(&txid);
 
-				Self::deposit_event(Event::RequestFinalized { psbt_hash });
+				Self::deposit_event(Event::RequestFinalized { txid });
 			} else {
 				// if not, remain as pending
-				<PendingRequests<T>>::insert(&psbt_hash, pending_request);
-				Self::deposit_event(Event::SignedPsbtSubmitted { psbt_hash, authority_id });
+				<PendingRequests<T>>::insert(&txid, pending_request);
+				Self::deposit_event(Event::SignedPsbtSubmitted { txid, authority_id });
 			}
 
 			Ok(().into())
@@ -343,12 +328,12 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let ExecutedPsbtMessage { psbt_hash, .. } = msg;
+			let ExecutedPsbtMessage { txid, .. } = msg;
 
-			let request = <FinalizedRequests<T>>::get(&psbt_hash).ok_or(Error::<T>::RequestDNE)?;
-			<FinalizedRequests<T>>::remove(&psbt_hash);
-			<ExecutedRequests<T>>::insert(&psbt_hash, request);
-			Self::deposit_event(Event::RequestExecuted { psbt_hash });
+			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
+			<FinalizedRequests<T>>::remove(&txid);
+			<ExecutedRequests<T>>::insert(&txid, request);
+			Self::deposit_event(Event::RequestExecuted { txid });
 
 			Ok(().into())
 		}
@@ -401,11 +386,11 @@ pub mod pallet {
 						.build()
 				},
 				Call::submit_executed_request { msg, signature } => {
-					let ExecutedPsbtMessage { authority_id, psbt_hash } = msg;
+					let ExecutedPsbtMessage { authority_id, txid } = msg;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message = format!("{:?}", psbt_hash);
+					let message = format!("{:?}", txid);
 					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}

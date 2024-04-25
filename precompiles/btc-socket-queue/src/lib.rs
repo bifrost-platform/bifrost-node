@@ -7,7 +7,7 @@ use pallet_btc_socket_queue::Call as BtcSocketQueueCall;
 use precompile_utils::prelude::*;
 
 use fp_account::EthereumSignature;
-use sp_core::{H160, H256};
+use sp_core::{H160, H256, U256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
@@ -68,5 +68,20 @@ where
 			},
 			None => vec![],
 		})
+	}
+
+	#[precompile::public("filterExecutableMsgs(uint256[])")]
+	#[precompile::public("filter_executable_msgs(uint256[])")]
+	#[precompile::view]
+	fn filter_executable_msgs(
+		handle: &mut impl PrecompileHandle,
+		sequences: Vec<U256>,
+	) -> EvmResult<Vec<U256>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		Ok(sequences
+			.into_iter()
+			.filter(|seq| BtcSocketQueueOf::<Runtime>::socket_messages(seq).is_none())
+			.collect())
 	}
 }

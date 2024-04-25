@@ -1,8 +1,8 @@
 use ethabi_decode::{ParamKind, Token};
 
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Psbt, PsbtExt, Script, Secp256k1,
-	UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
+	Txid, UnboundedBytes,
 };
 use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
@@ -162,6 +162,13 @@ where
 	/// Hash the given bytes.
 	pub fn hash_bytes(bytes: &UnboundedBytes) -> H256 {
 		H256::from(keccak_256(bytes))
+	}
+
+	/// Convert txid from big endian to little endian.
+	pub fn convert_txid(txid: Txid) -> H256 {
+		let mut txid = txid.to_byte_array();
+		txid.reverse();
+		H256::from(txid)
 	}
 
 	/// Try to get the `RequestInfo` by the given `req_id`.

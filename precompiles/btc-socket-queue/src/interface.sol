@@ -23,4 +23,11 @@ interface BtcSocketQueue {
     /// @custom:selector d6da279c
     /// @return The list of the socket messages used for the given transaction
     function outbound_tx(bytes32 txid) external view returns (bytes[] memory);
+
+    /// @dev Filter out executable socket messages from the given sequence ID's.
+    /// @custom:selector 7cd4510f
+    /// @return The list of executable sequence ID's.
+    function filter_executable_msgs(
+        uint256[] memory sequences
+    ) external view returns (uint256[] memory);
 }
