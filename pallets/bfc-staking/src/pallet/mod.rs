@@ -2,9 +2,9 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, InflationInfo, NominationRequest, Nominations, Nominator,
-	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
-	TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
+	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
+	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -171,6 +171,8 @@ pub mod pallet {
 		AlreadyPaired,
 		/// The given nominator is already leaving.
 		NominatorAlreadyLeaving,
+		/// The given nominator fo given candidate is already revoking.
+		NominatorAlreadyRevoking,
 		/// The given nominator is not leaving.
 		NominatorNotLeaving,
 		/// The given nominator cannot execute to leave yet.
@@ -235,6 +237,8 @@ pub mod pallet {
 		TooLowCandidateNominationCountToLeaveCandidates,
 		/// Cannot leave as a nominator due to too low nomination count.
 		TooLowNominationCountToLeaveNominators,
+		/// Cannot request as a nominator due to too many requests.
+		TooManyPendingRequests,
 		/// Pending(scheduled) candidate request does not exist.
 		PendingCandidateRequestsDNE,
 		/// A pending(scheduled) candidate request already exists.
@@ -316,11 +320,13 @@ pub mod pallet {
 			new_total_amt_locked: BalanceOf<T>,
 		},
 		/// Nominator requested to decrease a bond for the validator candidate.
-		NominationDecreaseScheduled {
+		NominationScheduled {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount_to_decrease: BalanceOf<T>,
 			execute_round: RoundIndex,
+			in_top: bool,
+			action: NominationChange,
 		},
 		/// Nomination increased.
 		NominationIncreased {
@@ -329,12 +335,12 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 			in_top: bool,
 		},
-		/// Nomination decreased.
-		NominationDecreased {
+		/// Nomination Executed.
+		NominatorExecuted {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
-			in_top: bool,
+			action: NominationChange,
 		},
 		/// Nominator requested to leave the set of nominators.
 		NominatorExitScheduled {
@@ -1280,79 +1286,79 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(13)]
-		#[pallet::weight(
-			<T as Config>::WeightInfo::execute_leave_candidates(*candidate_nomination_count)
-		)]
-		/// Execute leave candidates request
-		/// - origin should be the stash account
-		pub fn execute_leave_candidates(
-			origin: OriginFor<T>,
-			candidate_nomination_count: u32,
-		) -> DispatchResultWithPostInfo {
-			let stash = ensure_signed(origin)?;
-			let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
-			let state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
-			ensure!(
-				state.nomination_count <= candidate_nomination_count,
-				Error::<T>::TooLowCandidateNominationCountToLeaveCandidates
-			);
-			state.can_leave::<T>()?;
-			let return_stake =
-				|bond: Bond<T::AccountId, BalanceOf<T>>,
-				 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
-					T::Currency::unreserve(&bond.owner, bond.amount);
-					// remove nomination from nominator state
-					if let Some(remaining) = nominator.rm_nomination(&controller) {
-						if remaining.is_zero() {
-							<NominatorState<T>>::remove(&bond.owner);
-						} else {
-							nominator.requests.remove_request(&controller);
-							<NominatorState<T>>::insert(&bond.owner, nominator);
-						}
-					}
-				};
-			// total backing stake is at least the candidate self bond
-			let mut total_backing = state.bond;
-			// return all top nominations
-			let top_nominations =
-				<TopNominations<T>>::take(&controller).ok_or(<Error<T>>::TopNominationDNE)?;
-			for bond in top_nominations.nominations {
-				return_stake(
-					bond.clone(),
-					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
-				);
-			}
-			total_backing += top_nominations.total;
-			// return all bottom nominations
-			let bottom_nominations =
-				<BottomNominations<T>>::take(&controller).ok_or(<Error<T>>::BottomNominationDNE)?;
-			for bond in bottom_nominations.nominations {
-				return_stake(
-					bond.clone(),
-					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
-				);
-			}
-			total_backing += bottom_nominations.total;
-			// return stake to stash account
-			T::Currency::unreserve(&stash, state.bond);
-			<CandidateInfo<T>>::remove(&controller);
-			<BondedStash<T>>::remove(&stash);
-			<TopNominations<T>>::remove(&controller);
-			<BottomNominations<T>>::remove(&controller);
-			let new_total_staked = <Total<T>>::get().saturating_sub(total_backing);
-			<Total<T>>::put(new_total_staked);
+		// #[pallet::call_index(13)]
+		// #[pallet::weight(
+		// 	<T as Config>::WeightInfo::execute_leave_candidates(*candidate_nomination_count)
+		// )]
+		// /// Execute leave candidates request
+		// /// - origin should be the stash account
+		// pub fn execute_leave_candidates(
+		// 	origin: OriginFor<T>,
+		// 	candidate_nomination_count: u32,
+		// ) -> DispatchResultWithPostInfo {
+		// 	let stash = ensure_signed(origin)?;
+		// 	let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+		// 	let state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
+		// 	ensure!(
+		// 		state.nomination_count <= candidate_nomination_count,
+		// 		Error::<T>::TooLowCandidateNominationCountToLeaveCandidates
+		// 	);
+		// 	state.can_leave::<T>()?;
+		// 	let return_stake =
+		// 		|bond: Bond<T::AccountId, BalanceOf<T>>,
+		// 		 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
+		// 			T::Currency::unreserve(&bond.owner, bond.amount);
+		// 			// remove nomination from nominator state
+		// 			if let Some(remaining) = nominator.rm_nomination(&controller) {
+		// 				if remaining.is_zero() {
+		// 					<NominatorState<T>>::remove(&bond.owner);
+		// 				} else {
+		// 					nominator.requests.remove_request(&controller);
+		// 					<NominatorState<T>>::insert(&bond.owner, nominator);
+		// 				}
+		// 			}
+		// 		};
+		// 	// total backing stake is at least the candidate self bond
+		// 	let mut total_backing = state.bond;
+		// 	// return all top nominations
+		// 	let top_nominations =
+		// 		<TopNominations<T>>::take(&controller).ok_or(<Error<T>>::TopNominationDNE)?;
+		// 	for bond in top_nominations.nominations {
+		// 		return_stake(
+		// 			bond.clone(),
+		// 			NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+		// 		);
+		// 	}
+		// 	total_backing += top_nominations.total;
+		// 	// return all bottom nominations
+		// 	let bottom_nominations =
+		// 		<BottomNominations<T>>::take(&controller).ok_or(<Error<T>>::BottomNominationDNE)?;
+		// 	for bond in bottom_nominations.nominations {
+		// 		return_stake(
+		// 			bond.clone(),
+		// 			NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+		// 		);
+		// 	}
+		// 	total_backing += bottom_nominations.total;
+		// 	// return stake to stash account
+		// 	T::Currency::unreserve(&stash, state.bond);
+		// 	<CandidateInfo<T>>::remove(&controller);
+		// 	<BondedStash<T>>::remove(&stash);
+		// 	<TopNominations<T>>::remove(&controller);
+		// 	<BottomNominations<T>>::remove(&controller);
+		// 	let new_total_staked = <Total<T>>::get().saturating_sub(total_backing);
+		// 	<Total<T>>::put(new_total_staked);
 
-			// remove relayer from pool
-			T::RelayManager::leave_relayers(&controller);
+		// 	// remove relayer from pool
+		// 	T::RelayManager::leave_relayers(&controller);
 
-			Self::deposit_event(Event::CandidateLeft {
-				ex_candidate: controller,
-				unlocked_amount: total_backing,
-				new_total_amt_locked: new_total_staked,
-			});
-			Ok(().into())
-		}
+		// 	Self::deposit_event(Event::CandidateLeft {
+		// 		ex_candidate: controller,
+		// 		unlocked_amount: total_backing,
+		// 		new_total_amt_locked: new_total_staked,
+		// 	});
+		// 	Ok(().into())
+		// }
 
 		#[pallet::call_index(14)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_candidates(*candidate_count))]
@@ -1630,6 +1636,17 @@ pub mod pallet {
 					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
+
+				ensure!(
+					!state.nominations.contains_key(&candidate),
+					Error::<T>::AlreadyNominatedCandidate
+				);
+
+				ensure!(
+					!state.nominations.contains_key(&candidate),
+					Error::<T>::AlreadyNominatedCandidate
+				);
+
 				state.add_nomination::<T>(candidate.clone(), amount)?;
 				state
 			} else {
@@ -1731,22 +1748,27 @@ pub mod pallet {
 		#[pallet::call_index(29)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_revoke_nomination())]
 		/// Request to revoke an existing nomination. If successful, the nomination is scheduled
-		/// to be allowed to be revoked via the `execute_nomination_request` extrinsic.
 		pub fn schedule_revoke_nomination(
 			origin: OriginFor<T>,
-			validator: T::AccountId,
+			candidate: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
-			let (now, when) = state.schedule_revoke::<T>(validator.clone())?;
-			<NominatorState<T>>::insert(&nominator, state);
-			Self::deposit_event(Event::NominationRevocationScheduled {
-				round: now,
-				nominator,
-				candidate: validator,
-				scheduled_exit: when,
-			});
+
+			let _ = state.ok_to_revoke::<T>(candidate.clone())?;
+
+			let nominate_amount =
+				state.nominations.get(&candidate.clone()).ok_or(Error::<T>::NominatorDNE)?;
+
+			let less = nominate_amount.clone();
+
+			let _ = state.schedule_decrease_nomination::<T>(
+				candidate.clone(),
+				less.clone(),
+				NominationChange::Revoke,
+			)?;
+
+			<NominatorState<T>>::insert(&state.id, state.clone());
 			Ok(().into())
 		}
 
@@ -1760,7 +1782,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.increase_nomination::<T>(candidate.clone(), more)?;
+			state.increase_nomination::<T>(candidate.clone(), more, true)?;
 			Ok(().into())
 		}
 
@@ -1774,15 +1796,17 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let caller = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&caller).ok_or(Error::<T>::NominatorDNE)?;
-			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
-			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
-			<NominatorState<T>>::insert(&caller, state);
-			Self::deposit_event(Event::NominationDecreaseScheduled {
-				nominator: caller,
-				candidate,
-				amount_to_decrease: less,
-				execute_round: when,
-			});
+
+			let _ = state.ok_to_decrease::<T>(candidate.clone(), less)?;
+
+			let _ = state.schedule_decrease_nomination::<T>(
+				candidate.clone(),
+				less,
+				NominationChange::Decrease,
+			)?;
+
+			<NominatorState<T>>::insert(&state.id, state.clone());
+
 			Ok(().into())
 		}
 
@@ -1791,11 +1815,12 @@ pub mod pallet {
 		/// Execute pending request to change an existing nomination
 		pub fn execute_nomination_request(
 			origin: OriginFor<T>,
+			execute_round: RoundIndex,
 			candidate: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.execute_pending_request::<T>(candidate)?;
+			state.execute_pending_request::<T>(execute_round, candidate)?;
 			Ok(().into())
 		}
 
@@ -1804,16 +1829,12 @@ pub mod pallet {
 		/// Cancel request to change an existing nomination.
 		pub fn cancel_nomination_request(
 			origin: OriginFor<T>,
+			cancel_round: RoundIndex,
 			candidate: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			let request = state.cancel_pending_request::<T>(candidate)?;
-			<NominatorState<T>>::insert(&nominator, state);
-			Self::deposit_event(Event::CancelledNominationRequest {
-				nominator,
-				cancelled_request: request,
-			});
+			state.cancel_pending_request::<T>(cancel_round, candidate)?;
 			Ok(().into())
 		}
 	}

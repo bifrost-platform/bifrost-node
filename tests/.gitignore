@@ -196,3 +196,6 @@ $RECYCLE.BIN/
 config.json
 config.testnet.json
 config.mainnet.json
+
+# stryker temp files
+.stryker-tmp

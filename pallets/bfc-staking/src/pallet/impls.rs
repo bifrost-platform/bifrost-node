@@ -330,16 +330,11 @@ impl<T: Config> Pallet<T> {
 		nominator: T::AccountId,
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
-		if let Some(mut nominator_state) = Self::nominator_state(&nominator) {
-			// the nominator must be active (not leaving)
-			// and not revoking/decreasing the current validator
-			if nominator_state.is_active()
-				&& !nominator_state.is_revoking(&controller)
-				&& !nominator_state.is_decreasing(&controller)
-			{
-				// mint rewards to the nominator account
-				Self::mint_reward(reward, nominator.clone());
+		// mint rewards to the nominator account
+		Self::mint_reward(reward, nominator.clone());
 
+		if let Some(mut nominator_state) = Self::nominator_state(&nominator) {
+			if nominator_state.is_active() && !nominator_state.is_revoking(&controller) {
 				// auto-compound round rewards if `reward_dst` is set to `Staked`
 				match nominator_state.reward_dst {
 					RewardDestination::Staked => {
@@ -347,7 +342,7 @@ impl<T: Config> Pallet<T> {
 						nominator_state.increment_awarded_tokens(&controller, reward);
 						// auto-compound nomination
 						if nominator_state
-							.increase_nomination::<T>(controller.clone(), reward)
+							.increase_nomination::<T>(controller.clone(), reward, true)
 							.is_ok()
 						{
 							<NominatorState<T>>::insert(&nominator, nominator_state);
@@ -826,33 +821,44 @@ impl<T: Config> Pallet<T> {
 			let bottom_nominations =
 				Self::bottom_nominations(&owner).expect("Candidate must have bottom nominations");
 
+			let top_nominations_active_amount = top_nominations.total;
+			let bottom_nominations_active_amount = bottom_nominations.total;
+
 			if selected_candidates.contains(&owner) {
 				snapshot.increment_active_self_bond(state.bond);
-				snapshot
-					.increment_active_nominations(top_nominations.total + bottom_nominations.total);
-				snapshot.increment_active_top_nominations(top_nominations.total);
-				snapshot.increment_active_bottom_nominations(bottom_nominations.total);
+				snapshot.increment_active_nominations(
+					top_nominations_active_amount + bottom_nominations_active_amount,
+				);
+				snapshot.increment_active_top_nominations(top_nominations_active_amount);
+				snapshot.increment_active_bottom_nominations(bottom_nominations_active_amount);
+				snapshot.increment_active_nominations(
+					top_nominations_active_amount + bottom_nominations_active_amount,
+				);
+				snapshot.increment_active_top_nominations(top_nominations_active_amount);
+				snapshot.increment_active_bottom_nominations(bottom_nominations_active_amount);
 				snapshot.increment_active_nominators(
 					top_nominations.count() + bottom_nominations.count(),
 				);
 				snapshot.increment_active_top_nominators(top_nominations.count());
 				snapshot.increment_active_bottom_nominators(bottom_nominations.count());
 				snapshot.increment_active_stake(
-					state.bond + top_nominations.total + bottom_nominations.total,
+					state.bond + top_nominations_active_amount + bottom_nominations_active_amount,
 				);
 				snapshot.increment_active_voting_power(state.voting_power);
 			}
 
 			snapshot.increment_total_self_bond(state.bond);
-			snapshot.increment_total_nominations(top_nominations.total + bottom_nominations.total);
-			snapshot.increment_total_top_nominations(top_nominations.total);
-			snapshot.increment_total_bottom_nominations(bottom_nominations.total);
+			snapshot.increment_total_nominations(
+				top_nominations_active_amount + bottom_nominations_active_amount,
+			);
+			snapshot.increment_total_top_nominations(top_nominations_active_amount);
+			snapshot.increment_total_bottom_nominations(bottom_nominations_active_amount);
 			snapshot
 				.increment_total_nominators(top_nominations.count() + bottom_nominations.count());
 			snapshot.increment_total_top_nominators(top_nominations.count());
 			snapshot.increment_total_bottom_nominators(bottom_nominations.count());
 			snapshot.increment_total_stake(
-				state.bond + top_nominations.total + bottom_nominations.total,
+				state.bond + top_nominations_active_amount + bottom_nominations_active_amount,
 			);
 			snapshot.increment_total_voting_power(state.voting_power);
 		}
