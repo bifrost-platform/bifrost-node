@@ -1,5 +1,5 @@
 use miniscript::{
-	bitcoin::{key::Error, Address, Network, PublicKey, Script},
+	bitcoin::{key::Error, Network, PublicKey},
 	Descriptor,
 };
 
@@ -31,11 +31,6 @@ pub trait MultiSigManager {
 				.map_err(|_| ())?;
 		desc.sanity_check().map_err(|_| ())?;
 		Ok(desc)
-	}
-
-	/// Creates a witness pay to script hash address.
-	fn generate_address(script: &Script, network: Network) -> Address {
-		Address::p2wsh(script, network)
 	}
 }
 
