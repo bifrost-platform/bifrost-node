@@ -51,6 +51,32 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
     const bondedPubKey = rawBondedPubKey.toHuman();
     expect(bondedPubKey).is.eq(who);
   });
+
+  it('should successfully clear vault', async function () {
+    const vault = 'bcrt1qgzfqaq2xf4xxlws42casl78pm68g2m0hnmdlsc7d9k2f8j72k3uselxq9q';
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcRegistrationPool.clearVault(vault)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
+    const bondedVault = rawBondedVault.toHuman();
+    expect(bondedVault).is.null;
+
+    const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(vault);
+    const bondedDescriptor = rawBondedDescriptor.toHuman();
+    expect(bondedDescriptor).is.null;
+
+    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
+    const bondedPubKey = rawBondedPubKey.toHuman()
+    expect(bondedPubKey).is.null;
+
+    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
+    const systemVault = rawSystemVault.toHuman();
+    expect(systemVault).is.null;
+  });
 });
 
 describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
