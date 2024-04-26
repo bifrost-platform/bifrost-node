@@ -127,6 +127,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
 
 describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
   const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
   const charlethRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
@@ -216,6 +217,37 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
     expect(extrinsicResult).eq('VaultAlreadyGenerated');
+  });
+
+  it('should successfully clear vault', async function () {
+    const vault = 'bcrt1qgzfqaq2xf4xxlws42casl78pm68g2m0hnmdlsc7d9k2f8j72k3uselxq9q';
+    const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcRegistrationPool.clearVault(vault)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
+    const bondedVault = rawBondedVault.toHuman();
+    expect(bondedVault).is.null;
+
+    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
+    const bondedRefund = rawBondedRefund.toHuman();
+    expect(bondedRefund).is.null;
+
+    const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(vault);
+    const bondedDescriptor = rawBondedDescriptor.toHuman();
+    expect(bondedDescriptor).is.null;
+
+    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
+    const bondedPubKey = rawBondedPubKey.toHuman()
+    expect(bondedPubKey).is.null;
+
+    const rawTarget: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
+    const target = rawTarget.toHuman();
+    expect(target).is.null;
   });
 });
 
