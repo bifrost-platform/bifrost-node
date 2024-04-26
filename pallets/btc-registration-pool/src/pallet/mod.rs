@@ -77,8 +77,8 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// The user does not exist.
 		UserDNE,
-		/// The system vault does not exist.
-		SystemVaultDNE,
+		/// The (system) vault does not exist.
+		VaultDNE,
 		/// The vault is out of range.
 		OutOfRange,
 	}
@@ -118,7 +118,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
 	/// Mapped Bitcoin vault addresses. The key is the vault address and the value is the user's Bifrost address.
-	/// For system vault, the value will be set to the zero address.
+	/// For system vault, the value will be set to the precompile address.
 	pub type BondedVault<T: Config> =
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
@@ -131,7 +131,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_pub_key)]
 	/// Mapped public keys used for vault account generation. The key is the public key and the value is user's Bifrost address.
-	/// For system vault, the value will be set to the zero address.
+	/// For system vault, the value will be set to the precompile address.
 	pub type BondedPubKey<T: Config> = StorageMap<_, Twox64Concat, Public, T::AccountId>;
 
 	#[pallet::storage]
@@ -347,7 +347,7 @@ pub mod pallet {
 			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 
 			let precompile: T::AccountId = H160::from_low_u64_be(ADDRESS_U64).into();
-			ensure!(precompile == who, Error::<T>::SystemVaultDNE);
+			ensure!(precompile == who, Error::<T>::VaultDNE);
 
 			if let Some(mut system_vault) = <SystemVault<T>>::get() {
 				ensure!(system_vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
@@ -391,8 +391,33 @@ pub mod pallet {
 				<BondedPubKey<T>>::insert(&pub_key, precompile);
 				<SystemVault<T>>::put(system_vault);
 			} else {
-				return Err(Error::<T>::SystemVaultDNE)?;
+				return Err(Error::<T>::VaultDNE)?;
 			}
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::clear_vault())]
+		pub fn clear_vault(
+			origin: OriginFor<T>,
+			vault_address: UnboundedBytes,
+		) -> DispatchResultWithPostInfo {
+			T::SetOrigin::ensure_origin(origin)?;
+			let vault_address: BoundedBitcoinAddress =
+				Self::get_checked_bitcoin_address(&vault_address)?;
+
+			let bfc_address = <BondedVault<T>>::get(&vault_address).ok_or(Error::<T>::VaultDNE)?;
+			let target = <RegistrationPool<T>>::get(&bfc_address).ok_or(Error::<T>::UserDNE)?;
+
+			<BondedVault<T>>::remove(&vault_address);
+			<BondedRefund<T>>::remove(&target.refund_address);
+			<BondedDescriptor<T>>::remove(&vault_address);
+
+			for pubkey in target.vault.pub_keys() {
+				<BondedPubKey<T>>::remove(&pubkey);
+			}
+			<RegistrationPool<T>>::remove(&bfc_address);
 
 			Ok(().into())
 		}
