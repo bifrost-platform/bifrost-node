@@ -10,7 +10,6 @@ use frame_support::{
 	traits::{SortedMembers, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
-use scale_info::prelude::format;
 
 use bp_multi_sig::{
 	traits::{MultiSigManager, PoolManager},
@@ -354,8 +353,7 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message = format!("{:?}", Self::hash_bytes(psbt));
-					if !signature.verify(message.as_bytes(), authority_id) {
+					if !signature.verify(psbt.as_ref(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -374,8 +372,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!("{:?}", Self::hash_bytes(signed_psbt));
-					if !signature.verify(message.as_bytes(), authority_id) {
+					if !signature.verify(signed_psbt.as_ref(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -390,8 +387,7 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message = format!("{:?}", txid);
-					if !signature.verify(message.as_bytes(), authority_id) {
+					if !signature.verify(txid.as_ref(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 

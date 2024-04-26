@@ -192,6 +192,37 @@ impl TryFrom<Vec<Token>> for TaskParams {
 	}
 }
 
+/// The `UserRequest`.
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct UserRequest {
+	pub ins_code: Instruction,
+	pub params: TaskParams,
+}
+
+impl UserRequest {
+	pub fn new(ins_code: Instruction, params: TaskParams) -> Self {
+		Self { ins_code, params }
+	}
+
+	/// Encodes into bytes.
+	pub fn encode(&self) -> UnboundedBytes {
+		ethabi_decode::encode(&[Token::Tuple(vec![
+			Token::Tuple(vec![
+				Token::FixedBytes(self.ins_code.chain.clone()),
+				Token::FixedBytes(self.ins_code.method.clone()),
+			]),
+			Token::Tuple(vec![
+				Token::FixedBytes(self.params.token_idx0.clone()),
+				Token::FixedBytes(self.params.token_idx1.clone()),
+				Token::Address(self.params.refund),
+				Token::Address(self.params.to),
+				Token::Uint(self.params.amount),
+				Token::Bytes(self.params.variants.clone()),
+			]),
+		])])
+	}
+}
+
 /// The `SocketMessage`.
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct SocketMessage {

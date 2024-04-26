@@ -13,7 +13,10 @@ use pallet_evm::Runner;
 use scale_info::prelude::string::String;
 use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
 
-use crate::{RequestInfo, SocketMessage, UncheckedOutput, CALL_FUNCTION_SELECTOR, CALL_GAS_LIMIT};
+use crate::{
+	RequestInfo, SocketMessage, UncheckedOutput, UserRequest, CALL_FUNCTION_SELECTOR,
+	CALL_GAS_LIMIT,
+};
 
 use super::pallet::*;
 
@@ -116,14 +119,16 @@ where
 
 		let mut msgs = vec![];
 		let mut msg_hashes = vec![];
-		for msg in socket_messages {
-			let msg_hash = Self::hash_bytes(msg);
+		for raw_msg in socket_messages {
+			let msg = Self::try_decode_socket_message(raw_msg)
+				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+			let msg_hash = Self::hash_bytes(
+				&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
+			);
 			if msg_hashes.contains(&msg_hash) {
 				return Err(Error::<T>::InvalidSocketMessage.into());
 			}
 
-			let msg = Self::try_decode_socket_message(msg)
-				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 			let request_info = Self::try_get_request(&msg.encode_req_id())?;
 
 			// the socket message should be valid
