@@ -152,28 +152,17 @@ pub mod pallet {
 	pub type RequiredN<T: Config> = StorageValue<_, u8, ValueQuery>;
 
 	#[pallet::genesis_config]
+	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T> {
-		pub required_m: u8,
-		pub required_n: u8,
 		#[serde(skip)]
 		pub _config: PhantomData<T>,
-	}
-
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> Self {
-			Self {
-				required_m: T::DefaultRequiredM::get(),
-				required_n: T::DefaultRequiredN::get(),
-				_config: Default::default(),
-			}
-		}
 	}
 
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			RequiredM::<T>::put(self.required_m);
-			RequiredN::<T>::put(self.required_n);
+			RequiredM::<T>::put(T::DefaultRequiredM::get());
+			RequiredN::<T>::put(T::DefaultRequiredN::get());
 		}
 	}
 
