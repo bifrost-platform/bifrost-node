@@ -57,7 +57,8 @@ impl<T: Config> Pallet<T> {
 		// generate vault address
 		Ok((
 			BoundedVec::try_from(
-				Self::generate_address(desc.script_pubkey().as_script(), T::BitcoinNetwork::get())
+				desc.address(T::BitcoinNetwork::get())
+					.map_err(|_| Error::<T>::DescriptorGeneration)?
 					.to_string()
 					.as_bytes()
 					.to_vec(),
