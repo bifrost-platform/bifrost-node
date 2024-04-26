@@ -396,17 +396,26 @@ pub mod pallet {
 			let vault_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&vault_address)?;
 
-			let bfc_address = <BondedVault<T>>::get(&vault_address).ok_or(Error::<T>::VaultDNE)?;
-			let target = <RegistrationPool<T>>::get(&bfc_address).ok_or(Error::<T>::UserDNE)?;
+			let who = <BondedVault<T>>::get(&vault_address).ok_or(Error::<T>::VaultDNE)?;
+			if who == H160::from_low_u64_be(ADDRESS_U64).into() {
+				// system vault
+				let system_vault = <SystemVault<T>>::get().ok_or(Error::<T>::VaultDNE)?;
+				for pubkey in system_vault.pub_keys() {
+					<BondedPubKey<T>>::remove(&pubkey);
+				}
+				<SystemVault<T>>::kill();
+			} else {
+				// user
+				let target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+				for pubkey in target.vault.pub_keys() {
+					<BondedPubKey<T>>::remove(&pubkey);
+				}
+				<RegistrationPool<T>>::remove(&who);
+				<BondedRefund<T>>::remove(&target.refund_address);
+			}
 
 			<BondedVault<T>>::remove(&vault_address);
-			<BondedRefund<T>>::remove(&target.refund_address);
 			<BondedDescriptor<T>>::remove(&vault_address);
-
-			for pubkey in target.vault.pub_keys() {
-				<BondedPubKey<T>>::remove(&pubkey);
-			}
-			<RegistrationPool<T>>::remove(&bfc_address);
 
 			Ok(().into())
 		}
