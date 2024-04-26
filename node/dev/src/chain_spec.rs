@@ -95,11 +95,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
 				],
 				// Relay Executives
-				vec![
-					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
-					AccountId::from(hex!("12159710B13fe31Cca949BcAfB190772Fb0E220C")),
-					AccountId::from(hex!("6E574113B9A9105ba6B5877379a25b4Fc8327c5A")),
-				],
+				vec![AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58"))],
 				// Sudo account
 				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 				// Socket queue authority
@@ -246,11 +242,7 @@ fn development_genesis(
 				.expect("Membership must be initialized"),
 		},
 		treasury: Default::default(),
-		btc_registration_pool: devnet::BtcRegistrationPoolConfig {
-			required_m: 2u8,
-			required_n: 2u8,
-			..Default::default()
-		},
+		btc_registration_pool: Default::default(),
 		btc_socket_queue: devnet::BtcSocketQueueConfig {
 			authority: Some(authority),
 			..Default::default()
