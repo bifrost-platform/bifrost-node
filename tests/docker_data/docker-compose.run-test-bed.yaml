@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+
+  boot_node:
+    container_name: boot_node
+    image: munsunout/bifrost-node:v111.3 # private repository of docker hub for test
+    volumes:
+      - ./:/data
+    ports:
+      - "9933:9933"
+      - "30333:30333"
+    environment:
+      - CHAIN=dev
+      - DIR="/data/chain0"
+      - CHAIN_DIR=/data/bifrost-dev.json
+      - GENESIS_P2P_PORT=30333
+      - GENESIS_RPC_PORT=9933
+      - NODE_NAME="BOOT-NODE"
+    entrypoint: ["/bin/sh", "-c"]
+    command: "/data/run_boot_node.sh"
+
+  peer_node-1:
+    container_name: peer_node-1
+    image: munsunout/bifrost-node:v111.3
+    volumes:
+      - ./:/data
+    ports:
+      - "9934:9934"
+      - "30334:30334"
+    environment:
+      - DIR="/data/chain1"
+      - CHAIN_DIR=/data/bifrost-dev.json
+      - GENESIS_P2P_PORT=30333
+      - GENESIS_RPC_PORT=9933
+      - PEER_P2P_PORT=30334
+      - PEER_RPC_PORT=9934
+      - NODE_NAME="PEER_NODE-1"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/data/run_peer_node.sh"]
+
+  peer_node-2:
+    container_name: peer_node-2
+    image: munsunout/bifrost-node:v111.3
+    volumes:
+      - ./:/data
+    ports:
+      - "9935:9935"
+      - "30335:30335"
+    environment:
+      - DIR="/data/chain2"
+      - CHAIN_DIR=/data/bifrost-dev.json
+      - GENESIS_P2P_PORT=30333
+      - GENESIS_RPC_PORT=9933
+      - PEER_P2P_PORT=30335
+      - PEER_RPC_PORT=9935
+      - NODE_NAME="PEER_NODE-2"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/data/run_peer_node.sh"]
+
+  peer_node-3:
+    container_name: peer_node-3
+    image: munsunout/bifrost-node:v111.3
+    volumes:
+      - ./:/data
+    ports:
+      - "9936:9936"
+      - "30336:30336"
+    environment:
+      - DIR="/data/chain3"
+      - CHAIN_DIR=/data/bifrost-dev.json
+      - GENESIS_P2P_PORT=30333
+      - GENESIS_RPC_PORT=9933
+      - PEER_P2P_PORT=30336
+      - PEER_RPC_PORT=9936
+      - NODE_NAME="PEER_NODE-3"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/data/run_peer_node.sh"]
+
+  peer_node-4:
+    container_name: peer_node-4
+    image: munsunout/bifrost-node:v111.3
+    volumes:
+      - ./:/data
+    ports:
+      - "9937:9937"
+      - "30337:30337"
+    environment:
+      - DIR="/data/chain4"
+      - CHAIN_DIR=/data/bifrost-dev.json
+      - GENESIS_P2P_PORT=30333
+      - GENESIS_RPC_PORT=9933
+      - PEER_P2P_PORT=30337
+      - PEER_RPC_PORT=9937
+      - NODE_NAME="PEER_NODE-4"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/data/run_peer_node.sh"]

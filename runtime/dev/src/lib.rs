@@ -725,17 +725,17 @@ parameter_types! {
 	/// Rounds before the reward is paid.
 	pub const RewardPaymentDelay: u32 = 1;
 	/// Default maximum full validators selected per round, default at genesis.
-	pub const DefaultMaxSelectedFullCandidates: u32 = 10;
-	/// Default maximum basicvalidators selected per round, default at genesis.
-	pub const DefaultMaxSelectedBasicCandidates: u32 = 10;
+	pub const DefaultMaxSelectedFullCandidates: u32 = 20;
+	/// Default maximum basic validators selected per round, default at genesis.
+	pub const DefaultMaxSelectedBasicCandidates: u32 = 200;
 	/// Maximum top nominations per candidate.
-	pub const MaxTopNominationsPerCandidate: u32 = 10;
+	pub const MaxTopNominationsPerCandidate: u32 = 100;
 	/// Maximum bottom nominations per candidate.
-	pub const MaxBottomNominationsPerCandidate: u32 = 2;
+	pub const MaxBottomNominationsPerCandidate: u32 = 50;
 	/// Maximum nominations per nominator.
-	pub const MaxNominationsPerNominator: u32 = 3;
+	pub const MaxNominationsPerNominator: u32 = 50;
 	/// Default commission rate for full validators.
-	pub const DefaultFullValidatorCommission: Perbill = Perbill::from_percent(50);
+	pub const DefaultFullValidatorCommission: Perbill = Perbill::from_percent(30);
 	/// Default commission rate for basic validators.
 	pub const DefaultBasicValidatorCommission: Perbill = Perbill::from_percent(10);
 	/// Maximum commission rate available for full validators.
@@ -743,15 +743,15 @@ parameter_types! {
 	/// Maximum commission rate available for basic validators.
 	pub const MaxBasicValidatorCommission: Perbill = Perbill::from_percent(20);
 	/// Minimum stake required to become a full validator.
-	pub const MinFullValidatorStk: u128 = 1_000 * SUPPLY_FACTOR * BFC;
+	pub const MinFullValidatorStk: u128 = 4_000_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to become a basic validator.
-	pub const MinBasicValidatorStk: u128 = 500 * SUPPLY_FACTOR * BFC;
+	pub const MinBasicValidatorStk: u128 = 2_000_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a full candidate.
-	pub const MinFullCandidateStk: u128 = 950 * SUPPLY_FACTOR * BFC;
+	pub const MinFullCandidateStk: u128 = 400_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a basic candidate.
-	pub const MinBasicCandidateStk: u128 = 100 * SUPPLY_FACTOR * BFC;
+	pub const MinBasicCandidateStk: u128 = 400_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a nominator.
-	pub const MinNominatorStk: u128 = 1 * SUPPLY_FACTOR * BFC;
+	pub const MinNominatorStk: u128 = 100 * SUPPLY_FACTOR * BFC;
 }
 
 /// Minimal staking pallet that implements validator selection by total backed stake.

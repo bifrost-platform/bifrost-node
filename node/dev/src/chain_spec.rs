@@ -38,9 +38,9 @@ pub fn inflation_config() -> InflationInfo<Balance> {
 		)
 	}
 	let annual = Range {
-		min: Perbill::from_percent(7),
-		ideal: Perbill::from_percent(13),
-		max: Perbill::from_percent(15),
+		min: Perbill::from_percent(70),
+		ideal: Perbill::from_percent(130),
+		max: Perbill::from_percent(150),
 	};
 	InflationInfo {
 		// staking expectations
@@ -78,7 +78,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					get_from_seed::<AuraId>("Alice"),
 					get_from_seed::<GrandpaId>("Alice"),
 					get_from_seed::<ImOnlineId>("Alice"),
-					1_000 * BFC * SUPPLY_FACTOR,
+					4_000_000 * BFC * SUPPLY_FACTOR,
 				)],
 				// Nominations
 				vec![],
