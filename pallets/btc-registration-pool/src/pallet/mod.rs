@@ -17,7 +17,7 @@ use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	Percent,
 };
-use sp_std::{str, vec};
+use sp_std::{str, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -121,10 +121,11 @@ pub mod pallet {
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_refund)]
-	/// Mapped Bitcoin refund addresses. The key is the refund address and the value is the user's Bifrost address.
+	/// Mapped Bitcoin refund addresses. The key is the refund address and the value is the user's Bifrost address(s).
 	pub type BondedRefund<T: Config> =
-		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
+		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, Vec<T::AccountId>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_pub_key)]
@@ -181,11 +182,16 @@ pub mod pallet {
 			let old = relay_target.refund_address.clone();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 
-			ensure!(!<BondedRefund<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
 			ensure!(!<BondedVault<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
 
-			<BondedRefund<T>>::remove(&old);
-			<BondedRefund<T>>::insert(&new, who.clone());
+			// remove from previous bond
+			<BondedRefund<T>>::mutate(&old, |users| {
+				users.retain(|u| *u != who);
+			});
+			// add to new bond
+			<BondedRefund<T>>::mutate(&new, |users| {
+				users.push(who.clone());
+			});
 
 			relay_target.set_refund_address(new.clone());
 			<RegistrationPool<T>>::insert(&who, relay_target);
@@ -207,10 +213,6 @@ pub mod pallet {
 				Self::get_checked_bitcoin_address(&refund_address)?;
 
 			ensure!(
-				!<BondedRefund<T>>::contains_key(&refund_address),
-				Error::<T>::AddressAlreadyRegistered
-			);
-			ensure!(
 				!<BondedVault<T>>::contains_key(&refund_address),
 				Error::<T>::AddressAlreadyRegistered
 			);
@@ -219,7 +221,9 @@ pub mod pallet {
 				Error::<T>::AddressAlreadyRegistered
 			);
 
-			<BondedRefund<T>>::insert(&refund_address, &who);
+			<BondedRefund<T>>::mutate(&refund_address, |users| {
+				users.push(who.clone());
+			});
 			<RegistrationPool<T>>::insert(
 				who.clone(),
 				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n()),

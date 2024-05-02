@@ -33,6 +33,9 @@ pub mod v2 {
 
 				<MultiSigRatio<T>>::put(Percent::from_percent(100));
 
+				// translate `BondedRefund` to vector.
+				<BondedRefund<T>>::translate(|_, old: T::AccountId| Some(vec![old]));
+
 				current.put::<Pallet<T>>();
 
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(0, 4));

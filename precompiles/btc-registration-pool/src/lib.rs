@@ -206,10 +206,8 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let refund_addresses: Vec<BitcoinAddressString> =
-			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter()
-				.map(|(_, relay_target)| {
-					BitcoinAddressString::from(relay_target.refund_address.into_inner())
-				})
+			pallet_btc_registration_pool::BondedRefund::<Runtime>::iter()
+				.map(|(address, _)| BitcoinAddressString::from(address.into_inner()))
 				.collect();
 		Ok(refund_addresses)
 	}
@@ -234,25 +232,19 @@ where
 		Ok(refund_address)
 	}
 
-	#[precompile::public("userAddress(string,bool)")]
-	#[precompile::public("user_address(string,bool)")]
+	#[precompile::public("userAddress(string)")]
+	#[precompile::public("user_address(string)")]
 	#[precompile::view]
 	fn user_address(
 		handle: &mut impl PrecompileHandle,
-		vault_or_refund: BitcoinAddressString,
-		is_vault: bool,
+		vault_address: BitcoinAddressString,
 	) -> EvmResult<Address> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let vault_or_refund =
-			Self::convert_string_to_bitcoin_address(vault_or_refund).in_field("vault_or_refund")?;
-		let user_address = if is_vault {
-			BtcRegistrationPoolOf::<Runtime>::bonded_vault(vault_or_refund)
-		} else {
-			BtcRegistrationPoolOf::<Runtime>::bonded_refund(vault_or_refund)
-		};
+		let vault_address =
+			Self::convert_string_to_bitcoin_address(vault_address).in_field("vault_address")?;
 
-		Ok(match user_address {
+		Ok(match BtcRegistrationPoolOf::<Runtime>::bonded_vault(vault_address) {
 			Some(address) => Address(address.into()),
 			None => Address::default(),
 		})
