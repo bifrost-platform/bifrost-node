@@ -53,7 +53,7 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
   });
 
   it('should successfully clear vault', async function () {
-    const vault = 'bcrt1qgzfqaq2xf4xxlws42casl78pm68g2m0hnmdlsc7d9k2f8j72k3uselxq9q';
+    const vault = 'bcrt1qq8u3pf4z60udx43w534htszh8p7xmdk5njemsc7gsn6smgdgg58qvavm86';
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
 
     await context.polkadotApi.tx.sudo.sudo(
@@ -222,10 +222,16 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
 
     const vault = registeredBitcoinPair.vault;
     expect(vault.address['Generated']).is.exist;
-    expect(Number(vault.m)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredM()));
-    expect(Number(vault.n)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
 
-    expect(Object.keys(registeredBitcoinPair.vault.pubKeys).length).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
+    const rawRatio: any = await context.polkadotApi.query.btcRegistrationPool.multiSigRatio();
+    const ratio = rawRatio.toJSON();
+    const rawRelayExec: any = await context.polkadotApi.query.relayExecutiveMembership.members();
+    const relayExec = rawRelayExec.toJSON();
+
+    expect(Number(vault.m)).eq(Math.ceil(relayExec.length * ratio / 100));
+    expect(Number(vault.n)).eq(relayExec.length);
+
+    expect(Object.keys(registeredBitcoinPair.vault.pubKeys).length).eq(Math.ceil(relayExec.length * ratio / 100));
     expect(registeredBitcoinPair.vault.pubKeys[alithRelayer.address]).eq(pubKey);
   });
 
@@ -246,7 +252,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
   });
 
   it('should successfully clear vault', async function () {
-    const vault = 'bcrt1qgzfqaq2xf4xxlws42casl78pm68g2m0hnmdlsc7d9k2f8j72k3uselxq9q';
+    const vault = 'bcrt1qq8u3pf4z60udx43w534htszh8p7xmdk5njemsc7gsn6smgdgg58qvavm86';
     const refund = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
 
@@ -277,24 +283,12 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
   });
 });
 
-describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) => {
+describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
   const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
   const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
   const charlethRelayer = keyring.addFromUri(TEST_RELAYERS[2].private);
-
-  before('should successfully set vault config', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcRegistrationPool.setVaultConfig(1, 2)
-    ).signAndSend(alith);
-    await context.createBlock();
-
-    const m = Number(await context.polkadotApi.query.btcRegistrationPool.requiredM());
-    const n = Number(await context.polkadotApi.query.btcRegistrationPool.requiredN());
-    expect(m).eq(1);
-    expect(n).eq(2);
-  });
 
   before('should successfully add relay executive member', async function () {
     await context.polkadotApi.tx.sudo.sudo(
@@ -399,10 +393,16 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-2)', (context) 
     const vault = registeredBitcoinPair.vault;
     expect(vault.address['Generated']).is.exist;
     expect(vault.address).is.exist;
-    expect(Number(vault.m)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredM()));
-    expect(Number(vault.n)).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
 
-    expect(Object.keys(registeredBitcoinPair.vault.pubKeys).length).eq(Number(await context.polkadotApi.query.btcRegistrationPool.requiredN()));
+    const rawRatio: any = await context.polkadotApi.query.btcRegistrationPool.multiSigRatio();
+    const ratio = rawRatio.toJSON();
+    const rawRelayExec: any = await context.polkadotApi.query.relayExecutiveMembership.members();
+    const relayExec = rawRelayExec.toJSON();
+
+    expect(Number(vault.m)).eq(Math.ceil(relayExec.length * ratio / 100));
+    expect(Number(vault.n)).eq(relayExec.length);
+
+    expect(Object.keys(registeredBitcoinPair.vault.pubKeys).length).eq(Math.ceil(relayExec.length * ratio / 100));
     expect(registeredBitcoinPair.vault.pubKeys[charlethRelayer.address]).eq(pubKey);
   });
 });
