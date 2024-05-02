@@ -121,7 +121,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
     await context.createBlock();
 
     const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
-    expect(rawBondedRefund.toJSON()).eq(baltathar.address);
+    expect(rawBondedRefund.toJSON()[0]).eq(baltathar.address);
 
     const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
@@ -136,8 +136,8 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(charleth);
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'requestVault');
-    expect(extrinsicResult).eq('AddressAlreadyRegistered');
+    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
+    expect(rawBondedRefund.toJSON()[1]).eq(charleth.address);
   });
 
   it('should fail to join registration pool due to duplicate user address', async function () {
@@ -267,7 +267,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
 
     const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
     const bondedRefund = rawBondedRefund.toHuman();
-    expect(bondedRefund).is.null;
+    expect(bondedRefund).is.empty;
 
     const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(vault);
     const bondedDescriptor = rawBondedDescriptor.toHuman();
