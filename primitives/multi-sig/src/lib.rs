@@ -4,9 +4,11 @@ pub mod traits;
 
 pub use miniscript::{
 	bitcoin::{
-		hashes::Hash, secp256k1::Secp256k1, Address, Network, Psbt, PublicKey, Script, Txid,
+		hashes::Hash, key::Error, secp256k1::Secp256k1, Address, Network, Psbt, PublicKey, Script,
+		Txid,
 	},
 	psbt::PsbtExt,
+	Descriptor,
 };
 
 use sp_core::{ConstU32, RuntimeDebug};
@@ -63,13 +65,13 @@ pub struct MultiSigAccount<AccountId> {
 	/// Public keys that the vault address contains.
 	pub pub_keys: BoundedBTreeMap<AccountId, Public, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 	/// The m value of the multi-sig address.
-	pub m: u8,
+	pub m: u32,
 	/// The n value of the multi-sig address.
-	pub n: u8,
+	pub n: u32,
 }
 
 impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
-	pub fn new(m: u8, n: u8) -> Self {
+	pub fn new(m: u32, n: u32) -> Self {
 		Self {
 			address: AddressState::Pending,
 			descriptor: UnboundedBytes::default(),

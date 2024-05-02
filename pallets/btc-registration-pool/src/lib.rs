@@ -24,11 +24,8 @@ pub struct BitcoinRelayTarget<AccountId> {
 }
 
 impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
-	pub fn new<T: Config>(refund_address: BoundedBitcoinAddress) -> Self {
-		Self {
-			refund_address,
-			vault: MultiSigAccount::new(<RequiredM<T>>::get(), <RequiredN<T>>::get()),
-		}
+	pub fn new<T: Config>(refund_address: BoundedBitcoinAddress, m: u32, n: u32) -> Self {
+		Self { refund_address, vault: MultiSigAccount::new(m, n) }
 	}
 
 	pub fn set_vault_address(&mut self, address: BoundedBitcoinAddress) {

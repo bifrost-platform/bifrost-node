@@ -11,9 +11,12 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{Network, Public, PublicKey, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_multi_sig::{Network, Public, PublicKey, UnboundedBytes};
 use sp_core::H160;
-use sp_runtime::traits::{IdentifyAccount, Verify};
+use sp_runtime::{
+	traits::{IdentifyAccount, Verify},
+	Percent,
+};
 use sp_std::{str, vec};
 
 #[frame_support::pallet]
@@ -42,12 +45,9 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
-		/// The required number of public keys to generate a vault address.
+		/// The minimum required number of signatures to send a transaction with the vault account. (in percentage)
 		#[pallet::constant]
-		type DefaultRequiredM: Get<u8>;
-		/// The required number of signatures to send a transaction with the vault account.
-		#[pallet::constant]
-		type DefaultRequiredN: Get<u8>;
+		type DefaultMultiSigRatio: Get<Percent>;
 		/// The custom Bitcoin's chain ID for CCCP.
 		#[pallet::constant]
 		type BitcoinChainId: Get<u32>;
@@ -96,8 +96,6 @@ pub mod pallet {
 			refund_address: BoundedBitcoinAddress,
 			vault_address: BoundedBitcoinAddress,
 		},
-		/// A new vault configuration has been set.
-		VaultConfigSet { m: u8, n: u8 },
 		/// A user's refund address has been (re-)set.
 		RefundSet { who: T::AccountId, old: BoundedBitcoinAddress, new: BoundedBitcoinAddress },
 	}
@@ -142,14 +140,9 @@ pub mod pallet {
 		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, UnboundedBytes>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn required_m)]
-	/// The required number of public keys to generate a vault address.
-	pub type RequiredM<T: Config> = StorageValue<_, u8, ValueQuery>;
-
-	#[pallet::storage]
 	#[pallet::getter(fn required_n)]
-	/// The required number of signatures to send a transaction with the vault account.
-	pub type RequiredN<T: Config> = StorageValue<_, u8, ValueQuery>;
+	/// The minimum required number of signatures to send a transaction with the vault account.
+	pub type MultiSigRatio<T: Config> = StorageValue<_, Percent, ValueQuery>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
@@ -161,8 +154,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
-			RequiredM::<T>::put(T::DefaultRequiredM::get());
-			RequiredN::<T>::put(T::DefaultRequiredN::get());
+			MultiSigRatio::<T>::put(T::DefaultMultiSigRatio::get());
 		}
 	}
 
@@ -172,23 +164,6 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_vault_config())]
-		/// (Re-)set the vault configurations.
-		pub fn set_vault_config(origin: OriginFor<T>, m: u8, n: u8) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
-
-			ensure!(n >= 1 && u32::from(n) <= MULTI_SIG_MAX_ACCOUNTS, Error::<T>::OutOfRange);
-			ensure!(m >= 1 && m <= n, Error::<T>::OutOfRange);
-
-			Self::deposit_event(Event::VaultConfigSet { m, n });
-
-			<RequiredM<T>>::put(m);
-			<RequiredN<T>>::put(n);
-
-			Ok(().into())
-		}
-
-		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_refund())]
 		/// (Re-)set the user's refund address.
 		pub fn set_refund(origin: OriginFor<T>, new: UnboundedBytes) -> DispatchResultWithPostInfo {
@@ -213,7 +188,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(2)]
+		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
@@ -240,7 +215,7 @@ pub mod pallet {
 			<BondedRefund<T>>::insert(&refund_address, &who);
 			<RegistrationPool<T>>::insert(
 				who.clone(),
-				BitcoinRelayTarget::new::<T>(refund_address.clone()),
+				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n()),
 			);
 
 			Self::deposit_event(Event::VaultPending { who, refund_address });
@@ -248,7 +223,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(3)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
 		/// Request a system vault address. Initially, the vault address will be in pending state.
 		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -256,16 +231,13 @@ pub mod pallet {
 
 			ensure!(<SystemVault<T>>::get().is_none(), Error::<T>::VaultAlreadyGenerated);
 
-			<SystemVault<T>>::put(MultiSigAccount::new(
-				<RequiredM<T>>::get(),
-				<RequiredN<T>>::get(),
-			));
+			<SystemVault<T>>::put(MultiSigAccount::new(Self::get_m(), Self::get_n()));
 			Self::deposit_event(Event::SystemVaultPending);
 
 			Ok(().into())
 		}
 
-		#[pallet::call_index(4)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_vault_key(
@@ -322,7 +294,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(5)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
@@ -386,7 +358,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(6)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::clear_vault())]
 		pub fn clear_vault(
 			origin: OriginFor<T>,

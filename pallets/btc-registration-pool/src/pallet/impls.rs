@@ -1,21 +1,16 @@
 use bp_multi_sig::{
-	traits::{MultiSigManager, PoolManager},
-	Address, AddressState, Network, UnboundedBytes,
+	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, Network, PublicKey,
+	UnboundedBytes,
 };
+use frame_support::traits::SortedMembers;
 use scale_info::prelude::string::ToString;
 use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
-use sp_std::{str, str::FromStr, vec::Vec};
+use sp_std::{str, str::FromStr, vec, vec::Vec};
 
 use crate::{BoundedBitcoinAddress, Public};
 
 use super::pallet::*;
-
-impl<T: Config> MultiSigManager for Pallet<T> {
-	fn is_finalizable(m: u8) -> bool {
-		<RequiredM<T>>::get() <= m
-	}
-}
 
 impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	fn get_refund_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
@@ -47,11 +42,44 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 }
 
 impl<T: Config> Pallet<T> {
+	/// Get the `m` value.
+	pub fn get_m() -> u32 {
+		<MultiSigRatio<T>>::get().mul_ceil(Self::get_n())
+	}
+
+	/// Get the `n` value.
+	pub fn get_n() -> u32 {
+		T::Executives::count() as u32
+	}
+
+	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
+	fn sort_pub_keys(raw_pub_keys: Vec<Public>) -> Result<Vec<PublicKey>, KeyError> {
+		let mut pub_keys = vec![];
+		for raw_key in raw_pub_keys.iter() {
+			let key = PublicKey::from_slice(raw_key.as_ref())?;
+			pub_keys.push(key);
+		}
+		pub_keys.sort();
+		Ok(pub_keys)
+	}
+
+	/// Create a new wsh sorted multi descriptor.
+	fn generate_descriptor(
+		m: usize,
+		raw_pub_keys: Vec<Public>,
+	) -> Result<Descriptor<PublicKey>, ()> {
+		let desc =
+			Descriptor::new_wsh_sortedmulti(m, Self::sort_pub_keys(raw_pub_keys).map_err(|_| ())?)
+				.map_err(|_| ())?;
+		desc.sanity_check().map_err(|_| ())?;
+		Ok(desc)
+	}
+
 	/// Generate a multi-sig vault address.
 	pub fn generate_vault_address(
 		raw_pub_keys: Vec<Public>,
 	) -> Result<(BoundedBitcoinAddress, UnboundedBytes), DispatchError> {
-		let desc = Self::generate_descriptor(<RequiredM<T>>::get() as usize, raw_pub_keys)
+		let desc = Self::generate_descriptor(Self::get_m() as usize, raw_pub_keys)
 			.map_err(|_| Error::<T>::DescriptorGeneration)?;
 
 		// generate vault address
