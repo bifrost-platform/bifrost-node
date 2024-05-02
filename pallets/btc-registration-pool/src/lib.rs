@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod migrations;
 mod pallet;
 pub mod weights;
 
@@ -13,6 +14,19 @@ use sp_core::RuntimeDebug;
 use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
 pub const ADDRESS_U64: u64 = 256;
+
+pub(crate) const LOG_TARGET: &'static str = "runtime::btc-registration-pool";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
 
 #[derive(Decode, Encode, TypeInfo)]
 /// The registered Bitcoin relay target information.

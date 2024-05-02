@@ -10,6 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 # General
+log = { workspace = true }
 array-bytes = { workspace = true }
 
 # Substrate
@@ -27,12 +28,12 @@ bp-multi-sig = { workspace = true }
 [features]
 default = ["std"]
 std = [
-    "scale-info/std",
-    "parity-scale-codec/std",
-    "frame-support/std",
-    "frame-system/std",
-    "sp-runtime/std",
-    "sp-std/std",
-    "sp-core/std",
-    "bp-multi-sig/std",
+	"scale-info/std",
+	"parity-scale-codec/std",
+	"frame-support/std",
+	"frame-system/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-core/std",
+	"bp-multi-sig/std",
 ]
