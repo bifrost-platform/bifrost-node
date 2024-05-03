@@ -474,7 +474,8 @@ where
 				let commission = validator_contribution_pct * validator_issuance;
 				let amount_due = total_reward_amount - commission;
 
-				let nominator_stake_pct = Perbill::from_rational(amounts[idx], state.voting_power);
+				let nominator_stake_pct =
+					Perbill::from_rational(amounts[idx], state.voting_power + amounts[idx]);
 				estimated_yearly_return.push(
 					((nominator_stake_pct * amount_due) * rounds_per_year.into())
 						.try_into()
