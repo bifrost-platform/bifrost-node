@@ -17,7 +17,7 @@ use precompile_utils::prelude::*;
 use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
 use fp_evm::PrecompileHandle;
 use sp_core::{H160, U256};
-use sp_runtime::{traits::Dispatchable, Perbill};
+use sp_runtime::{traits::Dispatchable, Perbill, Saturating};
 use sp_std::{
 	collections::btree_set::BTreeSet, convert::TryInto, marker::PhantomData, vec, vec::Vec,
 };
@@ -472,18 +472,99 @@ where
 			if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
 				let validator_issuance = state.commission * round_issuance;
 				let commission = validator_contribution_pct * validator_issuance;
-				let amount_due = total_reward_amount - commission;
+				let amount_due = total_reward_amount.saturating_sub(commission);
 
-				let nominator_stake_pct =
-					Perbill::from_rational(amounts[idx], state.voting_power + amounts[idx]);
+				let nominator_stake_pct = Perbill::from_rational(
+					amounts[idx],
+					state.voting_power.saturating_add(amounts[idx]),
+				);
 				estimated_yearly_return.push(
 					((nominator_stake_pct * amount_due) * rounds_per_year.into())
 						.try_into()
 						.map_err(|_| revert("Amount is too large for provided balance type"))?,
 				);
+			} else {
+				return Err(RevertReason::custom("Candidate does not exist").into());
 			}
 		}
 
+		Ok(estimated_yearly_return)
+	}
+
+	#[precompile::public("estimatedYearlyReturnOnBondLess(address,address[],uint256[])")]
+	#[precompile::public("estimated_yearly_return_on_bond_less(address,address[],uint256[])")]
+	#[precompile::view]
+	fn estimated_yearly_return_on_bond_less(
+		handle: &mut impl PrecompileHandle,
+		nominator: Address,
+		candidates: Vec<Address>,
+		amounts: Vec<U256>,
+	) -> EvmResult<Vec<u128>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
+		let candidates = candidates
+			.clone()
+			.into_iter()
+			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
+			.collect::<Vec<Runtime::AccountId>>();
+		let amounts = Self::u256_array_to_amount_array(amounts)?;
+		if candidates.len() < 1 {
+			return Err(RevertReason::custom("Empty candidates vector received").into());
+		}
+		if amounts.len() < 1 {
+			return Err(RevertReason::custom("Empty amounts vector received").into());
+		}
+		if candidates.len() != amounts.len() {
+			return Err(RevertReason::custom("Request vectors length does not match").into());
+		}
+
+		let nominator_state = <StakingOf<Runtime>>::nominator_state(&nominator)
+			.ok_or(RevertReason::custom("Nominator does not exist"))?;
+
+		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
+		if selected_candidates.len() < 1 {
+			return Err(RevertReason::custom("Empty selected candidates").into());
+		}
+
+		let total_stake = <StakingOf<Runtime>>::total();
+		let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
+		let validator_contribution_pct =
+			Perbill::from_percent(100 / (selected_candidates.len() as u32) + 1);
+		let total_reward_amount = validator_contribution_pct * round_issuance;
+
+		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
+
+		let mut estimated_yearly_return: Vec<u128> = vec![];
+		for (idx, candidate) in candidates.iter().enumerate() {
+			if let Some(candidate_state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
+				let validator_issuance = candidate_state.commission * round_issuance;
+				let commission = validator_contribution_pct * validator_issuance;
+				let amount_due = total_reward_amount.saturating_sub(commission);
+
+				if let Some(nomination) = nominator_state.nominations.get(&candidate) {
+					let bond_less = nomination.saturating_sub(amounts[idx]);
+					if bond_less.into() == U256::zero() {
+						return Err(RevertReason::custom(
+							"Amount is larger or equal than current nomination",
+						)
+						.into());
+					}
+					let nominator_stake_pct = Perbill::from_rational(
+						bond_less,
+						candidate_state.voting_power.saturating_sub(amounts[idx]),
+					);
+					estimated_yearly_return.push(
+						((nominator_stake_pct * amount_due) * rounds_per_year.into())
+							.try_into()
+							.map_err(|_| revert("Amount is too large for provided balance type"))?,
+					);
+				} else {
+					return Err(RevertReason::custom("Nomination does not exist").into());
+				}
+			} else {
+				return Err(RevertReason::custom("Candidate does not exist").into());
+			}
+		}
 		Ok(estimated_yearly_return)
 	}
 
