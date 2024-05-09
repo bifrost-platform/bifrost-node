@@ -12,6 +12,30 @@ use bp_staking::TierType;
 use sp_core::{H160, U256};
 use sp_std::{vec, vec::Vec};
 
+#[derive(Clone, Copy)]
+/// The estimation method.
+pub enum EyrMethod {
+	/// Estimates the yearly return of a new nomination.
+	Nominate,
+	/// Estimates the yearly return of a bond more for existing nominations.
+	BondMore,
+	/// Estimates the yearly return of a bond less for existing nominations.
+	BondLess,
+}
+
+impl TryFrom<u32> for EyrMethod {
+	type Error = ();
+
+	fn try_from(value: u32) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(EyrMethod::Nominate),
+			1 => Ok(EyrMethod::BondMore),
+			2 => Ok(EyrMethod::BondLess),
+			_ => Err(()),
+		}
+	}
+}
+
 pub type BalanceOf<Runtime> = <<Runtime as pallet_bfc_staking::Config>::Currency as Currency<
 	<Runtime as frame_system::Config>::AccountId,
 >>::Balance;

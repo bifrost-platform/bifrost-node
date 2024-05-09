@@ -228,10 +228,11 @@ interface BfcStaking {
         uint256[] memory amounts
     ) external view returns (uint256[] memory);
 
-    /// @dev The estimated yearly return on bond less
-    /// Selector: f579bfe5
+    /// @dev The estimated yearly return
+    /// Selector:
     /// @return The estimated yearly return according to the requested data
-    function estimated_yearly_return_on_bond_less(
+    function get_estimated_yearly_return(
+        uint256 method,
         address nominator,
         address[] memory candidates,
         uint256[] memory amounts

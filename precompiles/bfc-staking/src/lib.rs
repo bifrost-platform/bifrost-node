@@ -17,7 +17,10 @@ use precompile_utils::prelude::*;
 use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
 use fp_evm::PrecompileHandle;
 use sp_core::{H160, U256};
-use sp_runtime::{traits::Dispatchable, Perbill, Saturating};
+use sp_runtime::{
+	traits::{Dispatchable, Zero},
+	Perbill, Saturating,
+};
 use sp_std::{
 	collections::btree_set::BTreeSet, convert::TryInto, marker::PhantomData, vec, vec::Vec,
 };
@@ -26,7 +29,7 @@ mod types;
 use types::{
 	BalanceOf, CandidateState, CandidateStates, EvmCandidatePoolOf, EvmCandidateStateOf,
 	EvmCandidateStatesOf, EvmNominatorRequestsOf, EvmNominatorStateOf, EvmRoundInfoOf, EvmTotalOf,
-	NominatorState, StakingOf, TotalStake,
+	EyrMethod, NominatorState, StakingOf, TotalStake,
 };
 
 /// A precompile to wrap the functionality from pallet_bfc_staking.
@@ -426,6 +429,77 @@ where
 	}
 
 	/// Returns the estimated yearly return for the given `nominator`
+	///
+	/// @param: `method` the estimation method.
+	/// 		`Nominate`: estimates the yearly return of a new nomination
+	/// 		`BondMore`: estimates the yearly return of a bond more for existing nominations
+	/// 		`BondLess`: estimates the yearly return of a bond less for existing nominations
+	///
+	/// @param: `nominator` the nominator address.
+	///			`Nominate`: the address will be ignored in this case
+	/// 		`BondMore` | `BondLess`: the address must exist as a nominator
+	///
+	/// @param: `candidates` the address vector.
+	///			`Nominate`: the address will be used as the newly nominated validator
+	/// 		`BondMore` | `BondLess`: a nomination for the candidate must exist from the `nominator`
+	///
+	/// @param: `amounts` the amount vector.
+	/// 		`Nominate`: the value will be used as the current nomination
+	/// 		`BondMore`: the value will be added to the current nomination and total stake
+	/// 		`BondLess`: the value will be subtracted to the current nomination and total stake
+	///
+	/// @return: The estimated yearly return according to the requested data
+	#[precompile::public("getEstimatedYearlyReturn(uint256,address,address[],uint256[])")]
+	#[precompile::public("get_estimated_yearly_return(uint256,address,address[],uint256[])")]
+	#[precompile::view]
+	fn get_estimated_yearly_return(
+		handle: &mut impl PrecompileHandle,
+		method: u32,
+		nominator: Address,
+		candidates: Vec<Address>,
+		amounts: Vec<U256>,
+	) -> EvmResult<Vec<u128>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let method: EyrMethod =
+			method.try_into().map_err(|_| RevertReason::read_out_of_bounds("method"))?;
+
+		let mut estimated_yearly_return: Vec<u128> = vec![];
+		let (nominator, candidates, amounts) =
+			Self::parse_eyr_inputs(nominator, candidates, amounts)?;
+
+		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
+
+		for (idx, candidate) in candidates.iter().enumerate() {
+			if let Some(candidate_state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
+				let nominator_stake_pct = Perbill::from_rational(
+					Self::get_eyr_nomination(method, &nominator, &candidate, amounts[idx])?,
+					match method {
+						EyrMethod::Nominate | EyrMethod::BondMore => {
+							candidate_state.voting_power.saturating_add(amounts[idx])
+						},
+						EyrMethod::BondLess => {
+							candidate_state.voting_power.saturating_sub(amounts[idx])
+						},
+					},
+				);
+				let amount_due =
+					Self::get_amount_due(method, amounts[idx], candidate_state.commission)?;
+				estimated_yearly_return.push(
+					(nominator_stake_pct * amount_due * rounds_per_year.into())
+						.try_into()
+						.map_err(|_| revert("Amount is too large for provided balance type"))?,
+				);
+			} else {
+				return Err(RevertReason::custom("Candidate does not exist").into());
+			}
+		}
+
+		Ok(estimated_yearly_return)
+	}
+
+	/// DEPRECATED. Use `get_estimated_yearly_return()` instead.
+	/// Returns the estimated yearly return for the given `nominator`
 	/// @param: `candidates` the address vector for which to estimate as the target validator
 	/// @param: `amounts` the amount vector for which to estimate as the current stake amount
 	/// @return: The estimated yearly return according to the requested data
@@ -438,48 +512,32 @@ where
 		amounts: Vec<U256>,
 	) -> EvmResult<Vec<u128>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let candidates = candidates
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
-		let amounts = Self::u256_array_to_amount_array(amounts)?;
-		if candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty candidates vector received").into());
-		}
-		if amounts.len() < 1 {
-			return Err(RevertReason::custom("Empty amounts vector received").into());
-		}
-		if candidates.len() != amounts.len() {
-			return Err(RevertReason::custom("Request vectors length does not match").into());
-		}
+
+		let (_, candidates, amounts) =
+			Self::parse_eyr_inputs(Default::default(), candidates, amounts)?;
 
 		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
 		if selected_candidates.len() < 1 {
 			return Err(RevertReason::custom("Empty selected candidates").into());
 		}
 
-		let total_stake = <StakingOf<Runtime>>::total();
-		let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
-		let validator_contribution_pct =
-			Perbill::from_percent(100 / (selected_candidates.len() as u32) + 1);
-		let total_reward_amount = validator_contribution_pct * round_issuance;
-
 		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
 
 		let mut estimated_yearly_return: Vec<u128> = vec![];
 		for (idx, candidate) in candidates.iter().enumerate() {
-			if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
-				let validator_issuance = state.commission * round_issuance;
-				let commission = validator_contribution_pct * validator_issuance;
-				let amount_due = total_reward_amount.saturating_sub(commission);
+			if let Some(candidate_state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
+				let amount_due = Self::get_amount_due(
+					EyrMethod::Nominate,
+					amounts[idx],
+					candidate_state.commission,
+				)?;
 
 				let nominator_stake_pct = Perbill::from_rational(
 					amounts[idx],
-					state.voting_power.saturating_add(amounts[idx]),
+					candidate_state.voting_power.saturating_add(amounts[idx]),
 				);
 				estimated_yearly_return.push(
-					((nominator_stake_pct * amount_due) * rounds_per_year.into())
+					(nominator_stake_pct * amount_due * rounds_per_year.into())
 						.try_into()
 						.map_err(|_| revert("Amount is too large for provided balance type"))?,
 				);
@@ -488,83 +546,6 @@ where
 			}
 		}
 
-		Ok(estimated_yearly_return)
-	}
-
-	#[precompile::public("estimatedYearlyReturnOnBondLess(address,address[],uint256[])")]
-	#[precompile::public("estimated_yearly_return_on_bond_less(address,address[],uint256[])")]
-	#[precompile::view]
-	fn estimated_yearly_return_on_bond_less(
-		handle: &mut impl PrecompileHandle,
-		nominator: Address,
-		candidates: Vec<Address>,
-		amounts: Vec<U256>,
-	) -> EvmResult<Vec<u128>> {
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
-		let candidates = candidates
-			.clone()
-			.into_iter()
-			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
-			.collect::<Vec<Runtime::AccountId>>();
-		let amounts = Self::u256_array_to_amount_array(amounts)?;
-		if candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty candidates vector received").into());
-		}
-		if amounts.len() < 1 {
-			return Err(RevertReason::custom("Empty amounts vector received").into());
-		}
-		if candidates.len() != amounts.len() {
-			return Err(RevertReason::custom("Request vectors length does not match").into());
-		}
-
-		let nominator_state = <StakingOf<Runtime>>::nominator_state(&nominator)
-			.ok_or(RevertReason::custom("Nominator does not exist"))?;
-
-		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
-		if selected_candidates.len() < 1 {
-			return Err(RevertReason::custom("Empty selected candidates").into());
-		}
-
-		let total_stake = <StakingOf<Runtime>>::total();
-		let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
-		let validator_contribution_pct =
-			Perbill::from_percent(100 / (selected_candidates.len() as u32) + 1);
-		let total_reward_amount = validator_contribution_pct * round_issuance;
-
-		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
-
-		let mut estimated_yearly_return: Vec<u128> = vec![];
-		for (idx, candidate) in candidates.iter().enumerate() {
-			if let Some(candidate_state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
-				let validator_issuance = candidate_state.commission * round_issuance;
-				let commission = validator_contribution_pct * validator_issuance;
-				let amount_due = total_reward_amount.saturating_sub(commission);
-
-				if let Some(nomination) = nominator_state.nominations.get(&candidate) {
-					let bond_less = nomination.saturating_sub(amounts[idx]);
-					if bond_less.into() == U256::zero() {
-						return Err(RevertReason::custom(
-							"Amount is larger or equal than current nomination",
-						)
-						.into());
-					}
-					let nominator_stake_pct = Perbill::from_rational(
-						bond_less,
-						candidate_state.voting_power.saturating_sub(amounts[idx]),
-					);
-					estimated_yearly_return.push(
-						((nominator_stake_pct * amount_due) * rounds_per_year.into())
-							.try_into()
-							.map_err(|_| revert("Amount is too large for provided balance type"))?,
-					);
-				} else {
-					return Err(RevertReason::custom("Nomination does not exist").into());
-				}
-			} else {
-				return Err(RevertReason::custom("Candidate does not exist").into());
-			}
-		}
 		Ok(estimated_yearly_return)
 	}
 
@@ -1412,6 +1393,68 @@ where
 
 	// Util methods
 
+	fn get_amount_due(
+		method: EyrMethod,
+		amount: BalanceOf<Runtime>,
+		commission_rate: Perbill,
+	) -> MayRevert<BalanceOf<Runtime>> {
+		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
+		if selected_candidates.len() < 1 {
+			return Err(RevertReason::custom("Empty selected candidates").into());
+		}
+		let validator_contribution_pct =
+			Perbill::from_percent(100 / (selected_candidates.len() as u32) + 1);
+
+		let total_stake = match method {
+			EyrMethod::Nominate | EyrMethod::BondMore => {
+				<StakingOf<Runtime>>::total().saturating_add(amount)
+			},
+			EyrMethod::BondLess => <StakingOf<Runtime>>::total().saturating_sub(amount),
+		};
+		let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
+		let total_reward_amount = validator_contribution_pct * round_issuance;
+		let validator_issuance = commission_rate * round_issuance;
+		let commission = validator_contribution_pct * validator_issuance;
+		Ok(total_reward_amount.saturating_sub(commission))
+	}
+
+	fn get_eyr_nomination(
+		method: EyrMethod,
+		nominator: &Runtime::AccountId,
+		candidate: &Runtime::AccountId,
+		amount: BalanceOf<Runtime>,
+	) -> MayRevert<BalanceOf<Runtime>> {
+		match method {
+			EyrMethod::Nominate => Ok(amount),
+			_ => {
+				let nominator_state = <StakingOf<Runtime>>::nominator_state(nominator)
+					.ok_or(RevertReason::custom("Nominator does not exist"))?;
+				let nomination = nominator_state
+					.nominations
+					.get(candidate)
+					.ok_or(RevertReason::custom("Nomination does not exist"))?;
+
+				Ok(match method {
+					EyrMethod::BondMore => {
+						let bond_more = nomination.saturating_add(amount);
+						bond_more
+					},
+					EyrMethod::BondLess => {
+						let bond_less = nomination.saturating_sub(amount);
+						if bond_less.is_zero() {
+							return Err(RevertReason::custom(
+								"Amount is larger or equal than current nomination",
+							)
+							.into());
+						}
+						bond_less
+					},
+					_ => *nomination,
+				})
+			},
+		}
+	}
+
 	fn get_unique_candidates(candidates: &Vec<Address>) -> EvmResult<BTreeSet<Runtime::AccountId>> {
 		let unique_candidates: BTreeSet<Runtime::AccountId> = candidates
 			.iter()
@@ -1474,5 +1517,35 @@ where
 		value
 			.try_into()
 			.map_err(|_| RevertReason::value_is_too_large("balance type").into())
+	}
+
+	fn parse_eyr_inputs(
+		nominator: Address,
+		candidates: Vec<Address>,
+		amounts: Vec<U256>,
+	) -> MayRevert<(Runtime::AccountId, Vec<Runtime::AccountId>, Vec<BalanceOf<Runtime>>)> {
+		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
+		let candidates = candidates
+			.clone()
+			.into_iter()
+			.map(|address| Runtime::AddressMapping::into_account_id(address.0))
+			.collect::<Vec<Runtime::AccountId>>();
+		let amounts = Self::u256_array_to_amount_array(amounts)?;
+		if candidates.len() < 1 {
+			return Err(RevertReason::custom("Empty candidates vector received").into());
+		}
+		if amounts.len() < 1 {
+			return Err(RevertReason::custom("Empty amounts vector received").into());
+		}
+		if candidates.len() != amounts.len() {
+			return Err(RevertReason::custom("Request vectors length does not match").into());
+		}
+
+		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
+		if selected_candidates.len() < 1 {
+			return Err(RevertReason::custom("Empty selected candidates").into());
+		}
+
+		Ok((nominator, candidates, amounts))
 	}
 }
