@@ -11,10 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{
-	traits::{MultiSigManager, PoolManager},
-	UnboundedBytes,
-};
+use bp_multi_sig::{traits::PoolManager, UnboundedBytes};
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::vec::Vec;
@@ -46,7 +43,7 @@ pub mod pallet {
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
-		type RegistrationPool: MultiSigManager + PoolManager<Self::AccountId>;
+		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -298,20 +295,23 @@ pub mod pallet {
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
 			// if finalizable (quorum reached m), then accept the request
-			if T::RegistrationPool::is_finalizable(pending_request.signed_psbts.len() as u8) {
-				let finalized_psbt_obj = Self::try_psbt_finalization(combined_psbt_obj)?;
-				pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
+			match Self::try_psbt_finalization(combined_psbt_obj) {
+				Ok(finalized_psbt_obj) => {
+					pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
 
-				// move pending to finalized
-				<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
-				<FinalizedRequests<T>>::insert(&txid, pending_request);
-				<PendingRequests<T>>::remove(&txid);
+					// move pending to finalized
+					<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
+					<FinalizedRequests<T>>::insert(&txid, pending_request);
+					<PendingRequests<T>>::remove(&txid);
 
-				Self::deposit_event(Event::RequestFinalized { txid });
-			} else {
-				// if not, remain as pending
-				<PendingRequests<T>>::insert(&txid, pending_request);
-				Self::deposit_event(Event::SignedPsbtSubmitted { txid, authority_id });
+					Self::deposit_event(Event::SignedPsbtSubmitted { txid, authority_id });
+					Self::deposit_event(Event::RequestFinalized { txid });
+				},
+				Err(_) => {
+					// if not, remain as pending
+					<PendingRequests<T>>::insert(&txid, pending_request);
+					Self::deposit_event(Event::SignedPsbtSubmitted { txid, authority_id });
+				},
 			}
 
 			Ok(().into())

@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod migrations;
 mod pallet;
 pub mod weights;
 
@@ -14,6 +15,19 @@ use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
 pub const ADDRESS_U64: u64 = 256;
 
+pub(crate) const LOG_TARGET: &'static str = "runtime::btc-registration-pool";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
+
 #[derive(Decode, Encode, TypeInfo)]
 /// The registered Bitcoin relay target information.
 pub struct BitcoinRelayTarget<AccountId> {
@@ -24,11 +38,8 @@ pub struct BitcoinRelayTarget<AccountId> {
 }
 
 impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
-	pub fn new<T: Config>(refund_address: BoundedBitcoinAddress) -> Self {
-		Self {
-			refund_address,
-			vault: MultiSigAccount::new(<RequiredM<T>>::get(), <RequiredN<T>>::get()),
-		}
+	pub fn new<T: Config>(refund_address: BoundedBitcoinAddress, m: u32, n: u32) -> Self {
+		Self { refund_address, vault: MultiSigAccount::new(m, n) }
 	}
 
 	pub fn set_vault_address(&mut self, address: BoundedBitcoinAddress) {
