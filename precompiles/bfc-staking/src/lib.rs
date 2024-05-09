@@ -471,28 +471,26 @@ where
 		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
 
 		for (idx, candidate) in candidates.iter().enumerate() {
-			if let Some(candidate_state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
-				let nominator_stake_pct = Perbill::from_rational(
-					Self::get_eyr_nomination(method, &nominator, &candidate, amounts[idx])?,
-					match method {
-						EyrMethod::Nominate | EyrMethod::BondMore => {
-							candidate_state.voting_power.saturating_add(amounts[idx])
-						},
-						EyrMethod::BondLess => {
-							candidate_state.voting_power.saturating_sub(amounts[idx])
-						},
+			let candidate_state = <StakingOf<Runtime>>::candidate_info(&candidate)
+				.ok_or(RevertReason::custom("Candidate does not exist").into())?;
+			let nominator_stake_pct = Perbill::from_rational(
+				Self::get_eyr_nomination(method, &nominator, &candidate, amounts[idx])?,
+				match method {
+					EyrMethod::Nominate | EyrMethod::BondMore => {
+						candidate_state.voting_power.saturating_add(amounts[idx])
 					},
-				);
-				let amount_due =
-					Self::get_amount_due(method, amounts[idx], candidate_state.commission)?;
-				estimated_yearly_return.push(
-					(nominator_stake_pct * amount_due * rounds_per_year.into())
-						.try_into()
-						.map_err(|_| revert("Amount is too large for provided balance type"))?,
-				);
-			} else {
-				return Err(RevertReason::custom("Candidate does not exist").into());
-			}
+					EyrMethod::BondLess => {
+						candidate_state.voting_power.saturating_sub(amounts[idx])
+					},
+				},
+			);
+			let amount_due =
+				Self::get_amount_due(method, amounts[idx], candidate_state.commission)?;
+			estimated_yearly_return.push(
+				(nominator_stake_pct * amount_due * rounds_per_year.into())
+					.try_into()
+					.map_err(|_| revert("Amount is too large for provided balance type"))?,
+			);
 		}
 
 		Ok(estimated_yearly_return)
