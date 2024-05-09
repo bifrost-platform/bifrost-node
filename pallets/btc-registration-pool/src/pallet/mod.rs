@@ -1,13 +1,13 @@
 mod impls;
 
 use crate::{
-	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, VaultKeySubmission,
-	WeightInfo, ADDRESS_U64,
+	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, VaultKeySubmission, WeightInfo,
+	ADDRESS_U64,
 };
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, SortedMembers, StorageVersion},
+	traits::{SortedMembers, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -144,13 +144,6 @@ pub mod pallet {
 	#[pallet::getter(fn required_n)]
 	/// The minimum required number of signatures to send a transaction with the vault account.
 	pub type MultiSigRatio<T: Config> = StorageValue<_, Percent, ValueQuery>;
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade() -> Weight {
-			migrations::v2::MigrateToV2::<T>::on_runtime_upgrade()
-		}
-	}
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]

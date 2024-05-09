@@ -9,6 +9,7 @@ pub mod v2 {
 	};
 	use sp_core::Get;
 	use sp_runtime::Percent;
+	use sp_std::vec;
 
 	use super::*;
 
