@@ -472,7 +472,7 @@ where
 
 		for (idx, candidate) in candidates.iter().enumerate() {
 			let candidate_state = <StakingOf<Runtime>>::candidate_info(&candidate)
-				.ok_or(RevertReason::custom("Candidate does not exist").into())?;
+				.ok_or(RevertReason::custom("Candidate does not exist"))?;
 			let nominator_stake_pct = Perbill::from_rational(
 				Self::get_eyr_nomination(method, &nominator, &candidate, amounts[idx])?,
 				match method {
