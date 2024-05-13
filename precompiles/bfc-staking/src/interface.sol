@@ -229,7 +229,7 @@ interface BfcStaking {
     ) external view returns (uint256[] memory);
 
     /// @dev The estimated yearly return
-    /// Selector:
+    /// Selector: 062e4041
     /// @return The estimated yearly return according to the requested data
     function get_estimated_yearly_return(
         uint256 method,
