@@ -21,7 +21,7 @@ describeDevNode('precompile_balances - precompile view functions', (context) => 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'total_issuance',
-      [],
+      '',
     );
     const decoded_total_issuance = context.web3.eth.abi.decodeParameters(
       ['uint256'],

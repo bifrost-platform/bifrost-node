@@ -38,7 +38,7 @@ describeDevNode('precompile_governance - precompile actions', (context) => {
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'public_prop_count',
-      [],
+      '',
     );
     const decoded_public_prop_count = context.web3.eth.abi.decodeParameters(
       ['uint256'],
