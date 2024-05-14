@@ -22,7 +22,7 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'maximum_offence_count',
-      ['0x0'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x0'),
     );
     const decoded_maximum_offence_count: any = context.web3.eth.abi.decodeParameters(
       ['uint256[]'],
@@ -37,7 +37,7 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'validator_offence',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_validator_offence: any = context.web3.eth.abi.decodeParameters(
       ['tuple(address,uint256,uint256,uint256)'],
@@ -51,9 +51,7 @@ describeDevNode('precompile_bfc_offences - precompile view functions', (context)
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'validator_offences',
-      [
-        context.web3.eth.abi.encodeParameter('address[]', [alith.public])
-      ],
+      context.web3.eth.abi.encodeParameter('address[]', [alith.public]),
     );
     const decoded_validator_offences: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'uint256[]', 'uint256[]', 'uint256[]'],

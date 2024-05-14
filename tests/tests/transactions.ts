@@ -49,7 +49,7 @@ export async function callPrecompile(
   precompileContractAddress: string,
   selectors: { [key: string]: string },
   selector: string,
-  parameters: string[]
+  inputs: string
 ) {
   let data: string;
   if (selectors[selector]) {
@@ -57,9 +57,7 @@ export async function callPrecompile(
   } else {
     throw new Error(`selector doesn't exist on the precompile contract`);
   }
-  parameters.forEach((para: string) => {
-    data += para.slice(2).padStart(64, '0');
-  });
+  data += inputs.slice(2);
 
   return await customWeb3Request(context.web3, 'eth_call', [
     {

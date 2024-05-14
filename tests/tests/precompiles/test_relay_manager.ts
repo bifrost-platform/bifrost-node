@@ -41,7 +41,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_relayer',
-      [alithRelayer.public],
+      context.web3.eth.abi.encodeParameter('address', alithRelayer.public),
     );
     const decoded_is_relayer = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -55,7 +55,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_selected_relayer',
-      [alithRelayer.public, '0x1'],
+      context.web3.eth.abi.encodeParameters(['address', 'bool'], [alithRelayer.public, true]),
     );
     const decoded_is_selected_relayer = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -69,9 +69,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_relayers',
-      [
-        context.web3.eth.abi.encodeParameter('address[]', [alithRelayer.public]),
-      ],
+      context.web3.eth.abi.encodeParameter('address[]', [alithRelayer.public]),
     );
     const decoded_is_relayers = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -85,10 +83,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_selected_relayers',
-      [
-        context.web3.eth.abi.encodeParameter('address[]', [alithRelayer.public]),
-        '0x1',
-      ],
+      context.web3.eth.abi.encodeParameters(['address[]', 'bool'], [[alithRelayer.public], true]),
     );
     const decoded_is_selected_relayers = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -102,10 +97,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_complete_selected_relayers',
-      [
-        context.web3.eth.abi.encodeParameter('address[]', [alithRelayer.public]),
-        '0x1',
-      ],
+      context.web3.eth.abi.encodeParameters(['address[]', 'bool'], [[alithRelayer.public], true]),
     );
     const decoded_is_complete_selected_relayers = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -119,11 +111,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_previous_selected_relayer',
-      [
-        '0x1',
-        alithRelayer.public,
-        '0x1',
-      ],
+      context.web3.eth.abi.encodeParameters(['uint256', 'address', 'bool'], ['0x1', alithRelayer.public, true]),
     );
     const decoded_is_previous_selected_relayer = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -139,7 +127,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'selected_relayers',
-      ['0x1'],
+      context.web3.eth.abi.encodeParameter('bool', true),
     );
     const decoded_selected_relayers: any = context.web3.eth.abi.decodeParameters(
       ['address[]'],
@@ -154,7 +142,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'previous_selected_relayers',
-      ['0x1', '0x1'],
+      context.web3.eth.abi.encodeParameters(['uint256', 'bool'], ['0x1', true]),
     );
     const decoded_previous_selected_relayers: any = context.web3.eth.abi.decodeParameters(
       ['address[]'],
@@ -169,7 +157,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'relayer_pool',
-      [],
+      '',
     );
     const decoded_relayer_pool: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'address[]'],
@@ -183,7 +171,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'majority',
-      ['0x1'],
+      context.web3.eth.abi.encodeParameter('bool', true),
     );
     const decoded_majority = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -197,7 +185,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'previous_majority',
-      ['0x1', '0x1'],
+      context.web3.eth.abi.encodeParameters(['uint256', 'bool'], ['0x1', true]),
     );
     const decoded_previous_majority = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -211,7 +199,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'relayer_state',
-      [alithRelayer.public],
+      context.web3.eth.abi.encodeParameter('address', alithRelayer.public),
     );
     const decoded_relayer_state: any = context.web3.eth.abi.decodeParameters(
       ['tuple(address,address,uint256)'],
@@ -225,7 +213,7 @@ describeDevNode('precompile_relay_manager - precompile view functions', (context
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'relayer_states',
-      [],
+      '',
     );
     const decoded_relayer_states: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'address[]', 'uint256[]'],

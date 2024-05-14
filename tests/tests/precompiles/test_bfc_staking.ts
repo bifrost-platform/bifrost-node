@@ -2,7 +2,9 @@ import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 import { numberToHex } from 'web3-utils';
 
-import { MIN_FULL_CANDIDATE_STAKING_AMOUNT } from '../../constants/currency';
+import {
+  MIN_FULL_CANDIDATE_STAKING_AMOUNT, MIN_NOMINATOR_STAKING_AMOUNT
+} from '../../constants/currency';
 import {
   TEST_CONTROLLERS, TEST_RELAYERS, TEST_STASHES
 } from '../../constants/keys';
@@ -32,6 +34,7 @@ const SELECTORS = {
   inflation_config: '10db2de9',
   inflation_rate: '180692d0',
   estimated_yearly_return: 'fd0c6dc1',
+  get_estimated_yearly_return: '062e4041',
   min_nomination: 'c9f593b2',
   max_nominations_per_nominator: '8b88f0e1',
   max_nominations_per_candidate: '547eaba9',
@@ -90,7 +93,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_candidate',
-      [alith.public, '0x0'],
+      context.web3.eth.abi.encodeParameters(['address', 'uint256'], [alith.public, '0x0']),
     );
     const decoded_is_candidate = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -104,7 +107,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_selected_candidate',
-      [alith.public, '0x0'],
+      context.web3.eth.abi.encodeParameters(['address', 'uint256'], [alith.public, '0x0']),
     );
     const decoded_is_selected_candidate = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -118,7 +121,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'is_previous_selected_candidate',
-      ['0x1', alith.public],
+      context.web3.eth.abi.encodeParameters(['uint256', 'address'], ['0x1', alith.public]),
     );
     const decoded_is_previous_selected_candidate = context.web3.eth.abi.decodeParameters(
       ['bool'],
@@ -134,7 +137,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'round_info',
-      [],
+      '',
     );
     const decoded_round_info: any = context.web3.eth.abi.decodeParameters(
       ['tuple(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)'],
@@ -148,7 +151,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'latest_round',
-      [],
+      '',
     );
     const decoded_latest_round = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -162,7 +165,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'majority',
-      [],
+      '',
     );
     const decoded_majority = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -176,7 +179,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'previous_majority',
-      ['0x1'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x1'),
     );
     const decoded_previous_majority = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -191,7 +194,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'points',
-      ['0x1'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x1'),
     );
     const decoded_points = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -205,7 +208,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'validator_points',
-      ['0x1', alith.public],
+      context.web3.eth.abi.encodeParameters(['uint256', 'address'], ['0x1', alith.public]),
     );
     const decoded_validator_points = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -220,7 +223,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'rewards',
-      [],
+      '',
     );
     const decoded_rewards = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -234,7 +237,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'total',
-      ['0x2'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x2'),
     );
     const decoded_total: any = context.web3.eth.abi.decodeParameters(
       [
@@ -250,7 +253,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'inflation_config',
-      [],
+      '',
     );
     const decoded_inflation_config = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256', 'uint256'],
@@ -267,7 +270,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'inflation_rate',
-      [],
+      '',
     );
     const decoded_inflation_rate = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -281,7 +284,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'min_nomination',
-      [],
+      '',
     );
     const decoded_min_nomination = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -295,7 +298,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'max_nominations_per_nominator',
-      [],
+      '',
     );
     const decoded_max_nominations_per_nominator = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -309,7 +312,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'max_nominations_per_candidate',
-      [],
+      '',
     );
     const decoded_max_nominations_per_candidate = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256'],
@@ -325,7 +328,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_bond_less_delay',
-      [],
+      '',
     );
     const decoded_candidate_bond_less_delay = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256'],
@@ -341,7 +344,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'nominator_bond_less_delay',
-      [],
+      '',
     );
     const decoded_nominator_bond_less_delay = context.web3.eth.abi.decodeParameters(
       ['uint256', 'uint256', 'uint256'],
@@ -360,7 +363,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_count',
-      [],
+      '',
     );
     const decoded_candidate_count = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -374,7 +377,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'selected_candidates',
-      ['0x0'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x0'),
     );
     const decoded_selected_candidates: any = context.web3.eth.abi.decodeParameters(
       ['address[]'],
@@ -389,7 +392,8 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'previous_selected_candidates',
-      ['0x2'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x2'),
+
     );
     const decoded_previous_selected_candidates: any = context.web3.eth.abi.decodeParameters(
       ['address[]'],
@@ -404,7 +408,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_pool',
-      [],
+      '',
     );
     const decoded_candidate_pool: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'uint256[]'],
@@ -420,7 +424,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_state',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_candidate_state: any = context.web3.eth.abi.decodeParameters(
       [
@@ -436,7 +440,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_states',
-      ['0x0'],
+      context.web3.eth.abi.encodeParameter('uint256', '0x0'),
     );
     const decoded_candidate_states: any = context.web3.eth.abi.decodeParameters(
       [
@@ -471,7 +475,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_states_by_selection',
-      ['0x0', '0x1'],
+      context.web3.eth.abi.encodeParameters(['uint256', 'bool'], ['0x0', true]),
     );
     const decoded_candidate_states_by_selection: any = context.web3.eth.abi.decodeParameters(
       [
@@ -506,7 +510,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_request',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_candidate_request: any = context.web3.eth.abi.decodeParameters(
       [
@@ -522,7 +526,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_top_nominations',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_candidate_top_nominations = context.web3.eth.abi.decodeParameters(
       [
@@ -541,7 +545,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_bottom_nominations',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_candidate_bottom_nominations = context.web3.eth.abi.decodeParameters(
       [
@@ -560,7 +564,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_nomination_count',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_candidate_nomination_count = context.web3.eth.abi.decodeParameters(
       [
@@ -578,7 +582,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'nominator_state',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_nominator_state = context.web3.eth.abi.decodeParameters(
       [
@@ -604,7 +608,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'nominator_requests',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_nominator_requests = context.web3.eth.abi.decodeParameters(
       [
@@ -626,7 +630,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'nominator_nomination_count',
-      [alith.public],
+      context.web3.eth.abi.encodeParameter('address', alith.public),
     );
     const decoded_nominator_nomination_count = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -642,6 +646,8 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
   const baltathar: { public: string, private: string } = TEST_CONTROLLERS[1];
   const baltatharStash: { public: string, private: string } = TEST_STASHES[1];
   const baltatharRelayer: { public: string, private: string } = TEST_RELAYERS[1];
+
+  const charleth: { public: string, private: string } = TEST_CONTROLLERS[2];
 
   it('should successfully execute `join_candidates()`', async function () {
     const stake = new BigNumber(MIN_FULL_CANDIDATE_STAKING_AMOUNT);
@@ -665,7 +671,7 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_pool',
-      [],
+      '',
     );
     const decoded_candidate_pool: any = context.web3.eth.abi.decodeParameters(
       ['address[]', 'uint256[]'],
@@ -698,7 +704,7 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'candidate_state',
-      [baltathar.public],
+      context.web3.eth.abi.encodeParameter('address', baltathar.public),
     );
     const decoded_candidate_state: any = context.web3.eth.abi.decodeParameters(
       [
@@ -707,6 +713,51 @@ describeDevNode('precompile_bfc_staking - precompile dispatch functions', (conte
       candidate_state,
     )[0];
     expect(new BigNumber(decoded_candidate_state[2]).toFixed()).equal(new BigNumber(more).multipliedBy(2).toFixed());
+  });
+
+  it('should successfully execute `nominate()`', async function () {
+    const nomination = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+
+    const block = await sendPrecompileTx(
+      context,
+      PRECOMPILE_ADDRESS,
+      SELECTORS,
+      charleth.public,
+      charleth.private,
+      'nominate',
+      [alith.public, numberToHex(nomination.toFixed()), numberToHex(1000), numberToHex(1000)],
+    );
+
+    const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0]);
+    expect(Boolean(receipt.status)).equal(true);
+  });
+
+  it('should successfully verify estimated yearly return', async function () {
+    const nomination = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT);
+
+    const estimated_yearly_return = await callPrecompile(
+      context,
+      charleth.public,
+      PRECOMPILE_ADDRESS,
+      SELECTORS,
+      'get_estimated_yearly_return',
+      context.web3.eth.abi.encodeParameters(
+        ['uint256', 'address', 'address[]', 'uint256[]'],
+        [
+          numberToHex(1),
+          charleth.public,
+          [alith.public],
+          [numberToHex(nomination.toFixed())],
+        ],
+      ),
+    );
+    const decoded_estimated_yearly_return = context.web3.eth.abi.decodeParameters(
+      [
+        'uint256[]',
+      ],
+      estimated_yearly_return,
+    )[0];
+    expect(Number(decoded_estimated_yearly_return)).gte(1);
   });
 });
 
