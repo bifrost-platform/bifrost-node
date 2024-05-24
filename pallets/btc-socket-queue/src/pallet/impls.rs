@@ -14,8 +14,8 @@ use scale_info::prelude::string::String;
 use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
 
 use crate::{
-	RequestInfo, SocketMessage, UncheckedOutput, UserRequest, CALL_FUNCTION_SELECTOR,
-	CALL_GAS_LIMIT,
+	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UncheckedOutput, UserRequest,
+	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 
 use super::pallet::*;
@@ -56,6 +56,20 @@ where
 		Ok(Psbt::deserialize(psbt).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
+	pub fn convert_to_address_from_script(script: &Script) -> Result<Address, DispatchError> {
+		Ok(Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
+	}
+
+	pub fn convert_to_address_from_vec(
+		addr: BoundedBitcoinAddress,
+	) -> Result<Address, DispatchError> {
+		let addr = str::from_utf8(&addr).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+		Ok(Address::from_str(addr)
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?
+			.assume_checked())
+	}
+
 	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
 	pub fn try_psbt_output_verification(
 		psbt: &Psbt,
@@ -71,13 +85,8 @@ where
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 
-		let convert_to_address = |script: &Script| {
-			Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
-		};
-
 		for i in 0..origin.len() {
-			let to = convert_to_address(origin[i].script_pubkey.as_script())
-				.map_err(|_| Error::<T>::InvalidPsbt)?;
+			let to = Self::convert_to_address_from_script(origin[i].script_pubkey.as_script())?;
 			if to != unchecked[i].to {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
@@ -110,12 +119,6 @@ where
 			return Err(Error::<T>::InvalidSystemVout.into());
 		}
 		let mut outputs = vec![];
-
-		let convert_to_address = |addr: BoundedBitcoinAddress| {
-			// we assume all the registered addresses are valid and checked.
-			let addr = str::from_utf8(&addr).expect("Must be valid");
-			Address::from_str(addr).expect("Must be valid").assume_checked()
-		};
 
 		let mut msgs = vec![];
 		let mut msg_hashes = vec![];
@@ -151,7 +154,10 @@ where
 			// the user must exist in the pool
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
 				.ok_or(Error::<T>::UserDNE)?;
-			outputs.push(UncheckedOutput { to: convert_to_address(to), amount: msg.params.amount });
+			outputs.push(UncheckedOutput {
+				to: Self::convert_to_address_from_vec(to)?,
+				amount: msg.params.amount,
+			});
 
 			msgs.push(msg);
 			msg_hashes.push(msg_hash);
@@ -159,7 +165,10 @@ where
 		// we assume the utxo repayment output would be placed at `system_vout`
 		outputs.insert(
 			system_vout,
-			UncheckedOutput { to: convert_to_address(system_vault), amount: Default::default() },
+			UncheckedOutput {
+				to: Self::convert_to_address_from_vec(system_vault)?,
+				amount: Default::default(),
+			},
 		);
 		Ok((outputs, msgs))
 	}
@@ -181,7 +190,7 @@ where
 		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
 		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
 
-		let mut calldata: String = CALL_FUNCTION_SELECTOR.to_owned(); // get_request()
+		let mut calldata: String = SOCKET_GET_REQUEST_FUNCTION_SELECTOR.to_owned(); // get_request()
 		calldata.push_str(&array_bytes::bytes2hex("", req_id));
 
 		let info = <T as pallet_evm::Config>::Runner::call(
@@ -204,6 +213,58 @@ where
 
 		Ok(Self::try_decode_request_info(&info.value)
 			.map_err(|_| Error::<T>::InvalidRequestInfo)?)
+	}
+
+	pub fn get_hash_key(txid: H256, vout: u32, who: T::AccountId, amount: U256) -> H256 {
+		let hash_key_req = HashKeyRequest::new(txid.0.to_vec(), vout.into(), who.into(), amount);
+		Self::hash_bytes(&hash_key_req.encode())
+	}
+
+	pub fn try_get_tx_info(hash_key: H256) -> Result<TxInfo, DispatchError> {
+		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
+		let socket = <BitcoinSocket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
+
+		let mut calldata: String = BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR.to_owned();
+		calldata.push_str(&array_bytes::bytes2hex("", hash_key.as_bytes()));
+
+		let info = <T as pallet_evm::Config>::Runner::call(
+			caller.into(),
+			socket.into(),
+			hex::decode(&calldata).map_err(|_| Error::<T>::InvalidCalldata)?,
+			U256::zero(),
+			CALL_GAS_LIMIT,
+			None,
+			None,
+			None,
+			vec![],
+			false,
+			true,
+			None,
+			None,
+			<T as pallet_evm::Config>::config(),
+		)
+		.map_err(|_| Error::<T>::RequestDNE)?;
+
+		Ok(Self::try_decode_tx_info(&info.value).map_err(|_| Error::<T>::InvalidTxInfo)?)
+	}
+
+	pub fn try_decode_tx_info(info: &UnboundedBytes) -> Result<TxInfo, ()> {
+		match ethabi_decode::decode(
+			&[
+				ParamKind::Address,
+				ParamKind::Uint(256),
+				ParamKind::Uint(256),
+				ParamKind::Tuple(vec![
+					Box::new(ParamKind::FixedBytes(4)),
+					Box::new(ParamKind::Uint(64)),
+					Box::new(ParamKind::Uint(128)),
+				]),
+			],
+			info,
+		) {
+			Ok(token) => Ok(token.clone().try_into()?),
+			Err(_) => return Err(()),
+		}
 	}
 
 	/// Try to decode the given `RequestInfo`.

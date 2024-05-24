@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	ExecutedPsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
-	WeightInfo,
+	ExecutedPsbtMessage, PsbtRequest, RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage,
+	SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -11,10 +11,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{traits::PoolManager, UnboundedBytes};
+use bp_multi_sig::{traits::PoolManager, Amount, UnboundedBytes};
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::vec::Vec;
+use sp_std::{str, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -78,6 +78,9 @@ pub mod pallet {
 		InvalidSocketMessage,
 		/// The request information is invalid.
 		InvalidRequestInfo,
+		InvalidTxInfo,
+		/// The given bitcoin address is invalid.
+		InvalidBitcoinAddress,
 		/// The submitted system vout is invalid.
 		InvalidSystemVout,
 		/// Cannot finalize the PSBT.
@@ -102,13 +105,18 @@ pub mod pallet {
 		/// An authority has been set.
 		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
-		SocketSet { new: T::AccountId },
+		SocketSet { new: T::AccountId, is_bitcoin: bool },
 	}
 
 	#[pallet::storage]
 	#[pallet::getter(fn socket_contract)]
 	/// The Socket contract address.
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn bitcoin_socket_contract)]
+	/// The BitcoinSocket contract address.
+	pub type BitcoinSocket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn authority)]
@@ -149,6 +157,12 @@ pub mod pallet {
 	/// value: The PSBT information.
 	pub type ExecutedRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, PsbtRequest<T::AccountId>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn rollback_requests)]
+	pub type RollbackRequests<T: Config> =
+		StorageMap<_, Twox64Concat, H256, RollbackRequest<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -203,15 +217,28 @@ pub mod pallet {
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_socket())]
 		/// Set the authority address.
-		pub fn set_socket(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
+		pub fn set_socket(
+			origin: OriginFor<T>,
+			new: T::AccountId,
+			is_bitcoin: bool,
+		) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			if let Some(old) = <Socket<T>>::get() {
-				ensure!(old != new, Error::<T>::NoWritingSameValue);
-			}
+			if is_bitcoin {
+				if let Some(old) = <BitcoinSocket<T>>::get() {
+					ensure!(old != new, Error::<T>::NoWritingSameValue);
+				}
 
-			<Socket<T>>::put(new.clone());
-			Self::deposit_event(Event::SocketSet { new });
+				<BitcoinSocket<T>>::put(new.clone());
+				Self::deposit_event(Event::SocketSet { new, is_bitcoin });
+			} else {
+				if let Some(old) = <Socket<T>>::get() {
+					ensure!(old != new, Error::<T>::NoWritingSameValue);
+				}
+
+				<Socket<T>>::put(new.clone());
+				Self::deposit_event(Event::SocketSet { new, is_bitcoin });
+			}
 
 			Ok(().into())
 		}
@@ -333,6 +360,59 @@ pub mod pallet {
 			<FinalizedRequests<T>>::remove(&txid);
 			<ExecutedRequests<T>>::insert(&txid, request);
 			Self::deposit_event(Event::RequestExecuted { txid });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_rollback_request())]
+		/// Submit a rollback PSBT request.
+		pub fn submit_rollback_request(
+			origin: OriginFor<T>,
+			msg: RollbackPsbtMessage<T::AccountId>,
+			psbt: UnboundedBytes,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			let RollbackPsbtMessage { who, txid, vout, amount } = msg;
+
+			// verify if psbt bytes are valid
+			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
+			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			ensure!(
+				!<RollbackRequests<T>>::contains_key(&psbt_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+
+			// user information must exist
+			let vault = T::RegistrationPool::get_vault_address(&who).ok_or(Error::<T>::UserDNE)?;
+			let refund =
+				T::RegistrationPool::get_refund_address(&who).ok_or(Error::<T>::UserDNE)?;
+
+			// the request must not exist on-chain
+			let hash_key = Self::get_hash_key(txid, vout, who.clone(), amount);
+			let tx_info = Self::try_get_tx_info(hash_key)?;
+			ensure!(tx_info.to.is_zero(), Error::<T>::RequestAlreadyExists);
+
+			// the psbt must contain only one output
+			let outputs = &psbt_obj.unsigned_tx.output;
+			ensure!(outputs.len() == 1, Error::<T>::InvalidPsbt);
+
+			// the output must be to the user's refund address
+			let to = Self::convert_to_address_from_script(outputs[0].script_pubkey.as_script())?;
+			ensure!(to == Self::convert_to_address_from_vec(refund)?, Error::<T>::InvalidPsbt);
+
+			// the output amount must be less than the origin amount (output.amount = origin amount - network fee)
+			ensure!(
+				Amount::from_sat(amount.as_u64()).checked_sub(outputs[0].value).is_some(),
+				Error::<T>::InvalidPsbt
+			);
+
+			<RollbackRequests<T>>::insert(
+				&psbt_txid,
+				RollbackRequest::new(psbt, who, txid, vout, vault, amount),
+			);
 
 			Ok(().into())
 		}

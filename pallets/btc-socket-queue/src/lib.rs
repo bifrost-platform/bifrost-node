@@ -10,7 +10,7 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use bp_multi_sig::{Address, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_multi_sig::{Address, BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
@@ -19,7 +19,43 @@ use sp_std::{vec, vec::Vec};
 const CALL_GAS_LIMIT: u64 = 1_000_000;
 
 /// The function selector of `Socket::get_request()`.
-const CALL_FUNCTION_SELECTOR: &str = "8dac2204";
+const SOCKET_GET_REQUEST_FUNCTION_SELECTOR: &str = "8dac2204";
+
+const BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR: &str = "986ba392";
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct RollbackRequest<AccountId> {
+	/// The origin unsigned PSBT (in bytes).
+	pub unsigned_psbt: UnboundedBytes,
+	/// The registered user's Bifrost address.
+	pub who: AccountId,
+	/// The hash of the transaction that contains the output (that should be rollbacked. to: `vault`)
+	pub txid: H256,
+	/// The output index of the transaction.
+	pub vout: u32,
+	/// The to address of the output. (= `vault`)
+	pub to: BoundedBitcoinAddress,
+	/// The amount of the output.
+	pub amount: U256,
+	/// The current votes submitted by relayers.
+	pub vote_count: u32,
+	/// The current approval of the request.
+	/// It'll only be approved when two-thirds of relayers voted for the request.
+	pub is_approved: bool,
+}
+
+impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
+	pub fn new(
+		unsigned_psbt: UnboundedBytes,
+		who: AccountId,
+		txid: H256,
+		vout: u32,
+		to: BoundedBitcoinAddress,
+		amount: U256,
+	) -> Self {
+		Self { unsigned_psbt, who, txid, vout, to, amount, vote_count: 0u32, is_approved: false }
+	}
+}
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The submitted PSBT information for outbound request(s).
@@ -106,6 +142,14 @@ pub struct ExecutedPsbtMessage<AccountId> {
 	pub authority_id: AccountId,
 	/// The executed PSBT's txid.
 	pub txid: H256,
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct RollbackPsbtMessage<AccountId> {
+	pub who: AccountId,
+	pub txid: H256,
+	pub vout: u32,
+	pub amount: U256,
 }
 
 /// The `SocketMessage`'s request ID.
@@ -220,6 +264,56 @@ impl UserRequest {
 				Token::Bytes(self.params.variants.clone()),
 			]),
 		])])
+	}
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct HashKeyRequest {
+	pub tx_hash: UnboundedBytes,
+	pub index: U256,
+	pub to: H160,
+	pub amount: U256,
+}
+
+impl HashKeyRequest {
+	pub fn new(tx_hash: UnboundedBytes, index: U256, to: H160, amount: U256) -> Self {
+		Self { tx_hash, index, to, amount }
+	}
+
+	pub fn encode(&self) -> UnboundedBytes {
+		ethabi_decode::encode(&vec![
+			Token::FixedBytes(self.tx_hash.clone()),
+			Token::Uint(self.index),
+			Token::Address(self.to),
+			Token::Uint(self.amount),
+		])
+	}
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct TxInfo {
+	pub to: H160,
+	pub amount: U256,
+	pub vote_count: U256,
+	pub request_id: RequestID,
+}
+
+impl TryFrom<Vec<Token>> for TxInfo {
+	type Error = ();
+
+	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
+		if token.len() < 3 {
+			return Err(());
+		}
+
+		let to = token[0].clone().to_address().ok_or(())?;
+		let amount = token[1].clone().to_uint().ok_or(())?;
+		let vote_count = token[2].clone().to_uint().ok_or(())?;
+		let request_id = match &token[0] {
+			Token::Tuple(token) => token.clone().try_into()?,
+			_ => return Err(()),
+		};
+		return Ok(TxInfo { to, amount, vote_count, request_id });
 	}
 }
 

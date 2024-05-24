@@ -14,6 +14,7 @@ pub trait WeightInfo {
 	fn submit_unsigned_psbt() -> Weight;
 	fn submit_signed_psbt() -> Weight;
 	fn submit_executed_request() -> Weight;
+	fn submit_rollback_request() -> Weight;
 }
 
 /// Weights for `pallet_btc_socket_queue` using the Substrate node and recommended hardware.
@@ -44,6 +45,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(6 as u64))
 			.saturating_add(T::DbWeight::get().writes(4 as u64))
 	}
+	fn submit_rollback_request() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(T::DbWeight::get().reads(6 as u64))
+			.saturating_add(T::DbWeight::get().writes(4 as u64))
+	}
 }
 
 // For backwards compatibility and tests
@@ -69,6 +75,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
 	}
 	fn submit_executed_request() -> Weight {
+		Weight::from_parts(18_178_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(6 as u64))
+			.saturating_add(RocksDbWeight::get().writes(4 as u64))
+	}
+	fn submit_rollback_request() -> Weight {
 		Weight::from_parts(18_178_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(6 as u64))
 			.saturating_add(RocksDbWeight::get().writes(4 as u64))
