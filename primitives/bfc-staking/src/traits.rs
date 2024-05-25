@@ -4,6 +4,14 @@ use frame_support::{pallet_prelude::ConstU32, BoundedBTreeSet};
 use sp_runtime::{DispatchError, Perbill};
 use sp_std::vec::Vec;
 
+pub trait Authorities<AccountId> {
+	fn is_authority(who: &AccountId) -> bool;
+
+	fn count() -> usize;
+
+	fn majority() -> u32;
+}
+
 /// The trait used for `pallet_relay_manager`
 pub trait RelayManager<AccountId> {
 	/// Add the given `relayer` to the `RelayerPool` and bond to the given `controller` account

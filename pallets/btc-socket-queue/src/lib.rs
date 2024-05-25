@@ -11,6 +11,7 @@ use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
 use bp_multi_sig::{Address, BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_staking::MAX_AUTHORITIES;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
@@ -38,9 +39,9 @@ pub struct RollbackRequest<AccountId> {
 	/// The amount of the output.
 	pub amount: U256,
 	/// The current votes submitted by relayers.
-	pub vote_count: u32,
+	pub votes: BoundedBTreeMap<AccountId, bool, ConstU32<MAX_AUTHORITIES>>,
 	/// The current approval of the request.
-	/// It'll only be approved when two-thirds of relayers voted for the request.
+	/// It'll only be approved when the majority of relayers voted for the request.
 	pub is_approved: bool,
 }
 
@@ -53,7 +54,16 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 		to: BoundedBitcoinAddress,
 		amount: U256,
 	) -> Self {
-		Self { unsigned_psbt, who, txid, vout, to, amount, vote_count: 0u32, is_approved: false }
+		Self {
+			unsigned_psbt,
+			who,
+			txid,
+			vout,
+			to,
+			amount,
+			votes: Default::default(),
+			is_approved: false,
+		}
 	}
 }
 
@@ -69,18 +79,25 @@ pub struct PsbtRequest<AccountId> {
 	/// The submitted signed PSBT's (in bytes).
 	pub signed_psbts: BoundedBTreeMap<AccountId, UnboundedBytes, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 	/// The submitted `SocketMessage`'s of this request. It is ordered by the PSBT's tx outputs.
+	/// This will be empty for rollback requests.
 	pub socket_messages: Vec<UnboundedBytes>,
+	pub is_rollback: bool,
 }
 
 impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	/// Instantiates a new `PsbtRequest` instance.
-	pub fn new(unsigned_psbt: UnboundedBytes, socket_messages: Vec<UnboundedBytes>) -> Self {
+	pub fn new(
+		unsigned_psbt: UnboundedBytes,
+		socket_messages: Vec<UnboundedBytes>,
+		is_rollback: bool,
+	) -> Self {
 		Self {
 			combined_psbt: unsigned_psbt.clone(),
 			unsigned_psbt,
 			finalized_psbt: UnboundedBytes::default(),
 			signed_psbts: BoundedBTreeMap::default(),
 			socket_messages,
+			is_rollback,
 		}
 	}
 
@@ -150,6 +167,13 @@ pub struct RollbackPsbtMessage<AccountId> {
 	pub txid: H256,
 	pub vout: u32,
 	pub amount: U256,
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct RollbackPollMessage<AccountId> {
+	pub authority_id: AccountId,
+	pub txid: H256,
+	pub is_approved: bool,
 }
 
 /// The `SocketMessage`'s request ID.

@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	ExecutedPsbtMessage, PsbtRequest, RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage,
-	SocketMessage, UnsignedPsbtMessage, WeightInfo,
+	ExecutedPsbtMessage, PsbtRequest, RollbackPollMessage, RollbackPsbtMessage, RollbackRequest,
+	SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -12,9 +12,10 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::{traits::PoolManager, Amount, UnboundedBytes};
+use bp_staking::traits::Authorities;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str, vec::Vec};
+use sp_std::{str, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -42,6 +43,7 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
+		type Relayers: Authorities<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
@@ -169,7 +171,7 @@ pub mod pallet {
 	#[pallet::getter(fn bonded_outbound_tx)]
 	/// Mapped txid's.
 	/// key: The PSBT's txid.
-	/// value: The composed socket messages.
+	/// value: The composed socket messages. This will be empty for rollback requests.
 	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
 
 	#[pallet::genesis_config]
@@ -275,7 +277,10 @@ pub mod pallet {
 			for msg in msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
 			}
-			<PendingRequests<T>>::insert(&txid, PsbtRequest::new(psbt.clone(), socket_messages));
+			<PendingRequests<T>>::insert(
+				&txid,
+				PsbtRequest::new(psbt.clone(), socket_messages, false),
+			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
 			Ok(().into())
@@ -403,7 +408,8 @@ pub mod pallet {
 			let to = Self::convert_to_address_from_script(outputs[0].script_pubkey.as_script())?;
 			ensure!(to == Self::convert_to_address_from_vec(refund)?, Error::<T>::InvalidPsbt);
 
-			// the output amount must be less than the origin amount (output.amount = origin amount - network fee)
+			// the output amount must be less than the origin amount
+			// (output.amount = origin amount - network fee)
 			ensure!(
 				Amount::from_sat(amount.as_u64()).checked_sub(outputs[0].value).is_some(),
 				Error::<T>::InvalidPsbt
@@ -412,6 +418,38 @@ pub mod pallet {
 			<RollbackRequests<T>>::insert(
 				&psbt_txid,
 				RollbackRequest::new(psbt, who, txid, vout, vault, amount),
+			);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_rollback_poll())]
+		pub fn submit_rollback_poll(
+			origin: OriginFor<T>,
+			msg: RollbackPollMessage<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let RollbackPollMessage { authority_id, txid, is_approved } = msg;
+
+			let mut rollback_request =
+				<RollbackRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
+			rollback_request
+				.votes
+				.try_insert(authority_id, is_approved)
+				.map_err(|_| Error::<T>::OutOfRange)?;
+
+			if rollback_request.votes.iter().filter(|v| *v.1).count() as u32
+				>= T::Relayers::majority()
+			{
+				rollback_request.is_approved = true;
+			}
+			<RollbackRequests<T>>::insert(&txid, rollback_request.clone());
+			<PendingRequests<T>>::insert(
+				&txid,
+				PsbtRequest::new(rollback_request.unsigned_psbt, vec![], true),
 			);
 
 			Ok(().into())
@@ -472,6 +510,25 @@ pub mod pallet {
 					}
 
 					ValidTransaction::with_tag_prefix("ExecutedPsbtSubmission")
+						.priority(TransactionPriority::MAX)
+						.and_provides(authority_id)
+						.propagate(true)
+						.build()
+				},
+				Call::submit_rollback_poll { msg, signature } => {
+					let RollbackPollMessage { authority_id, txid, .. } = msg;
+
+					// verify if the authority is a selected relayer.
+					if !T::Relayers::is_authority(&authority_id) {
+						return InvalidTransaction::BadSigner.into();
+					}
+
+					// verify if the signature was originated from the authority_id.
+					if !signature.verify(txid.as_ref(), authority_id) {
+						return InvalidTransaction::BadProof.into();
+					}
+
+					ValidTransaction::with_tag_prefix("RollbackPollSubmission")
 						.priority(TransactionPriority::MAX)
 						.and_provides(authority_id)
 						.propagate(true)
