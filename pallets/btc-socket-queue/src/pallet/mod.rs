@@ -332,9 +332,12 @@ pub mod pallet {
 					pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
 
 					// move pending to finalized
-					<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
-					<FinalizedRequests<T>>::insert(&txid, pending_request);
+					<FinalizedRequests<T>>::insert(&txid, pending_request.clone());
 					<PendingRequests<T>>::remove(&txid);
+
+					if !pending_request.is_rollback {
+						<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages);
+					}
 
 					Self::deposit_event(Event::SignedPsbtSubmitted { txid, authority_id });
 					Self::deposit_event(Event::RequestFinalized { txid });
