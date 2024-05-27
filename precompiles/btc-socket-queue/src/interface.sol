@@ -19,6 +19,11 @@ interface BtcSocketQueue {
     /// @return The list of the finalized PSBT bytes
     function finalized_psbts() external view returns (bytes[] memory);
 
+    /// @dev Returns the current pending rollback PSBT bytes
+    /// @custom:selector 97edc6ce
+    /// @return The list of the rollback PSBT bytes
+    function rollback_psbts() external view returns (bytes[] memory);
+
     /// @dev Returns the socket messages used for the given transaction
     /// @custom:selector d6da279c
     /// @return The list of the socket messages used for the given transaction

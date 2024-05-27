@@ -53,6 +53,22 @@ where
 		Ok(psbts)
 	}
 
+	#[precompile::public("rollbackPsbts()")]
+	#[precompile::public("rollback_psbts()")]
+	#[precompile::view]
+	fn rollback_psbts(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedBytes>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let psbts: Vec<UnboundedBytes> =
+			pallet_btc_socket_queue::RollbackRequests::<Runtime>::iter()
+				.filter_map(|(_, request)| match request.is_approved {
+					true => None,
+					false => Some(UnboundedBytes::from(request.unsigned_psbt)),
+				})
+				.collect();
+		Ok(psbts)
+	}
+
 	#[precompile::public("outboundTx(bytes32)")]
 	#[precompile::public("outbound_tx(bytes32)")]
 	#[precompile::view]
