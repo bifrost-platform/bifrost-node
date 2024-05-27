@@ -56,12 +56,14 @@ where
 		Ok(Psbt::deserialize(psbt).map_err(|_| Error::<T>::InvalidPsbt)?)
 	}
 
-	pub fn convert_to_address_from_script(script: &Script) -> Result<Address, DispatchError> {
+	/// Try to convert a script to a Bitcoin address.
+	pub fn try_convert_to_address_from_script(script: &Script) -> Result<Address, DispatchError> {
 		Ok(Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
 	}
 
-	pub fn convert_to_address_from_vec(
+	/// Try to convert bytes to a Bitcoin address.
+	pub fn try_convert_to_address_from_vec(
 		addr: BoundedBitcoinAddress,
 	) -> Result<Address, DispatchError> {
 		let addr = str::from_utf8(&addr).map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
@@ -86,7 +88,7 @@ where
 		}
 
 		for i in 0..origin.len() {
-			let to = Self::convert_to_address_from_script(origin[i].script_pubkey.as_script())?;
+			let to = Self::try_convert_to_address_from_script(origin[i].script_pubkey.as_script())?;
 			if to != unchecked[i].to {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
@@ -155,7 +157,7 @@ where
 			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
 				.ok_or(Error::<T>::UserDNE)?;
 			outputs.push(UncheckedOutput {
-				to: Self::convert_to_address_from_vec(to)?,
+				to: Self::try_convert_to_address_from_vec(to)?,
 				amount: msg.params.amount,
 			});
 
@@ -166,7 +168,7 @@ where
 		outputs.insert(
 			system_vout,
 			UncheckedOutput {
-				to: Self::convert_to_address_from_vec(system_vault)?,
+				to: Self::try_convert_to_address_from_vec(system_vault)?,
 				amount: Default::default(),
 			},
 		);
@@ -215,11 +217,13 @@ where
 			.map_err(|_| Error::<T>::InvalidRequestInfo)?)
 	}
 
-	pub fn get_hash_key(txid: H256, vout: u32, who: T::AccountId, amount: U256) -> H256 {
+	/// Generate a hash key.
+	pub fn generate_hash_key(txid: H256, vout: u32, who: T::AccountId, amount: U256) -> H256 {
 		let hash_key_req = HashKeyRequest::new(txid.0.to_vec(), vout.into(), who.into(), amount);
 		Self::hash_bytes(&hash_key_req.encode())
 	}
 
+	/// Try to get the `TxInfo` by the given `hash_key`.
 	pub fn try_get_tx_info(hash_key: H256) -> Result<TxInfo, DispatchError> {
 		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
 		let socket = <BitcoinSocket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
@@ -248,6 +252,7 @@ where
 		Ok(Self::try_decode_tx_info(&info.value).map_err(|_| Error::<T>::InvalidTxInfo)?)
 	}
 
+	/// Try to decode the given `TxInfo`.
 	pub fn try_decode_tx_info(info: &UnboundedBytes) -> Result<TxInfo, ()> {
 		match ethabi_decode::decode(
 			&[

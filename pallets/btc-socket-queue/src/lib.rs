@@ -16,15 +16,17 @@ use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
 
-/// The gas limit used for `Socket::get_request()` function calls.
+/// The gas limit used for contract function calls.
 const CALL_GAS_LIMIT: u64 = 1_000_000;
 
 /// The function selector of `Socket::get_request()`.
 const SOCKET_GET_REQUEST_FUNCTION_SELECTOR: &str = "8dac2204";
 
+/// The function selector of `BitcoinSocket::txs()`.
 const BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR: &str = "986ba392";
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The submitted PSBT information for a rollback request.
 pub struct RollbackRequest<AccountId> {
 	/// The origin unsigned PSBT (in bytes).
 	pub unsigned_psbt: UnboundedBytes,
@@ -34,11 +36,13 @@ pub struct RollbackRequest<AccountId> {
 	pub txid: H256,
 	/// The output index of the transaction.
 	pub vout: u32,
-	/// The to address of the output. (= `vault`)
+	/// The `to` address of the output. (= `vault`)
 	pub to: BoundedBitcoinAddress,
-	/// The amount of the output.
+	/// The `amount` of the output.
 	pub amount: U256,
 	/// The current votes submitted by relayers.
+	/// key: The relayer address.
+	/// value: The voting side. Approved or not.
 	pub votes: BoundedBTreeMap<AccountId, bool, ConstU32<MAX_AUTHORITIES>>,
 	/// The current approval of the request.
 	/// It'll only be approved when the majority of relayers voted for the request.
@@ -81,6 +85,7 @@ pub struct PsbtRequest<AccountId> {
 	/// The submitted `SocketMessage`'s of this request. It is ordered by the PSBT's tx outputs.
 	/// This will be empty for rollback requests.
 	pub socket_messages: Vec<UnboundedBytes>,
+	/// The flag whether the request is for normal outbounds or rollbacks.
 	pub is_rollback: bool,
 }
 
@@ -162,17 +167,28 @@ pub struct ExecutedPsbtMessage<AccountId> {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The message payload for rollback PSBT submission.
 pub struct RollbackPsbtMessage<AccountId> {
+	/// The registered user's Bifrost address.
 	pub who: AccountId,
+	/// The hash of the transaction that contains the output (that should be rollbacked. to: `vault`)
 	pub txid: H256,
+	/// The output index of the transaction.
 	pub vout: u32,
+	/// The `amount` of the output.
 	pub amount: U256,
+	/// The unsigned PSBT (in bytes).
+	pub unsigned_psbt: UnboundedBytes,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The message payload for rollback poll submission.
 pub struct RollbackPollMessage<AccountId> {
+	/// The authority's account address.
 	pub authority_id: AccountId,
-	pub txid: H256,
+	/// The unsigned PSBT (in bytes).
+	pub unsigned_psbt: UnboundedBytes,
+	/// The voting side. Approved or not.
 	pub is_approved: bool,
 }
 
@@ -292,10 +308,15 @@ impl UserRequest {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The hash key used to call `BitcoinSocket::txs()`.
 pub struct HashKeyRequest {
+	/// The Bitcoin transaction hash.
 	pub tx_hash: UnboundedBytes,
+	/// The output index.
 	pub index: U256,
+	/// The user's Bifrost address.
 	pub to: H160,
+	/// The `amount` of the output.
 	pub amount: U256,
 }
 
@@ -315,10 +336,15 @@ impl HashKeyRequest {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The return type of `BitcoinSocket::txs()`.
 pub struct TxInfo {
+	/// The user's Bifrost address.
 	pub to: H160,
+	/// The `amount` of the output.
 	pub amount: U256,
+	/// The current vote status.
 	pub vote_count: U256,
+	/// The request id.
 	pub request_id: RequestID,
 }
 
