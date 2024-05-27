@@ -180,7 +180,7 @@ pub mod pallet {
 	#[pallet::getter(fn bonded_outbound_tx)]
 	/// Mapped txid's.
 	/// key: The PSBT's txid.
-	/// value: The composed socket messages. This will be empty for rollback requests.
+	/// value: The composed socket messages.
 	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
 
 	#[pallet::genesis_config]
