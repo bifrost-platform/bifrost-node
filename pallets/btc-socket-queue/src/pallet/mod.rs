@@ -388,7 +388,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			msg: RollbackPsbtMessage<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
+			T::SetOrigin::ensure_origin(origin)?;
 
 			let RollbackPsbtMessage { who, txid, vout, amount, unsigned_psbt } = msg;
 
