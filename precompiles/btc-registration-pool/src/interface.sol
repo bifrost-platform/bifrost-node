@@ -15,6 +15,11 @@ interface BtcRegistrationPool {
     /// @param refund_address The registered refund address.
     event VaultPending(address user_bfc_address, string refund_address);
 
+    /// @dev Returns the current round number.
+    /// @custom:selector 319c068c
+    /// @return The current round number.
+    function current_round() external view returns (uint32);
+
     /// @dev Returns the registration information of the user.
     /// @custom:selector e3fe1187
     /// @param user_bfc_address the address that we want to check

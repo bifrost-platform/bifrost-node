@@ -4,6 +4,7 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
+use frame_support::pallet_prelude::MaxEncodedLen;
 pub use pallet::pallet::*;
 use weights::WeightInfo;
 
@@ -27,6 +28,9 @@ macro_rules! log {
 		)
 	};
 }
+
+/// The round of the registration pool.
+pub type PoolRound = u32;
 
 #[derive(Decode, Encode, TypeInfo)]
 /// The registered Bitcoin relay target information.
@@ -60,4 +64,29 @@ pub struct VaultKeySubmission<AccountId> {
 	pub who: AccountId,
 	/// The generated public key. (33 bytes)
 	pub pub_key: Public,
+}
+
+/// Sequence of migrating registration pool.
+#[derive(
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Copy,
+	Clone,
+	Encode,
+	Decode,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+	Default,
+)]
+pub enum MigrationSequence {
+	/// Normal sequence.
+	#[default]
+	Normal,
+	/// Prepare next system vault.
+	PrepareNextSystemVault,
+	/// Wait till all UTXOs transferred to the new system vault.
+	UTXOTransfer,
 }
