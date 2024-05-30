@@ -4,7 +4,8 @@ import { TransactionReceiptAPI } from 'web3';
 import { Keyring } from '@polkadot/api';
 
 import {
-  DEMO_SOCKET_ABI, INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_MSG_HASH,
+  DEMO_BITCOIN_SOCKET_ABI, DEMO_BITCOIN_SOCKET_BYTE_CODE, DEMO_SOCKET_ABI,
+  INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_MSG_HASH,
   INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_STATUS, VALID_DEMO_SOCKET_BYTE_CODE
 } from '../../constants/demo_contract';
 import { TEST_CONTROLLERS, TEST_RELAYERS } from '../../constants/keys';
@@ -42,6 +43,12 @@ const INVALID_SIGNED_PSBT_SUBMISSION_SIG = '0x1ddb5590467cc3b90495696689229bb7f5
 const INVALID_SIGNED_PSBT_WITH_WRONG_ORIGIN = '0x70736274ff01007d020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200ca9a3b0000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e9284284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0108fc040047304402203a1dd209d8a6c163759c2ec37561cb48d7f466cfd650813348b63e85583277ce022060fdccbb6b0f863b6933c1623a946d1c3cbbf121f4982747d4fc18b3195ef2b50147304402201f839262864d169e564644dcbc00cc9226b7dd42621568367b654aa89455cbb2022020a3dfc14590342badbe9ee4810c2203c3b88bd5887dc8b8073ae84cc574495401695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae000000';
 const INVALID_SIGNED_PSBT_WITH_UNFINALIZED = '0x70736274ff01007d020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200ca9a3b0000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e9584284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be2202024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076648304502210082620df266e4bbe7df2a4e9e29e402efd3858efd2a69a217092caef9d26f663f022030d281a151db5233e20d1e8e5762378edc0292360d0dd759cdf4ee7d06e6b86d010105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
 
+// submit_rollback_request()
+const VALID_ROLLBACK_PSBT = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff019284284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
+const INVALID_ROLLBACK_PSBT_WITH_WRONG_OUTPUT_TO = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff01928428480000000016001455768e86925d0d680ff3ee5a3338875b01c1869f000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
+const INVALID_ROLLBACK_PSBT_WITH_WRONG_OUTPUT_AMOUNT = '0x70736274ff010052020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff019684284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
+const VALID_ROLLBACK_PSBT_TXID = '0x7e4b764c82bad01dae9e279c35d74f2b03a115e7f9dd7040b3f32d63520bbe28';
+
 // submit_system_vault_key()
 const SYSTEM_VAULT_PUBKEY = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
 const SYSTEM_VAULT_PUBKEY_SUBMISSION_SIG = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
@@ -52,12 +59,13 @@ const VAULT_PUBKEY_SUBMISSION_SIG = '0xcc1c09e81934cdcaeebf370fe793cf82bdf06b5fc
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const REFUND_ADDRESS = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
+const REFUND_ADDRESS_2 = 'bcrt1q24mgap5jt5xksrlnaedrxwy8tvqurp5l0600ag';
 
-async function joinRegistrationPool(context: INodeContext) {
+async function joinRegistrationPool(context: INodeContext, refund: string, pk: string) {
   const keyring = new Keyring({ type: 'ethereum' });
-  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const who = keyring.addFromUri(pk);
 
-  await context.polkadotApi.tx.btcRegistrationPool.requestVault(REFUND_ADDRESS).signAndSend(baltathar);
+  await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(who);
   await context.createBlock();
 }
 
@@ -76,11 +84,11 @@ async function submitVaultKey(context: INodeContext) {
   await context.createBlock();
 }
 
-async function setSocket(context: INodeContext, address: string) {
+async function setSocket(context: INodeContext, address: string, is_bitcoin: boolean) {
   const keyring = new Keyring({ type: 'ethereum' });
   const sudo = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   await context.polkadotApi.tx.sudo.sudo(
-    context.polkadotApi.tx.btcSocketQueue.setSocket(address, false)
+    context.polkadotApi.tx.btcSocketQueue.setSocket(address, is_bitcoin)
   ).signAndSend(sudo);
   await context.createBlock();
 }
@@ -89,14 +97,33 @@ async function deployDemoSocket(context: INodeContext, bytecode: string) {
   const deployTx = ((new context.web3.eth.Contract(DEMO_SOCKET_ABI) as any).deploy({
     data: bytecode
   }));
-  const receipt = await deployDemo(context, deployTx);
+  const receipt = await sendTx(context, deployTx, null);
   return receipt?.contractAddress;
 }
 
-const deployDemo = async (context: INodeContext, deployTx: any): Promise<TransactionReceiptAPI | undefined> => {
+async function deployDemoBitcoinSocket(context: INodeContext, bytecode: string) {
+  const deployTx = ((new context.web3.eth.Contract(DEMO_BITCOIN_SOCKET_ABI) as any).deploy({
+    data: bytecode
+  }));
+  const receipt = await sendTx(context, deployTx, null);
+  return receipt?.contractAddress;
+}
+
+async function insertDummyTxInfo(context: INodeContext, address: string) {
+  const tx = ((new context.web3.eth.Contract(DEMO_BITCOIN_SOCKET_ABI, address) as any).methods.insert_dummy());
+  await sendTx(context, tx, address);
+}
+
+async function clearDummyTxInfo(context: INodeContext, address: string) {
+  const tx = ((new context.web3.eth.Contract(DEMO_BITCOIN_SOCKET_ABI, address) as any).methods.clear_dummy());
+  await sendTx(context, tx, address);
+}
+
+const sendTx = async (context: INodeContext, tx: any, to: string | null): Promise<TransactionReceiptAPI | undefined> => {
   const signedTx = (await context.web3.eth.accounts.signTransaction({
+    to,
     from: TEST_CONTROLLERS[3].public,
-    data: deployTx.encodeABI(),
+    data: tx.encodeABI(),
     gasPrice: context.web3.utils.toWei(1000, 'gwei'),
     gas: 3000000
   }, TEST_CONTROLLERS[3].private)).rawTransaction;
@@ -112,7 +139,6 @@ const deployDemo = async (context: INodeContext, deployTx: any): Promise<Transac
   const receipt = await context.web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
   expect(receipt).is.ok;
   expect(receipt?.status).equal('0x1');
-  expect(receipt?.contractAddress).is.ok;
 
   return receipt;
 };
@@ -262,7 +288,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - invalid request info response', async function () {
-    await setSocket(context, ZERO_ADDRESS); // set socket to wrong address
+    await setSocket(context, ZERO_ADDRESS, false); // set socket to wrong address
 
     const msg = {
       authorityId: alith.address,
@@ -281,7 +307,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - socket message hash does not match', async function () {
     const socket = await deployDemoSocket(context, INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_MSG_HASH);
     if (socket) {
-      await setSocket(context, socket);
+      await setSocket(context, socket, false);
     }
 
     const msg = {
@@ -301,7 +327,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - message status is not accepted', async function () {
     const socket = await deployDemoSocket(context, INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_STATUS);
     if (socket) {
-      await setSocket(context, socket);
+      await setSocket(context, socket, false);
     }
 
     const msg = {
@@ -321,7 +347,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - invalid bridge relay chains', async function () {
     const socket = await deployDemoSocket(context, VALID_DEMO_SOCKET_BYTE_CODE);
     if (socket) {
-      await setSocket(context, socket);
+      await setSocket(context, socket, false);
     }
 
     const msg = {
@@ -354,7 +380,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - socket message duplication', async function () {
-    await joinRegistrationPool(context);
+    await joinRegistrationPool(context, REFUND_ADDRESS, TEST_CONTROLLERS[1].private);
     await submitVaultKey(context);
 
     const msg = {
@@ -450,12 +476,12 @@ describeDevNode('pallet_btc_socket_queue - submit signed pbst', (context) => {
     await requestSystemVault(context);
     await submitSystemVaultKey(context);
 
-    await joinRegistrationPool(context);
+    await joinRegistrationPool(context, REFUND_ADDRESS, TEST_CONTROLLERS[1].private);
     await submitVaultKey(context);
 
     const socket = await deployDemoSocket(context, VALID_DEMO_SOCKET_BYTE_CODE);
     if (socket) {
-      await setSocket(context, socket);
+      await setSocket(context, socket, false);
     }
 
     const msg = {
@@ -598,12 +624,12 @@ describeDevNode('pallet_btc_socket_queue - accept request', (context) => {
     await requestSystemVault(context);
     await submitSystemVaultKey(context);
 
-    await joinRegistrationPool(context);
+    await joinRegistrationPool(context, REFUND_ADDRESS, TEST_CONTROLLERS[1].private);
     await submitVaultKey(context);
 
     const socket = await deployDemoSocket(context, VALID_DEMO_SOCKET_BYTE_CODE);
     if (socket) {
-      await setSocket(context, socket);
+      await setSocket(context, socket, false);
     }
 
     const msg = {
@@ -641,5 +667,170 @@ describeDevNode('pallet_btc_socket_queue - accept request', (context) => {
     const rawExecutedRequest: any = await context.polkadotApi.query.btcSocketQueue.executedRequests(VALID_PSBT_TXID);
     const executedRequest = rawExecutedRequest.toHuman();
     expect(executedRequest).is.ok;
+  });
+});
+
+describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
+  // const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
+
+  before('should successfully deploy bitcoin socket contract', async function () {
+    const socket = await deployDemoBitcoinSocket(context, DEMO_BITCOIN_SOCKET_BYTE_CODE);
+    if (socket) {
+      await setSocket(context, socket, true);
+    }
+  });
+
+  before('should join registration pool', async function () {
+    await joinRegistrationPool(context, REFUND_ADDRESS, TEST_CONTROLLERS[1].private);
+    await submitVaultKey(context);
+  });
+
+  it('should fail to submit rollback request - unknown user', async function () {
+    const msg = {
+      who: charleth.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: VALID_ROLLBACK_PSBT,
+    };
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.null;
+  });
+
+  it('should fail to submit rollback request - pending vault', async function () {
+    await joinRegistrationPool(context, REFUND_ADDRESS_2, TEST_CONTROLLERS[2].private);
+
+    const msg = {
+      who: charleth.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: VALID_ROLLBACK_PSBT,
+    };
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.null;
+  });
+
+  it('should fail to submit rollback request - already known txinfo', async function () {
+    const rawBitcoinSocket: any = await context.polkadotApi.query.btcSocketQueue.bitcoinSocket();
+    const bitcoinSocket = rawBitcoinSocket.toHuman();
+
+    await insertDummyTxInfo(context, bitcoinSocket);
+    await context.createBlock();
+
+    const msg = {
+      who: baltathar.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: VALID_ROLLBACK_PSBT,
+    };
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.null;
+
+    await clearDummyTxInfo(context, bitcoinSocket);
+  });
+
+  it('should fail to submit rollback request - invalid output length', async function () {
+    const msg = {
+      who: baltathar.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: VALID_UNSIGNED_PSBT,
+    };
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.null;
+  });
+
+  it('should fail to submit rollback request - invalid output to address', async function () {
+    const msg = {
+      who: baltathar.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: INVALID_ROLLBACK_PSBT_WITH_WRONG_OUTPUT_TO,
+    };
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.null;
+  });
+
+  it('should fail to submit rollback request - invalid output to address', async function () {
+    const msg = {
+      who: baltathar.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: INVALID_ROLLBACK_PSBT_WITH_WRONG_OUTPUT_AMOUNT,
+    };
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.null;
+  });
+
+  it('should successfully submit rollback request', async function () {
+    const msg = {
+      who: baltathar.address,
+      txid: VALID_PSBT_TXID,
+      vout: 0,
+      amount: 1210614933,
+      unsignedPsbt: VALID_ROLLBACK_PSBT,
+    };
+
+    await context.createBlock();
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
+    ).signAndSend(alith);
+    await context.createBlock();
+
+    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
+    const rollbackRequest = rawRollbackRequest.toHuman();
+    expect(rollbackRequest).is.ok;
+    expect(rollbackRequest.unsignedPsbt).equal(VALID_ROLLBACK_PSBT);
   });
 });
