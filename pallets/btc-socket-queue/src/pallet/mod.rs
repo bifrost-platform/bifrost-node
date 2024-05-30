@@ -460,6 +460,9 @@ pub mod pallet {
 				<RollbackRequests<T>>::get(&psbt_txid).ok_or(Error::<T>::RequestDNE)?;
 			ensure!(!rollback_request.is_approved, Error::<T>::RequestAlreadyApproved);
 
+			if let Some(vote) = rollback_request.votes.get(&authority_id) {
+				ensure!(*vote != is_approved, Error::<T>::NoWritingSameValue);
+			}
 			rollback_request
 				.votes
 				.try_insert(authority_id.clone(), is_approved)
