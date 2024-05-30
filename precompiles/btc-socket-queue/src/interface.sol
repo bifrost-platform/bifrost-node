@@ -24,6 +24,26 @@ interface BtcSocketQueue {
     /// @return The list of the rollback PSBT bytes
     function rollback_psbts() external view returns (bytes[] memory);
 
+    /// @dev Returns the rollback request information
+    /// @custom:selector a3b23b30
+    /// @return The rollback request information
+    function rollback_request(
+        bytes32 txid
+    )
+        external
+        view
+        returns (
+            bytes memory,
+            address,
+            bytes32,
+            uint256,
+            string memory,
+            uint256,
+            address[] memory,
+            bool[] memory,
+            bool
+        );
+
     /// @dev Returns the socket messages used for the given transaction
     /// @custom:selector d6da279c
     /// @return The list of the socket messages used for the given transaction
