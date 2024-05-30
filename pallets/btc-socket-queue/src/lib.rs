@@ -207,7 +207,7 @@ impl TryFrom<Vec<Token>> for RequestID {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
-		if token.len() < 2 {
+		if token.len() != 3 {
 			return Err(());
 		}
 		Ok(Self {
@@ -231,7 +231,7 @@ impl TryFrom<Vec<Token>> for Instruction {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
-		if token.len() < 1 {
+		if token.len() != 2 {
 			return Err(());
 		}
 		Ok(Self {
@@ -262,7 +262,7 @@ impl TryFrom<Vec<Token>> for TaskParams {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
-		if token.len() < 5 {
+		if token.len() != 6 {
 			return Err(());
 		}
 		Ok(TaskParams {
@@ -352,14 +352,14 @@ impl TryFrom<Vec<Token>> for TxInfo {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
-		if token.len() < 3 {
+		if token.len() != 4 {
 			return Err(());
 		}
 
 		let to = token[0].clone().to_address().ok_or(())?;
 		let amount = token[1].clone().to_uint().ok_or(())?;
 		let vote_count = token[2].clone().to_uint().ok_or(())?;
-		let request_id = match &token[0] {
+		let request_id = match &token[3] {
 			Token::Tuple(token) => token.clone().try_into()?,
 			_ => return Err(()),
 		};
@@ -407,7 +407,7 @@ impl TryFrom<Vec<Token>> for SocketMessage {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
-		if token.len() < 3 {
+		if token.len() != 4 {
 			return Err(());
 		}
 
@@ -455,7 +455,7 @@ impl TryFrom<Vec<Token>> for RequestInfo {
 	type Error = ();
 
 	fn try_from(token: Vec<Token>) -> Result<Self, Self::Error> {
-		if token.len() < 2 {
+		if token.len() != 3 {
 			return Err(());
 		}
 		let tokenized_field = token[0].clone().to_fixed_array().ok_or(())?;

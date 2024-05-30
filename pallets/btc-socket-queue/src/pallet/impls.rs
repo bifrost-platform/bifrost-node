@@ -192,7 +192,7 @@ where
 		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
 		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
 
-		let mut calldata: String = SOCKET_GET_REQUEST_FUNCTION_SELECTOR.to_owned(); // get_request()
+		let mut calldata: String = SOCKET_GET_REQUEST_FUNCTION_SELECTOR.to_owned();
 		calldata.push_str(&array_bytes::bytes2hex("", req_id));
 
 		let info = <T as pallet_evm::Config>::Runner::call(
@@ -211,7 +211,7 @@ where
 			None,
 			<T as pallet_evm::Config>::config(),
 		)
-		.map_err(|_| Error::<T>::SocketMessageDNE)?;
+		.map_err(|_| Error::<T>::InvalidCalldata)?;
 
 		Ok(Self::try_decode_request_info(&info.value)
 			.map_err(|_| Error::<T>::InvalidRequestInfo)?)
@@ -247,7 +247,7 @@ where
 			None,
 			<T as pallet_evm::Config>::config(),
 		)
-		.map_err(|_| Error::<T>::RequestDNE)?;
+		.map_err(|_| Error::<T>::InvalidCalldata)?;
 
 		Ok(Self::try_decode_tx_info(&info.value).map_err(|_| Error::<T>::InvalidTxInfo)?)
 	}
