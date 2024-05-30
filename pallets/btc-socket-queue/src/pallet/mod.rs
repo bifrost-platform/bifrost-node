@@ -43,6 +43,7 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
+		/// The Bifrost relayers.
 		type Relayers: Authorities<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
@@ -121,17 +122,17 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn socket_contract)]
-	/// The Socket contract address.
+	/// The `Socket` contract address.
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bitcoin_socket_contract)]
-	/// The BitcoinSocket contract address.
+	/// The `BitcoinSocket` contract address.
 	pub type BitcoinSocket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn authority)]
-	/// The core authority address.
+	/// The core authority address. The account that is permitted to submit unsigned PSBT's.
 	pub type Authority<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
@@ -172,6 +173,9 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn rollback_requests)]
+	/// Pending or approved rollback requests.
+	/// key: The PSBT's txid.
+	/// value: The rollback information.
 	pub type RollbackRequests<T: Config> =
 		StorageMap<_, Twox64Concat, H256, RollbackRequest<T::AccountId>>;
 
@@ -227,7 +231,7 @@ pub mod pallet {
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_socket())]
-		/// Set the authority address.
+		/// Set the `Socket` or `BitcoinSocket` contract address.
 		pub fn set_socket(
 			origin: OriginFor<T>,
 			new: T::AccountId,
