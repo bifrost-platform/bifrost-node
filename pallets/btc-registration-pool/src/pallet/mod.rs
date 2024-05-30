@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	BitcoinRelayTarget, BoundedBitcoinAddress, MigrationSequence, MultiSigAccount, PoolRound,
-	VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound, VaultKeySubmission,
+	WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -11,7 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{Network, Public, PublicKey, UnboundedBytes};
+use bp_multi_sig::{MigrationSequence, Network, Public, PublicKey, UnboundedBytes};
 use sp_core::H160;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},

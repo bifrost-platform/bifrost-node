@@ -1,6 +1,6 @@
 use miniscript::bitcoin::Network;
 
-use crate::BoundedBitcoinAddress;
+use crate::{BoundedBitcoinAddress, MigrationSequence};
 
 pub trait PoolManager<AccountId> {
 	/// Get the refund address of the given user.
@@ -14,4 +14,7 @@ pub trait PoolManager<AccountId> {
 
 	/// Get the Bitcoin chain ID.
 	fn get_bitcoin_chain_id() -> u32;
+
+	/// Get current service state.
+	fn get_service_state() -> MigrationSequence;
 }

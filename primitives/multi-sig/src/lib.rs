@@ -125,3 +125,28 @@ pub enum AddressState {
 	/// n public keys has been submitted and address generation done.
 	Generated(BoundedBitcoinAddress),
 }
+
+/// Sequence of migrating registration pool.
+#[derive(
+	Eq,
+	PartialEq,
+	Ord,
+	PartialOrd,
+	Copy,
+	Clone,
+	Encode,
+	Decode,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+	Default,
+)]
+pub enum MigrationSequence {
+	/// Normal sequence.
+	#[default]
+	Normal,
+	/// Prepare next system vault.
+	PrepareNextSystemVault,
+	/// Wait till all UTXOs transferred to the new system vault.
+	UTXOTransfer,
+}

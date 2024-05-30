@@ -1,6 +1,6 @@
 use bp_multi_sig::{
-	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, Network, PublicKey,
-	UnboundedBytes,
+	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, MigrationSequence,
+	Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
 use scale_info::prelude::string::ToString;
@@ -38,6 +38,10 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 
 	fn get_bitcoin_chain_id() -> u32 {
 		T::BitcoinChainId::get()
+	}
+
+	fn get_service_state() -> MigrationSequence {
+		Self::service_state()
 	}
 }
 
