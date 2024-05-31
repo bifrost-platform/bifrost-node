@@ -207,6 +207,7 @@ pub mod pallet {
 		fn build(&self) {
 			MultiSigRatio::<T>::put(T::DefaultMultiSigRatio::get());
 			CurrentRound::<T>::put(T::DefaultPoolRound::get());
+			ServiceState::<T>::put(MigrationSequence::Normal);
 		}
 	}
 
