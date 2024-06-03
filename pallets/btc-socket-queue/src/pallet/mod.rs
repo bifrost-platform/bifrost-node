@@ -182,10 +182,20 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_outbound_tx)]
-	/// Mapped txid's.
+	/// Mapped outbound txid's.
 	/// key: The PSBT's txid.
 	/// value: The composed socket messages.
 	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn bonded_rollback_outputs)]
+	/// Mapped rollback outputs.
+	/// key #1: The rollback transaction txid.
+	/// key #2: The rollback transaction output index.
+	/// value: The rollback PSBT txid.
+	pub type BondedRollbackOutputs<T: Config> =
+		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, H256>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
@@ -435,6 +445,7 @@ pub mod pallet {
 				&psbt_txid,
 				RollbackRequest::new(unsigned_psbt, who, txid, vout, vault, amount),
 			);
+			<BondedRollbackOutputs<T>>::insert(txid, vout, psbt_txid);
 			Self::deposit_event(Event::RollbackPsbtSubmitted { txid });
 
 			Ok(().into())

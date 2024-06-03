@@ -35,7 +35,7 @@ pub struct RollbackRequest<AccountId> {
 	/// The hash of the transaction that contains the output (that should be rollbacked. to: `vault`)
 	pub txid: H256,
 	/// The output index of the transaction.
-	pub vout: u32,
+	pub vout: U256,
 	/// The `to` address of the output. (= `vault`)
 	pub to: BoundedBitcoinAddress,
 	/// The `amount` of the output.
@@ -54,7 +54,7 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 		unsigned_psbt: UnboundedBytes,
 		who: AccountId,
 		txid: H256,
-		vout: u32,
+		vout: U256,
 		to: BoundedBitcoinAddress,
 		amount: U256,
 	) -> Self {
@@ -138,7 +138,7 @@ pub struct UnsignedPsbtMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
 	/// The PSBT's system output index.
-	pub system_vout: u32,
+	pub system_vout: U256,
 	/// The emitted `SocketMessage`'s (in bytes).
 	/// The order should match with the submitted PSBT's outputs order.
 	pub socket_messages: Vec<UnboundedBytes>,
@@ -174,7 +174,7 @@ pub struct RollbackPsbtMessage<AccountId> {
 	/// The hash of the transaction that contains the output (that should be rollbacked. to: `vault`)
 	pub txid: H256,
 	/// The output index of the transaction.
-	pub vout: u32,
+	pub vout: U256,
 	/// The `amount` of the output.
 	pub amount: U256,
 	/// The unsigned PSBT (in bytes).

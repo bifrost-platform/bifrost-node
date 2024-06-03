@@ -218,8 +218,8 @@ where
 	}
 
 	/// Generate a hash key.
-	pub fn generate_hash_key(txid: H256, vout: u32, who: T::AccountId, amount: U256) -> H256 {
-		let hash_key_req = HashKeyRequest::new(txid.0.to_vec(), vout.into(), who.into(), amount);
+	pub fn generate_hash_key(txid: H256, vout: U256, who: T::AccountId, amount: U256) -> H256 {
+		let hash_key_req = HashKeyRequest::new(txid.0.to_vec(), vout, who.into(), amount);
 		Self::hash_bytes(&hash_key_req.encode())
 	}
 

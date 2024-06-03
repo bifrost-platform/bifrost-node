@@ -118,6 +118,22 @@ where
 		})
 	}
 
+	#[precompile::public("rollbackOutput(bytes32,uint256)")]
+	#[precompile::public("rollback_output(bytes32,uint256)")]
+	#[precompile::view]
+	fn rollback_output(
+		handle: &mut impl PrecompileHandle,
+		txid: H256,
+		vout: U256,
+	) -> EvmResult<H256> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		Ok(match BtcSocketQueueOf::<Runtime>::bonded_rollback_outputs(txid, vout) {
+			Some(psbt_txid) => psbt_txid,
+			None => H256::zero(),
+		})
+	}
+
 	#[precompile::public("filterExecutableMsgs(uint256[])")]
 	#[precompile::public("filter_executable_msgs(uint256[])")]
 	#[precompile::view]

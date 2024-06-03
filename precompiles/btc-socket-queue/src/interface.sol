@@ -49,6 +49,14 @@ interface BtcSocketQueue {
     /// @return The list of the socket messages used for the given transaction
     function outbound_tx(bytes32 txid) external view returns (bytes[] memory);
 
+    /// @dev Returns the bonded PSBT transaction hash of the given output information.
+    /// @custom:selector abbfb5ed
+    /// @return The bonded PSBT transaction hash
+    function rollback_output(
+        bytes32 txid,
+        uint256 vout
+    ) external view returns (bytes32);
+
     /// @dev Filter out executable socket messages from the given sequence ID's.
     /// @custom:selector 7cd4510f
     /// @return The list of executable sequence ID's.
