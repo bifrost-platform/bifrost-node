@@ -675,7 +675,6 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
   const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
   const charleth = keyring.addFromUri(TEST_CONTROLLERS[2].private);
-  // const alithRelayer = keyring.addFromUri(TEST_RELAYERS[0].private);
 
   before('should successfully deploy bitcoin socket contract', async function () {
     const socket = await deployDemoBitcoinSocket(context, DEMO_BITCOIN_SOCKET_BYTE_CODE);
@@ -832,5 +831,9 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
     const rollbackRequest = rawRollbackRequest.toHuman();
     expect(rollbackRequest).is.ok;
     expect(rollbackRequest.unsignedPsbt).equal(VALID_ROLLBACK_PSBT);
+
+    const rawBondedRollbackOutput: any = await context.polkadotApi.query.btcSocketQueue.bondedRollbackOutputs(VALID_PSBT_TXID, 0);
+    const bondedRollbackOutput = rawBondedRollbackOutput.toHuman();
+    expect(bondedRollbackOutput).equal(VALID_ROLLBACK_PSBT_TXID);
   });
 });
