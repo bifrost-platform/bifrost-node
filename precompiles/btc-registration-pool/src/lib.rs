@@ -286,15 +286,10 @@ where
 		refund_address: BitcoinAddressString,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		let event = log1(
-			handle.context().address,
-			SELECTOR_LOG_VAULT_PENDING,
-			solidity::encode_event_data((Address(caller), refund_address.clone())),
-		);
-		handle.record_log_costs(&[&event])?;
 
-		let refund_address =
-			Self::convert_string_to_bitcoin_address(refund_address).in_field("refund_address")?;
+		let raw_refund_address = refund_address.clone();
+		let refund_address = Self::convert_string_to_bitcoin_address(raw_refund_address.clone())
+			.in_field("refund_address")?;
 
 		let call = BtcRegistrationPoolCall::<Runtime>::request_vault {
 			refund_address: refund_address.to_vec(),
@@ -302,6 +297,12 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(caller);
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_VAULT_PENDING,
+			solidity::encode_event_data((Address(caller), raw_refund_address)),
+		);
+		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
 
 		Ok(())
