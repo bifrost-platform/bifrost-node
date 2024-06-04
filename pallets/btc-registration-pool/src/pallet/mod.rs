@@ -400,22 +400,25 @@ pub mod pallet {
 			// make sure this cannot be executed by a signed transaction.
 			ensure_none(origin)?;
 
-			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
-				Error::<T>::UnderMaintenance
-			);
+			let service_state = Self::service_state();
+
+			let target_round;
+			match Self::service_state() {
+				MigrationSequence::Normal => {
+					target_round = Self::current_round();
+				},
+				MigrationSequence::PrepareNextSystemVault => {
+					target_round = Self::current_round() + 1;
+				},
+				MigrationSequence::UTXOTransfer => {
+					return Err(Error::<T>::UnderMaintenance)?;
+				},
+			}
 
 			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 
 			let precompile: T::AccountId = H160::from_low_u64_be(ADDRESS_U64).into();
 			ensure!(precompile == who, Error::<T>::VaultDNE);
-
-			let service_state = Self::service_state();
-			let target_round = if service_state == MigrationSequence::PrepareNextSystemVault {
-				Self::current_round() + 1
-			} else {
-				Self::current_round()
-			};
 
 			if let Some(mut system_vault) = <SystemVault<T>>::get(target_round) {
 				ensure!(system_vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
