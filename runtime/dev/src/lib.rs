@@ -982,7 +982,6 @@ parameter_types! {
 	pub const BitcoinChainId: u32 = 10002;
 	pub const BitcoinNetwork: Network = Network::Regtest;
 	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
-	pub const DefaultPoolRound: pallet_btc_registration_pool::PoolRound = 1;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {
@@ -992,7 +991,6 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;
-	type DefaultPoolRound = DefaultPoolRound;
 	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;

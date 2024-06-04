@@ -48,9 +48,6 @@ pub mod pallet {
 		/// The minimum required number of signatures to send a transaction with the vault account. (in percentage)
 		#[pallet::constant]
 		type DefaultMultiSigRatio: Get<Percent>;
-		/// The default round of the registration pool.
-		#[pallet::constant]
-		type DefaultPoolRound: Get<PoolRound>;
 		/// The custom Bitcoin's chain ID for CCCP.
 		#[pallet::constant]
 		type BitcoinChainId: Get<u32>;
@@ -206,7 +203,7 @@ pub mod pallet {
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			MultiSigRatio::<T>::put(T::DefaultMultiSigRatio::get());
-			CurrentRound::<T>::put(T::DefaultPoolRound::get());
+			CurrentRound::<T>::put(1);
 			ServiceState::<T>::put(MigrationSequence::Normal);
 		}
 	}
