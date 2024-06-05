@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub mod migrations;
 mod pallet;
 pub mod weights;
 
@@ -14,8 +13,6 @@ use sp_core::RuntimeDebug;
 use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
 pub const ADDRESS_U64: u64 = 256;
-
-pub(crate) const LOG_TARGET: &'static str = "runtime::btc-registration-pool";
 
 // syntactic sugar for logging.
 #[macro_export]
