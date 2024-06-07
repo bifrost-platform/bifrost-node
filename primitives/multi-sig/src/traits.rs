@@ -6,6 +6,9 @@ pub trait PoolManager<AccountId> {
 	/// Get the refund address of the given user.
 	fn get_refund_address(who: &AccountId) -> Option<BoundedBitcoinAddress>;
 
+	/// Get the vault address of the given user.
+	fn get_vault_address(who: &AccountId) -> Option<BoundedBitcoinAddress>;
+
 	/// Get the system vault address.
 	fn get_system_vault() -> Option<BoundedBitcoinAddress>;
 

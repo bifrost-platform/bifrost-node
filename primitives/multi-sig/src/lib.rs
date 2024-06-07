@@ -4,8 +4,8 @@ pub mod traits;
 
 pub use miniscript::{
 	bitcoin::{
-		hashes::Hash, key::Error, secp256k1::Secp256k1, Address, Network, Psbt, PublicKey, Script,
-		Txid,
+		hashes::Hash, key::Error, secp256k1::Secp256k1, Address, Amount, Network, Psbt, PublicKey,
+		Script, Txid,
 	},
 	psbt::PsbtExt,
 	Descriptor,
@@ -56,7 +56,7 @@ impl AsRef<[u8]> for Public {
 }
 
 #[derive(Decode, Encode, TypeInfo)]
-/// A m-of-n multi signature based Bitcoin address.
+/// An m-of-n multi signature based Bitcoin address.
 pub struct MultiSigAccount<AccountId> {
 	/// The vault address.
 	pub address: AddressState,

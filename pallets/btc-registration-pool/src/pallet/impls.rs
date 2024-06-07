@@ -21,6 +21,17 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		}
 	}
 
+	fn get_vault_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
+		if let Some(relay_target) = Self::registration_pool(Self::current_round(), who) {
+			match relay_target.vault.address {
+				AddressState::Pending => None,
+				AddressState::Generated(address) => Some(address),
+			}
+		} else {
+			None
+		}
+	}
+
 	fn get_system_vault() -> Option<BoundedBitcoinAddress> {
 		if let Some(vault) = Self::system_vault(Self::current_round()) {
 			match vault.address {

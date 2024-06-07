@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	ExecutedPsbtMessage, PsbtRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
-	WeightInfo,
+	ExecutedPsbtMessage, PsbtRequest, RollbackPollMessage, RollbackPsbtMessage, RollbackRequest,
+	SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -11,10 +11,11 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{traits::PoolManager, UnboundedBytes};
+use bp_multi_sig::{traits::PoolManager, Amount, UnboundedBytes};
+use bp_staking::traits::Authorities;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::vec::Vec;
+use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -42,6 +43,8 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
+		/// The Bifrost relayers.
+		type Relayers: Authorities<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
@@ -58,6 +61,8 @@ pub mod pallet {
 		SocketMessageAlreadySubmitted,
 		/// The request has already been finalized or exists.
 		RequestAlreadyExists,
+		/// The request has already been approved.
+		RequestAlreadyApproved,
 		/// The authority account does not exist.
 		AuthorityDNE,
 		/// The socket contract does not exist.
@@ -78,6 +83,10 @@ pub mod pallet {
 		InvalidSocketMessage,
 		/// The request information is invalid.
 		InvalidRequestInfo,
+		/// The transaction information is invalid.
+		InvalidTxInfo,
+		/// The given bitcoin address is invalid.
+		InvalidBitcoinAddress,
 		/// The submitted system vout is invalid.
 		InvalidSystemVout,
 		/// Cannot finalize the PSBT.
@@ -95,6 +104,12 @@ pub mod pallet {
 		UnsignedPsbtSubmitted { txid: H256 },
 		/// A signed PSBT for an outbound request has been submitted.
 		SignedPsbtSubmitted { txid: H256, authority_id: T::AccountId },
+		/// An unsigned PSBT for a rollback request has been submitted.
+		RollbackPsbtSubmitted { txid: H256 },
+		/// A rollback poll has been submitted.
+		RollbackPollSubmitted { txid: H256, authority_id: T::AccountId, is_approved: bool },
+		/// A rollback request has been approved.
+		RollbackApproved { txid: H256 },
 		/// An outbound request has been finalized.
 		RequestFinalized { txid: H256 },
 		/// An outbound request has been executed.
@@ -102,17 +117,22 @@ pub mod pallet {
 		/// An authority has been set.
 		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
-		SocketSet { new: T::AccountId },
+		SocketSet { new: T::AccountId, is_bitcoin: bool },
 	}
 
 	#[pallet::storage]
 	#[pallet::getter(fn socket_contract)]
-	/// The Socket contract address.
+	/// The `Socket` contract address.
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
+	#[pallet::getter(fn bitcoin_socket_contract)]
+	/// The `BitcoinSocket` contract address.
+	pub type BitcoinSocket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn authority)]
-	/// The core authority address.
+	/// The core authority address. The account that is permitted to submit unsigned PSBT's.
 	pub type Authority<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
@@ -152,11 +172,30 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
+	#[pallet::getter(fn rollback_requests)]
+	/// Pending or approved rollback requests.
+	/// key: The PSBT's txid.
+	/// value: The rollback information.
+	pub type RollbackRequests<T: Config> =
+		StorageMap<_, Twox64Concat, H256, RollbackRequest<T::AccountId>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_outbound_tx)]
-	/// Mapped txid's.
+	/// Mapped outbound txids.
 	/// key: The PSBT's txid.
 	/// value: The composed socket messages.
 	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn bonded_rollback_outputs)]
+	/// Mapped rollback outputs.
+	/// key #1: The rollback transaction txid.
+	/// key #2: The rollback transaction output index.
+	/// value: The rollback PSBT txid.
+	pub type BondedRollbackOutputs<T: Config> =
+		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, H256>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
@@ -202,16 +241,29 @@ pub mod pallet {
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_socket())]
-		/// Set the authority address.
-		pub fn set_socket(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
+		/// Set the `Socket` or `BitcoinSocket` contract address.
+		pub fn set_socket(
+			origin: OriginFor<T>,
+			new: T::AccountId,
+			is_bitcoin: bool,
+		) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			if let Some(old) = <Socket<T>>::get() {
-				ensure!(old != new, Error::<T>::NoWritingSameValue);
-			}
+			if is_bitcoin {
+				if let Some(old) = <BitcoinSocket<T>>::get() {
+					ensure!(old != new, Error::<T>::NoWritingSameValue);
+				}
 
-			<Socket<T>>::put(new.clone());
-			Self::deposit_event(Event::SocketSet { new });
+				<BitcoinSocket<T>>::put(new.clone());
+				Self::deposit_event(Event::SocketSet { new, is_bitcoin });
+			} else {
+				if let Some(old) = <Socket<T>>::get() {
+					ensure!(old != new, Error::<T>::NoWritingSameValue);
+				}
+
+				<Socket<T>>::put(new.clone());
+				Self::deposit_event(Event::SocketSet { new, is_bitcoin });
+			}
 
 			Ok(().into())
 		}
@@ -248,7 +300,10 @@ pub mod pallet {
 			for msg in msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
 			}
-			<PendingRequests<T>>::insert(&txid, PsbtRequest::new(psbt.clone(), socket_messages));
+			<PendingRequests<T>>::insert(
+				&txid,
+				PsbtRequest::new(psbt.clone(), socket_messages, false),
+			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
 			Ok(().into())
@@ -300,9 +355,12 @@ pub mod pallet {
 					pending_request.set_finalized_psbt(finalized_psbt_obj.serialize());
 
 					// move pending to finalized
-					<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages.clone());
-					<FinalizedRequests<T>>::insert(&txid, pending_request);
+					<FinalizedRequests<T>>::insert(&txid, pending_request.clone());
 					<PendingRequests<T>>::remove(&txid);
+
+					if !pending_request.is_rollback {
+						<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages);
+					}
 
 					Self::deposit_event(Event::SignedPsbtSubmitted { txid, authority_id });
 					Self::deposit_event(Event::RequestFinalized { txid });
@@ -333,6 +391,112 @@ pub mod pallet {
 			<FinalizedRequests<T>>::remove(&txid);
 			<ExecutedRequests<T>>::insert(&txid, request);
 			Self::deposit_event(Event::RequestExecuted { txid });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_rollback_request())]
+		/// Submit a rollback PSBT request.
+		pub fn submit_rollback_request(
+			origin: OriginFor<T>,
+			msg: RollbackPsbtMessage<T::AccountId>,
+		) -> DispatchResultWithPostInfo {
+			T::SetOrigin::ensure_origin(origin)?;
+
+			let RollbackPsbtMessage { who, txid, vout, amount, unsigned_psbt } = msg;
+
+			// verify if psbt bytes are valid
+			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
+			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			ensure!(
+				!<RollbackRequests<T>>::contains_key(&psbt_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+
+			// user information must exist
+			let vault = T::RegistrationPool::get_vault_address(&who).ok_or(Error::<T>::UserDNE)?;
+			let refund =
+				T::RegistrationPool::get_refund_address(&who).ok_or(Error::<T>::UserDNE)?;
+
+			// the request must not exist on-chain
+			let hash_key = Self::generate_hash_key(txid, vout, who.clone(), amount);
+			let tx_info = Self::try_get_tx_info(hash_key)?;
+			ensure!(tx_info.to.is_zero(), Error::<T>::RequestAlreadyExists);
+
+			// the psbt must contain only one output
+			let outputs = &psbt_obj.unsigned_tx.output;
+			ensure!(outputs.len() == 1, Error::<T>::InvalidPsbt);
+
+			// the output must be to the user's refund address
+			let to =
+				Self::try_convert_to_address_from_script(outputs[0].script_pubkey.as_script())?;
+			ensure!(to == Self::try_convert_to_address_from_vec(refund)?, Error::<T>::InvalidPsbt);
+
+			// the output amount must be less than the origin amount
+			// (output.amount = origin amount - network fee)
+			ensure!(
+				Amount::from_sat(amount.as_u64()).checked_sub(outputs[0].value).is_some(),
+				Error::<T>::InvalidPsbt
+			);
+
+			<RollbackRequests<T>>::insert(
+				&psbt_txid,
+				RollbackRequest::new(unsigned_psbt, who, txid, vout, vault, amount),
+			);
+			<BondedRollbackOutputs<T>>::insert(txid, vout, psbt_txid);
+			Self::deposit_event(Event::RollbackPsbtSubmitted { txid });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_rollback_poll())]
+		/// Submit a vote for a rollback request.
+		pub fn submit_rollback_poll(
+			origin: OriginFor<T>,
+			msg: RollbackPollMessage<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let RollbackPollMessage { authority_id, unsigned_psbt, is_approved } = msg;
+
+			// verify if psbt bytes are valid
+			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
+			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			let mut rollback_request =
+				<RollbackRequests<T>>::get(&psbt_txid).ok_or(Error::<T>::RequestDNE)?;
+			ensure!(!rollback_request.is_approved, Error::<T>::RequestAlreadyApproved);
+
+			if let Some(vote) = rollback_request.votes.get(&authority_id) {
+				ensure!(*vote != is_approved, Error::<T>::NoWritingSameValue);
+			}
+			rollback_request
+				.votes
+				.try_insert(authority_id.clone(), is_approved)
+				.map_err(|_| Error::<T>::OutOfRange)?;
+
+			Self::deposit_event(Event::RollbackPollSubmitted {
+				txid: psbt_txid,
+				authority_id,
+				is_approved,
+			});
+
+			if rollback_request.votes.iter().filter(|v| *v.1).count() as u32
+				>= T::Relayers::majority()
+			{
+				// approve request and move the `PendingRequests`
+				rollback_request.is_approved = true;
+				<PendingRequests<T>>::insert(
+					&psbt_txid,
+					PsbtRequest::new(rollback_request.unsigned_psbt.clone(), vec![], true),
+				);
+				Self::deposit_event(Event::RollbackApproved { txid: psbt_txid });
+			}
+			<RollbackRequests<T>>::insert(&psbt_txid, rollback_request);
 
 			Ok(().into())
 		}
@@ -392,6 +556,25 @@ pub mod pallet {
 					}
 
 					ValidTransaction::with_tag_prefix("ExecutedPsbtSubmission")
+						.priority(TransactionPriority::MAX)
+						.and_provides(authority_id)
+						.propagate(true)
+						.build()
+				},
+				Call::submit_rollback_poll { msg, signature } => {
+					let RollbackPollMessage { authority_id, unsigned_psbt, .. } = msg;
+
+					// verify if the authority is a selected relayer.
+					if !T::Relayers::is_authority(&authority_id) {
+						return InvalidTransaction::BadSigner.into();
+					}
+
+					// verify if the signature was originated from the authority_id.
+					if !signature.verify(unsigned_psbt.as_ref(), authority_id) {
+						return InvalidTransaction::BadProof.into();
+					}
+
+					ValidTransaction::with_tag_prefix("RollbackPollSubmission")
 						.priority(TransactionPriority::MAX)
 						.and_provides(authority_id)
 						.propagate(true)

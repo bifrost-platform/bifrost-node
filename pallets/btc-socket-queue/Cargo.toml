@@ -25,6 +25,7 @@ sp-io = { workspace = true }
 
 # Bifrost
 bp-multi-sig = { workspace = true }
+bp-staking = { workspace = true }
 
 # Frontier
 pallet-evm = { workspace = true }
