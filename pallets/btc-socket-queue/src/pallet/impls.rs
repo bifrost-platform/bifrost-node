@@ -7,10 +7,9 @@ use bp_multi_sig::{
 use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::DispatchError;
-use sp_std::{boxed::Box, prelude::ToOwned, str, str::FromStr, vec, vec::Vec};
+use sp_std::{boxed::Box, str, str::FromStr, vec, vec::Vec};
 
 use pallet_evm::Runner;
-use scale_info::prelude::string::String;
 use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
 
 use crate::{
@@ -187,18 +186,15 @@ where
 		H256::from(txid)
 	}
 
-	/// Try to get the `RequestInfo` by the given `req_id`.
-	pub fn try_get_request(req_id: &UnboundedBytes) -> Result<RequestInfo, DispatchError> {
-		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
-		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
-
-		let mut calldata: String = SOCKET_GET_REQUEST_FUNCTION_SELECTOR.to_owned();
-		calldata.push_str(&array_bytes::bytes2hex("", req_id));
-
+	pub fn try_evm_call(
+		source: T::AccountId,
+		target: T::AccountId,
+		calldata: &str,
+	) -> Result<UnboundedBytes, DispatchError> {
 		let info = <T as pallet_evm::Config>::Runner::call(
-			caller.into(),
-			socket.into(),
-			hex::decode(&calldata).map_err(|_| Error::<T>::InvalidCalldata)?,
+			source.into(),
+			target.into(),
+			hex::decode(calldata).map_err(|_| Error::<T>::InvalidCalldata)?,
 			U256::zero(),
 			CALL_GAS_LIMIT,
 			None,
@@ -213,7 +209,20 @@ where
 		)
 		.map_err(|_| Error::<T>::InvalidCalldata)?;
 
-		Ok(Self::try_decode_request_info(&info.value)
+		Ok(info.value)
+	}
+
+	/// Try to get the `RequestInfo` by the given `req_id`.
+	pub fn try_get_request(req_id: &UnboundedBytes) -> Result<RequestInfo, DispatchError> {
+		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
+		let socket = <Socket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
+		let calldata = format!(
+			"{}{}",
+			SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+			array_bytes::bytes2hex("", req_id)
+		);
+
+		Ok(Self::try_decode_request_info(&Self::try_evm_call(caller, socket, &calldata)?)
 			.map_err(|_| Error::<T>::InvalidRequestInfo)?)
 	}
 
@@ -226,30 +235,15 @@ where
 	/// Try to get the `TxInfo` by the given `hash_key`.
 	pub fn try_get_tx_info(hash_key: H256) -> Result<TxInfo, DispatchError> {
 		let caller = <Authority<T>>::get().ok_or(Error::<T>::AuthorityDNE)?;
-		let socket = <BitcoinSocket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
+		let bitcoin_socket = <BitcoinSocket<T>>::get().ok_or(Error::<T>::SocketDNE)?;
+		let calldata = format!(
+			"{}{}",
+			BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR,
+			array_bytes::bytes2hex("", hash_key.as_bytes())
+		);
 
-		let mut calldata: String = BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR.to_owned();
-		calldata.push_str(&array_bytes::bytes2hex("", hash_key.as_bytes()));
-
-		let info = <T as pallet_evm::Config>::Runner::call(
-			caller.into(),
-			socket.into(),
-			hex::decode(&calldata).map_err(|_| Error::<T>::InvalidCalldata)?,
-			U256::zero(),
-			CALL_GAS_LIMIT,
-			None,
-			None,
-			None,
-			vec![],
-			false,
-			true,
-			None,
-			None,
-			<T as pallet_evm::Config>::config(),
-		)
-		.map_err(|_| Error::<T>::InvalidCalldata)?;
-
-		Ok(Self::try_decode_tx_info(&info.value).map_err(|_| Error::<T>::InvalidTxInfo)?)
+		Ok(Self::try_decode_tx_info(&Self::try_evm_call(caller, bitcoin_socket, &calldata)?)
+			.map_err(|_| Error::<T>::InvalidTxInfo)?)
 	}
 
 	/// Try to decode the given `TxInfo`.
