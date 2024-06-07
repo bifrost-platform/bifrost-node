@@ -15,7 +15,7 @@ use bp_multi_sig::{traits::PoolManager, Amount, UnboundedBytes};
 use bp_staking::traits::Authorities;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{str, vec, vec::Vec};
+use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -182,7 +182,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_outbound_tx)]
-	/// Mapped outbound txid's.
+	/// Mapped outbound txids.
 	/// key: The PSBT's txid.
 	/// value: The composed socket messages.
 	pub type BondedOutboundTx<T: Config> = StorageMap<_, Twox64Concat, H256, Vec<UnboundedBytes>>;
