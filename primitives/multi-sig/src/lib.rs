@@ -56,7 +56,7 @@ impl AsRef<[u8]> for Public {
 }
 
 #[derive(Decode, Encode, TypeInfo)]
-/// A m-of-n multi signature based Bitcoin address.
+/// An m-of-n multi signature based Bitcoin address.
 pub struct MultiSigAccount<AccountId> {
 	/// The vault address.
 	pub address: AddressState,
