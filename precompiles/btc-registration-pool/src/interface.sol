@@ -15,12 +15,18 @@ interface BtcRegistrationPool {
     /// @param refund_address The registered refund address.
     event VaultPending(address user_bfc_address, string refund_address);
 
+    /// @dev Returns the current round number.
+    /// @custom:selector 319c068c
+    /// @return The current round number.
+    function current_round() external view returns (uint32);
+
     /// @dev Returns the registration information of the user.
-    /// @custom:selector e3fe1187
+    /// @custom:selector a8d1d421
     /// @param user_bfc_address the address that we want to check
     /// @return The registration information
     function registration_info(
-        address user_bfc_address
+        address user_bfc_address,
+        uint32 pool_round
     )
         external
         view
@@ -33,66 +39,66 @@ interface BtcRegistrationPool {
         );
 
     /// @dev Returns the current registration pool
-    /// @custom:selector e9db6a30
+    /// @custom:selector cc65f61a
     /// @return The list of the current registration pool (0: Bifrost addresses, 1: refund addresses, 2: vault addresses)
-    function registration_pool()
+    function registration_pool(uint32 pool_round)
         external
         view
         returns (address[] memory, string[] memory, string[] memory);
 
     /// @dev Returns the current pending registrations
-    /// @custom:selector 867b8c31
+    /// @custom:selector 752507ef
     /// @return The list of the current pending registrations (0: Bifrost addresses, 1: refund addresses)
-    function pending_registrations()
+    function pending_registrations(uint32 pool_round)
         external
         view
         returns (address[] memory, string[] memory);
 
     /// @dev Returns the current bonded vault addresses
-    /// @custom:selector 557bca49
+    /// @custom:selector fd26a335
     /// @return The list of the current bonded vault addresses
-    function vault_addresses() external view returns (string[] memory);
+    function vault_addresses(uint32 pool_round) external view returns (string[] memory);
 
     /// @dev Returns the current bonded descriptors
-    /// @custom:selector 8f228ff1
+    /// @custom:selector f8f5c229
     /// @return The list of the current bonded descriptors
-    function descriptors() external view returns (string[] memory);
+    function descriptors(uint32 pool_round) external view returns (string[] memory);
 
     /// @dev Returns the current bonded refund addresses
-    /// @custom:selector 135ca504
+    /// @custom:selector 4e9b6a3b
     /// @return The list of the current bonded refund addresses
-    function refund_addresses() external view returns (string[] memory);
+    function refund_addresses(uint32 pool_round) external view returns (string[] memory);
 
     /// @dev Returns the bonded vault address mapped to the Bifrost address
-    /// @custom:selector d2534116
+    /// @custom:selector 414628e3
     /// @param user_bfc_address the address that we want to check
     /// @return A Bitcoin vault address
     function vault_address(
-        address user_bfc_address
+        address user_bfc_address, uint32 pool_round
     ) external view returns (string memory);
 
     /// @dev Returns the bonded refund address mapped to the Bifrost address
-    /// @custom:selector 6dcd31db
+    /// @custom:selector e3c8a422
     /// @param user_bfc_address the address that we want to check
     /// @return A Bitcoin refund address
     function refund_address(
-        address user_bfc_address
+        address user_bfc_address, uint32 pool_round
     ) external view returns (string memory);
 
     /// @dev Returns the bonded user address mapped to the given vault address
-    /// @custom:selector 257640e7
+    /// @custom:selector 8d1bc821
     /// @param vault_address the vault address
     /// @return The users Bifrost address
     function user_address(
-        string memory vault_address
+        string memory vault_address, uint32 pool_round
     ) external view returns (address);
 
     /// @dev Returns the bonded descriptor(string) mapped to the given vault address
-    /// @custom:selector 6dcc1eeb
+    /// @custom:selector 6ccaec24
     /// @param vault_address the vault or refund address
     /// @return The descriptor (in string)
     function descriptor(
-        string memory vault_address
+        string memory vault_address, uint32 pool_round
     ) external view returns (string memory);
 
     /// @dev Join the registration pool and request a Bitcoin vault address.

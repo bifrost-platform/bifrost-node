@@ -1,6 +1,6 @@
 use bp_multi_sig::{
-	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, Network, PublicKey,
-	UnboundedBytes,
+	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, MigrationSequence,
+	Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
 use scale_info::prelude::string::ToString;
@@ -14,19 +14,30 @@ use super::pallet::*;
 
 impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	fn get_refund_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
-		if let Some(relay_target) = Self::registration_pool(who) {
+		if let Some(relay_target) = Self::registration_pool(Self::current_round(), who) {
 			Some(relay_target.refund_address)
 		} else {
 			None
 		}
 	}
 
+	fn get_vault_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
+		if let Some(relay_target) = Self::registration_pool(Self::current_round(), who) {
+			match relay_target.vault.address {
+				AddressState::Pending => None,
+				AddressState::Generated(address) => Some(address),
+			}
+		} else {
+			None
+		}
+	}
+
 	fn get_system_vault() -> Option<BoundedBitcoinAddress> {
-		if let Some(vault) = Self::system_vault() {
+		if let Some(vault) = Self::system_vault(Self::current_round()) {
 			match vault.address {
-				AddressState::Pending => return None,
-				AddressState::Generated(address) => return Some(address),
-			};
+				AddressState::Pending => None,
+				AddressState::Generated(address) => Some(address),
+			}
 		} else {
 			None
 		}
@@ -39,12 +50,16 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	fn get_bitcoin_chain_id() -> u32 {
 		T::BitcoinChainId::get()
 	}
+
+	fn get_service_state() -> MigrationSequence {
+		Self::service_state()
+	}
 }
 
 impl<T: Config> Pallet<T> {
 	/// Get the `m` value.
 	pub fn get_m() -> u32 {
-		<MultiSigRatio<T>>::get().mul_ceil(Self::get_n())
+		Self::m_n_ratio().mul_ceil(Self::get_n())
 	}
 
 	/// Get the `n` value.

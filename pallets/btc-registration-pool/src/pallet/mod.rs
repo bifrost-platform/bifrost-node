@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, VaultKeySubmission, WeightInfo,
-	ADDRESS_U64,
+	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound, VaultKeySubmission,
+	WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -11,19 +11,19 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{Network, Public, PublicKey, UnboundedBytes};
+use bp_multi_sig::{MigrationSequence, Network, Public, PublicKey, UnboundedBytes};
 use sp_core::H160;
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	Percent,
 };
-use sp_std::{str, vec, vec::Vec};
+use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -81,6 +81,10 @@ pub mod pallet {
 		VaultDNE,
 		/// The vault is out of range.
 		OutOfRange,
+		/// Service is under maintenance mode.
+		UnderMaintenance,
+		/// Do not control migration sequence in this state.
+		DoNotInterceptMigration,
 	}
 
 	#[pallet::event]
@@ -98,51 +102,94 @@ pub mod pallet {
 		},
 		/// A user's refund address has been (re-)set.
 		RefundSet { who: T::AccountId, old: BoundedBitcoinAddress, new: BoundedBitcoinAddress },
+		/// Round's infos dropped.
+		RoundDropped(PoolRound),
+		/// The migration sequence has started. Waiting for prepare next system vault.
+		MigrationStarted,
+		/// The migration has been completed.
+		MigrationCompleted,
 	}
+
+	#[pallet::storage]
+	#[pallet::getter(fn current_round)]
+	/// The current round of the registration pool.
+	pub type CurrentRound<T: Config> = StorageValue<_, PoolRound, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn service_state)]
+	/// The migration sequence of the registration pool.
+	pub type ServiceState<T: Config> = StorageValue<_, MigrationSequence, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn system_vault)]
 	/// The system vault account that is used for fee refunds.
-	pub type SystemVault<T: Config> = StorageValue<_, MultiSigAccount<T::AccountId>, OptionQuery>;
+	pub type SystemVault<T: Config> =
+		StorageMap<_, Twox64Concat, PoolRound, MultiSigAccount<T::AccountId>, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn registration_pool)]
 	/// Registered addresses that are permitted to relay Bitcoin.
-	pub type RegistrationPool<T: Config> =
-		StorageMap<_, Twox64Concat, T::AccountId, BitcoinRelayTarget<T::AccountId>>;
+	pub type RegistrationPool<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		PoolRound,
+		Twox64Concat,
+		T::AccountId,
+		BitcoinRelayTarget<T::AccountId>,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_vault)]
 	/// Mapped Bitcoin vault addresses. The key is the vault address and the value is the user's Bifrost address.
 	/// For system vault, the value will be set to the precompile address.
-	pub type BondedVault<T: Config> =
-		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, T::AccountId>;
+	pub type BondedVault<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		PoolRound,
+		Twox64Concat,
+		BoundedBitcoinAddress,
+		T::AccountId,
+	>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_refund)]
 	/// Mapped Bitcoin refund addresses. The key is the refund address and the value is the user's Bifrost address(s).
-	pub type BondedRefund<T: Config> =
-		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, Vec<T::AccountId>, ValueQuery>;
+	pub type BondedRefund<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		PoolRound,
+		Twox64Concat,
+		BoundedBitcoinAddress,
+		Vec<T::AccountId>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn bonded_pub_key)]
 	/// Mapped public keys used for vault account generation. The key is the public key and the value is user's Bifrost address.
 	/// For system vault, the value will be set to the precompile address.
-	pub type BondedPubKey<T: Config> = StorageMap<_, Twox64Concat, Public, T::AccountId>;
+	pub type BondedPubKey<T: Config> =
+		StorageDoubleMap<_, Twox64Concat, PoolRound, Twox64Concat, Public, T::AccountId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn bonded_descriptor)]
 	/// Mapped descriptors. The key is the vault address and the value is the descriptor.
-	pub type BondedDescriptor<T: Config> =
-		StorageMap<_, Twox64Concat, BoundedBitcoinAddress, UnboundedBytes>;
+	pub type BondedDescriptor<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		PoolRound,
+		Twox64Concat,
+		BoundedBitcoinAddress,
+		UnboundedBytes,
+	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn required_n)]
-	/// The minimum required number of signatures to send a transaction with the vault account.
+	#[pallet::getter(fn m_n_ratio)]
+	/// The minimum required ratio of signatures to unlock the vault account's txo.
 	pub type MultiSigRatio<T: Config> = StorageValue<_, Percent, ValueQuery>;
 
 	#[pallet::genesis_config]
@@ -156,6 +203,8 @@ pub mod pallet {
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			MultiSigRatio::<T>::put(T::DefaultMultiSigRatio::get());
+			CurrentRound::<T>::put(1);
+			ServiceState::<T>::put(MigrationSequence::Normal);
 		}
 	}
 
@@ -165,29 +214,39 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_refund())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// (Re-)set the user's refund address.
 		pub fn set_refund(origin: OriginFor<T>, new: UnboundedBytes) -> DispatchResultWithPostInfo {
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
 			let who = ensure_signed(origin)?;
 			let new: BoundedBitcoinAddress = Self::get_checked_bitcoin_address(&new)?;
+			let current_round = Self::current_round();
 
-			let mut relay_target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+			let mut relay_target =
+				<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 			let old = relay_target.refund_address.clone();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 
-			ensure!(!<BondedVault<T>>::contains_key(&new), Error::<T>::AddressAlreadyRegistered);
+			ensure!(
+				!<BondedVault<T>>::contains_key(current_round, &new),
+				Error::<T>::AddressAlreadyRegistered
+			);
 
 			// remove from previous bond
-			<BondedRefund<T>>::mutate(&old, |users| {
+			<BondedRefund<T>>::mutate(current_round, &old, |users| {
 				users.retain(|u| *u != who);
 			});
 			// add to new bond
-			<BondedRefund<T>>::mutate(&new, |users| {
+			<BondedRefund<T>>::mutate(current_round, &new, |users| {
 				users.push(who.clone());
 			});
 
 			relay_target.set_refund_address(new.clone());
-			<RegistrationPool<T>>::insert(&who, relay_target);
+			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 
 			Self::deposit_event(Event::RefundSet { who, old, new });
 
@@ -195,29 +254,36 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
 			origin: OriginFor<T>,
 			refund_address: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
 			let who = ensure_signed(origin)?;
 			let refund_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&refund_address)?;
+			let current_round = Self::current_round();
 
 			ensure!(
-				!<BondedVault<T>>::contains_key(&refund_address),
+				!<BondedVault<T>>::contains_key(current_round, &refund_address),
 				Error::<T>::AddressAlreadyRegistered
 			);
 			ensure!(
-				!<RegistrationPool<T>>::contains_key(&who),
+				!<RegistrationPool<T>>::contains_key(current_round, &who),
 				Error::<T>::AddressAlreadyRegistered
 			);
 
-			<BondedRefund<T>>::mutate(&refund_address, |users| {
+			<BondedRefund<T>>::mutate(current_round, &refund_address, |users| {
 				users.push(who.clone());
 			});
 			<RegistrationPool<T>>::insert(
+				current_round,
 				who.clone(),
 				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n()),
 			);
@@ -228,21 +294,38 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Request a system vault address. Initially, the vault address will be in pending state.
-		pub fn request_system_vault(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+		pub fn request_system_vault(
+			origin: OriginFor<T>,
+			migration_prepare: bool,
+		) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			ensure!(<SystemVault<T>>::get().is_none(), Error::<T>::VaultAlreadyGenerated);
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
 
-			<SystemVault<T>>::put(MultiSigAccount::new(Self::get_m(), Self::get_n()));
+			let target_round =
+				if migration_prepare { Self::current_round() + 1 } else { Self::current_round() };
+
+			ensure!(
+				<SystemVault<T>>::get(target_round).is_none(),
+				Error::<T>::VaultAlreadyGenerated
+			);
+
+			<SystemVault<T>>::insert(
+				target_round,
+				MultiSigAccount::new(Self::get_m(), Self::get_n()),
+			);
 			Self::deposit_event(Event::SystemVaultPending);
 
 			Ok(().into())
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_vault_key(
 			origin: OriginFor<T>,
@@ -252,8 +335,16 @@ pub mod pallet {
 			// make sure this cannot be executed by a signed transaction.
 			ensure_none(origin)?;
 
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
+			let current_round = Self::current_round();
+
 			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
-			let mut relay_target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+			let mut relay_target =
+				<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 
 			ensure!(relay_target.vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
 			ensure!(
@@ -266,7 +357,7 @@ pub mod pallet {
 			);
 			ensure!(PublicKey::from_slice(pub_key.as_ref()).is_ok(), Error::<T>::InvalidPublicKey);
 			ensure!(
-				<BondedPubKey<T>>::get(&pub_key).is_none(),
+				<BondedPubKey<T>>::get(current_round, &pub_key).is_none(),
 				Error::<T>::VaultAlreadyContainsPubKey
 			);
 
@@ -283,8 +374,8 @@ pub mod pallet {
 				relay_target.set_vault_address(vault_address.clone());
 				relay_target.vault.set_descriptor(descriptor.clone());
 
-				<BondedVault<T>>::insert(&vault_address, who.clone());
-				<BondedDescriptor<T>>::insert(&vault_address, descriptor);
+				<BondedVault<T>>::insert(current_round, &vault_address, who.clone());
+				<BondedDescriptor<T>>::insert(current_round, &vault_address, descriptor);
 				Self::deposit_event(Event::VaultGenerated {
 					who: who.clone(),
 					refund_address: relay_target.refund_address.clone(),
@@ -292,14 +383,14 @@ pub mod pallet {
 				});
 			}
 
-			<BondedPubKey<T>>::insert(&pub_key, who.clone());
-			<RegistrationPool<T>>::insert(&who, relay_target);
+			<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
+			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 
 			Ok(().into())
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
@@ -309,12 +400,27 @@ pub mod pallet {
 			// make sure this cannot be executed by a signed transaction.
 			ensure_none(origin)?;
 
+			let service_state = Self::service_state();
+
+			let target_round;
+			match Self::service_state() {
+				MigrationSequence::Normal => {
+					target_round = Self::current_round();
+				},
+				MigrationSequence::PrepareNextSystemVault => {
+					target_round = Self::current_round() + 1;
+				},
+				MigrationSequence::UTXOTransfer => {
+					return Err(Error::<T>::UnderMaintenance)?;
+				},
+			}
+
 			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
 
 			let precompile: T::AccountId = H160::from_low_u64_be(ADDRESS_U64).into();
 			ensure!(precompile == who, Error::<T>::VaultDNE);
 
-			if let Some(mut system_vault) = <SystemVault<T>>::get() {
+			if let Some(mut system_vault) = <SystemVault<T>>::get(target_round) {
 				ensure!(system_vault.is_pending(), Error::<T>::VaultAlreadyGenerated);
 				ensure!(
 					!system_vault.is_authority_submitted(&authority_id),
@@ -329,7 +435,7 @@ pub mod pallet {
 					Error::<T>::InvalidPublicKey
 				);
 				ensure!(
-					<BondedPubKey<T>>::get(&pub_key).is_none(),
+					<BondedPubKey<T>>::get(target_round, &pub_key).is_none(),
 					Error::<T>::VaultAlreadyContainsPubKey
 				);
 
@@ -345,16 +451,20 @@ pub mod pallet {
 					system_vault.set_address(vault_address.clone());
 					system_vault.set_descriptor(descriptor.clone());
 
-					<BondedVault<T>>::insert(&vault_address, precompile.clone());
-					<BondedDescriptor<T>>::insert(&vault_address, descriptor);
+					<BondedVault<T>>::insert(target_round, &vault_address, precompile.clone());
+					<BondedDescriptor<T>>::insert(target_round, &vault_address, descriptor);
 					Self::deposit_event(Event::VaultGenerated {
 						who: precompile.clone(),
 						refund_address: Default::default(),
 						vault_address,
 					});
+
+					if service_state == MigrationSequence::PrepareNextSystemVault {
+						<ServiceState<T>>::put(MigrationSequence::UTXOTransfer);
+					}
 				}
-				<BondedPubKey<T>>::insert(&pub_key, precompile);
-				<SystemVault<T>>::put(system_vault);
+				<BondedPubKey<T>>::insert(target_round, &pub_key, precompile);
+				<SystemVault<T>>::insert(target_round, system_vault);
 			} else {
 				return Err(Error::<T>::VaultDNE)?;
 			}
@@ -363,35 +473,97 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::clear_vault())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn clear_vault(
 			origin: OriginFor<T>,
 			vault_address: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
+
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
+			let current_round = Self::current_round();
 			let vault_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&vault_address)?;
 
-			let who = <BondedVault<T>>::get(&vault_address).ok_or(Error::<T>::VaultDNE)?;
+			let who =
+				<BondedVault<T>>::get(current_round, &vault_address).ok_or(Error::<T>::VaultDNE)?;
 			if who == H160::from_low_u64_be(ADDRESS_U64).into() {
 				// system vault
-				let system_vault = <SystemVault<T>>::get().ok_or(Error::<T>::VaultDNE)?;
+				let system_vault =
+					<SystemVault<T>>::get(Self::current_round()).ok_or(Error::<T>::VaultDNE)?;
 				for pubkey in system_vault.pub_keys() {
-					<BondedPubKey<T>>::remove(&pubkey);
+					<BondedPubKey<T>>::remove(current_round, &pubkey);
 				}
-				<SystemVault<T>>::kill();
+				<SystemVault<T>>::remove(Self::current_round());
 			} else {
 				// user
-				let target = <RegistrationPool<T>>::get(&who).ok_or(Error::<T>::UserDNE)?;
+				let target =
+					Self::registration_pool(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 				for pubkey in target.vault.pub_keys() {
-					<BondedPubKey<T>>::remove(&pubkey);
+					<BondedPubKey<T>>::remove(current_round, &pubkey);
 				}
-				<RegistrationPool<T>>::remove(&who);
-				<BondedRefund<T>>::remove(&target.refund_address);
+				<RegistrationPool<T>>::remove(current_round, &who);
+				<BondedRefund<T>>::remove(current_round, &target.refund_address);
 			}
 
-			<BondedVault<T>>::remove(&vault_address);
-			<BondedDescriptor<T>>::remove(&vault_address);
+			<BondedVault<T>>::remove(current_round, &vault_address);
+			<BondedDescriptor<T>>::remove(current_round, &vault_address);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn migration_control(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin.clone())?;
+
+			match Self::service_state() {
+				MigrationSequence::Normal => {
+					Self::deposit_event(Event::MigrationStarted);
+					Self::request_system_vault(origin, true)?;
+					<ServiceState<T>>::put(MigrationSequence::PrepareNextSystemVault);
+				},
+				MigrationSequence::PrepareNextSystemVault => {
+					return Err(<Error<T>>::DoNotInterceptMigration)?;
+				},
+				MigrationSequence::UTXOTransfer => {
+					Self::deposit_event(Event::MigrationCompleted);
+					<CurrentRound<T>>::mutate(|r| *r += 1);
+					<ServiceState<T>>::put(MigrationSequence::Normal);
+				},
+			}
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[allow(deprecated)]
+		pub fn drop_previous_round(
+			origin: OriginFor<T>,
+			round: PoolRound,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+			ensure!(round < Self::current_round(), Error::<T>::OutOfRange);
+
+			// remove all data related to the round
+			<SystemVault<T>>::remove(round);
+			<RegistrationPool<T>>::remove_prefix(round, None);
+			<BondedVault<T>>::remove_prefix(round, None);
+			<BondedRefund<T>>::remove_prefix(round, None);
+			<BondedPubKey<T>>::remove_prefix(round, None);
+			<BondedDescriptor<T>>::remove_prefix(round, None);
+
+			Self::deposit_event(Event::RoundDropped(round));
 
 			Ok(().into())
 		}
