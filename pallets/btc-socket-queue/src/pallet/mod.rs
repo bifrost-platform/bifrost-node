@@ -271,7 +271,7 @@ pub mod pallet {
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_unsigned_psbt())]
 		/// Submit an unsigned PSBT of an outbound request.
-		/// This extrinsic can only be executed by the `UnsignedPsbtSubmitter`.
+		/// This extrinsic can only be executed by the `Authority`.
 		pub fn submit_unsigned_psbt(
 			origin: OriginFor<T>,
 			msg: UnsignedPsbtMessage<T::AccountId>,
@@ -412,6 +412,10 @@ pub mod pallet {
 
 			ensure!(
 				!<RollbackRequests<T>>::contains_key(&psbt_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<BondedRollbackOutputs<T>>::contains_key(&txid, &vout),
 				Error::<T>::RequestAlreadyExists
 			);
 
