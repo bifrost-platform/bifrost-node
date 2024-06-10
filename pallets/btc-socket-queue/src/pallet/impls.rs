@@ -4,13 +4,15 @@ use bp_multi_sig::{
 	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
 	Txid, UnboundedBytes,
 };
+use pallet_evm::Runner;
+use scale_info::prelude::format;
 use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::DispatchError;
+use sp_runtime::{
+	transaction_validity::{InvalidTransaction, TransactionValidityError},
+	DispatchError,
+};
 use sp_std::{boxed::Box, str, str::FromStr, vec, vec::Vec};
-
-use pallet_evm::Runner;
-use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
 
 use crate::{
 	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UncheckedOutput, UserRequest,
