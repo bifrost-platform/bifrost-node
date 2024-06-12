@@ -105,7 +105,7 @@ where
 			// verify socket messages
 			if let Some(socket_messages) = unchecked_outputs.get(&to) {
 				// output for system vault must contain zero messages.
-				if socket_messages.is_empty() && to == system_vault {
+				if to == system_vault && socket_messages.is_empty() {
 					return Err(Error::<T>::InvalidUncheckedOutput.into());
 				}
 
@@ -149,9 +149,9 @@ where
 					amount = amount.checked_add(msg.params.amount).unwrap();
 				}
 
-				// verify psbt output
+				// verify psbt output (refund addresses only)
 				let psbt_amount = U256::from(output.value.to_sat());
-				if psbt_amount != amount {
+				if to != system_vault && psbt_amount != amount {
 					return Err(Error::<T>::InvalidPsbt.into());
 				}
 			} else {
