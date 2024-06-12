@@ -77,6 +77,8 @@ pub mod pallet {
 		RequestDNE,
 		/// The submitted PSBT is invalid.
 		InvalidPsbt,
+		/// The submitted unchecked output is invalid.
+		InvalidUncheckedOutput,
 		/// The contract calldata is invalid.
 		InvalidCalldata,
 		/// The socket message is invalid.
@@ -87,8 +89,6 @@ pub mod pallet {
 		InvalidTxInfo,
 		/// The given bitcoin address is invalid.
 		InvalidBitcoinAddress,
-		/// The submitted system vout is invalid.
-		InvalidSystemVout,
 		/// Cannot finalize the PSBT.
 		CannotFinalizePsbt,
 		/// The value is out of range.
@@ -279,7 +279,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { system_vout, socket_messages, psbt, .. } = msg;
+			let UnsignedPsbtMessage { outputs, psbt, .. } = msg;
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
@@ -291,18 +291,15 @@ pub mod pallet {
 			ensure!(!<ExecutedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 
 			// verify PSBT outputs
-			let system_vout =
-				usize::try_from(system_vout).map_err(|_| Error::<T>::InvalidSystemVout)?;
-			let (unchecked, msgs) =
-				Self::try_build_unchecked_outputs(&socket_messages, system_vout)?;
-			Self::try_psbt_output_verification(&psbt_obj, unchecked, system_vout)?;
+			let (deserialized_msgs, serialized_msgs) =
+				Self::try_psbt_output_verification(&psbt_obj, outputs)?;
 
-			for msg in msgs {
+			for msg in deserialized_msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
 			}
 			<PendingRequests<T>>::insert(
 				&txid,
-				PsbtRequest::new(psbt.clone(), socket_messages, false),
+				PsbtRequest::new(psbt.clone(), serialized_msgs, false),
 			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
