@@ -72,6 +72,16 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub enum RequestType {
+	/// PSBT for normal requests.
+	Normal,
+	/// PSBT for rollback requests.
+	Rollback,
+	/// PSBT for vault migration requests.
+	Migration,
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The submitted PSBT information for outbound request(s).
 pub struct PsbtRequest<AccountId> {
 	/// The submitted origin unsigned PSBT (in bytes).
@@ -85,8 +95,8 @@ pub struct PsbtRequest<AccountId> {
 	/// The submitted `SocketMessage`'s of this request. It is ordered by the PSBT's tx outputs.
 	/// This will be empty for rollback requests.
 	pub socket_messages: Vec<UnboundedBytes>,
-	/// The flag whether the request is for normal outbounds or rollbacks.
-	pub is_rollback: bool,
+	/// The request type of the PSBT.
+	pub request_type: RequestType,
 }
 
 impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
@@ -94,7 +104,7 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	pub fn new(
 		unsigned_psbt: UnboundedBytes,
 		socket_messages: Vec<UnboundedBytes>,
-		is_rollback: bool,
+		request_type: RequestType,
 	) -> Self {
 		Self {
 			combined_psbt: unsigned_psbt.clone(),
@@ -102,7 +112,7 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 			finalized_psbt: UnboundedBytes::default(),
 			signed_psbts: BoundedBTreeMap::default(),
 			socket_messages,
-			is_rollback,
+			request_type,
 		}
 	}
 
@@ -143,6 +153,8 @@ pub struct UnsignedPsbtMessage<AccountId> {
 	pub outputs: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>>,
 	/// The unsigned PSBT (in bytes).
 	pub psbt: UnboundedBytes,
+	/// The flag that represents whether the PSBT is for migration or not.
+	pub is_migration: bool,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]

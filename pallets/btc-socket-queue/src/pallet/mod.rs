@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	ExecutedPsbtMessage, PsbtRequest, RollbackPollMessage, RollbackPsbtMessage, RollbackRequest,
-	SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
+	ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage, RollbackPsbtMessage,
+	RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -11,7 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{traits::PoolManager, Amount, UnboundedBytes};
+use bp_multi_sig::{traits::PoolManager, Amount, MigrationSequence, UnboundedBytes};
 use bp_staking::traits::Authorities;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
@@ -95,6 +95,8 @@ pub mod pallet {
 		OutOfRange,
 		/// Cannot overwrite to the same value.
 		NoWritingSameValue,
+		/// Service is under maintenance mode.
+		UnderMaintenance,
 	}
 
 	#[pallet::event]
@@ -279,7 +281,14 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { outputs, psbt, .. } = msg;
+			let UnsignedPsbtMessage { outputs, psbt, is_migration, .. } = msg;
+
+			if is_migration {
+				ensure!(
+					T::RegistrationPool::get_service_state() == MigrationSequence::UTXOTransfer,
+					Error::<T>::UnderMaintenance
+				);
+			}
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
@@ -292,14 +301,18 @@ pub mod pallet {
 
 			// verify PSBT outputs
 			let (deserialized_msgs, serialized_msgs) =
-				Self::try_psbt_output_verification(&psbt_obj, outputs)?;
+				Self::try_psbt_output_verification(&psbt_obj, outputs, is_migration)?;
 
 			for msg in deserialized_msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
 			}
 			<PendingRequests<T>>::insert(
 				&txid,
-				PsbtRequest::new(psbt.clone(), serialized_msgs, false),
+				PsbtRequest::new(
+					psbt.clone(),
+					serialized_msgs,
+					if is_migration { RequestType::Migration } else { RequestType::Normal },
+				),
 			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
@@ -355,7 +368,7 @@ pub mod pallet {
 					<FinalizedRequests<T>>::insert(&txid, pending_request.clone());
 					<PendingRequests<T>>::remove(&txid);
 
-					if !pending_request.is_rollback {
+					if matches!(pending_request.request_type, RequestType::Normal) {
 						<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages);
 					}
 
@@ -402,6 +415,11 @@ pub mod pallet {
 			T::SetOrigin::ensure_origin(origin)?;
 
 			let RollbackPsbtMessage { who, txid, vout, amount, unsigned_psbt } = msg;
+
+			ensure!(
+				T::RegistrationPool::get_service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
@@ -493,7 +511,11 @@ pub mod pallet {
 				rollback_request.is_approved = true;
 				<PendingRequests<T>>::insert(
 					&psbt_txid,
-					PsbtRequest::new(rollback_request.unsigned_psbt.clone(), vec![], true),
+					PsbtRequest::new(
+						rollback_request.unsigned_psbt.clone(),
+						vec![],
+						RequestType::Rollback,
+					),
 				);
 				Self::deposit_event(Event::RollbackApproved { txid: psbt_txid });
 			}
