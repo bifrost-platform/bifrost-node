@@ -105,7 +105,7 @@ where
 			// verify socket messages
 			if let Some(socket_messages) = unchecked_outputs.get(&to) {
 				// output for system vault must contain zero messages.
-				if to == system_vault && socket_messages.is_empty() {
+				if to == system_vault && !socket_messages.is_empty() {
 					return Err(Error::<T>::InvalidUncheckedOutput.into());
 				}
 
