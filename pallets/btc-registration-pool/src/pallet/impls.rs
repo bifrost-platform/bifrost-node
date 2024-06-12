@@ -32,8 +32,8 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		}
 	}
 
-	fn get_system_vault() -> Option<BoundedBitcoinAddress> {
-		if let Some(vault) = Self::system_vault(Self::current_round()) {
+	fn get_system_vault(round: u32) -> Option<BoundedBitcoinAddress> {
+		if let Some(vault) = Self::system_vault(round) {
 			match vault.address {
 				AddressState::Pending => None,
 				AddressState::Generated(address) => Some(address),
@@ -53,6 +53,10 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 
 	fn get_service_state() -> MigrationSequence {
 		Self::service_state()
+	}
+
+	fn get_current_round() -> u32 {
+		Self::current_round()
 	}
 }
 

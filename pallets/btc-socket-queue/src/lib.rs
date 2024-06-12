@@ -153,8 +153,6 @@ pub struct UnsignedPsbtMessage<AccountId> {
 	pub outputs: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>>,
 	/// The unsigned PSBT (in bytes).
 	pub psbt: UnboundedBytes,
-	/// The flag that represents whether the PSBT is for migration or not.
-	pub is_migration: bool,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
