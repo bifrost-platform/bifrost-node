@@ -10,7 +10,7 @@ pub trait PoolManager<AccountId> {
 	fn get_vault_address(who: &AccountId) -> Option<BoundedBitcoinAddress>;
 
 	/// Get the system vault address.
-	fn get_system_vault() -> Option<BoundedBitcoinAddress>;
+	fn get_system_vault(round: u32) -> Option<BoundedBitcoinAddress>;
 
 	/// Get the Bitcoin network of the current runtime.
 	fn get_bitcoin_network() -> Network;
@@ -20,4 +20,7 @@ pub trait PoolManager<AccountId> {
 
 	/// Get current service state.
 	fn get_service_state() -> MigrationSequence;
+
+	/// Get the current pool round.
+	fn get_current_round() -> u32;
 }

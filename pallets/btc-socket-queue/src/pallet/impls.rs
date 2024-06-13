@@ -5,17 +5,17 @@ use bp_multi_sig::{
 	Txid, UnboundedBytes,
 };
 use pallet_evm::Runner;
-use scale_info::prelude::format;
+use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	transaction_validity::{InvalidTransaction, TransactionValidityError},
-	DispatchError,
+	BoundedVec, DispatchError,
 };
-use sp_std::{boxed::Box, str, str::FromStr, vec, vec::Vec};
+use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
 
 use crate::{
-	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UncheckedOutput, UserRequest,
+	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UserRequest,
 	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 
@@ -73,107 +73,92 @@ where
 			.assume_checked())
 	}
 
-	/// Try to verify the PSBT transaction outputs with the unchecked outputs derived from the submitted socket messages.
+	/// Try to verify PSBT outputs with the given `SocketMessage`'s.
 	pub fn try_psbt_output_verification(
 		psbt: &Psbt,
-		unchecked: Vec<UncheckedOutput>,
-		system_vout: usize,
-	) -> Result<(), DispatchError> {
-		let origin = &psbt.unsigned_tx.output;
-		if origin.len() != unchecked.len() {
+		unchecked_outputs: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>>,
+	) -> Result<(Vec<SocketMessage>, Vec<UnboundedBytes>), DispatchError> {
+		let psbt_outputs = &psbt.unsigned_tx.output;
+		// output length must match.
+		if psbt_outputs.len() != unchecked_outputs.len() {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
-		// at least 2 outputs required. one for refund and one for system vault.
-		if origin.len() < 2 {
+		// for normal requests, at least 2 outputs required. one or more for refund(s) and one for system vault.
+		if psbt_outputs.len() < 2 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
+		let current_round = T::RegistrationPool::get_current_round();
+		let system_vault = T::RegistrationPool::get_system_vault(current_round)
+			.ok_or(Error::<T>::SystemVaultDNE)?;
 
-		for i in 0..origin.len() {
-			let to = Self::try_convert_to_address_from_script(origin[i].script_pubkey.as_script())?;
-			if to != unchecked[i].to {
-				return Err(Error::<T>::InvalidPsbt.into());
-			}
+		let mut deserialized_msgs = vec![];
+		let mut serialized_msgs = vec![];
+		let mut msg_hashes = vec![];
+		for output in psbt_outputs {
+			let to: BoundedBitcoinAddress = BoundedVec::try_from(
+				Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
+					.to_string()
+					.as_bytes()
+					.to_vec(),
+			)
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
-			if i == system_vout {
-				// TODO: check amount
-			} else {
-				let amount = U256::from(origin[i].value.to_sat());
-				if amount != unchecked[i].amount {
+			if let Some(socket_messages) = unchecked_outputs.get(&to) {
+				// output for system vault must contain zero messages.
+				if to == system_vault && !socket_messages.is_empty() {
+					return Err(Error::<T>::InvalidUncheckedOutput.into());
+				}
+
+				// verify socket messages
+				let mut amount = U256::default();
+				for serialized_msg in socket_messages {
+					let msg = Self::try_decode_socket_message(serialized_msg)
+						.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+					let msg_hash = Self::hash_bytes(
+						&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
+					);
+					if msg_hashes.contains(&msg_hash) {
+						return Err(Error::<T>::InvalidSocketMessage.into());
+					}
+					let request_info = Self::try_get_request(&msg.encode_req_id())?;
+
+					// the socket message should be valid
+					if !request_info.is_msg_hash(msg_hash) {
+						return Err(Error::<T>::InvalidSocketMessage.into());
+					}
+					if !request_info.is_accepted() || !msg.is_accepted() {
+						return Err(Error::<T>::InvalidSocketMessage.into());
+					}
+					if !msg.is_outbound(
+						<T as pallet_evm::Config>::ChainId::get() as u32,
+						T::RegistrationPool::get_bitcoin_chain_id(),
+					) {
+						return Err(Error::<T>::InvalidSocketMessage.into());
+					}
+					if Self::socket_messages(&msg.req_id.sequence).is_some() {
+						return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
+					}
+
+					// user must be registered
+					if T::RegistrationPool::get_refund_address(&msg.params.to.into()).is_none() {
+						return Err(Error::<T>::UserDNE.into());
+					}
+
+					deserialized_msgs.push(msg.clone());
+					serialized_msgs.push(serialized_msg.clone());
+					msg_hashes.push(msg_hash);
+					amount = amount.checked_add(msg.params.amount).unwrap();
+				}
+				// verify psbt output (refund addresses only)
+				let psbt_amount = U256::from(output.value.to_sat());
+				if to != system_vault && psbt_amount != amount {
 					return Err(Error::<T>::InvalidPsbt.into());
 				}
+			} else {
+				return Err(Error::<T>::InvalidUncheckedOutput.into());
 			}
 		}
-		Ok(())
-	}
-
-	/// Try to verify the submitted socket messages and build unchecked outputs.
-	pub fn try_build_unchecked_outputs(
-		socket_messages: &Vec<UnboundedBytes>,
-		system_vout: usize,
-	) -> Result<(Vec<UncheckedOutput>, Vec<SocketMessage>), DispatchError> {
-		let system_vault =
-			T::RegistrationPool::get_system_vault().ok_or(Error::<T>::SystemVaultDNE)?;
-
-		// TODO: check length bound
-		if socket_messages.is_empty() {
-			return Err(Error::<T>::InvalidSocketMessage.into());
-		}
-		if socket_messages.len() < system_vout {
-			return Err(Error::<T>::InvalidSystemVout.into());
-		}
-		let mut outputs = vec![];
-
-		let mut msgs = vec![];
-		let mut msg_hashes = vec![];
-		for raw_msg in socket_messages {
-			let msg = Self::try_decode_socket_message(raw_msg)
-				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-			let msg_hash = Self::hash_bytes(
-				&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
-			);
-			if msg_hashes.contains(&msg_hash) {
-				return Err(Error::<T>::InvalidSocketMessage.into());
-			}
-
-			let request_info = Self::try_get_request(&msg.encode_req_id())?;
-
-			// the socket message should be valid
-			if !request_info.is_msg_hash(msg_hash) {
-				return Err(Error::<T>::InvalidSocketMessage.into());
-			}
-			if !request_info.is_accepted() || !msg.is_accepted() {
-				return Err(Error::<T>::InvalidSocketMessage.into());
-			}
-			if !msg.is_outbound(
-				<T as pallet_evm::Config>::ChainId::get() as u32,
-				T::RegistrationPool::get_bitcoin_chain_id(),
-			) {
-				return Err(Error::<T>::InvalidSocketMessage.into());
-			}
-			if Self::socket_messages(&msg.req_id.sequence).is_some() {
-				return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
-			}
-
-			// the user must exist in the pool
-			let to = T::RegistrationPool::get_refund_address(&msg.params.to.into())
-				.ok_or(Error::<T>::UserDNE)?;
-			outputs.push(UncheckedOutput {
-				to: Self::try_convert_to_address_from_vec(to)?,
-				amount: msg.params.amount,
-			});
-
-			msgs.push(msg);
-			msg_hashes.push(msg_hash);
-		}
-		// we assume the utxo repayment output would be placed at `system_vout`
-		outputs.insert(
-			system_vout,
-			UncheckedOutput {
-				to: Self::try_convert_to_address_from_vec(system_vault)?,
-				amount: Default::default(),
-			},
-		);
-		Ok((outputs, msgs))
+		Ok((deserialized_msgs, serialized_msgs))
 	}
 
 	/// Hash the given bytes.
@@ -188,6 +173,7 @@ where
 		H256::from(txid)
 	}
 
+	/// Try Pallet EVM contract call.
 	pub fn try_evm_call(
 		source: T::AccountId,
 		target: T::AccountId,

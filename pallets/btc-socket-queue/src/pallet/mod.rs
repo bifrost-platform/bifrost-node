@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	ExecutedPsbtMessage, PsbtRequest, RollbackPollMessage, RollbackPsbtMessage, RollbackRequest,
-	SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
+	ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage, RollbackPsbtMessage,
+	RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -11,8 +11,11 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{traits::PoolManager, Amount, UnboundedBytes};
+use bp_multi_sig::{
+	traits::PoolManager, Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
+};
 use bp_staking::traits::Authorities;
+use scale_info::prelude::string::ToString;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{vec, vec::Vec};
@@ -77,6 +80,8 @@ pub mod pallet {
 		RequestDNE,
 		/// The submitted PSBT is invalid.
 		InvalidPsbt,
+		/// The submitted unchecked output is invalid.
+		InvalidUncheckedOutput,
 		/// The contract calldata is invalid.
 		InvalidCalldata,
 		/// The socket message is invalid.
@@ -87,14 +92,14 @@ pub mod pallet {
 		InvalidTxInfo,
 		/// The given bitcoin address is invalid.
 		InvalidBitcoinAddress,
-		/// The submitted system vout is invalid.
-		InvalidSystemVout,
 		/// Cannot finalize the PSBT.
 		CannotFinalizePsbt,
 		/// The value is out of range.
 		OutOfRange,
 		/// Cannot overwrite to the same value.
 		NoWritingSameValue,
+		/// Service is under maintenance mode.
+		UnderMaintenance,
 	}
 
 	#[pallet::event]
@@ -221,7 +226,7 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_authority())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Set the authority address.
 		pub fn set_authority(
 			origin: OriginFor<T>,
@@ -240,7 +245,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_socket())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Set the `Socket` or `BitcoinSocket` contract address.
 		pub fn set_socket(
 			origin: OriginFor<T>,
@@ -269,7 +274,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_unsigned_psbt())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit an unsigned PSBT of an outbound request.
 		/// This extrinsic can only be executed by the `Authority`.
 		pub fn submit_unsigned_psbt(
@@ -279,7 +284,12 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UnsignedPsbtMessage { system_vout, socket_messages, psbt, .. } = msg;
+			let UnsignedPsbtMessage { outputs, psbt, .. } = msg;
+
+			ensure!(
+				T::RegistrationPool::get_service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
@@ -291,18 +301,15 @@ pub mod pallet {
 			ensure!(!<ExecutedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 
 			// verify PSBT outputs
-			let system_vout =
-				usize::try_from(system_vout).map_err(|_| Error::<T>::InvalidSystemVout)?;
-			let (unchecked, msgs) =
-				Self::try_build_unchecked_outputs(&socket_messages, system_vout)?;
-			Self::try_psbt_output_verification(&psbt_obj, unchecked, system_vout)?;
+			let (deserialized_msgs, serialized_msgs) =
+				Self::try_psbt_output_verification(&psbt_obj, outputs)?;
 
-			for msg in msgs {
+			for msg in deserialized_msgs {
 				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
 			}
 			<PendingRequests<T>>::insert(
 				&txid,
-				PsbtRequest::new(psbt.clone(), socket_messages, false),
+				PsbtRequest::new(psbt.clone(), serialized_msgs, RequestType::Normal),
 			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
@@ -310,7 +317,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_signed_psbt())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit a signed PSBT of a pending outbound request.
 		/// This extrinsic can only be executed by relay executives.
 		pub fn submit_signed_psbt(
@@ -358,7 +365,7 @@ pub mod pallet {
 					<FinalizedRequests<T>>::insert(&txid, pending_request.clone());
 					<PendingRequests<T>>::remove(&txid);
 
-					if !pending_request.is_rollback {
+					if matches!(pending_request.request_type, RequestType::Normal) {
 						<BondedOutboundTx<T>>::insert(&txid, pending_request.socket_messages);
 					}
 
@@ -376,7 +383,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_executed_request())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit an executed PSBT request.
 		pub fn submit_executed_request(
 			origin: OriginFor<T>,
@@ -396,7 +403,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_rollback_request())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit a rollback PSBT request.
 		pub fn submit_rollback_request(
 			origin: OriginFor<T>,
@@ -405,6 +412,11 @@ pub mod pallet {
 			T::SetOrigin::ensure_origin(origin)?;
 
 			let RollbackPsbtMessage { who, txid, vout, amount, unsigned_psbt } = msg;
+
+			ensure!(
+				T::RegistrationPool::get_service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
@@ -456,7 +468,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_rollback_poll())]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Submit a vote for a rollback request.
 		pub fn submit_rollback_poll(
 			origin: OriginFor<T>,
@@ -496,12 +508,67 @@ pub mod pallet {
 				rollback_request.is_approved = true;
 				<PendingRequests<T>>::insert(
 					&psbt_txid,
-					PsbtRequest::new(rollback_request.unsigned_psbt.clone(), vec![], true),
+					PsbtRequest::new(
+						rollback_request.unsigned_psbt.clone(),
+						vec![],
+						RequestType::Rollback,
+					),
 				);
 				Self::deposit_event(Event::RollbackApproved { txid: psbt_txid });
 			}
 			<RollbackRequests<T>>::insert(&psbt_txid, rollback_request);
 
+			Ok(().into())
+		}
+
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn submit_migration_request(
+			origin: OriginFor<T>,
+			psbt: UnboundedBytes,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				T::RegistrationPool::get_service_state() == MigrationSequence::UTXOTransfer,
+				Error::<T>::UnderMaintenance
+			);
+
+			// verify if psbt bytes are valid
+			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
+			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			// prevent storage duplication
+			ensure!(!<PendingRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
+			ensure!(!<FinalizedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
+			ensure!(!<ExecutedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
+
+			// only one output for migrations (=system vault)
+			let psbt_outputs = &psbt_obj.unsigned_tx.output;
+			if psbt_outputs.len() != 1 {
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
+
+			let target_round = T::RegistrationPool::get_current_round().saturating_add(1);
+			let system_vault = T::RegistrationPool::get_system_vault(target_round)
+				.ok_or(Error::<T>::SystemVaultDNE)?;
+			let to: BoundedBitcoinAddress = BoundedVec::try_from(
+				Self::try_convert_to_address_from_script(
+					psbt_outputs[0].script_pubkey.as_script(),
+				)?
+				.to_string()
+				.as_bytes()
+				.to_vec(),
+			)
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+			if to != system_vault {
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
+
+			<PendingRequests<T>>::insert(
+				&txid,
+				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
+			);
 			Ok(().into())
 		}
 	}

@@ -10,11 +10,11 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use bp_multi_sig::{Address, BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_multi_sig::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use bp_staking::MAX_AUTHORITIES;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
-use sp_std::{vec, vec::Vec};
+use sp_std::{collections::btree_map::BTreeMap, vec, vec::Vec};
 
 /// The gas limit used for contract function calls.
 const CALL_GAS_LIMIT: u64 = 1_000_000;
@@ -72,6 +72,16 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub enum RequestType {
+	/// PSBT for normal requests.
+	Normal,
+	/// PSBT for rollback requests.
+	Rollback,
+	/// PSBT for vault migration requests.
+	Migration,
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The submitted PSBT information for outbound request(s).
 pub struct PsbtRequest<AccountId> {
 	/// The submitted origin unsigned PSBT (in bytes).
@@ -83,10 +93,10 @@ pub struct PsbtRequest<AccountId> {
 	/// The submitted signed PSBT's (in bytes).
 	pub signed_psbts: BoundedBTreeMap<AccountId, UnboundedBytes, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 	/// The submitted `SocketMessage`'s of this request. It is ordered by the PSBT's tx outputs.
-	/// This will be empty for rollback requests.
+	/// This will be empty for rollback/migration requests.
 	pub socket_messages: Vec<UnboundedBytes>,
-	/// The flag whether the request is for normal outbounds or rollbacks.
-	pub is_rollback: bool,
+	/// The request type of the PSBT.
+	pub request_type: RequestType,
 }
 
 impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
@@ -94,7 +104,7 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	pub fn new(
 		unsigned_psbt: UnboundedBytes,
 		socket_messages: Vec<UnboundedBytes>,
-		is_rollback: bool,
+		request_type: RequestType,
 	) -> Self {
 		Self {
 			combined_psbt: unsigned_psbt.clone(),
@@ -102,7 +112,7 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 			finalized_psbt: UnboundedBytes::default(),
 			signed_psbts: BoundedBTreeMap::default(),
 			socket_messages,
-			is_rollback,
+			request_type,
 		}
 	}
 
@@ -137,11 +147,10 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 pub struct UnsignedPsbtMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
-	/// The PSBT's system output index.
-	pub system_vout: U256,
-	/// The emitted `SocketMessage`'s (in bytes).
-	/// The order should match with the submitted PSBT's outputs order.
-	pub socket_messages: Vec<UnboundedBytes>,
+	/// The PSBT output information.
+	/// key: the output `to` address. (=refund / system vault)
+	/// value: the `SocketMessage`'s related to the output. (system vault output will have empty socket messages)
+	pub outputs: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>>,
 	/// The unsigned PSBT (in bytes).
 	pub psbt: UnboundedBytes,
 }
@@ -469,12 +478,4 @@ impl TryFrom<Vec<Token>> for RequestInfo {
 			registered_time: token[2].clone().to_uint().ok_or(())?,
 		})
 	}
-}
-
-/// Unchecked PSBT transaction outputs derived by the submitted socket messages.
-pub struct UncheckedOutput {
-	/// The target Bitcoin address.
-	pub to: Address,
-	/// The amount to be transferred. (unit: sat)
-	pub amount: U256,
 }
