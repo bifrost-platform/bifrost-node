@@ -6,6 +6,7 @@ use bifrost_dev_constants::currency::{GWEI, SUPPLY_FACTOR, UNITS as BFC};
 
 use bifrost_dev_runtime as devnet;
 
+use fp_evm::GenesisAccount;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -177,6 +178,7 @@ fn development_genesis(
 	authority: AccountId,
 	endowed_accounts: Vec<AccountId>,
 ) -> devnet::RuntimeGenesisConfig {
+	let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
 	devnet::RuntimeGenesisConfig {
 		system: devnet::SystemConfig {
 			// Add Wasm runtime to storage.
@@ -203,7 +205,24 @@ fn development_genesis(
 		im_online: Default::default(),
 		sudo: devnet::SudoConfig { key: Some(root_key) },
 		transaction_payment: Default::default(),
-		evm: Default::default(),
+		evm: devnet::EVMConfig {
+			// We need _some_ code inserted at the precompile address so that
+			// the evm will actually call the address.
+			accounts: devnet::Precompiles::used_addresses()
+				.map(|addr| {
+					(
+						addr.into(),
+						GenesisAccount {
+							nonce: Default::default(),
+							balance: Default::default(),
+							storage: Default::default(),
+							code: revert_bytecode.clone(),
+						},
+					)
+				})
+				.collect(),
+			..Default::default()
+		},
 		ethereum: Default::default(),
 		base_fee: devnet::BaseFeeConfig::new(
 			sp_core::U256::from(1_000 * GWEI * SUPPLY_FACTOR),
