@@ -93,7 +93,7 @@ pub struct PsbtRequest<AccountId> {
 	/// The submitted signed PSBT's (in bytes).
 	pub signed_psbts: BoundedBTreeMap<AccountId, UnboundedBytes, ConstU32<MULTI_SIG_MAX_ACCOUNTS>>,
 	/// The submitted `SocketMessage`'s of this request. It is ordered by the PSBT's tx outputs.
-	/// This will be empty for rollback requests.
+	/// This will be empty for rollback/migration requests.
 	pub socket_messages: Vec<UnboundedBytes>,
 	/// The request type of the PSBT.
 	pub request_type: RequestType,

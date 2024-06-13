@@ -562,7 +562,7 @@ pub mod pallet {
 			)
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 			if to != system_vault {
-				return Err(Error::<T>::InvalidBitcoinAddress.into());
+				return Err(Error::<T>::InvalidPsbt.into());
 			}
 
 			<PendingRequests<T>>::insert(
