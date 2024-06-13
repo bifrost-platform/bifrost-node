@@ -193,6 +193,12 @@ pub mod pallet {
 	#[pallet::getter(fn m_n_ratio)]
 	/// The minimum required ratio of signatures to unlock the vault account's txo.
 	pub type MultiSigRatio<T: Config> = StorageValue<_, Percent, ValueQuery>;
+	
+	#[pallet::storage]
+	#[pallet::unbounded]
+	#[pallet::getter(fn presubmitted_pubkeys)]
+	/// The public keys that are pre-submitted by the relay executives.
+	pub type PresubmittedPubKeys<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Vec<Public>>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
