@@ -76,7 +76,7 @@ where
 	/// Try to verify PSBT outputs with the given `SocketMessage`'s.
 	pub fn try_psbt_output_verification(
 		psbt: &Psbt,
-		unchecked_outputs: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>>,
+		unchecked_outputs: Vec<(BoundedBitcoinAddress, Vec<UnboundedBytes>)>,
 	) -> Result<(Vec<SocketMessage>, Vec<UnboundedBytes>), DispatchError> {
 		let psbt_outputs = &psbt.unsigned_tx.output;
 		// output length must match.
@@ -94,6 +94,10 @@ where
 		let mut deserialized_msgs = vec![];
 		let mut serialized_msgs = vec![];
 		let mut msg_hashes = vec![];
+
+		let unchecked_outputs_map: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>> =
+			unchecked_outputs.into_iter().collect();
+
 		for output in psbt_outputs {
 			let to: BoundedBitcoinAddress = BoundedVec::try_from(
 				Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
@@ -103,7 +107,7 @@ where
 			)
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
-			if let Some(socket_messages) = unchecked_outputs.get(&to) {
+			if let Some(socket_messages) = unchecked_outputs_map.get(&to) {
 				// output for system vault must contain zero messages.
 				if to == system_vault && !socket_messages.is_empty() {
 					return Err(Error::<T>::InvalidUncheckedOutput.into());

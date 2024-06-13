@@ -14,7 +14,7 @@ use bp_multi_sig::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS
 use bp_staking::MAX_AUTHORITIES;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
-use sp_std::{collections::btree_map::BTreeMap, vec, vec::Vec};
+use sp_std::{vec, vec::Vec};
 
 /// The gas limit used for contract function calls.
 const CALL_GAS_LIMIT: u64 = 1_000_000;
@@ -150,7 +150,7 @@ pub struct UnsignedPsbtMessage<AccountId> {
 	/// The PSBT output information.
 	/// key: the output `to` address. (=refund / system vault)
 	/// value: the `SocketMessage`'s related to the output. (system vault output will have empty socket messages)
-	pub outputs: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>>,
+	pub outputs: Vec<(BoundedBitcoinAddress, Vec<UnboundedBytes>)>,
 	/// The unsigned PSBT (in bytes).
 	pub psbt: UnboundedBytes,
 }
