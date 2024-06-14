@@ -31,8 +31,8 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcSocketQueueCall<Runtime>>,
 {
-	#[precompile::public("isSignedPsbtSubmitted()")]
-	#[precompile::public("is_signed_psbt_submitted()")]
+	#[precompile::public("isSignedPsbtSubmitted(bytes32,bytes,address)")]
+	#[precompile::public("is_signed_psbt_submitted(bytes32,bytes,address)")]
 	#[precompile::view]
 	fn is_signed_psbt_submitted(
 		handle: &mut impl PrecompileHandle,
