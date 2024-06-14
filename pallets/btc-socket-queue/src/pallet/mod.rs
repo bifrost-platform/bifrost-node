@@ -109,6 +109,8 @@ pub mod pallet {
 		UnsignedPsbtSubmitted { txid: H256 },
 		/// A signed PSBT for an outbound request has been submitted.
 		SignedPsbtSubmitted { txid: H256, authority_id: T::AccountId },
+		/// An unsigned PSBT for a vault migration request has been submitted.
+		MigrationPsbtSubmitted { txid: H256 },
 		/// An unsigned PSBT for a rollback request has been submitted.
 		RollbackPsbtSubmitted { txid: H256 },
 		/// A rollback poll has been submitted.
@@ -583,6 +585,7 @@ pub mod pallet {
 				&txid,
 				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
 			);
+			Self::deposit_event(Event::MigrationPsbtSubmitted { txid });
 			Ok(().into())
 		}
 	}
