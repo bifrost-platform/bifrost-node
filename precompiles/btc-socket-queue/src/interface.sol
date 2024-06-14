@@ -9,6 +9,15 @@ pragma solidity >=0.8.0;
  */
 
 interface BtcSocketQueue {
+    /// @dev Returns the whether the authority has submitted the given signed PSBT bytes
+    /// @custom:selector db99ae7e
+    /// @return The boolean result
+    function is_signed_psbt_submitted(
+        bytes32 txid,
+        bytes memory signed_psbt,
+        address authority_id
+    ) external view returns (bool);
+
     /// @dev Returns the current pending request's unsigned PSBT bytes
     /// @custom:selector 60b55f8f
     /// @return The list of the current pending request's unsigned PSBT bytes

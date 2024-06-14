@@ -3,6 +3,7 @@
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
 use pallet_btc_socket_queue::Call as BtcSocketQueueCall;
+use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
@@ -30,6 +31,30 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcSocketQueueCall<Runtime>>,
 {
+	#[precompile::public("isSignedPsbtSubmitted()")]
+	#[precompile::public("is_signed_psbt_submitted()")]
+	#[precompile::view]
+	fn is_signed_psbt_submitted(
+		handle: &mut impl PrecompileHandle,
+		txid: H256,
+		signed_psbt: UnboundedBytes,
+		authority_id: Address,
+	) -> EvmResult<bool> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let authority_id = Runtime::AddressMapping::into_account_id(authority_id.0);
+
+		if let Some(pending_request) = BtcSocketQueueOf::<Runtime>::pending_requests(txid) {
+			if let Some(submitted) = pending_request.signed_psbts.get(&authority_id) {
+				Ok(UnboundedBytes::from(submitted.clone()) == signed_psbt)
+			} else {
+				Ok(false)
+			}
+		} else {
+			Ok(false)
+		}
+	}
+
 	#[precompile::public("unsignedPsbts()")]
 	#[precompile::public("unsigned_psbts()")]
 	#[precompile::view]
