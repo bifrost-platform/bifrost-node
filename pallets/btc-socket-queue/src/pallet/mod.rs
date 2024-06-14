@@ -433,29 +433,43 @@ pub mod pallet {
 
 			// user information must exist
 			let vault = T::RegistrationPool::get_vault_address(&who).ok_or(Error::<T>::UserDNE)?;
-			let refund =
-				T::RegistrationPool::get_refund_address(&who).ok_or(Error::<T>::UserDNE)?;
+			let refund = Self::try_convert_to_address_from_vec(
+				T::RegistrationPool::get_refund_address(&who).ok_or(Error::<T>::UserDNE)?,
+			)?;
 
 			// the request must not exist on-chain
 			let hash_key = Self::generate_hash_key(txid, vout, who.clone(), amount);
 			let tx_info = Self::try_get_tx_info(hash_key)?;
 			ensure!(tx_info.to.is_zero(), Error::<T>::RequestAlreadyExists);
 
-			// the psbt must contain only one output
+			// the psbt must contain only two outputs (system vault: change, refund)
 			let outputs = &psbt_obj.unsigned_tx.output;
-			ensure!(outputs.len() == 1, Error::<T>::InvalidPsbt);
+			ensure!(outputs.len() == 2, Error::<T>::InvalidPsbt);
 
-			// the output must be to the user's refund address
-			let to =
-				Self::try_convert_to_address_from_script(outputs[0].script_pubkey.as_script())?;
-			ensure!(to == Self::try_convert_to_address_from_vec(refund)?, Error::<T>::InvalidPsbt);
+			let current_round = T::RegistrationPool::get_current_round();
+			let system_vault = Self::try_convert_to_address_from_vec(
+				T::RegistrationPool::get_system_vault(current_round)
+					.ok_or(Error::<T>::SystemVaultDNE)?,
+			)?;
 
-			// the output amount must be less than the origin amount
-			// (output.amount = origin amount - network fee)
-			ensure!(
-				Amount::from_sat(amount.as_u64()).checked_sub(outputs[0].value).is_some(),
-				Error::<T>::InvalidPsbt
-			);
+			for output in outputs {
+				let to =
+					Self::try_convert_to_address_from_script(outputs[0].script_pubkey.as_script())?;
+
+				if to == system_vault {
+					continue;
+				}
+				if to == refund {
+					// the output amount must be less than the origin amount
+					// (output.amount = origin amount - network fee)
+					ensure!(
+						Amount::from_sat(amount.as_u64()).checked_sub(output.value).is_some(),
+						Error::<T>::InvalidPsbt
+					);
+					continue;
+				}
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
 
 			<RollbackRequests<T>>::insert(
 				&psbt_txid,
