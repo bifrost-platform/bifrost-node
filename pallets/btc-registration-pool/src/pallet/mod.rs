@@ -79,7 +79,7 @@ pub mod pallet {
 		UserDNE,
 		/// The (system) vault does not exist.
 		VaultDNE,
-		/// The vault is out of range.
+		/// Some value is out of the permitted range.
 		OutOfRange,
 		/// Service is under maintenance mode.
 		UnderMaintenance,
@@ -108,6 +108,8 @@ pub mod pallet {
 		MigrationStarted,
 		/// The migration has been completed.
 		MigrationCompleted,
+		/// A new multi-sig ratio has been set.
+		MultiSigRationSet { old: Percent, new: Percent },
 	}
 
 	#[pallet::storage]
@@ -564,6 +566,27 @@ pub mod pallet {
 			<BondedDescriptor<T>>::remove_prefix(round, None);
 
 			Self::deposit_event(Event::RoundDropped(round));
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// (Re-)set a new `MultiSigRatio`.
+		pub fn set_multi_sig_ratio(
+			origin: OriginFor<T>,
+			new: Percent,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			// we only permit ratio that is higher than 50%
+			ensure!(new >= Percent::from_percent(50), Error::<T>::OutOfRange);
+
+			let old = Self::m_n_ratio();
+			ensure!(new != old, Error::<T>::NoWritingSameValue);
+
+			<MultiSigRatio<T>>::set(new);
+			Self::deposit_event(Event::MultiSigRationSet { old, new });
 
 			Ok(().into())
 		}
