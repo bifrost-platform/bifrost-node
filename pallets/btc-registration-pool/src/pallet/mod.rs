@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound, VaultKeySubmission,
-	WeightInfo, ADDRESS_U64,
+	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound, VaultKeyPreSubmission,
+	VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -17,7 +17,7 @@ use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	Percent,
 };
-use sp_std::vec::Vec;
+use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -193,12 +193,24 @@ pub mod pallet {
 	#[pallet::getter(fn m_n_ratio)]
 	/// The minimum required ratio of signatures to unlock the vault account's txo.
 	pub type MultiSigRatio<T: Config> = StorageValue<_, Percent, ValueQuery>;
-	
+
 	#[pallet::storage]
 	#[pallet::unbounded]
 	#[pallet::getter(fn presubmitted_pubkeys)]
 	/// The public keys that are pre-submitted by the relay executives.
-	pub type PresubmittedPubKeys<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Vec<Public>>;
+	pub type PreSubmittedPubKeys<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		PoolRound,
+		Twox64Concat,
+		T::AccountId,
+		BTreeSet<Public>,
+		ValueQuery,
+	>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn max_presubmission)]
+	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
@@ -213,6 +225,7 @@ pub mod pallet {
 			MultiSigRatio::<T>::put(T::DefaultMultiSigRatio::get());
 			CurrentRound::<T>::put(1);
 			ServiceState::<T>::put(MigrationSequence::Normal);
+			MaxPreSubmission::<T>::put(100);
 		}
 	}
 
@@ -482,6 +495,45 @@ pub mod pallet {
 
 		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Submit public keys for prepare for the fast registration.
+		pub fn vault_key_presubmission(
+			origin: OriginFor<T>,
+			key_submission: VaultKeyPreSubmission<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
+			let VaultKeyPreSubmission { authority_id, pub_keys } = key_submission;
+			let current_round = Self::current_round();
+
+			let mut presubmitted = Self::presubmitted_pubkeys(current_round, &authority_id);
+			ensure!(
+				presubmitted.len() + pub_keys.len() <= Self::max_presubmission() as usize,
+				Error::<T>::OutOfRange
+			);
+
+			// check if the public keys are already submitted
+			ensure!(
+				!pub_keys.iter().any(|x| presubmitted.contains(x)),
+				Error::<T>::AuthorityAlreadySubmittedPubKey
+			);
+
+			// insert the public keys
+			presubmitted.extend(pub_keys);
+
+			// update the storage
+			<PreSubmittedPubKeys<T>>::insert(current_round, &authority_id, presubmitted);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn clear_vault(
 			origin: OriginFor<T>,
 			vault_address: UnboundedBytes,
@@ -524,7 +576,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn migration_control(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin.clone())?;
@@ -548,7 +600,7 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		#[allow(deprecated)]
 		pub fn drop_previous_round(
@@ -570,32 +622,45 @@ pub mod pallet {
 			<BondedRefund<T>>::remove_prefix(round, None);
 			<BondedPubKey<T>>::remove_prefix(round, None);
 			<BondedDescriptor<T>>::remove_prefix(round, None);
+			<PreSubmittedPubKeys<T>>::remove_prefix(round, None);
 
 			Self::deposit_event(Event::RoundDropped(round));
 
 			Ok(().into())
 		}
 
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// (Re-)set a new `MultiSigRatio`.
-		pub fn set_multi_sig_ratio(
-			origin: OriginFor<T>,
-			new: Percent,
-		) -> DispatchResultWithPostInfo {
+		pub fn set_max_presubmission(origin: OriginFor<T>, max: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
-			// we only permit ratio that is higher than 50%
-			ensure!(new >= Percent::from_percent(50), Error::<T>::OutOfRange);
+			ensure!(max > 0, Error::<T>::OutOfRange);
 
-			let old = Self::m_n_ratio();
-			ensure!(new != old, Error::<T>::NoWritingSameValue);
-
-			<MultiSigRatio<T>>::set(new);
-			Self::deposit_event(Event::MultiSigRationSet { old, new });
+			<MaxPreSubmission<T>>::put(max);
 
 			Ok(().into())
 		}
+
+        #[pallet::call_index(10)]
+        #[pallet::weight(<T as Config>::WeightInfo::default())]
+        /// (Re-)set a new `MultiSigRatio`.
+        pub fn set_multi_sig_ratio(
+            origin: OriginFor<T>,
+            new: Percent,
+        ) -> DispatchResultWithPostInfo {
+            ensure_root(origin)?;
+
+            // we only permit ratio that is higher than 50%
+            ensure!(new >= Percent::from_percent(50), Error::<T>::OutOfRange);
+
+            let old = Self::m_n_ratio();
+            ensure!(new != old, Error::<T>::NoWritingSameValue);
+
+            <MultiSigRatio<T>>::set(new);
+            Self::deposit_event(Event::MultiSigRationSet { old, new });
+
+            Ok(().into())
+        }
 	}
 
 	#[pallet::validate_unsigned]
@@ -608,44 +673,13 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::submit_vault_key { key_submission, signature } => {
-					let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
-
-					// verify if the authority is a relay executive member.
-					if !T::Executives::contains(&authority_id) {
-						return InvalidTransaction::BadSigner.into();
-					}
-
-					// verify if the signature was originated from the authority.
-					let message = array_bytes::bytes2hex("0x", pub_key);
-					if !signature.verify(message.as_bytes(), authority_id) {
-						return InvalidTransaction::BadProof.into();
-					}
-
-					ValidTransaction::with_tag_prefix("RegPoolKeySubmission")
-						.priority(TransactionPriority::MAX)
-						.and_provides((authority_id, who))
-						.propagate(true)
-						.build()
+					Self::verify_key_submission(key_submission, signature, "RegPoolKeySubmission")
 				},
 				Call::submit_system_vault_key { key_submission, signature } => {
-					let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
-
-					// verify if the authority is a relay executive member.
-					if !T::Executives::contains(&authority_id) {
-						return InvalidTransaction::BadSigner.into();
-					}
-
-					// verify if the signature was originated from the authority.
-					let message = array_bytes::bytes2hex("0x", pub_key);
-					if !signature.verify(message.as_bytes(), authority_id) {
-						return InvalidTransaction::BadProof.into();
-					}
-
-					ValidTransaction::with_tag_prefix("SystemKeySubmission")
-						.priority(TransactionPriority::MAX)
-						.and_provides((authority_id, who))
-						.propagate(true)
-						.build()
+					Self::verify_key_submission(key_submission, signature, "SystemKeySubmission")
+				},
+				Call::vault_key_presubmission { key_submission, signature } => {
+					Self::verify_key_presubmission(key_submission, signature)
 				},
 				_ => InvalidTransaction::Call.into(),
 			}

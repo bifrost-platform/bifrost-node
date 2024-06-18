@@ -9,6 +9,7 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::RuntimeDebug;
+use sp_std::vec::Vec;
 
 use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
@@ -60,4 +61,11 @@ pub struct VaultKeySubmission<AccountId> {
 	pub who: AccountId,
 	/// The generated public key. (33 bytes)
 	pub pub_key: Public,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// The payload used for public key submission.
+pub struct VaultKeyPreSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub pub_keys: Vec<Public>,
 }
