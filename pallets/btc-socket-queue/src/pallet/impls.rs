@@ -93,7 +93,7 @@ where
 
 		let mut deserialized_msgs = vec![];
 		let mut serialized_msgs = vec![];
-		let mut msg_hashes = vec![];
+		let mut msg_sequences = vec![];
 
 		let unchecked_outputs_map: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>> =
 			unchecked_outputs.into_iter().collect();
@@ -121,11 +121,10 @@ where
 					let msg_hash = Self::hash_bytes(
 						&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
 					);
-					if msg_hashes.contains(&msg_hash) {
+					if msg_sequences.contains(&msg.req_id.sequence) {
 						return Err(Error::<T>::InvalidSocketMessage.into());
 					}
 					let request_info = Self::try_get_request(&msg.encode_req_id())?;
-
 					// the socket message should be valid
 					if !request_info.is_msg_hash(msg_hash) {
 						return Err(Error::<T>::InvalidSocketMessage.into());
@@ -150,7 +149,7 @@ where
 
 					deserialized_msgs.push(msg.clone());
 					serialized_msgs.push(serialized_msg.clone());
-					msg_hashes.push(msg_hash);
+					msg_sequences.push(msg.req_id.sequence);
 					amount = amount.checked_add(msg.params.amount).unwrap();
 				}
 				// verify psbt output (refund addresses only)
