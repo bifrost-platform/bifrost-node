@@ -83,8 +83,8 @@ where
 		if psbt_outputs.len() != unchecked_outputs.len() {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
-		// for normal requests, at least 2 outputs required. one or more for refund(s) and one for system vault.
-		if psbt_outputs.len() < 2 {
+		// for normal requests, at least 1 output is required.
+		if psbt_outputs.len() < 1 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 		let current_round = T::RegistrationPool::get_current_round();
@@ -97,6 +97,10 @@ where
 
 		let unchecked_outputs_map: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>> =
 			unchecked_outputs.into_iter().collect();
+		// check if change position exists
+		if psbt_outputs.len() > 1 && unchecked_outputs_map.get(&system_vault).is_none() {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
 
 		for output in psbt_outputs {
 			let to: BoundedBitcoinAddress = BoundedVec::try_from(
