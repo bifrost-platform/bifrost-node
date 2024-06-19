@@ -83,8 +83,8 @@ where
 		if psbt_outputs.len() != unchecked_outputs.len() {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
-		// for normal requests, at least 2 outputs required. one or more for refund(s) and one for system vault.
-		if psbt_outputs.len() < 2 {
+		// for normal requests, at least 1 output is required.
+		if psbt_outputs.len() < 1 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 		let current_round = T::RegistrationPool::get_current_round();
@@ -93,10 +93,14 @@ where
 
 		let mut deserialized_msgs = vec![];
 		let mut serialized_msgs = vec![];
-		let mut msg_hashes = vec![];
+		let mut msg_sequences = vec![];
 
 		let unchecked_outputs_map: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>> =
 			unchecked_outputs.into_iter().collect();
+		// check if change position exists
+		if psbt_outputs.len() > 1 && unchecked_outputs_map.get(&system_vault).is_none() {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
 
 		for output in psbt_outputs {
 			let to: BoundedBitcoinAddress = BoundedVec::try_from(
@@ -121,11 +125,10 @@ where
 					let msg_hash = Self::hash_bytes(
 						&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
 					);
-					if msg_hashes.contains(&msg_hash) {
+					if msg_sequences.contains(&msg.req_id.sequence) {
 						return Err(Error::<T>::InvalidSocketMessage.into());
 					}
 					let request_info = Self::try_get_request(&msg.encode_req_id())?;
-
 					// the socket message should be valid
 					if !request_info.is_msg_hash(msg_hash) {
 						return Err(Error::<T>::InvalidSocketMessage.into());
@@ -150,7 +153,7 @@ where
 
 					deserialized_msgs.push(msg.clone());
 					serialized_msgs.push(serialized_msg.clone());
-					msg_hashes.push(msg_hash);
+					msg_sequences.push(msg.req_id.sequence);
 					amount = amount.checked_add(msg.params.amount).unwrap();
 				}
 				// verify psbt output (refund addresses only)

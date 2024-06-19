@@ -444,9 +444,9 @@ pub mod pallet {
 			let tx_info = Self::try_get_tx_info(hash_key)?;
 			ensure!(tx_info.to.is_zero(), Error::<T>::RequestAlreadyExists);
 
-			// the psbt must contain only two outputs (system vault: change, refund)
+			// the psbt must contain at max two outputs (system vault: if change exists, refund)
 			let outputs = &psbt_obj.unsigned_tx.output;
-			ensure!(outputs.len() == 2, Error::<T>::InvalidPsbt);
+			ensure!(outputs.len() <= 2, Error::<T>::InvalidPsbt);
 
 			let current_round = T::RegistrationPool::get_current_round();
 			let system_vault = Self::try_convert_to_address_from_vec(
