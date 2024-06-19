@@ -425,7 +425,7 @@ pub mod pallet {
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
 
-			// prevent storage duplication
+			// prevent double spend
 			ensure!(
 				!<PendingRequests<T>>::contains_key(&psbt_txid),
 				Error::<T>::RequestAlreadyExists
