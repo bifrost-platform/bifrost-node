@@ -112,6 +112,8 @@ pub mod pallet {
 		MigrationCompleted,
 		/// A new multi-sig ratio has been set.
 		MultiSigRationSet { old: Percent, new: Percent },
+		/// Vault key has been pre-submitted.
+		VaultKeyPresubmitted,
 	}
 
 	#[pallet::storage]
@@ -310,24 +312,23 @@ pub mod pallet {
 				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n());
 
 			let executives = T::Executives::sorted_members();
-			if executives.iter().all(|executive| {
-				!Self::presubmitted_pubkeys(Self::current_round(), executive).is_empty()
-			}) {
-				for executive in executives {
-					relay_target
-						.vault
-						.pub_keys
-						.try_insert(
-							executive.clone(),
-							<PreSubmittedPubKeys<T>>::mutate(current_round, executive, |x| {
-								let pub_key = x.pop_first().unwrap();
-								<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
-								pub_key
-							}),
-						)
-						.map_err(|_| Error::<T>::OutOfRange)?;
+			for executive in executives {
+				if let Some(pub_key) =
+					<PreSubmittedPubKeys<T>>::mutate(current_round, &executive, |keys| {
+						keys.pop_first()
+					}) {
+					if <BondedPubKey<T>>::get(current_round, &pub_key).is_none() {
+						<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
+						relay_target
+							.vault
+							.pub_keys
+							.try_insert(executive, pub_key)
+							.map_err(|_| <Error<T>>::OutOfRange)?;
+					}
 				}
+			}
 
+			if relay_target.vault.is_key_generation_ready() {
 				// generate vault address
 				let (vault_address, descriptor) =
 					Self::generate_vault_address(relay_target.vault.pub_keys())?;
@@ -546,6 +547,15 @@ pub mod pallet {
 			);
 
 			let VaultKeyPreSubmission { authority_id, pub_keys } = key_submission;
+
+			// validate public keys
+			for pub_key in &pub_keys {
+				ensure!(
+					PublicKey::from_slice(pub_key.as_ref()).is_ok(),
+					Error::<T>::InvalidPublicKey
+				);
+			}
+
 			let current_round = Self::current_round();
 
 			let mut presubmitted = Self::presubmitted_pubkeys(current_round, &authority_id);
@@ -565,6 +575,8 @@ pub mod pallet {
 
 			// update the storage
 			<PreSubmittedPubKeys<T>>::insert(current_round, &authority_id, presubmitted);
+
+			Self::deposit_event(Event::VaultKeyPresubmitted);
 
 			Ok(().into())
 		}
