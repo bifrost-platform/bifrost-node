@@ -85,6 +85,8 @@ pub mod pallet {
 		UnderMaintenance,
 		/// Do not control migration sequence in this state.
 		DoNotInterceptMigration,
+		/// Presubmission does not exist.
+		PreSubmissionDNE,
 	}
 
 	#[pallet::event]
@@ -303,13 +305,48 @@ pub mod pallet {
 			<BondedRefund<T>>::mutate(current_round, &refund_address, |users| {
 				users.push(who.clone());
 			});
-			<RegistrationPool<T>>::insert(
-				current_round,
-				who.clone(),
-				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n()),
-			);
 
-			Self::deposit_event(Event::VaultPending { who, refund_address });
+			let mut relay_target =
+				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n());
+
+			let executives = T::Executives::sorted_members();
+			if executives.iter().all(|executive| {
+				!Self::presubmitted_pubkeys(Self::current_round(), executive).is_empty()
+			}) {
+				for executive in executives {
+					relay_target
+						.vault
+						.pub_keys
+						.try_insert(
+							executive.clone(),
+							<PreSubmittedPubKeys<T>>::mutate(current_round, executive, |x| {
+								let pub_key = x.pop_first().unwrap();
+								<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
+								pub_key
+							}),
+						)
+						.map_err(|_| Error::<T>::OutOfRange)?;
+				}
+
+				// generate vault address
+				let (vault_address, descriptor) =
+					Self::generate_vault_address(relay_target.vault.pub_keys())?;
+				relay_target.set_vault_address(vault_address.clone());
+				relay_target.vault.set_descriptor(descriptor.clone());
+
+				<BondedVault<T>>::insert(current_round, &vault_address, who.clone());
+				<BondedDescriptor<T>>::insert(current_round, &vault_address, descriptor);
+
+				Self::deposit_event(Event::VaultGenerated {
+					who: who.clone(),
+					refund_address,
+					vault_address,
+				});
+			} else {
+				Self::deposit_event(Event::VaultPending { who: who.clone(), refund_address });
+			}
+
+			<RegistrationPool<T>>::insert(current_round, who.clone(), relay_target);
 
 			Ok(().into())
 		}
