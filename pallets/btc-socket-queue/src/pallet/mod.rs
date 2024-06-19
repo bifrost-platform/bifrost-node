@@ -301,6 +301,7 @@ pub mod pallet {
 			ensure!(!<PendingRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 			ensure!(!<FinalizedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 			ensure!(!<ExecutedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
+			ensure!(!<RollbackRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 
 			// verify PSBT outputs
 			let (deserialized_msgs, serialized_msgs) =
@@ -424,6 +425,19 @@ pub mod pallet {
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
 
+			// prevent double spend
+			ensure!(
+				!<PendingRequests<T>>::contains_key(&psbt_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<FinalizedRequests<T>>::contains_key(&psbt_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<ExecutedRequests<T>>::contains_key(&psbt_txid),
+				Error::<T>::RequestAlreadyExists
+			);
 			ensure!(
 				!<RollbackRequests<T>>::contains_key(&psbt_txid),
 				Error::<T>::RequestAlreadyExists
