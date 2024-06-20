@@ -987,7 +987,6 @@ parameter_types! {
 
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;

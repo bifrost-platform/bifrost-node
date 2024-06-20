@@ -234,7 +234,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			new: T::AccountId,
 		) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
+			ensure_root(origin.clone())?;
 
 			if let Some(old) = <Authority<T>>::get() {
 				ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -254,7 +254,7 @@ pub mod pallet {
 			new: T::AccountId,
 			is_bitcoin: bool,
 		) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
+			ensure_root(origin.clone())?;
 
 			if is_bitcoin {
 				if let Some(old) = <BitcoinSocket<T>>::get() {
