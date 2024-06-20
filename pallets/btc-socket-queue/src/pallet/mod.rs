@@ -414,7 +414,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			T::SetOrigin::ensure_origin(origin)?;
 
-			let RollbackPsbtMessage { who, txid, vout, amount, unsigned_psbt } = msg;
+			let RollbackPsbtMessage { who, txid: rollback_txid, vout, amount, unsigned_psbt } = msg;
 
 			ensure!(
 				T::RegistrationPool::get_service_state() == MigrationSequence::Normal,
@@ -443,7 +443,7 @@ pub mod pallet {
 				Error::<T>::RequestAlreadyExists
 			);
 			ensure!(
-				!<BondedRollbackOutputs<T>>::contains_key(&txid, &vout),
+				!<BondedRollbackOutputs<T>>::contains_key(&rollback_txid, &vout),
 				Error::<T>::RequestAlreadyExists
 			);
 
@@ -454,7 +454,7 @@ pub mod pallet {
 			)?;
 
 			// the request must not exist on-chain
-			let hash_key = Self::generate_hash_key(txid, vout, who.clone(), amount);
+			let hash_key = Self::generate_hash_key(rollback_txid, vout, who.clone(), amount);
 			let tx_info = Self::try_get_tx_info(hash_key)?;
 			ensure!(tx_info.to.is_zero(), Error::<T>::RequestAlreadyExists);
 
@@ -489,10 +489,10 @@ pub mod pallet {
 
 			<RollbackRequests<T>>::insert(
 				&psbt_txid,
-				RollbackRequest::new(unsigned_psbt, who, txid, vout, vault, amount),
+				RollbackRequest::new(unsigned_psbt, who, rollback_txid, vout, vault, amount),
 			);
-			<BondedRollbackOutputs<T>>::insert(txid, vout, psbt_txid);
-			Self::deposit_event(Event::RollbackPsbtSubmitted { txid });
+			<BondedRollbackOutputs<T>>::insert(rollback_txid, vout, psbt_txid);
+			Self::deposit_event(Event::RollbackPsbtSubmitted { txid: psbt_txid });
 
 			Ok(().into())
 		}

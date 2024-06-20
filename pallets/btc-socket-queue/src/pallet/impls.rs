@@ -84,6 +84,7 @@ where
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 		// for normal requests, at least 1 output is required.
+		// one or more for outbound refunds. change position may exist (=system vault)
 		if psbt_outputs.len() < 1 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
@@ -97,10 +98,6 @@ where
 
 		let unchecked_outputs_map: BTreeMap<BoundedBitcoinAddress, Vec<UnboundedBytes>> =
 			unchecked_outputs.into_iter().collect();
-		// check if change position exists
-		if psbt_outputs.len() > 1 && unchecked_outputs_map.get(&system_vault).is_none() {
-			return Err(Error::<T>::InvalidPsbt.into());
-		}
 
 		for output in psbt_outputs {
 			let to: BoundedBitcoinAddress = BoundedVec::try_from(
@@ -112,54 +109,61 @@ where
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
 			if let Some(socket_messages) = unchecked_outputs_map.get(&to) {
-				// output for system vault must contain zero messages.
-				if to == system_vault && !socket_messages.is_empty() {
-					return Err(Error::<T>::InvalidUncheckedOutput.into());
-				}
+				if to == system_vault {
+					if !socket_messages.is_empty() {
+						return Err(Error::<T>::InvalidUncheckedOutput.into());
+					}
+				} else {
+					// verify socket messages
+					let mut amount = U256::default();
+					for serialized_msg in socket_messages {
+						let msg = Self::try_decode_socket_message(serialized_msg)
+							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+						let msg_hash = Self::hash_bytes(
+							&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
+						);
+						if msg_sequences.contains(&msg.req_id.sequence) {
+							return Err(Error::<T>::InvalidSocketMessage.into());
+						}
+						let request_info = Self::try_get_request(&msg.encode_req_id())?;
+						// the socket message should be valid
+						if !request_info.is_msg_hash(msg_hash) {
+							return Err(Error::<T>::InvalidSocketMessage.into());
+						}
+						if !request_info.is_accepted() || !msg.is_accepted() {
+							return Err(Error::<T>::InvalidSocketMessage.into());
+						}
+						if !msg.is_outbound(
+							<T as pallet_evm::Config>::ChainId::get() as u32,
+							T::RegistrationPool::get_bitcoin_chain_id(),
+						) {
+							return Err(Error::<T>::InvalidSocketMessage.into());
+						}
+						if Self::socket_messages(&msg.req_id.sequence).is_some() {
+							return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
+						}
 
-				// verify socket messages
-				let mut amount = U256::default();
-				for serialized_msg in socket_messages {
-					let msg = Self::try_decode_socket_message(serialized_msg)
-						.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-					let msg_hash = Self::hash_bytes(
-						&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
-					);
-					if msg_sequences.contains(&msg.req_id.sequence) {
-						return Err(Error::<T>::InvalidSocketMessage.into());
-					}
-					let request_info = Self::try_get_request(&msg.encode_req_id())?;
-					// the socket message should be valid
-					if !request_info.is_msg_hash(msg_hash) {
-						return Err(Error::<T>::InvalidSocketMessage.into());
-					}
-					if !request_info.is_accepted() || !msg.is_accepted() {
-						return Err(Error::<T>::InvalidSocketMessage.into());
-					}
-					if !msg.is_outbound(
-						<T as pallet_evm::Config>::ChainId::get() as u32,
-						T::RegistrationPool::get_bitcoin_chain_id(),
-					) {
-						return Err(Error::<T>::InvalidSocketMessage.into());
-					}
-					if Self::socket_messages(&msg.req_id.sequence).is_some() {
-						return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
-					}
+						// user must be registered
+						if let Some(refund) =
+							T::RegistrationPool::get_refund_address(&msg.params.to.into())
+						{
+							if to != refund {
+								return Err(Error::<T>::InvalidSocketMessage.into());
+							}
+						} else {
+							return Err(Error::<T>::UserDNE.into());
+						}
 
-					// user must be registered
-					if T::RegistrationPool::get_refund_address(&msg.params.to.into()).is_none() {
-						return Err(Error::<T>::UserDNE.into());
+						deserialized_msgs.push(msg.clone());
+						serialized_msgs.push(serialized_msg.clone());
+						msg_sequences.push(msg.req_id.sequence);
+						amount = amount.checked_add(msg.params.amount).unwrap();
 					}
-
-					deserialized_msgs.push(msg.clone());
-					serialized_msgs.push(serialized_msg.clone());
-					msg_sequences.push(msg.req_id.sequence);
-					amount = amount.checked_add(msg.params.amount).unwrap();
-				}
-				// verify psbt output (refund addresses only)
-				let psbt_amount = U256::from(output.value.to_sat());
-				if to != system_vault && psbt_amount != amount {
-					return Err(Error::<T>::InvalidPsbt.into());
+					// verify psbt output
+					let psbt_amount = U256::from(output.value.to_sat());
+					if psbt_amount != amount {
+						return Err(Error::<T>::InvalidPsbt.into());
+					}
 				}
 			} else {
 				return Err(Error::<T>::InvalidUncheckedOutput.into());
