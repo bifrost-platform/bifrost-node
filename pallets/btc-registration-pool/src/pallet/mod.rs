@@ -33,8 +33,6 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-		/// Required origin for setting or resetting the configuration.
-		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
@@ -359,7 +357,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			migration_prepare: bool,
 		) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
+			ensure_root(origin.clone())?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
@@ -587,7 +585,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			vault_address: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
+			ensure_root(origin.clone())?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
@@ -690,26 +688,26 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-        #[pallet::call_index(10)]
-        #[pallet::weight(<T as Config>::WeightInfo::default())]
-        /// (Re-)set a new `MultiSigRatio`.
-        pub fn set_multi_sig_ratio(
-            origin: OriginFor<T>,
-            new: Percent,
-        ) -> DispatchResultWithPostInfo {
-            ensure_root(origin)?;
+		#[pallet::call_index(10)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// (Re-)set a new `MultiSigRatio`.
+		pub fn set_multi_sig_ratio(
+			origin: OriginFor<T>,
+			new: Percent,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
 
-            // we only permit ratio that is higher than 50%
-            ensure!(new >= Percent::from_percent(50), Error::<T>::OutOfRange);
+			// we only permit ratio that is higher than 50%
+			ensure!(new >= Percent::from_percent(50), Error::<T>::OutOfRange);
 
-            let old = Self::m_n_ratio();
-            ensure!(new != old, Error::<T>::NoWritingSameValue);
+			let old = Self::m_n_ratio();
+			ensure!(new != old, Error::<T>::NoWritingSameValue);
 
-            <MultiSigRatio<T>>::set(new);
-            Self::deposit_event(Event::MultiSigRationSet { old, new });
+			<MultiSigRatio<T>>::set(new);
+			Self::deposit_event(Event::MultiSigRationSet { old, new });
 
-            Ok(().into())
-        }
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
