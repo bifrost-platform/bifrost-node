@@ -195,8 +195,8 @@ pub struct RollbackPsbtMessage<AccountId> {
 pub struct RollbackPollMessage<AccountId> {
 	/// The authority's account address.
 	pub authority_id: AccountId,
-	/// The unsigned PSBT (in bytes).
-	pub unsigned_psbt: UnboundedBytes,
+	/// The rollback PSBT's txid.
+	pub txid: H256,
 	/// The voting side. Approved or not.
 	pub is_approved: bool,
 }

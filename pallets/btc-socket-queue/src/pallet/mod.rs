@@ -507,14 +507,10 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let RollbackPollMessage { authority_id, unsigned_psbt, is_approved } = msg;
-
-			// verify if psbt bytes are valid
-			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
-			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let RollbackPollMessage { authority_id, txid, is_approved } = msg;
 
 			let mut rollback_request =
-				<RollbackRequests<T>>::get(&psbt_txid).ok_or(Error::<T>::RequestDNE)?;
+				<RollbackRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
 			ensure!(!rollback_request.is_approved, Error::<T>::RequestAlreadyApproved);
 
 			if let Some(vote) = rollback_request.votes.get(&authority_id) {
@@ -525,11 +521,7 @@ pub mod pallet {
 				.try_insert(authority_id.clone(), is_approved)
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
-			Self::deposit_event(Event::RollbackPollSubmitted {
-				txid: psbt_txid,
-				authority_id,
-				is_approved,
-			});
+			Self::deposit_event(Event::RollbackPollSubmitted { txid, authority_id, is_approved });
 
 			if rollback_request.votes.iter().filter(|v| *v.1).count() as u32
 				>= T::Relayers::majority()
@@ -537,16 +529,16 @@ pub mod pallet {
 				// approve request and move the `PendingRequests`
 				rollback_request.is_approved = true;
 				<PendingRequests<T>>::insert(
-					&psbt_txid,
+					&txid,
 					PsbtRequest::new(
 						rollback_request.unsigned_psbt.clone(),
 						vec![],
 						RequestType::Rollback,
 					),
 				);
-				Self::deposit_event(Event::RollbackApproved { txid: psbt_txid });
+				Self::deposit_event(Event::RollbackApproved { txid });
 			}
-			<RollbackRequests<T>>::insert(&psbt_txid, rollback_request);
+			<RollbackRequests<T>>::insert(&txid, rollback_request);
 
 			Ok(().into())
 		}
@@ -664,7 +656,7 @@ pub mod pallet {
 						.build()
 				},
 				Call::submit_rollback_poll { msg, signature } => {
-					let RollbackPollMessage { authority_id, unsigned_psbt, .. } = msg;
+					let RollbackPollMessage { authority_id, txid, .. } = msg;
 
 					// verify if the authority is a selected relayer.
 					if !T::Relayers::is_authority(&authority_id) {
@@ -672,7 +664,7 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(unsigned_psbt.as_ref(), authority_id) {
+					if !signature.verify(txid.as_ref(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
