@@ -109,9 +109,11 @@ pub mod pallet {
 		/// The migration has been completed.
 		MigrationCompleted,
 		/// A new multi-sig ratio has been set.
-		MultiSigRationSet { old: Percent, new: Percent },
+		MultiSigRatioSet { old: Percent, new: Percent },
+		/// Vault key has been submitted.
+		VaultKeySubmitted { who: T::AccountId, pub_key: Public },
 		/// Vault key has been pre-submitted.
-		VaultKeyPresubmitted,
+		VaultKeyPresubmitted { authority_id: T::AccountId, len: u32 },
 	}
 
 	#[pallet::storage]
@@ -424,6 +426,11 @@ pub mod pallet {
 				.try_insert(authority_id, pub_key)
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
+			Self::deposit_event(Event::VaultKeySubmitted {
+				who: who.clone(),
+				pub_key: pub_key.clone(),
+			});
+
 			if relay_target.vault.is_key_generation_ready() {
 				// generate vault address
 				let (vault_address, descriptor) =
@@ -501,6 +508,11 @@ pub mod pallet {
 					.try_insert(authority_id, pub_key)
 					.map_err(|_| Error::<T>::OutOfRange)?;
 
+				Self::deposit_event(Event::VaultKeySubmitted {
+					who: who.clone(),
+					pub_key: pub_key.clone(),
+				});
+
 				if system_vault.is_key_generation_ready() {
 					// generate vault address
 					let (vault_address, descriptor) =
@@ -569,12 +581,15 @@ pub mod pallet {
 			);
 
 			// insert the public keys
-			presubmitted.extend(pub_keys);
+			presubmitted.extend(pub_keys.clone());
 
 			// update the storage
 			<PreSubmittedPubKeys<T>>::insert(current_round, &authority_id, presubmitted);
 
-			Self::deposit_event(Event::VaultKeyPresubmitted);
+			Self::deposit_event(Event::VaultKeyPresubmitted {
+				authority_id,
+				len: pub_keys.len() as u32,
+			});
 
 			Ok(().into())
 		}
@@ -704,7 +719,7 @@ pub mod pallet {
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
 
 			<MultiSigRatio<T>>::set(new);
-			Self::deposit_event(Event::MultiSigRationSet { old, new });
+			Self::deposit_event(Event::MultiSigRatioSet { old, new });
 
 			Ok(().into())
 		}
