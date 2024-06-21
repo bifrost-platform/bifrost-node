@@ -1,10 +1,20 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use crate::{Offence, RoundIndex, TierType, MAX_AUTHORITIES};
 use frame_support::{pallet_prelude::ConstU32, BoundedBTreeSet};
 
 use sp_runtime::{DispatchError, Perbill};
 use sp_std::vec::Vec;
+
+/// The trait used for authority management. (ex: Relayers)
+pub trait Authorities<AccountId> {
+	/// Verifies whether the account is an authority.
+	fn is_authority(who: &AccountId) -> bool;
+
+	/// Get the number of items in the set.
+	fn count() -> usize;
+
+	/// Get the majority number of the set.
+	fn majority() -> u32;
+}
 
 /// The trait used for `pallet_relay_manager`
 pub trait RelayManager<AccountId> {

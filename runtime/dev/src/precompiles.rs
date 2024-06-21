@@ -1,4 +1,4 @@
-use crate::{CouncilInstance, TechCommitteeInstance};
+use crate::{CouncilInstance, RelayExecutiveInstance, TechCommitteeInstance};
 
 use pallet_evm_precompile_blake2::Blake2F;
 use pallet_evm_precompile_bn128::{Bn128Add, Bn128Mul, Bn128Pairing};
@@ -8,6 +8,8 @@ use pallet_evm_precompile_simple::{ECRecover, Identity, Ripemd160, Sha256};
 use precompile_balance::BalancePrecompile;
 use precompile_bfc_offences::BfcOffencesPrecompile;
 use precompile_bfc_staking::BfcStakingPrecompile;
+use precompile_btc_registration_pool::BtcRegistrationPoolPrecompile;
+use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
@@ -31,6 +33,8 @@ pub type BifrostPrecompilesAt<R> = (
 	PrecompileAt<AddressU64<8>, Bn128Pairing, EthereumPrecompilesChecks>,
 	PrecompileAt<AddressU64<9>, Blake2F, EthereumPrecompilesChecks>,
 	// BIFROST specific precompiles:
+	PrecompileAt<AddressU64<256>, BtcRegistrationPoolPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<257>, BtcSocketQueuePrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<1280>, BfcOffencesPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<2048>, GovernancePrecompile<R>, BifrostPrecompilesChecks>,
@@ -42,6 +46,11 @@ pub type BifrostPrecompilesAt<R> = (
 	PrecompileAt<
 		AddressU64<2050>,
 		CollectivePrecompile<R, TechCommitteeInstance>,
+		BifrostPrecompilesChecks,
+	>,
+	PrecompileAt<
+		AddressU64<2051>,
+		CollectivePrecompile<R, RelayExecutiveInstance>,
 		BifrostPrecompilesChecks,
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,

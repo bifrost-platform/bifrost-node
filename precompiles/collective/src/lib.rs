@@ -32,6 +32,16 @@ where
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
 {
+	#[precompile::public("isMember(address)")]
+	#[precompile::public("is_member(address)")]
+	#[precompile::view]
+	fn is_member(handle: &mut impl PrecompileHandle, who: Address) -> EvmResult<bool> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let who = Runtime::AddressMapping::into_account_id(who.0);
+		Ok(CollectiveOf::<Runtime, Instance>::is_member(&who))
+	}
+
 	#[precompile::public("members()")]
 	#[precompile::view]
 	fn members(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<Address>> {

@@ -2,7 +2,10 @@ use super::pallet::*;
 
 use crate::{pallet::*, IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence};
 
-use bp_staking::{traits::RelayManager, RoundIndex};
+use bp_staking::{
+	traits::{Authorities, RelayManager},
+	RoundIndex,
+};
 use frame_support::{
 	pallet_prelude::*,
 	traits::{ValidatorSet, ValidatorSetWithIdentification},
@@ -11,6 +14,20 @@ use frame_support::{
 use sp_runtime::traits::Convert;
 use sp_staking::offence::ReportOffence;
 use sp_std::{vec, vec::Vec};
+
+impl<T: Config> Authorities<T::AccountId> for Pallet<T> {
+	fn is_authority(who: &T::AccountId) -> bool {
+		Self::selected_relayers().contains(who)
+	}
+
+	fn count() -> usize {
+		Self::selected_relayers().len()
+	}
+
+	fn majority() -> u32 {
+		<Majority<T>>::get()
+	}
+}
 
 impl<T: Config> RelayManager<T::AccountId> for Pallet<T>
 where
