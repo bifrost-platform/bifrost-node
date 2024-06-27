@@ -3,7 +3,7 @@
   "version": "1.3.0",
   "author": "bifrost-platform",
   "scripts": {
-    "test": "mocha -r ts-node/register tests/**/**/*registration_pool.ts --exit",
+    "test": "mocha -r ts-node/register tests/**/**/*.ts --exit",
     "test_local_runtime": "mocha -r ts-node/register runtime/**/**/*local_runtime*.ts --exit",
     "test_live_runtime": "mocha -r ts-node/register runtime/**/**/*live_runtime*.ts --exit",
     "run_node": "ts-node commands/run_node.ts",
