@@ -25,7 +25,7 @@ export interface IBlockCreation {
 
 export interface INodeContext {
   createWeb3: (protocol?: 'ws' | 'http') => Promise<EnhancedWeb3>;
-  createEthers: () => Promise<ethers.providers.JsonRpcProvider>;
+  createEthers: () => Promise<ethers.JsonRpcProvider>;
   createPolkadotApi: () => Promise<ApiPromise>;
 
   createBlock: (options?: IBlockCreation) => Promise<{
@@ -37,7 +37,7 @@ export interface INodeContext {
   }>;
 
   web3: EnhancedWeb3;
-  ethers: ethers.providers.JsonRpcProvider;
+  ethers: ethers.JsonRpcProvider;
   polkadotApi: ApiPromise;
   rpcPort: number;
   ethTransactionType?: EthTransactionType;

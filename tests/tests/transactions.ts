@@ -1,7 +1,5 @@
 import { ethers } from 'ethers';
 
-import { AccessListish } from '@ethersproject/transactions';
-
 import { TEST_CONTROLLERS } from '../constants/keys';
 import { customWeb3Request } from './providers';
 import { INodeContext } from './set_dev_node';
@@ -20,7 +18,7 @@ export interface TransactionOptions {
   maxPriorityFeePerGas?: string | number;
   value?: string | number;
   data?: string;
-  accessList?: AccessListish; // AccessList | Array<[string, Array<string>]>
+  accessList?: ethers.AccessListish; // AccessList | Array<[string, Array<string>]>
 }
 
 export const TRANSACTION_TEMPLATE: TransactionOptions = {
@@ -151,7 +149,7 @@ export const createTransaction = async (
         value: value && value.toString(),
         gasPrice,
         gasLimit: gas,
-        nonce: nonce,
+        nonce: Number(nonce),
         data: options.data,
         accessList,
         chainId,
@@ -165,7 +163,7 @@ export const createTransaction = async (
         maxFeePerGas,
         maxPriorityFeePerGas,
         gasLimit: gas,
-        nonce: nonce,
+        nonce: Number(nonce),
         data: options.data,
         accessList,
         chainId,

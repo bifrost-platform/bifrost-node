@@ -4,7 +4,12 @@ import { Keyring } from '@polkadot/api';
 
 import { TEST_CONTROLLERS, TEST_RELAYERS } from '../../constants/keys';
 import { getExtrinsicResult } from '../extrinsics';
-import { describeDevNode } from '../set_dev_node';
+import { describeDevNode, INodeContext } from '../set_dev_node';
+
+async function getCurrentRound(context: INodeContext) {
+  const rawCurrentRound: any = await context.polkadotApi.query.btcRegistrationPool.currentRound();
+  return rawCurrentRound.toJSON();
+}
 
 describeDevNode('pallet_btc_registration_pool - request_system_vault', (context) => {
   const keyring = new Keyring({ type: 'ethereum' });
@@ -13,11 +18,11 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
 
   it('should successfully request system vault', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcRegistrationPool.requestSystemVault()
+      context.polkadotApi.tx.btcRegistrationPool.requestSystemVault(false)
     ).signAndSend(alith);
     await context.createBlock();
 
-    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
+    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault(await getCurrentRound(context));
     const systemVault = rawSystemVault.toHuman();
 
     expect(systemVault.address).is.eq('Pending');
@@ -39,7 +44,7 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
     await context.polkadotApi.tx.btcRegistrationPool.submitSystemVaultKey(submit, signature).send();
     await context.createBlock();
 
-    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
+    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault(await getCurrentRound(context));
     const systemVault = rawSystemVault.toHuman();
 
     expect(systemVault.descriptor).is.eq('wsh(sortedmulti(1,02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4))#0hzltyp0');
@@ -47,7 +52,7 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
     expect(systemVault.address['Generated']).is.ok;
     expect(systemVault.pubKeys[alithRelayer.address]).is.eq(pubKey);
 
-    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
+    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(await getCurrentRound(context), pubKey);
     const bondedPubKey = rawBondedPubKey.toHuman();
     expect(bondedPubKey).is.eq(who);
   });
@@ -61,19 +66,19 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
     ).signAndSend(alith);
     await context.createBlock();
 
-    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
+    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(await getCurrentRound(context), vault);
     const bondedVault = rawBondedVault.toHuman();
     expect(bondedVault).is.null;
 
-    const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(vault);
+    const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(await getCurrentRound(context), vault);
     const bondedDescriptor = rawBondedDescriptor.toHuman();
     expect(bondedDescriptor).is.null;
 
-    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
+    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(await getCurrentRound(context), pubKey);
     const bondedPubKey = rawBondedPubKey.toHuman()
     expect(bondedPubKey).is.null;
 
-    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault();
+    const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault(await getCurrentRound(context));
     const systemVault = rawSystemVault.toHuman();
     expect(systemVault).is.null;
   });
@@ -120,10 +125,10 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(baltathar);
     await context.createBlock();
 
-    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
+    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(await getCurrentRound(context), refund);
     expect(rawBondedRefund.toJSON()[0]).eq(baltathar.address);
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
     expect(registeredBitcoinPair.refundAddress).eq(refund);
     expect(registeredBitcoinPair.vault.address).eq('Pending');
@@ -136,7 +141,7 @@ describeDevNode('pallet_btc_registration_pool - request_vault', (context) => {
     await context.polkadotApi.tx.btcRegistrationPool.requestVault(refund).signAndSend(charleth);
     await context.createBlock();
 
-    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
+    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(await getCurrentRound(context), refund);
     expect(rawBondedRefund.toJSON()[1]).eq(charleth.address);
   });
 
@@ -217,7 +222,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
 
     const vault = registeredBitcoinPair.vault;
@@ -261,23 +266,23 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
     ).signAndSend(alith);
     await context.createBlock();
 
-    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(vault);
+    const rawBondedVault: any = await context.polkadotApi.query.btcRegistrationPool.bondedVault(await getCurrentRound(context), vault);
     const bondedVault = rawBondedVault.toHuman();
     expect(bondedVault).is.null;
 
-    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(refund);
+    const rawBondedRefund: any = await context.polkadotApi.query.btcRegistrationPool.bondedRefund(await getCurrentRound(context), refund);
     const bondedRefund = rawBondedRefund.toHuman();
     expect(bondedRefund).is.empty;
 
-    const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(vault);
+    const rawBondedDescriptor: any = await context.polkadotApi.query.btcRegistrationPool.bondedDescriptor(await getCurrentRound(context), vault);
     const bondedDescriptor = rawBondedDescriptor.toHuman();
     expect(bondedDescriptor).is.null;
 
-    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(pubKey);
+    const rawBondedPubKey: any = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(await getCurrentRound(context), pubKey);
     const bondedPubKey = rawBondedPubKey.toHuman()
     expect(bondedPubKey).is.null;
 
-    const rawTarget: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
+    const rawTarget: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
     const target = rawTarget.toHuman();
     expect(target).is.null;
   });
@@ -320,7 +325,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
     expect(registeredBitcoinPair.vault.address).eq('Pending');
     expect(Object.keys(registeredBitcoinPair.vault.pubKeys).length).eq(1);
@@ -387,7 +392,7 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
-    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(baltathar.address);
+    const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
     const registeredBitcoinPair = rawRegisteredBitcoinPair.toHuman();
 
     const vault = registeredBitcoinPair.vault;

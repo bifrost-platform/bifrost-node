@@ -18,17 +18,14 @@ const SOCKET_MESSAGE_SEQ_ID = 4657;
 const VALID_EXECUTED_REQUEST_SUBMISSION_SIG = '0x9a3be5965cadfe127e65e485fc18c39bc9f7157dc9bbaf643f108e7c1b0740dc53c82990ef286702363d60e05ffe1afeea11ef0b1efbc79f9546c08032f108e81c';
 
 // submit_unsigned_psbt()
-const VALID_SYSTEM_VAULT_VOUT = 0;
 const VALID_PSBT_TXID = '0x4356d8ce9259a22d2afc0ad7ba34bd349bf9d2bc7e28e676d22fc7cb3fa822a7';
 const VALID_UNSIGNED_PSBT_SUBMISSION_SIG = '0x431836a4322e811431403dcc4df011b62b96987a53b1053b36e0b7a07dbee1c208942ce79927ebd813b34097732e2ce9125250f25c49ca5ec1ddb60e558b060e1c';
 const VALID_UNSIGNED_PSBT_SUBMISSION_SIG_WITHOUT_REFUND = '0x441d7065a00bdc6249e466bfa46d1b35fd08e8c40386fa4c4235f1d8a0894ca61ab7bb5d601082e2cc7f24a46b9f116be3dc46f2c67d7a123d1375ca3177dc321b';
-const VALID_UNSIGNED_PSBT_SUBMISSION_SIG_WITH_WRONG_OUTPUT_ORDER = '0x7107b996671096138e7b04cae6894c9d381b64d2259ba08e27aaaa3643830bbf52d0fb70c1a7918c917ad4b41564885af5fe0444c1657df6023ab2cb49353af01c';
 const VALID_UNSIGNED_PSBT_SUBMISSION_SIG_WITH_WRONG_AMOUNT = '0x6b619c39b6a577e6730b50414e29beaf53899b50e8f3c5adfe9ea2d2d4033978582857574ca95ced1db18c13c199f6ec64880ad7e872f179584f8c0c90835b1c1c';
 const VALID_UNSIGNED_PSBT = '0x70736274ff01007d020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200ca9a3b0000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e9584284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
 
 const INVALID_UNSIGNED_PSBT_SUBMISSION_SIG = '0x64a7298c65a13542ea3b480f83822d8569398274e25aa920ba0f28cc7412750e23208877c20756ffaba0739356bc73cf09abdcd8be5045249be341785dff4fae1c';
 const INVALID_UNSIGNED_PSBT_WITHOUT_REFUND = '0x70736274ff01005e020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0100ca9a3b0000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b000880000';
-const INVALID_UNSIGNED_PSBT_WITH_WRONG_OUTPUT_ORDER = '0x70736274ff01007d020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff029584284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead1600ca9a3b0000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
 const INVALID_UNSIGNED_PSBT_WITH_WRONG_AMOUNT = '0x70736274ff01007d020000000150cefd4f6b4e3bf316808aa126d8d89ce812d04d1c0b072aa30cf8f86347804b0000000000ffffffff0200ca9a3b0000000022002001f910a6a2d3f8d3562ea46b75c057387c6db6d49cb3b863c884f50da1a8450e9284284800000000160014e0e55307ae2d25f1a8ff05fb3b25a0c67cbead16000000000001012b00f2052a01000000220020a3379884c9919e8ae37a568e76b4af9d72b0928bf52f5ea8e5f53032691d17be0105695221024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33721031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f53ae2206024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d076604ebc0ee0b220602531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33704417d4be92206031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f0479b00088000000';
 
 const VALID_SOCKET_MESSAGE = '0x00000000000000000000000000000000000000000000000000000000000000200000bfc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000036c000000000000000000000000000000000000000000000000000000000000123100000000000000000000000000000000000000000000000000000000000000050000271200000000000000000000000000000000000000000000000000000000040207030100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000080000000300000bfc7e3a761afcec9f3e2fb7e853ffc45a62319143fa00000000000000000000000000000000000000000000000000000000000000000000000000000000000000003cd0a705a2dc65e5b1e1205896baa2be8a07c6e00000000000000000000000003cd0a705a2dc65e5b1e1205896baa2be8a07c6e0000000000000000000000000000000000000000000000000000000004828849500000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000000';
@@ -60,6 +57,7 @@ const VAULT_PUBKEY_SUBMISSION_SIG = '0xcc1c09e81934cdcaeebf370fe793cf82bdf06b5fc
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const REFUND_ADDRESS = 'bcrt1qurj4xpaw95jlr28lqhankfdqce7tatgkeqrk9q';
 const REFUND_ADDRESS_2 = 'bcrt1q24mgap5jt5xksrlnaedrxwy8tvqurp5l0600ag';
+const SYSTEM_VAULT = 'bcrt1qq8u3pf4z60udx43w534htszh8p7xmdk5njemsc7gsn6smgdgg58qvavm86';
 
 async function joinRegistrationPool(context: INodeContext, refund: string, pk: string) {
   const keyring = new Keyring({ type: 'ethereum' });
@@ -147,7 +145,7 @@ async function requestSystemVault(context: INodeContext) {
   const keyring = new Keyring({ type: 'ethereum' });
   const sudo = keyring.addFromUri(TEST_CONTROLLERS[0].private);
   await context.polkadotApi.tx.sudo.sudo(
-    context.polkadotApi.tx.btcRegistrationPool.requestSystemVault()
+    context.polkadotApi.tx.btcRegistrationPool.requestSystemVault(false)
   ).signAndSend(sudo);
   await context.createBlock();
 }
@@ -173,8 +171,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - invalid authority', async function () {
     const msg = {
       authorityId: baltathar.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -192,8 +189,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - invalid signature', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -211,8 +207,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - system vault is not requested', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -228,8 +223,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -245,8 +239,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [],
+      outputs: [[REFUND_ADDRESS, []], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -254,14 +247,13 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
-    expect(extrinsicResult).eq('InvalidSocketMessage');
+    expect(extrinsicResult).eq('InvalidPsbt');
   });
 
   it('should fail to submit unsigned psbt - invalid socket message bytes', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [INVALID_SOCKET_MESSAGE_WITH_INVALID_BYTES],
+      outputs: [[REFUND_ADDRESS, [INVALID_SOCKET_MESSAGE_WITH_INVALID_BYTES]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -275,8 +267,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - socket contract is not set', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -292,8 +283,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -312,8 +302,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -332,8 +321,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -352,8 +340,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [INVALID_SOCKET_MESSAGE_WITH_INVALID_BRIDGE_CHAINS],
+      outputs: [[REFUND_ADDRESS, [INVALID_SOCKET_MESSAGE_WITH_INVALID_BRIDGE_CHAINS]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -367,8 +354,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - user is not registered', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -385,8 +371,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE, VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE, VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -400,8 +385,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should fail to submit unsigned psbt - missing refund tx output', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: INVALID_UNSIGNED_PSBT_WITHOUT_REFUND
     };
 
@@ -412,26 +396,10 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
     expect(extrinsicResult).eq('InvalidPsbt');
   });
 
-  it('should fail to submit unsigned psbt - first tx output is not system vault change refund', async function () {
-    const msg = {
-      authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
-      psbt: INVALID_UNSIGNED_PSBT_WITH_WRONG_OUTPUT_ORDER
-    };
-
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG_WITH_WRONG_OUTPUT_ORDER).send();
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'btcSocketQueue', 'submitUnsignedPsbt');
-    expect(extrinsicResult).eq('InvalidPsbt');
-  });
-
   it('should fail to submit unsigned psbt - tx output with wrong amount', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: INVALID_UNSIGNED_PSBT_WITH_WRONG_AMOUNT
     };
 
@@ -445,8 +413,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   it('should successfully submit an unsigned psbt', async function () {
     const msg = {
       authorityId: alith.address,
-      systemVout: VALID_SYSTEM_VAULT_VOUT,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -486,7 +453,7 @@ describeDevNode('pallet_btc_socket_queue - submit signed pbst', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -634,7 +601,7 @@ describeDevNode('pallet_btc_socket_queue - accept request', (context) => {
 
     const msg = {
       authorityId: alith.address,
-      socketMessages: [VALID_SOCKET_MESSAGE],
+      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
       psbt: VALID_UNSIGNED_PSBT
     };
 
@@ -686,6 +653,11 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
   before('should join registration pool', async function () {
     await joinRegistrationPool(context, REFUND_ADDRESS, TEST_CONTROLLERS[1].private);
     await submitVaultKey(context);
+  });
+
+  before('should generate system vault', async function () {
+    await requestSystemVault(context);
+    await submitSystemVaultKey(context);
   });
 
   it('should fail to submit rollback request - unknown user', async function () {
@@ -743,6 +715,7 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
       unsignedPsbt: VALID_ROLLBACK_PSBT,
     };
 
+    await context.createBlock();
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
     ).signAndSend(alith);
@@ -753,25 +726,7 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
     expect(rollbackRequest).is.null;
 
     await clearDummyTxInfo(context, bitcoinSocket);
-  });
-
-  it('should fail to submit rollback request - invalid output length', async function () {
-    const msg = {
-      who: baltathar.address,
-      txid: VALID_PSBT_TXID,
-      vout: 0,
-      amount: 1210614933,
-      unsignedPsbt: VALID_UNSIGNED_PSBT,
-    };
-
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
-    ).signAndSend(alith);
     await context.createBlock();
-
-    const rawRollbackRequest: any = await context.polkadotApi.query.btcSocketQueue.rollbackRequests(VALID_ROLLBACK_PSBT_TXID);
-    const rollbackRequest = rawRollbackRequest.toHuman();
-    expect(rollbackRequest).is.null;
   });
 
   it('should fail to submit rollback request - invalid output to address', async function () {
@@ -793,7 +748,7 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
     expect(rollbackRequest).is.null;
   });
 
-  it('should fail to submit rollback request - invalid output to address', async function () {
+  it('should fail to submit rollback request - invalid output amount', async function () {
     const msg = {
       who: baltathar.address,
       txid: VALID_PSBT_TXID,
@@ -802,6 +757,7 @@ describeDevNode('pallet_btc_socket_queue - rollback request', (context) => {
       unsignedPsbt: INVALID_ROLLBACK_PSBT_WITH_WRONG_OUTPUT_AMOUNT,
     };
 
+    await context.createBlock();
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.btcSocketQueue.submitRollbackRequest(msg)
     ).signAndSend(alith);
