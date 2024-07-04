@@ -75,7 +75,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					// Controller account
 					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 					// Relayer account
-					AccountId::from(hex!("32b7FcBf9a680D510efe4e514D9d18bB1bEF2fBf")),
+					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
 					get_from_seed::<AuraId>("Alice"),
 					get_from_seed::<GrandpaId>("Alice"),
 					get_from_seed::<ImOnlineId>("Alice"),
@@ -96,7 +96,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
 				],
 				// Relay Executives
-				vec![AccountId::from(hex!("32b7FcBf9a680D510efe4e514D9d18bB1bEF2fBf"))],
+				vec![AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58"))],
 				// Sudo account
 				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 				// Socket queue authority
@@ -126,8 +126,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					AccountId::from(hex!("C41C5F1123ECCd5ce233578B2e7ebd5693869d73")),
 					AccountId::from(hex!("2898FE7a42Be376C8BC7AF536A940F7Fd5aDd423")),
 					// Relayer accounts
-					AccountId::from(hex!("32b7FcBf9a680D510efe4e514D9d18bB1bEF2fBf")),
-					AccountId::from(hex!("701147418A38146A90309eabef5619D540145067")),
+					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
 					AccountId::from(hex!("12159710B13fe31Cca949BcAfB190772Fb0E220C")),
 					AccountId::from(hex!("6E574113B9A9105ba6B5877379a25b4Fc8327c5A")),
 					AccountId::from(hex!("a7e19a783c6BB2A3732CcAD33DDD022B0aE8A439")),
