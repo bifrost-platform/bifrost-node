@@ -12,7 +12,7 @@ use sp_runtime::{
 	},
 	BoundedVec, DispatchError,
 };
-use sp_std::{str, str::FromStr, vec, vec::Vec};
+use sp_std::{str, str::FromStr, vec::Vec};
 
 use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
 
@@ -79,11 +79,10 @@ impl<T: Config> Pallet<T> {
 
 	/// Convert string typed public keys to `PublicKey` type and return the sorted list.
 	fn sort_pub_keys(raw_pub_keys: Vec<Public>) -> Result<Vec<PublicKey>, KeyError> {
-		let mut pub_keys = vec![];
-		for raw_key in raw_pub_keys.iter() {
-			let key = PublicKey::from_slice(raw_key.as_ref())?;
-			pub_keys.push(key);
-		}
+		let mut pub_keys = raw_pub_keys
+			.iter()
+			.map(|raw_key| PublicKey::from_slice(raw_key.as_ref()))
+			.collect::<Result<Vec<PublicKey>, _>>()?;
 		pub_keys.sort();
 		Ok(pub_keys)
 	}
