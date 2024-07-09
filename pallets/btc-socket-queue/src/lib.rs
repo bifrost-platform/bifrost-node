@@ -4,6 +4,7 @@ mod pallet;
 use ethabi_decode::Token;
 pub use pallet::pallet::*;
 
+pub mod migrations;
 pub mod weights;
 use weights::WeightInfo;
 
@@ -24,6 +25,19 @@ const SOCKET_GET_REQUEST_FUNCTION_SELECTOR: &str = "8dac2204";
 
 /// The function selector of `BitcoinSocket::txs()`.
 const BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR: &str = "986ba392";
+
+pub(crate) const LOG_TARGET: &'static str = "runtime::socket-queue";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The submitted PSBT information for a rollback request.

@@ -9,6 +9,7 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
+log = { workspace = true }
 hex = { workspace = true }
 array-bytes = { workspace = true }
 ethabi-decode = { workspace = true }

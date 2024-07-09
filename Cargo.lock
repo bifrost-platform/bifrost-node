@@ -6254,6 +6254,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "hex",
+ "log",
  "pallet-evm",
  "parity-scale-codec",
  "scale-info",
