@@ -1,13 +1,13 @@
 mod impls;
 
 use crate::{
-	BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound, VaultKeyPreSubmission,
-	VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
+	VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{SortedMembers, StorageVersion},
+	traits::{OnRuntimeUpgrade, SortedMembers, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -215,6 +215,13 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn max_presubmission)]
 	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]

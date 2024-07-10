@@ -1,13 +1,14 @@
 mod impls;
 
 use crate::{
-	ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage, RollbackPsbtMessage,
-	RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
+	migrations, ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage,
+	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
+	WeightInfo,
 };
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{SortedMembers, StorageVersion},
+	traits::{OnRuntimeUpgrade, SortedMembers, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -203,6 +204,13 @@ pub mod pallet {
 	/// value: The rollback PSBT txid.
 	pub type BondedRollbackOutputs<T: Config> =
 		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, H256>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
