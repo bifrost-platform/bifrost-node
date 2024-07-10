@@ -6,6 +6,7 @@ use bifrost_dev_constants::currency::{GWEI, SUPPLY_FACTOR, UNITS as BFC};
 
 use bifrost_dev_runtime as devnet;
 
+use fp_evm::GenesisAccount;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -94,7 +95,11 @@ pub fn development_config() -> Result<ChainSpec, String> {
 					AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
 					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
 				],
+				// Relay Executives
+				vec![AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58"))],
 				// Sudo account
+				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+				// Socket queue authority
 				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
 				// Pre-funded accounts
 				vec![
@@ -167,9 +172,12 @@ fn development_genesis(
 	initial_nominators: Vec<(AccountId, AccountId, Balance)>,
 	initial_council_members: Vec<AccountId>,
 	initial_tech_committee_members: Vec<AccountId>,
+	initial_relay_executives: Vec<AccountId>,
 	root_key: AccountId,
+	authority: AccountId,
 	endowed_accounts: Vec<AccountId>,
 ) -> devnet::RuntimeGenesisConfig {
+	let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
 	devnet::RuntimeGenesisConfig {
 		system: devnet::SystemConfig {
 			// Add Wasm runtime to storage.
@@ -196,7 +204,24 @@ fn development_genesis(
 		im_online: Default::default(),
 		sudo: devnet::SudoConfig { key: Some(root_key) },
 		transaction_payment: Default::default(),
-		evm: Default::default(),
+		evm: devnet::EVMConfig {
+			// We need _some_ code inserted at the precompile address so that
+			// the evm will actually call the address.
+			accounts: devnet::Precompiles::used_addresses()
+				.map(|addr| {
+					(
+						addr.into(),
+						GenesisAccount {
+							nonce: Default::default(),
+							balance: Default::default(),
+							storage: Default::default(),
+							code: revert_bytecode.clone(),
+						},
+					)
+				})
+				.collect(),
+			..Default::default()
+		},
 		ethereum: Default::default(),
 		base_fee: devnet::BaseFeeConfig::new(
 			sp_core::U256::from(1_000 * GWEI * SUPPLY_FACTOR),
@@ -219,6 +244,7 @@ fn development_genesis(
 		democracy: Default::default(),
 		council: Default::default(),
 		technical_committee: Default::default(),
+		relay_executive: Default::default(),
 		council_membership: devnet::CouncilMembershipConfig {
 			phantom: Default::default(),
 			members: BoundedVec::try_from(initial_council_members.clone())
@@ -229,6 +255,16 @@ fn development_genesis(
 			members: BoundedVec::try_from(initial_tech_committee_members.clone())
 				.expect("Membership must be initialized"),
 		},
+		relay_executive_membership: devnet::RelayExecutiveMembershipConfig {
+			phantom: Default::default(),
+			members: BoundedVec::try_from(initial_relay_executives.clone())
+				.expect("Membership must be initialized"),
+		},
 		treasury: Default::default(),
+		btc_registration_pool: Default::default(),
+		btc_socket_queue: devnet::BtcSocketQueueConfig {
+			authority: Some(authority),
+			..Default::default()
+		},
 	}
 }
