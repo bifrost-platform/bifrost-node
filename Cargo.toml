@@ -82,9 +82,9 @@ syn = "1.0"
 array-bytes = "6.1"
 
 # Bifrost Primitive
+bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }
 bp-core = { default-features = false, path = "primitives/core" }
 bp-staking = { default-features = false, path = "primitives/bfc-staking" }
-bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }
 
 # Bifrost Runtime
 bifrost-common-constants = { default-features = false, path = "runtime/common/constants" }

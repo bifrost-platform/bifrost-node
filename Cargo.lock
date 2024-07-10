@@ -801,6 +801,7 @@ dependencies = [
  "bifrost-dev-constants",
  "bp-btc-relay",
  "bp-core",
+ "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",
@@ -1038,7 +1039,11 @@ dependencies = [
 
 [[package]]
 name = "bifrost-node"
+<<<<<<< HEAD
 version = "2.0.0"
+=======
+version = "2.0.0-pre"
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
 dependencies = [
  "bifrost-common-node",
  "bifrost-dev-node",
@@ -1137,6 +1142,7 @@ dependencies = [
  "bifrost-testnet-constants",
  "bp-btc-relay",
  "bp-core",
+ "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",
@@ -1427,6 +1433,18 @@ dependencies = [
  "fp-self-contained",
  "sp-core",
  "sp-runtime",
+]
+
+[[package]]
+name = "bp-multi-sig"
+version = "0.0.1"
+dependencies = [
+ "miniscript",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -6238,15 +6256,24 @@ name = "pallet-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.2",
+<<<<<<< HEAD
  "bp-btc-relay",
  "frame-support",
  "frame-system",
  "hex",
+=======
+ "bp-multi-sig",
+ "frame-support",
+ "frame-system",
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
  "log",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
+<<<<<<< HEAD
  "sp-io",
+=======
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
  "sp-runtime",
  "sp-std",
 ]
@@ -6256,14 +6283,21 @@ name = "pallet-btc-socket-queue"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.2",
+<<<<<<< HEAD
  "bp-btc-relay",
+=======
+ "bp-multi-sig",
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
  "bp-staking",
  "ethabi-decode",
  "frame-support",
  "frame-system",
  "hex",
  "log",
+<<<<<<< HEAD
  "miniscript",
+=======
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
  "pallet-evm",
  "parity-scale-codec",
  "scale-info",
@@ -7089,7 +7123,11 @@ dependencies = [
 name = "precompile-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
+<<<<<<< HEAD
  "bp-btc-relay",
+=======
+ "bp-multi-sig",
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
  "fp-account",
  "fp-evm",
  "frame-support",
@@ -7108,7 +7146,11 @@ dependencies = [
 name = "precompile-btc-socket-queue"
 version = "1.0.0"
 dependencies = [
+<<<<<<< HEAD
  "bp-btc-relay",
+=======
+ "bp-multi-sig",
+>>>>>>> 2566d07 ([Testnet] Apply Bitcoin Relay Protocol (BRP) (#53))
  "fp-account",
  "fp-evm",
  "frame-support",

@@ -114,7 +114,26 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
+	MigratePrecompiles,
 >;
+
+/// Init new precompiles
+pub struct MigratePrecompiles;
+impl frame_support::traits::OnRuntimeUpgrade for MigratePrecompiles {
+	fn on_runtime_upgrade() -> Weight {
+		let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD]; // dummy revert bytecode
+		let precompiles = vec![
+			H160::from_low_u64_be(256),  // registration pool
+			H160::from_low_u64_be(257),  // socket queue
+			H160::from_low_u64_be(2051), // relay executive
+		];
+
+		for precomile in precompiles {
+			pallet_evm::Pallet::<Runtime>::create_account(precomile, revert_bytecode.clone());
+		}
+		Weight::from_parts(0u64, 0u64)
+	}
+}
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
