@@ -148,8 +148,10 @@ pub mod pallet {
 	#[pallet::getter(fn socket_messages)]
 	/// The submitted `SocketMessage` instances.
 	/// key: Request sequence ID.
-	/// value: The socket message in bytes.
-	pub type SocketMessages<T: Config> = StorageMap<_, Twox64Concat, U256, SocketMessage>;
+	/// value:
+	/// 	0. The PSBT txid that contains the socket message.
+	/// 	1. The socket message in bytes.
+	pub type SocketMessages<T: Config> = StorageMap<_, Twox64Concat, U256, (H256, SocketMessage)>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -316,7 +318,7 @@ pub mod pallet {
 				Self::try_psbt_output_verification(&psbt_obj, outputs)?;
 
 			for msg in deserialized_msgs {
-				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
+				<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
 			}
 			<PendingRequests<T>>::insert(
 				&txid,

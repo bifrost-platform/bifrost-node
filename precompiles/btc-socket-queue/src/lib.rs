@@ -143,6 +143,18 @@ where
 		})
 	}
 
+	#[precompile::public("socketMessageTx(uint256)")]
+	#[precompile::public("socket_message_tx(uint256)")]
+	#[precompile::view]
+	fn socket_message_tx(handle: &mut impl PrecompileHandle, sequence: U256) -> EvmResult<H256> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		Ok(match BtcSocketQueueOf::<Runtime>::socket_messages(sequence) {
+			Some((txid, _)) => txid,
+			None => H256::zero(),
+		})
+	}
+
 	#[precompile::public("rollbackOutput(bytes32,uint256)")]
 	#[precompile::public("rollback_output(bytes32,uint256)")]
 	#[precompile::view]
