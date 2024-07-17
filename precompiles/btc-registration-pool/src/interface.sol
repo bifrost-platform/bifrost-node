@@ -118,7 +118,7 @@ interface BtcRegistrationPool {
     function request_vault(string memory refund_address) external;
 
     /// @dev (Re-)set the user's refund address.
-    /// @custom:selector
+    /// @custom:selector 7d538c00
     /// @param refund_address The Bitcoin refund address
     function set_refund(string memory refund_address) external;
 }
