@@ -25,7 +25,7 @@ use sp_std::{vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -208,9 +208,13 @@ pub mod pallet {
 		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, H256>;
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+	where
+		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
+	{
 		fn on_runtime_upgrade() -> Weight {
-			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+			migrations::v2::V2::<T>::on_runtime_upgrade()
 		}
 	}
 
