@@ -59,9 +59,9 @@ interface BtcSocketQueue {
     function outbound_tx(bytes32 txid) external view returns (bytes[] memory);
 
     /// @dev Returns the PSBT txid that contains the given socket message.
-    /// @custom:selector 2bce5722
+    /// @custom:selector 821e058c
     /// @return The PSBT txid
-    function sequence_to_tx_hash(
+    function sequence_to_tx_id(
         uint256 sequence
     ) external view returns (bytes32);
 

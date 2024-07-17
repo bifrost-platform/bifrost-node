@@ -143,10 +143,10 @@ where
 		})
 	}
 
-	#[precompile::public("sequenceToTxHash(uint256)")]
-	#[precompile::public("sequence_to_tx_hash(uint256)")]
+	#[precompile::public("sequenceToTxId(uint256)")]
+	#[precompile::public("sequence_to_tx_id(uint256)")]
 	#[precompile::view]
-	fn sequence_to_tx_hash(handle: &mut impl PrecompileHandle, sequence: U256) -> EvmResult<H256> {
+	fn sequence_to_tx_id(handle: &mut impl PrecompileHandle, sequence: U256) -> EvmResult<H256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		Ok(match BtcSocketQueueOf::<Runtime>::socket_messages(sequence) {
