@@ -58,6 +58,13 @@ interface BtcSocketQueue {
     /// @return The list of the socket messages used for the given transaction
     function outbound_tx(bytes32 txid) external view returns (bytes[] memory);
 
+    /// @dev Returns the PSBT txid that contains the given socket message.
+    /// @custom:selector 821e058c
+    /// @return The PSBT txid
+    function sequence_to_tx_id(
+        uint256 sequence
+    ) external view returns (bytes32);
+
     /// @dev Returns the bonded PSBT transaction hash of the given output information.
     /// @custom:selector abbfb5ed
     /// @return The bonded PSBT transaction hash

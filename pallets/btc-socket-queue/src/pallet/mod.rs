@@ -25,7 +25,7 @@ use sp_std::{vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -148,8 +148,10 @@ pub mod pallet {
 	#[pallet::getter(fn socket_messages)]
 	/// The submitted `SocketMessage` instances.
 	/// key: Request sequence ID.
-	/// value: The socket message in bytes.
-	pub type SocketMessages<T: Config> = StorageMap<_, Twox64Concat, U256, SocketMessage>;
+	/// value:
+	/// 	0. The PSBT txid that contains the socket message.
+	/// 	1. The socket message in bytes.
+	pub type SocketMessages<T: Config> = StorageMap<_, Twox64Concat, U256, (H256, SocketMessage)>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -206,9 +208,13 @@ pub mod pallet {
 		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, H256>;
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+	where
+		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
+	{
 		fn on_runtime_upgrade() -> Weight {
-			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+			migrations::v2::V2::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -316,7 +322,7 @@ pub mod pallet {
 				Self::try_psbt_output_verification(&psbt_obj, outputs)?;
 
 			for msg in deserialized_msgs {
-				<SocketMessages<T>>::insert(msg.req_id.sequence, msg);
+				<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
 			}
 			<PendingRequests<T>>::insert(
 				&txid,
