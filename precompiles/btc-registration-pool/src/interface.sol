@@ -41,7 +41,9 @@ interface BtcRegistrationPool {
     /// @dev Returns the current registration pool
     /// @custom:selector cc65f61a
     /// @return The list of the current registration pool (0: Bifrost addresses, 1: refund addresses, 2: vault addresses)
-    function registration_pool(uint32 pool_round)
+    function registration_pool(
+        uint32 pool_round
+    )
         external
         view
         returns (address[] memory, string[] memory, string[] memory);
@@ -49,32 +51,38 @@ interface BtcRegistrationPool {
     /// @dev Returns the current pending registrations
     /// @custom:selector 752507ef
     /// @return The list of the current pending registrations (0: Bifrost addresses, 1: refund addresses)
-    function pending_registrations(uint32 pool_round)
-        external
-        view
-        returns (address[] memory, string[] memory);
+    function pending_registrations(
+        uint32 pool_round
+    ) external view returns (address[] memory, string[] memory);
 
     /// @dev Returns the current bonded vault addresses
     /// @custom:selector fd26a335
     /// @return The list of the current bonded vault addresses
-    function vault_addresses(uint32 pool_round) external view returns (string[] memory);
+    function vault_addresses(
+        uint32 pool_round
+    ) external view returns (string[] memory);
 
     /// @dev Returns the current bonded descriptors
     /// @custom:selector f8f5c229
     /// @return The list of the current bonded descriptors
-    function descriptors(uint32 pool_round) external view returns (string[] memory);
+    function descriptors(
+        uint32 pool_round
+    ) external view returns (string[] memory);
 
     /// @dev Returns the current bonded refund addresses
     /// @custom:selector 4e9b6a3b
     /// @return The list of the current bonded refund addresses
-    function refund_addresses(uint32 pool_round) external view returns (string[] memory);
+    function refund_addresses(
+        uint32 pool_round
+    ) external view returns (string[] memory);
 
     /// @dev Returns the bonded vault address mapped to the Bifrost address
     /// @custom:selector 414628e3
     /// @param user_bfc_address the address that we want to check
     /// @return A Bitcoin vault address
     function vault_address(
-        address user_bfc_address, uint32 pool_round
+        address user_bfc_address,
+        uint32 pool_round
     ) external view returns (string memory);
 
     /// @dev Returns the bonded refund address mapped to the Bifrost address
@@ -82,7 +90,8 @@ interface BtcRegistrationPool {
     /// @param user_bfc_address the address that we want to check
     /// @return A Bitcoin refund address
     function refund_address(
-        address user_bfc_address, uint32 pool_round
+        address user_bfc_address,
+        uint32 pool_round
     ) external view returns (string memory);
 
     /// @dev Returns the bonded user address mapped to the given vault address
@@ -90,7 +99,8 @@ interface BtcRegistrationPool {
     /// @param vault_address the vault address
     /// @return The users Bifrost address
     function user_address(
-        string memory vault_address, uint32 pool_round
+        string memory vault_address,
+        uint32 pool_round
     ) external view returns (address);
 
     /// @dev Returns the bonded descriptor(string) mapped to the given vault address
@@ -98,11 +108,17 @@ interface BtcRegistrationPool {
     /// @param vault_address the vault or refund address
     /// @return The descriptor (in string)
     function descriptor(
-        string memory vault_address, uint32 pool_round
+        string memory vault_address,
+        uint32 pool_round
     ) external view returns (string memory);
 
     /// @dev Join the registration pool and request a Bitcoin vault address.
     /// @custom:selector f65d6a74
     /// @param refund_address The Bitcoin refund address
     function request_vault(string memory refund_address) external;
+
+    /// @dev (Re-)set the user's refund address.
+    /// @custom:selector
+    /// @param refund_address The Bitcoin refund address
+    function set_refund(string memory refund_address) external;
 }

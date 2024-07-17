@@ -362,6 +362,29 @@ where
 		Ok(())
 	}
 
+	#[precompile::public("set_refund(string)")]
+	#[precompile::public("setRefund(string)")]
+	fn set_refund(
+		handle: &mut impl PrecompileHandle,
+		refund_address: BitcoinAddressString,
+	) -> EvmResult {
+		if BtcRegistrationPoolOf::<Runtime>::service_state() != MigrationSequence::Normal {
+			return Err(RevertReason::custom("Service is under maintenance").into());
+		}
+
+		let caller = handle.context().caller;
+
+		let raw_refund_address = refund_address.clone();
+		let refund_address = Self::convert_string_to_bitcoin_address(raw_refund_address.clone())
+			.in_field("refund_address")?;
+
+		let call = BtcRegistrationPoolCall::<Runtime>::set_refund { new: refund_address.to_vec() };
+		let origin = Runtime::AddressMapping::into_account_id(caller);
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+
+		Ok(())
+	}
+
 	/// Converts a solidity string typed Bitcoin address to a `BoundedVec`.
 	fn convert_string_to_bitcoin_address(
 		string: BitcoinAddressString,
