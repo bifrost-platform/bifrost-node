@@ -46,7 +46,7 @@ where
 
 		if let Some(pending_request) = BtcSocketQueueOf::<Runtime>::pending_requests(txid) {
 			if let Some(submitted) = pending_request.signed_psbts.get(&authority_id) {
-				Ok(UnboundedBytes::from(submitted.clone()) == signed_psbt)
+				Ok(UnboundedBytes::from(submitted.clone()).as_bytes() == signed_psbt.as_bytes())
 			} else {
 				Ok(false)
 			}
