@@ -33,7 +33,7 @@ use sp_runtime::{
 	},
 	ApplyExtrinsicResult,
 };
-pub use sp_runtime::{Perbill, Percent, Permill};
+pub use sp_runtime::{traits, Perbill, Percent, Permill};
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -696,11 +696,14 @@ impl pallet_treasury::Config for Runtime {
 
 parameter_types! {
 	pub const BasicDeposit: Balance = 100 * BFC;
-	pub const FieldDeposit: Balance = 100 * BFC;
+	pub const ByteDeposit: Balance = 100 * BFC;
 	pub const SubAccountDeposit: Balance = 100 * BFC;
 	pub const MaxSubAccounts: u32 = 100;
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
+	pub const PendingUsernameExpiration: u32 = 1 * DAYS;
+	pub const MaxSuffixLength: u32 = 7;
+	pub const MaxUsernameLength: u32 = 32;
 }
 
 /// The module that manages account identities and registrar judgements.
@@ -708,15 +711,20 @@ impl pallet_identity::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type BasicDeposit = BasicDeposit;
-	type FieldDeposit = FieldDeposit;
+	type ByteDeposit = ByteDeposit;
 	type SubAccountDeposit = SubAccountDeposit;
 	type MaxSubAccounts = MaxSubAccounts;
-	type MaxAdditionalFields = MaxAdditionalFields;
 	type IdentityInformation = IdentityInfo<MaxAdditionalFields>;
 	type MaxRegistrars = MaxRegistrars;
 	type Slashed = Treasury;
 	type ForceOrigin = EnsureRoot<AccountId>;
 	type RegistrarOrigin = EnsureRoot<AccountId>;
+	type OffchainSignature = Signature;
+	type SigningPublicKey = <Signature as traits::Verify>::Signer;
+	type UsernameAuthorityOrigin = EnsureRoot<Self::AccountId>;
+	type PendingUsernameExpiration = PendingUsernameExpiration;
+	type MaxSuffixLength = MaxSuffixLength;
+	type MaxUsernameLength = MaxUsernameLength;
 	type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
 }
 
