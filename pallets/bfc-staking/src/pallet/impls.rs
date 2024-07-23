@@ -18,7 +18,7 @@ use sp_runtime::{
 	Perbill, Permill,
 };
 use sp_staking::{
-	offence::{DisableStrategy, OffenceDetails, OnOffenceHandler},
+	offence::{OffenceDetails, OnOffenceHandler},
 	SessionIndex,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
@@ -1107,7 +1107,6 @@ where
 		>],
 		slash_fraction: &[Perbill],
 		slash_session: SessionIndex,
-		_disable_strategy: DisableStrategy,
 	) -> Weight {
 		let round = Self::round();
 		for (details, slash_fraction) in offenders.iter().zip(slash_fraction) {
