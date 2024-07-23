@@ -33,7 +33,7 @@ use sp_runtime::{
 	},
 	ApplyExtrinsicResult,
 };
-pub use sp_runtime::{traits, Perbill, Percent, Permill};
+pub use sp_runtime::{traits, ExtrinsicInclusionMode, Perbill, Percent, Permill};
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -248,6 +248,11 @@ impl frame_system::Config for Runtime {
 	type OnSetCode = ();
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	type SingleBlockMigrations = ();
+	type MultiBlockMigrator = ();
+	type PreInherents = ();
+	type PostInherents = ();
+	type PostTransactions = ();
 }
 
 parameter_types! {

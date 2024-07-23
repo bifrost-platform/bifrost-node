@@ -11,7 +11,7 @@ macro_rules! impl_common_runtime_apis {
 				fn execute_block(block: Block) {
 					Executive::execute_block(block);
 				}
-				fn initialize_block(header: &<Block as BlockT>::Header) {
+				fn initialize_block(header: &<Block as BlockT>::Header) -> ExtrinsicInclusionMode {
 					Executive::initialize_block(header)
 				}
 			}
