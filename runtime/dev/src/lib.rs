@@ -206,6 +206,8 @@ impl frame_system::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	/// The ubiquitous origin type.
 	type RuntimeOrigin = RuntimeOrigin;
+	/// The aggregated RuntimeTask type.
+	type RuntimeTask = RuntimeTask;
 	/// Maximum number of block number to block hash mappings to keep (oldest pruned first).
 	type BlockHashCount = BlockHashCount;
 	/// The weight of database operations that the runtime can invoke.
