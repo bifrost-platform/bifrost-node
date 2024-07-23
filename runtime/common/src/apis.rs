@@ -452,7 +452,7 @@ macro_rules! impl_common_runtime_apis {
 					sp_consensus_aura::SlotDuration::from_millis(Aura::slot_duration())
 				}
 				fn authorities() -> Vec<AuraId> {
-					Aura::authorities().into_inner()
+					pallet_aura::Authorities::<Runtime>::get().into_inner()
 				}
 			}
 			impl sp_session::SessionKeys<Block> for Runtime {

@@ -17,6 +17,7 @@ pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce,
 use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
+use pallet_aura::Authorities;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, ConstBool, ConstU64, OpaqueMetadata, H160, H256, U256};
@@ -898,7 +899,8 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 		I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
 	{
 		if let Some(author_index) = F::find_author(digests) {
-			let authority_id = Aura::authorities()[author_index as usize].clone();
+			let authority_id =
+				pallet_aura::Authorities::<Runtime>::get()[author_index as usize].clone();
 			let queued_keys = <pallet_session::Pallet<Runtime>>::queued_keys();
 			for key in queued_keys {
 				if key.1.aura == authority_id {
