@@ -59,15 +59,15 @@ pallet-preimage = { workspace = true }
 sp-io = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
-sp-consensus-aura = { workspace = true }
-sp-core = { workspace = true }
+sp-consensus-aura = { workspace = true, features = ["serde"] }
+sp-core = { workspace = true, features = ["serde"] }
 sp-inherents = { workspace = true }
 sp-offchain = { workspace = true }
-sp-runtime = { workspace = true }
+sp-runtime = { workspace = true, features = ["serde"] }
 sp-session = { workspace = true }
 sp-std = { workspace = true }
 sp-transaction-pool = { workspace = true }
-sp-version = { workspace = true }
+sp-version = { workspace = true, features = ["serde"] }
 sp-genesis-builder = { workspace = true }
 
 # Frontier
@@ -115,7 +115,9 @@ std = [
 	"parity-scale-codec/std",
 	"scale-info/std",
 	"bifrost-common-runtime/std",
+	"bifrost-dev-constants/std",
 	"bp-core/std",
+	"bp-multi-sig/std",
 	"frame-executive/std",
 	"frame-support/std",
 	"frame-system-rpc-runtime-api/std",
@@ -148,6 +150,10 @@ std = [
 	"pallet-offences/std",
 	"pallet-identity/std",
 	"pallet-preimage/std",
+	"pallet-evm-precompile-simple/std",
+	"pallet-evm-precompile-bn128/std",
+	"pallet-evm-precompile-modexp/std",
+	"pallet-evm-precompile-blake2/std",
 	"sp-api/std",
 	"sp-consensus-aura/std",
 	"sp-block-builder/std",
@@ -160,6 +166,7 @@ std = [
 	"sp-io/std",
 	"sp-transaction-pool/std",
 	"sp-version/std",
+	"sp-genesis-builder/std",
 	"fp-self-contained/std",
 	"fp-evm/std",
 	"fp-rpc/std",
@@ -169,16 +176,17 @@ std = [
 	"fp-account/std",
 	"evm-tracer/std",
 	"precompile-utils/std",
+	"precompile-bfc-staking/std",
+	"precompile-bfc-offences/std",
+	"precompile-relay-manager/std",
+	"precompile-governance/std",
+	"precompile-collective/std",
+	"precompile-balance/std",
+	"precompile-btc-registration-pool/std",
+	"precompile-btc-socket-queue/std",
 	"substrate-wasm-builder",
 ]
-evm-tracing = [
-	"rlp",
-	"sha3",
-	"evm-tracer",
-	"sp-io/disable_oom",
-	"sp-io/disable_panic_handler",
-	"fp-rpc-evm-tracing-events",
-]
+evm-tracing = ["rlp", "sha3", "evm-tracer", "fp-rpc-evm-tracing-events"]
 runtime-wasm = []
 runtime-benchmarks = [
 	"hex-literal",

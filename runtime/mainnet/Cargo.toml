@@ -59,15 +59,15 @@ pallet-preimage = { workspace = true }
 sp-io = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
-sp-consensus-aura = { workspace = true }
-sp-core = { workspace = true }
+sp-consensus-aura = { workspace = true, features = ["serde"] }
+sp-core = { workspace = true, features = ["serde"] }
 sp-inherents = { workspace = true }
 sp-offchain = { workspace = true }
-sp-runtime = { workspace = true }
+sp-runtime = { workspace = true, features = ["serde"] }
 sp-session = { workspace = true }
 sp-std = { workspace = true }
 sp-transaction-pool = { workspace = true }
-sp-version = { workspace = true }
+sp-version = { workspace = true, features = ["serde"] }
 sp-genesis-builder = { workspace = true }
 
 # Frontier
@@ -115,6 +115,7 @@ std = [
 	"parity-scale-codec/std",
 	"scale-info/std",
 	"bifrost-common-runtime/std",
+	"bifrost-mainnet-constants/std",
 	"bp-core/std",
 	"frame-executive/std",
 	"frame-support/std",
@@ -148,6 +149,10 @@ std = [
 	"pallet-offences/std",
 	"pallet-identity/std",
 	"pallet-preimage/std",
+	"pallet-evm-precompile-simple/std",
+	"pallet-evm-precompile-bn128/std",
+	"pallet-evm-precompile-modexp/std",
+	"pallet-evm-precompile-blake2/std",
 	"sp-api/std",
 	"sp-consensus-aura/std",
 	"sp-block-builder/std",
@@ -160,6 +165,7 @@ std = [
 	"sp-io/std",
 	"sp-transaction-pool/std",
 	"sp-version/std",
+	"sp-genesis-builder/std",
 	"fp-self-contained/std",
 	"fp-evm/std",
 	"fp-rpc/std",
@@ -171,14 +177,7 @@ std = [
 	"precompile-utils/std",
 	"substrate-wasm-builder",
 ]
-evm-tracing = [
-	"rlp",
-	"sha3",
-	"evm-tracer",
-	"sp-io/disable_oom",
-	"sp-io/disable_panic_handler",
-	"fp-rpc-evm-tracing-events",
-]
+evm-tracing = ["rlp", "sha3", "evm-tracer", "fp-rpc-evm-tracing-events"]
 runtime-wasm = []
 runtime-benchmarks = [
 	"hex-literal",

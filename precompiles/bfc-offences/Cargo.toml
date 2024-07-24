@@ -21,7 +21,6 @@ parity-scale-codec = { workspace = true, features = ["max-encoded-len"] }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-core = { workspace = true }
-sp-io = { workspace = true }
 sp-std = { workspace = true }
 sp-runtime = { workspace = true }
 sp-staking = { workspace = true }
@@ -49,6 +48,7 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-bfc-offences/std",
+	"pallet-evm/std",
 	"precompile-utils/std",
 	"sp-core/std",
 	"sp-std/std",

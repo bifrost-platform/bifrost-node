@@ -10,7 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 log = { workspace = true }
-serde = { workspace = true, features = ["std"] }
+serde = { workspace = true }
 substrate-fixed = { workspace = true }
 
 # Substrate
@@ -36,7 +36,6 @@ similar-asserts = { workspace = true }
 
 pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
 sp-core = { workspace = true, features = ["std"] }
-sp-io = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
@@ -54,7 +53,6 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-staking/std",
-	"sp-io/std",
 	"bp-staking/std",
 ]
 runtime-benchmarks = ["frame-benchmarking"]
