@@ -34,6 +34,7 @@ frame-benchmarking = { workspace = true, features = ["std"] }
 sp-core = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
 sp-api = { workspace = true, features = ["std"] }
+sp-io = { workspace = true, features = ["std"] }
 sp-blockchain = { workspace = true }
 sp-block-builder = { workspace = true, features = ["std"] }
 

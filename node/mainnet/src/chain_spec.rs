@@ -7,13 +7,15 @@ use bifrost_mainnet_runtime as mainnet;
 
 use fp_evm::GenesisAccount;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
+use sc_chain_spec::Properties;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_consensus_grandpa::AuthorityId as GrandpaId;
-use sp_core::{Pair, Public};
-use sp_runtime::{BoundedVec, Perbill};
+use sp_core::{Pair, Public, H160};
+use sp_runtime::Perbill;
 
 use hex_literal::hex;
+use std::collections::BTreeMap;
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec<mainnet::RuntimeGenesisConfig>;
@@ -62,8 +64,12 @@ pub fn inflation_config() -> InflationInfo<Balance> {
 	}
 }
 
-pub fn mainnet_config() -> Result<ChainSpec, String> {
-	let wasm_binary = WASM_BINARY.ok_or_else(|| "Mainnet wasm not available".to_string())?;
+fn properties() -> Properties {
+	let mut properties = Properties::new();
+	properties.insert("tokenDecimals".into(), 18.into());
+	properties.insert("tokenSymbol".into(), "BFC".into());
+	properties
+}
 
 	Ok(ChainSpec::from_genesis(
 		// Name
@@ -138,7 +144,6 @@ pub fn mainnet_config() -> Result<ChainSpec, String> {
 
 /// Configure initial storage state for FRAME modules.
 fn mainnet_genesis(
-	wasm_binary: &[u8],
 	initial_validators: Vec<(
 		AccountId,
 		AccountId,
@@ -163,16 +168,13 @@ fn mainnet_genesis(
 			code: wasm_binary.to_vec(),
 			..Default::default()
 		},
-		balances: mainnet::BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k| (k, 10_000_000 * BFC)).collect(),
-		},
-		session: mainnet::SessionConfig {
-			keys: initial_validators
+		"session": {
+			"keys": initial_validators
 				.iter()
 				.map(|x| {
 					(x.1.clone(), x.1.clone(), session_keys(x.3.clone(), x.4.clone(), x.5.clone()))
 				})
-				.collect::<Vec<_>>(),
+				.collect::<Vec<_>>()
 		},
 		aura: Default::default(),
 		grandpa: Default::default(),
@@ -210,9 +212,9 @@ fn mainnet_genesis(
 				.map(|(stash, controller, relayer, _, _, _, bond)| {
 					(stash, controller, relayer, bond)
 				})
-				.collect(),
-			nominations: initial_nominators,
-			inflation_config: inflation_config(),
+				.collect::<Vec<_>>(),
+			"nominations": initial_nominators,
+			"inflationConfig": inflation_config()
 		},
 		bfc_utility: Default::default(),
 		bfc_offences: Default::default(),
