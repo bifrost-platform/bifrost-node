@@ -111,6 +111,12 @@ pub type SignedExtra = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
 
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+type Migrations = (
+	pallet_identity::migration::versioned::V0ToV1<Runtime, { u64::MAX }>,
+	pallet_grandpa::migrations::MigrateV4ToV5<Runtime>,
+);
+
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
 	Runtime,
@@ -118,6 +124,7 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
+	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
