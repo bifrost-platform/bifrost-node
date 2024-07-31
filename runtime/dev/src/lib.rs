@@ -73,7 +73,7 @@ pub use frame_support::{
 			fungible::Credit, imbalance::ResolveTo, PayFromAccount, UnityAssetBalanceConversion,
 		},
 		ConstU128, ConstU32, ConstU8, Contains, Currency, EitherOfDiverse, EqualPrivilegeOnly,
-		FindAuthor, Imbalance, KeyOwnerProofSystem, LinearStoragePrice, LockIdentifier,
+		FindAuthor, Imbalance, InsideBoth, KeyOwnerProofSystem, LinearStoragePrice, LockIdentifier,
 		NeverEnsureOrigin, OnFinalize, OnUnbalanced, Randomness, StorageInfo,
 	},
 	weights::{
@@ -85,7 +85,7 @@ pub use frame_support::{
 	},
 	ConsensusEngineId, PalletId, StorageValue,
 };
-use frame_system::{EnsureRoot, EnsureSigned};
+use frame_system::{EnsureRoot, EnsureRootWithSuccess, EnsureSigned};
 
 mod precompiles;
 pub use precompiles::BifrostPrecompiles;
@@ -194,7 +194,7 @@ parameter_types! {
 /// The System pallet defines the core data types used in a Substrate runtime
 impl frame_system::Config for Runtime {
 	/// The basic call filter to use in dispatchable.
-	type BaseCallFilter = frame_support::traits::Everything;
+	type BaseCallFilter = InsideBoth<SafeMode, TxPause>;
 	/// The block type for the runtime.
 	type Block = Block;
 	/// Block & extrinsics weights: base values and limits.
@@ -246,6 +246,56 @@ impl frame_system::Config for Runtime {
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+}
+
+/// Calls that can bypass the safe-mode pallet.
+pub struct SafeModeWhitelistedCalls;
+impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
+	fn contains(call: &RuntimeCall) -> bool {
+		match call {
+			RuntimeCall::System(_)
+			| RuntimeCall::Timestamp(_)
+			| RuntimeCall::SafeMode(_)
+			| RuntimeCall::TxPause(_) => true,
+			_ => false,
+		}
+	}
+}
+
+impl pallet_tx_pause::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type PauseOrigin = EnsureRoot<AccountId>;
+	type UnpauseOrigin = EnsureRoot<AccountId>;
+	type WhitelistedCalls = ();
+	type MaxNameLen = ConstU32<256>;
+	type WeightInfo = pallet_tx_pause::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const EnterDuration: BlockNumber = 2 * MINUTES;
+	pub const EnterDepositAmount: Balance = 2_000 * BFC;
+	pub const ExtendDuration: BlockNumber = 1 * MINUTES;
+	pub const ExtendDepositAmount: Balance = 1_000 * BFC;
+	pub const ReleaseDelay: u32 = 1 * MINUTES;
+}
+
+impl pallet_safe_mode::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	type RuntimeHoldReason = RuntimeHoldReason;
+	type WhitelistedCalls = SafeModeWhitelistedCalls;
+	type EnterDuration = EnterDuration;
+	type EnterDepositAmount = EnterDepositAmount;
+	type ExtendDuration = ExtendDuration;
+	type ExtendDepositAmount = ExtendDepositAmount;
+	type ForceEnterOrigin = EnsureRootWithSuccess<AccountId, EnterDuration>;
+	type ForceExtendOrigin = EnsureRootWithSuccess<AccountId, ExtendDuration>;
+	type ForceExitOrigin = EnsureRoot<AccountId>;
+	type ForceDepositOrigin = EnsureRoot<AccountId>;
+	type ReleaseDelay = ReleaseDelay;
+	type Notify = ();
+	type WeightInfo = pallet_safe_mode::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1057,6 +1107,8 @@ construct_runtime!(
 		// Utility
 		Utility: pallet_utility::{Pallet, Call, Event} = 30,
 		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>} = 31,
+		SafeMode: pallet_safe_mode::{Pallet, Call, Storage, Config<T>, Event<T>, HoldReason} = 32,
+		TxPause: pallet_tx_pause::{Pallet, Call, Storage, Config<T>, Event<T>} = 33,
 
 		// Ethereum
 		EVM: pallet_evm::{Pallet, Config<T>, Call, Storage, Event<T>} = 40,

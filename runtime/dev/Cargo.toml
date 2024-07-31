@@ -54,6 +54,8 @@ pallet-offences = { workspace = true }
 pallet-treasury = { workspace = true }
 pallet-identity = { workspace = true }
 pallet-preimage = { workspace = true }
+pallet-safe-mode = { workspace = true }
+pallet-tx-pause = { workspace = true }
 
 # substrate primitives
 sp-io = { workspace = true }
@@ -150,6 +152,8 @@ std = [
 	"pallet-offences/std",
 	"pallet-identity/std",
 	"pallet-preimage/std",
+	"pallet-safe-mode/std",
+	"pallet-tx-pause/std",
 	"pallet-evm-precompile-simple/std",
 	"pallet-evm-precompile-bn128/std",
 	"pallet-evm-precompile-modexp/std",

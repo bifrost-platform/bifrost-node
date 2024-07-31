@@ -845,6 +845,7 @@ dependencies = [
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
+ "pallet-safe-mode",
  "pallet-scheduler",
  "pallet-session",
  "pallet-sudo",
@@ -852,6 +853,7 @@ dependencies = [
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-treasury",
+ "pallet-tx-pause",
  "pallet-utility",
  "parity-scale-codec",
  "precompile-balance",
@@ -1003,6 +1005,7 @@ dependencies = [
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
+ "pallet-safe-mode",
  "pallet-scheduler",
  "pallet-session",
  "pallet-sudo",
@@ -1010,6 +1013,7 @@ dependencies = [
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-treasury",
+ "pallet-tx-pause",
  "pallet-utility",
  "parity-scale-codec",
  "precompile-balance",
@@ -6526,6 +6530,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-proxy"
+version = "28.0.0"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.12.0#0393ae128df82baa78ad23949694795310630f39"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std 14.0.0 (git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.12.0)",
+]
+
+[[package]]
 name = "pallet-relay-manager"
 version = "1.0.0"
 dependencies = [
@@ -6545,6 +6564,25 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-std",
+]
+
+[[package]]
+name = "pallet-safe-mode"
+version = "9.0.0"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.12.0#0393ae128df82baa78ad23949694795310630f39"
+dependencies = [
+ "docify",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "pallet-proxy",
+ "pallet-utility",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-arithmetic",
+ "sp-runtime",
+ "sp-std 14.0.0 (git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.12.0)",
 ]
 
 [[package]]
@@ -6684,6 +6722,24 @@ dependencies = [
  "sp-core",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "pallet-tx-pause"
+version = "9.0.0"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.12.0#0393ae128df82baa78ad23949694795310630f39"
+dependencies = [
+ "docify",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "pallet-proxy",
+ "pallet-utility",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+ "sp-std 14.0.0 (git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-v1.12.0)",
 ]
 
 [[package]]
