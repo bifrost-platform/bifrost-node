@@ -30,7 +30,7 @@ precompile-utils = { workspace = true }
 
 # FRAME dependencies
 frame-system = { workspace = true }
-frame-support = { workspace = true }
+frame-support = { workspace = true, features = ["experimental"] }
 frame-executive = { workspace = true }
 frame-system-rpc-runtime-api = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
