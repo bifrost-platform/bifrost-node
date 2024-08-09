@@ -110,29 +110,24 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	#[pallet::getter(fn storage_cache_lifetime)]
 	/// The max storage lifetime for storage data to be cached
 	pub type StorageCacheLifetime<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn round)]
 	/// The current round index
 	pub type Round<T: Config> = StorageValue<_, RoundIndex, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn bonded_controller)]
 	/// Mapped controller accounts to the relayer account.
 	/// key: controller, value: relayer
 	pub type BondedController<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, T::AccountId>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn relayer_pool)]
 	/// The pool of relayers of the current round (including selected and non-selected relayers)
 	pub type RelayerPool<T: Config> =
 		StorageValue<_, BoundedVec<Relayer<T::AccountId>, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn relayer_state)]
 	/// The current state of a specific relayer
 	pub type RelayerState<T: Config> = StorageMap<
 		_,
@@ -143,13 +138,11 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn selected_relayers)]
 	/// The active relayer set selected for the current round. This storage is sorted by address.
 	pub type SelectedRelayers<T: Config> =
 		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn initial_selected_relayers)]
 	/// The active relayer set selected at the beginning of the current round. This storage is sorted by address.
 	/// This is used to differentiate with kicked out relayers.
 	pub type InitialSelectedRelayers<T: Config> =
@@ -157,7 +150,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn cached_selected_relayers)]
 	/// The cached active relayer set selected from previous rounds. This storage is sorted by address.
 	pub type CachedSelectedRelayers<T: Config> = StorageValue<
 		_,
@@ -167,7 +159,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn cached_initial_selected_relayers)]
 	/// The cached active relayer set selected from the beginning of each previous rounds. This storage is sorted by address.
 	/// This is used to differentiate with kicked out relayers.
 	pub type CachedInitialSelectedRelayers<T: Config> = StorageValue<
@@ -177,32 +168,27 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn majority)]
 	/// The majority of the current active relayer set
 	pub type Majority<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn initial_majority)]
 	/// The majority of the current active relayer set at the beginning of the current round.
 	/// This is used to differentiate with kicked out relayers.
 	pub type InitialMajority<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active relayer set selected from previous rounds
 	pub type CachedMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn cached_initial_majority)]
 	/// The cached majority based on the active relayer set selected from the beginning of each previous rounds.
 	/// This is used to differentiate with kicked out relayers.
 	pub type CachedInitialMajority<T: Config> =
 		StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn received_heartbeats)]
 	/// The received heartbeats of a specific relayer in the current session
 	pub type ReceivedHeartbeats<T: Config> = StorageDoubleMap<
 		_,
@@ -215,17 +201,14 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn is_heartbeat_offence_active)]
 	/// The activation of relayer heartbeat offence management
 	pub type IsHeartbeatOffenceActive<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn heartbeat_slash_fraction)]
 	/// The slash fraction for heartbeat offences
 	pub type HeartbeatSlashFraction<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn delayed_relayer_sets)]
 	/// Delayed relayer address update requests
 	pub type DelayedRelayerSets<T: Config> = StorageMap<
 		_,
@@ -328,7 +311,7 @@ pub mod pallet {
 		/// - origin should be the controller account
 		pub fn set_relayer(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
-			let old = Self::bonded_controller(&controller).ok_or(Error::<T>::ControllerDNE)?;
+			let old = BondedController::<T>::get(&controller).ok_or(Error::<T>::ControllerDNE)?;
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 			ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
 			ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
@@ -347,7 +330,8 @@ pub mod pallet {
 		/// - origin should be the controller account.
 		pub fn cancel_relayer_set(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
-			let relayer = Self::bonded_controller(&controller).ok_or(Error::<T>::ControllerDNE)?;
+			let relayer =
+				BondedController::<T>::get(&controller).ok_or(Error::<T>::ControllerDNE)?;
 			ensure!(Self::is_relayer_set_requested(controller.clone()), Error::<T>::RelayerSetDNE);
 			Self::remove_relayer_set(&relayer)?;
 			Self::deposit_event(Event::RelayerSetCancelled { relayer });

@@ -209,8 +209,10 @@ where
 	#[precompile::view]
 	fn validator_seats(handle: &mut impl PrecompileHandle) -> EvmResult<(U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let full_validator_seats: U256 = <StakingOf<Runtime>>::max_full_selected().into();
-		let basic_validator_seats: U256 = <StakingOf<Runtime>>::max_basic_selected().into();
+		let full_validator_seats: U256 =
+			pallet_bfc_staking::MaxFullSelected::<Runtime>::get().into();
+		let basic_validator_seats: U256 =
+			pallet_bfc_staking::MaxBasicSelected::<Runtime>::get().into();
 
 		Ok((full_validator_seats, basic_validator_seats))
 	}
@@ -269,7 +271,7 @@ where
 	#[precompile::view]
 	fn round_info(handle: &mut impl PrecompileHandle) -> EvmResult<EvmRoundInfoOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_info = StakingOf::<Runtime>::round();
+		let round_info = pallet_bfc_staking::Round::<Runtime>::get();
 
 		Ok((
 			round_info.current_round_index,
@@ -290,7 +292,7 @@ where
 	#[precompile::view]
 	fn latest_round(handle: &mut impl PrecompileHandle) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round_info = StakingOf::<Runtime>::round();
+		let round_info = pallet_bfc_staking::Round::<Runtime>::get();
 
 		Ok(round_info.current_round_index)
 	}
@@ -301,7 +303,7 @@ where
 	#[precompile::view]
 	fn majority(handle: &mut impl PrecompileHandle) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let majority: u32 = StakingOf::<Runtime>::majority();
+		let majority: u32 = pallet_bfc_staking::Majority::<Runtime>::get();
 
 		Ok(majority)
 	}
@@ -318,7 +320,9 @@ where
 	) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		if let Some(previous_majority) = <StakingOf<Runtime>>::cached_majority().get(&round_index) {
+		if let Some(previous_majority) =
+			pallet_bfc_staking::CachedMajority::<Runtime>::get().get(&round_index)
+		{
 			Ok(previous_majority.clone())
 		} else {
 			Err(RevertReason::read_out_of_bounds("round_index").into())
@@ -332,7 +336,7 @@ where
 	#[precompile::view]
 	fn points(handle: &mut impl PrecompileHandle, round_index: RoundIndex) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let points: u32 = StakingOf::<Runtime>::points(round_index);
+		let points: u32 = pallet_bfc_staking::Points::<Runtime>::get(round_index);
 
 		Ok(points)
 	}
@@ -351,7 +355,7 @@ where
 		let validator = Runtime::AddressMapping::into_account_id(validator.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let points = <StakingOf<Runtime>>::awarded_pts(round_index, &validator);
+		let points = pallet_bfc_staking::AwardedPts::<Runtime>::get(round_index, &validator);
 
 		Ok(points)
 	}
@@ -362,7 +366,7 @@ where
 	#[precompile::view]
 	fn rewards(handle: &mut impl PrecompileHandle) -> EvmResult<u128> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let rewards = <StakingOf<Runtime>>::awarded_tokens()
+		let rewards = pallet_bfc_staking::AwardedTokens::<Runtime>::get()
 			.try_into()
 			.map_err(|_| revert("Amount is too large for provided balance type"))?;
 
@@ -377,7 +381,7 @@ where
 	fn total(handle: &mut impl PrecompileHandle, round_index: RoundIndex) -> EvmResult<EvmTotalOf> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let mut total = TotalStake::<Runtime>::default();
-		if let Some(stake) = <StakingOf<Runtime>>::total_at_stake(round_index) {
+		if let Some(stake) = pallet_bfc_staking::TotalAtStake::<Runtime>::get(round_index) {
 			total.set_stake(stake);
 		} else {
 			return Err(RevertReason::read_out_of_bounds("round_index").into());
@@ -393,7 +397,7 @@ where
 	#[precompile::view]
 	fn inflation_config(handle: &mut impl PrecompileHandle) -> EvmResult<(u32, u32, u32)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let inflation = <StakingOf<Runtime>>::inflation_config();
+		let inflation = pallet_bfc_staking::InflationConfig::<Runtime>::get();
 
 		Ok((
 			inflation.annual.min.deconstruct(),
@@ -409,8 +413,8 @@ where
 	#[precompile::view]
 	fn inflation_rate(handle: &mut impl PrecompileHandle) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let inflation = <StakingOf<Runtime>>::inflation_config();
-		let total_stake = <StakingOf<Runtime>>::total();
+		let inflation = pallet_bfc_staking::InflationConfig::<Runtime>::get();
+		let total_stake = pallet_bfc_staking::Total::<Runtime>::get();
 
 		let inflation_rate = {
 			if total_stake <= inflation.expect.min {
@@ -454,12 +458,12 @@ where
 			return Err(RevertReason::custom("Request vectors length does not match").into());
 		}
 
-		let selected_candidates = <StakingOf<Runtime>>::selected_candidates();
+		let selected_candidates = pallet_bfc_staking::SelectedCandidates::<Runtime>::get();
 		if selected_candidates.len() < 1 {
 			return Err(RevertReason::custom("Empty selected candidates").into());
 		}
 
-		let total_stake = <StakingOf<Runtime>>::total();
+		let total_stake = pallet_bfc_staking::Total::<Runtime>::get();
 		let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
 		let validator_contribution_pct =
 			Perbill::from_percent(100 / (selected_candidates.len() as u32) + 1);
@@ -469,7 +473,7 @@ where
 
 		let mut estimated_yearly_return: Vec<u128> = vec![];
 		for (idx, candidate) in candidates.iter().enumerate() {
-			if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
+			if let Some(state) = pallet_bfc_staking::CandidateInfo::<Runtime>::get(&candidate) {
 				let validator_issuance = state.commission * round_issuance;
 				let commission = validator_contribution_pct * validator_issuance;
 				let amount_due = total_reward_amount - commission;
@@ -586,7 +590,7 @@ where
 	#[precompile::view]
 	fn candidate_count(handle: &mut impl PrecompileHandle) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let candidate_count: u32 = <StakingOf<Runtime>>::candidate_pool().len() as u32;
+		let candidate_count: u32 = pallet_bfc_staking::CandidatePool::<Runtime>::get().len() as u32;
 
 		Ok(candidate_count)
 	}
@@ -604,9 +608,9 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let raw_selected_candidates = match tier {
-			2 => StakingOf::<Runtime>::selected_full_candidates().into_inner(),
-			1 => StakingOf::<Runtime>::selected_basic_candidates().into_inner(),
-			_ => StakingOf::<Runtime>::selected_candidates().into_inner(),
+			2 => pallet_bfc_staking::SelectedFullCandidates::<Runtime>::get().into_inner(),
+			1 => pallet_bfc_staking::SelectedBasicCandidates::<Runtime>::get().into_inner(),
+			_ => pallet_bfc_staking::SelectedCandidates::<Runtime>::get().into_inner(),
 		};
 		let selected_candidates = raw_selected_candidates
 			.into_iter()
@@ -671,7 +675,7 @@ where
 		let mut candidate_state = CandidateStates::<Runtime>::default();
 
 		let mut is_existed: bool = false;
-		if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
+		if let Some(state) = pallet_bfc_staking::CandidateInfo::<Runtime>::get(&candidate) {
 			let mut new = CandidateState::<Runtime>::default();
 			new.set_state(candidate, state);
 			candidate_state.insert_state(new);
@@ -785,7 +789,7 @@ where
 		let mut amount: U256 = zero.into();
 		let mut when_executable: u32 = zero.into();
 
-		if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
+		if let Some(state) = pallet_bfc_staking::CandidateInfo::<Runtime>::get(&candidate) {
 			if let Some(request) = state.request {
 				amount = request.amount.into();
 				when_executable = request.when_executable.into();
@@ -812,7 +816,9 @@ where
 		let mut nominators: Vec<Address> = vec![];
 		let mut nomination_amounts: Vec<U256> = vec![];
 
-		if let Some(top_nominations) = <StakingOf<Runtime>>::top_nominations(&candidate) {
+		if let Some(top_nominations) =
+			pallet_bfc_staking::TopNominations::<Runtime>::get(&candidate)
+		{
 			for nomination in top_nominations.nominations {
 				nominators.push(Address(nomination.owner.into()));
 				nomination_amounts.push(nomination.amount.into());
@@ -840,7 +846,9 @@ where
 		let mut nominators: Vec<Address> = vec![];
 		let mut nomination_amounts: Vec<U256> = vec![];
 
-		if let Some(bottom_nominations) = <StakingOf<Runtime>>::bottom_nominations(&candidate) {
+		if let Some(bottom_nominations) =
+			pallet_bfc_staking::BottomNominations::<Runtime>::get(&candidate)
+		{
 			for nomination in bottom_nominations.nominations {
 				nominators.push(Address(nomination.owner.into()));
 				nomination_amounts.push(nomination.amount.into());
@@ -864,12 +872,13 @@ where
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let result = if let Some(state) = <StakingOf<Runtime>>::candidate_info(&candidate) {
-			let candidate_nomination_count: u32 = state.nomination_count;
-			candidate_nomination_count
-		} else {
-			0u32
-		};
+		let result =
+			if let Some(state) = pallet_bfc_staking::CandidateInfo::<Runtime>::get(&candidate) {
+				let candidate_nomination_count: u32 = state.nomination_count;
+				candidate_nomination_count
+			} else {
+				0u32
+			};
 
 		Ok(result)
 	}
@@ -891,7 +900,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let mut nominator_state = NominatorState::<Runtime>::default();
 
-		if let Some(state) = <StakingOf<Runtime>>::nominator_state(&nominator) {
+		if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
 			nominator_state.set_state(state);
 		};
 
@@ -919,7 +928,7 @@ where
 		let mut when_executables: Vec<u32> = vec![];
 		let mut actions: Vec<u32> = vec![];
 
-		if let Some(state) = <StakingOf<Runtime>>::nominator_state(&nominator) {
+		if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
 			revocations_count = state.requests.revocations_count.into();
 			less_total = state.requests.less_total.into();
 
@@ -960,12 +969,13 @@ where
 		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let result = if let Some(state) = <StakingOf<Runtime>>::nominator_state(&nominator) {
-			let nominator_nomination_count: u32 = state.nominations.len() as u32;
-			nominator_nomination_count
-		} else {
-			0u32
-		};
+		let result =
+			if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
+				let nominator_nomination_count: u32 = state.nominations.len() as u32;
+				nominator_nomination_count
+			} else {
+				0u32
+			};
 
 		Ok(result)
 	}
@@ -1345,7 +1355,8 @@ where
 	fn get_previous_selected_candidates(
 		round_index: &RoundIndex,
 	) -> EvmResult<BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>>> {
-		let previous_selected_candidates = <StakingOf<Runtime>>::cached_selected_candidates();
+		let previous_selected_candidates =
+			pallet_bfc_staking::CachedSelectedCandidates::<Runtime>::get();
 		if let Some(previous_selected_candidates) = previous_selected_candidates.get(round_index) {
 			Ok(previous_selected_candidates.clone())
 		} else {
@@ -1364,9 +1375,9 @@ where
 
 		let selected_candidates: BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>> =
 			match tier {
-				TierType::Full => StakingOf::<Runtime>::selected_full_candidates(),
-				TierType::Basic => StakingOf::<Runtime>::selected_basic_candidates(),
-				TierType::All => StakingOf::<Runtime>::selected_candidates(),
+				TierType::Full => pallet_bfc_staking::SelectedFullCandidates::<Runtime>::get(),
+				TierType::Basic => pallet_bfc_staking::SelectedBasicCandidates::<Runtime>::get(),
+				TierType::All => pallet_bfc_staking::SelectedCandidates::<Runtime>::get(),
 			};
 
 		return if is_complete {

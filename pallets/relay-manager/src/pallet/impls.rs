@@ -17,11 +17,11 @@ use sp_std::{vec, vec::Vec};
 
 impl<T: Config> Authorities<T::AccountId> for Pallet<T> {
 	fn is_authority(who: &T::AccountId) -> bool {
-		Self::selected_relayers().contains(who)
+		SelectedRelayers::<T>::get().contains(who)
 	}
 
 	fn count() -> usize {
-		Self::selected_relayers().len()
+		SelectedRelayers::<T>::get().len()
 	}
 
 	fn majority() -> u32 {
@@ -51,10 +51,10 @@ where
 	}
 
 	fn refresh_relayer_pool() {
-		let pool = Self::relayer_pool();
+		let pool = RelayerPool::<T>::get();
 		pool.iter().for_each(|r| {
 			let mut relayer_state =
-				Self::relayer_state(&r.relayer).expect("RelayerState must exist");
+				RelayerState::<T>::get(&r.relayer).expect("RelayerState must exist");
 			if !relayer_state.is_kicked_out() {
 				relayer_state.go_offline();
 			}
@@ -67,10 +67,10 @@ where
 		Self::refresh_relayer_pool();
 
 		for controller in selected_candidates {
-			if let Some(relayer) = Self::bonded_controller(&controller) {
+			if let Some(relayer) = BondedController::<T>::get(&controller) {
 				selected_relayers.try_insert(relayer.clone()).expect(<Error<T>>::TooManySelectedRelayers.as_str());
 				let mut relayer_state =
-					Self::relayer_state(&relayer).expect("RelayerState must exist");
+					RelayerState::<T>::get(&relayer).expect("RelayerState must exist");
 				relayer_state.go_online();
 				<RelayerState<T>>::insert(&relayer, relayer_state);
 				Self::deposit_event(Event::RelayerChosen {
@@ -86,12 +86,12 @@ where
 	}
 
 	fn refresh_cached_selected_relayers(round: RoundIndex, relayers: BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>) {
-		let mut cached_selected_relayers = Self::cached_selected_relayers();
-		let mut cached_initial_selected_relayers = Self::cached_initial_selected_relayers();
-		if Self::storage_cache_lifetime() <= cached_selected_relayers.len() as u32 {
+		let mut cached_selected_relayers = CachedSelectedRelayers::<T>::get();
+		let mut cached_initial_selected_relayers = CachedInitialSelectedRelayers::<T>::get();
+		if StorageCacheLifetime::<T>::get() <= cached_selected_relayers.len() as u32 {
 			cached_selected_relayers.pop_first();
 		}
-		if Self::storage_cache_lifetime() <= cached_initial_selected_relayers.len() as u32 {
+		if StorageCacheLifetime::<T>::get() <= cached_initial_selected_relayers.len() as u32 {
 			cached_initial_selected_relayers.pop_first();
 		}
 		cached_selected_relayers.insert(round, relayers.clone());
@@ -101,12 +101,12 @@ where
 	}
 
 	fn refresh_majority(round: RoundIndex) {
-		let mut cached_majority = Self::cached_majority();
-		let mut cached_initial_majority = Self::cached_initial_majority();
-		if Self::storage_cache_lifetime() <= cached_majority.len() as u32 {
+		let mut cached_majority = CachedMajority::<T>::get();
+		let mut cached_initial_majority = CachedInitialMajority::<T>::get();
+		if StorageCacheLifetime::<T>::get() <= cached_majority.len() as u32 {
 			cached_majority.pop_first();
 		}
-		if Self::storage_cache_lifetime() <= cached_initial_majority.len() as u32 {
+		if StorageCacheLifetime::<T>::get() <= cached_initial_majority.len() as u32 {
 			cached_initial_majority.pop_first();
 		}
 		let majority: u32 = Self::compute_majority();
@@ -122,7 +122,7 @@ where
 		if let Some(relayer) = <BondedController<T>>::take(&old) {
 			<BondedController<T>>::insert(&new, relayer.clone());
 			let mut relayer_state =
-				Self::relayer_state(&relayer).expect("RelayerState must exist");
+				RelayerState::<T>::get(&relayer).expect("RelayerState must exist");
 			relayer_state.set_controller(new.clone());
 			<RelayerState<T>>::insert(&relayer, relayer_state);
 			Self::remove_from_relayer_pool(&new, false);
@@ -138,9 +138,9 @@ where
 	}
 
 	fn kickout_relayer(controller: &T::AccountId) {
-		if let Some(relayer) = Self::bonded_controller(controller) {
+		if let Some(relayer) = BondedController::<T>::get(controller) {
 			let mut relayer_state =
-				Self::relayer_state(&relayer).expect("RelayerState must exist");
+				RelayerState::<T>::get(&relayer).expect("RelayerState must exist");
 			relayer_state.kick_out();
 			<RelayerState<T>>::insert(&relayer, relayer_state);
 
@@ -164,7 +164,7 @@ where
 			.enumerate()
 			.filter(|(_, id)| {
 				let controller: T::AccountId = id.clone().into();
-				if let Some(relayer) = Self::bonded_controller(&controller) {
+				if let Some(relayer) = BondedController::<T>::get(&controller) {
 					!Self::is_heartbeat_pulsed(&relayer)
 				} else {
 					false
@@ -173,9 +173,9 @@ where
 			.filter_map(|(_, id)| {
 				let controller: T::AccountId = id.clone().into();
 				let relayer =
-					Self::bonded_controller(&controller).expect("BondedController must exist");
+					BondedController::<T>::get(&controller).expect("BondedController must exist");
 				let mut relayer_state =
-					Self::relayer_state(&relayer).expect("RelayerState must exist");
+					RelayerState::<T>::get(&relayer).expect("RelayerState must exist");
 				relayer_state.go_offline();
 				<RelayerState<T>>::insert(&relayer, relayer_state);
 				<T::ValidatorSet as ValidatorSetWithIdentification<T::AccountId>>::IdentificationOf::convert(
@@ -192,7 +192,7 @@ where
 		if offenders.is_empty() {
 			Self::deposit_event(Event::<T>::AllGood);
 		} else {
-			if Self::is_heartbeat_offence_active() {
+			if IsHeartbeatOffenceActive::<T>::get() {
 				let validator_set_count = current_validators.len() as u32;
 				let offence = UnresponsivenessOffence {
 					session_index,
@@ -220,7 +220,7 @@ where
 impl<T: Config> Pallet<T> {
 	/// Verifies if the given account is a (candidate) relayer
 	pub fn is_relayer(relayer: &T::AccountId) -> bool {
-		if Self::relayer_state(relayer).is_some() {
+		if RelayerState::<T>::get(relayer).is_some() {
 			return true;
 		}
 		false
@@ -230,22 +230,22 @@ impl<T: Config> Pallet<T> {
 	/// the beginning of the current round
 	pub fn is_selected_relayer(relayer: &T::AccountId, is_initial: bool) -> bool {
 		if is_initial {
-			Self::initial_selected_relayers().contains(relayer)
+			InitialSelectedRelayers::<T>::get().contains(relayer)
 		} else {
-			Self::selected_relayers().contains(relayer)
+			SelectedRelayers::<T>::get().contains(relayer)
 		}
 	}
 
 	/// Verifies if the given account has already requested for relayer account update
 	pub fn is_relayer_set_requested(relayer: T::AccountId) -> bool {
-		let round = Self::round();
-		let relayer_sets = Self::delayed_relayer_sets(round);
+		let round = Round::<T>::get();
+		let relayer_sets = DelayedRelayerSets::<T>::get(round);
 		relayer_sets.into_iter().any(|r| r.old == relayer)
 	}
 
 	/// Compute majority based on the current selected relayers
 	fn compute_majority() -> u32 {
-		((Self::selected_relayers().len() as u32) / 2) + 1
+		((SelectedRelayers::<T>::get().len() as u32) / 2) + 1
 	}
 
 	/// Verifies the existence of the given relayer and controller account. If it is both not bonded
@@ -262,7 +262,7 @@ impl<T: Config> Pallet<T> {
 	/// Sets the liveness of the requested relayer to `true`.
 	pub fn pulse_heartbeat(relayer: &T::AccountId) -> bool {
 		let session_index = T::ValidatorSet::session_index();
-		if !Self::received_heartbeats(session_index, relayer) {
+		if !ReceivedHeartbeats::<T>::get(session_index, relayer) {
 			<ReceivedHeartbeats<T>>::insert(session_index, relayer, true);
 			return true;
 		}
@@ -273,7 +273,7 @@ impl<T: Config> Pallet<T> {
 	/// `true` if the given relayer sent a heartbeat in the current session.
 	pub fn is_heartbeat_pulsed(relayer: &T::AccountId) -> bool {
 		let session_index = T::ValidatorSet::session_index();
-		Self::received_heartbeats(session_index, relayer)
+		ReceivedHeartbeats::<T>::get(session_index, relayer)
 	}
 
 	/// Remove the given `relayer` from the `SelectedRelayers`. Returns `true` if the relayer has
@@ -293,7 +293,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Adds a new relayer address update request. The state reflection will be applied in the next round.
 	pub fn add_to_relayer_sets(old: T::AccountId, new: T::AccountId) -> DispatchResult {
-		let round = Self::round();
+		let round = Round::<T>::get();
 		<DelayedRelayerSets<T>>::try_mutate(round, |relayer_sets| -> DispatchResult {
 			Ok(relayer_sets
 				.try_push(DelayedRelayerSet::new(old, new))
@@ -303,7 +303,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Remove the given `who` from the `DelayedRelayerSets` of the current round.
 	pub fn remove_relayer_set(who: &T::AccountId) -> DispatchResult {
-		let round = Self::round();
+		let round = Round::<T>::get();
 		<DelayedRelayerSets<T>>::mutate(round, |relayer_set| {
 			relayer_set.retain(|r| r.old != *who);
 		});
@@ -312,9 +312,9 @@ impl<T: Config> Pallet<T> {
 
 	/// Refresh the latest rounds cached selected relayers to the current state
 	fn refresh_latest_cached_relayers() {
-		let round = Self::round();
+		let round = Round::<T>::get();
 		<CachedSelectedRelayers<T>>::mutate(|cached_selected_relayers| {
-			let selected_relayers = Self::selected_relayers();
+			let selected_relayers = SelectedRelayers::<T>::get();
 			cached_selected_relayers
 				.entry(round)
 				.and_modify(|s| *s = selected_relayers.clone())
@@ -324,7 +324,7 @@ impl<T: Config> Pallet<T> {
 
 	/// Refresh the latest rounds cached majority to the current state
 	fn refresh_latest_cached_majority() {
-		let round = Self::round();
+		let round = Round::<T>::get();
 		<CachedMajority<T>>::mutate(|cached_majority| {
 			let majority = Self::majority();
 			cached_majority.entry(round).and_modify(|m| *m = majority).or_insert(majority);
@@ -335,7 +335,7 @@ impl<T: Config> Pallet<T> {
 	/// the given `acc` references to the relayer account or not. It it's not, it represents the
 	/// bonded controller account. Returns `true` if the relayer has been removed.
 	fn remove_from_relayer_pool(acc: &T::AccountId, is_relayer: bool) -> bool {
-		let mut pool = Self::relayer_pool();
+		let mut pool = RelayerPool::<T>::get();
 		let prev_len = pool.len();
 		pool.retain(|r| if is_relayer { r.relayer != *acc } else { r.controller != *acc });
 		let curr_len = pool.len();

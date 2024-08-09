@@ -78,7 +78,7 @@ where
 		}
 
 		if is_complete {
-			let selected_relayers = RelayManagerOf::<Runtime>::selected_relayers();
+			let selected_relayers = pallet_relay_manager::SelectedRelayers::<Runtime>::get();
 			if selected_relayers.len() != unique_relayers.len() {
 				return Ok(false);
 			}
@@ -133,9 +133,9 @@ where
 		is_initial: bool,
 	) -> EvmResult<BoundedBTreeSet<Runtime::AccountId, ConstU32<MAX_AUTHORITIES>>> {
 		let previous_selected_relayers = if is_initial {
-			RelayManagerOf::<Runtime>::cached_initial_selected_relayers()
+			pallet_relay_manager::CachedInitialSelectedRelayers::<Runtime>::get()
 		} else {
-			RelayManagerOf::<Runtime>::cached_selected_relayers()
+			pallet_relay_manager::CachedSelectedRelayers::<Runtime>::get()
 		};
 
 		if let Some(previous_selected_relayers) = previous_selected_relayers.get(round_index) {
@@ -218,8 +218,8 @@ where
 	) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let selected_relayers = match is_initial {
-			true => RelayManagerOf::<Runtime>::initial_selected_relayers(),
-			false => RelayManagerOf::<Runtime>::selected_relayers(),
+			true => pallet_relay_manager::InitialSelectedRelayers::<Runtime>::get(),
+			false => pallet_relay_manager::SelectedRelayers::<Runtime>::get(),
 		};
 
 		let result = selected_relayers
@@ -254,7 +254,7 @@ where
 	#[precompile::view]
 	fn relayer_pool(handle: &mut impl PrecompileHandle) -> EvmResult<(Vec<Address>, Vec<Address>)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let relayer_pool = RelayManagerOf::<Runtime>::relayer_pool();
+		let relayer_pool = pallet_relay_manager::RelayerPool::<Runtime>::get();
 
 		let mut relayers: Vec<Address> = vec![];
 		let mut controllers: Vec<Address> = vec![];
@@ -272,8 +272,8 @@ where
 	fn majority(handle: &mut impl PrecompileHandle, is_initial: bool) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let majority = match is_initial {
-			true => RelayManagerOf::<Runtime>::initial_majority(),
-			false => RelayManagerOf::<Runtime>::majority(),
+			true => pallet_relay_manager::InitialMajority::<Runtime>::get(),
+			false => pallet_relay_manager::Majority::<Runtime>::get(),
 		};
 
 		Ok(majority.into())
@@ -289,8 +289,8 @@ where
 	) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let cached_majority = match is_initial {
-			true => RelayManagerOf::<Runtime>::cached_initial_majority(),
-			false => RelayManagerOf::<Runtime>::cached_majority(),
+			true => pallet_relay_manager::CachedInitialMajority::<Runtime>::get(),
+			false => pallet_relay_manager::CachedMajority::<Runtime>::get(),
 		};
 
 		if let Some(majority) = cached_majority.get(&round_index) {
@@ -305,7 +305,7 @@ where
 	#[precompile::view]
 	fn latest_round(handle: &mut impl PrecompileHandle) -> EvmResult<RoundIndex> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let round = RelayManagerOf::<Runtime>::round();
+		let round = pallet_relay_manager::Round::<Runtime>::get();
 
 		Ok(round)
 	}
@@ -321,7 +321,7 @@ where
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		if let Some(state) = RelayManagerOf::<Runtime>::relayer_state(&relayer) {
+		if let Some(state) = pallet_relay_manager::RelayerState::<Runtime>::get(&relayer) {
 			let mut new = RelayerState::<Runtime>::default();
 			new.set_state(relayer, state);
 			Ok(new.into())

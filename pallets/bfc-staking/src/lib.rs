@@ -177,8 +177,8 @@ impl<T: Config> Convert<T::AccountId, Option<ValidatorSnapshot<T::AccountId, Bal
 	for ValidatorSnapshotOf<T>
 {
 	fn convert(validator: T::AccountId) -> Option<ValidatorSnapshot<T::AccountId, BalanceOf<T>>> {
-		let round = Pallet::<T>::round();
-		Some(Pallet::<T>::at_stake(round.current_round_index, &validator))
+		let round = <Round<T>>::get();
+		Some(<AtStake<T>>::get(round.current_round_index, &validator))
 	}
 }
 

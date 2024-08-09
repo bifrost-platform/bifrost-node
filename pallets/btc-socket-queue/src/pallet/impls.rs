@@ -459,7 +459,7 @@ where
 						) {
 							return Err(Error::<T>::InvalidSocketMessage.into());
 						}
-						if Self::socket_messages(&msg.req_id.sequence).is_some() {
+						if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
 							return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
 						}
 

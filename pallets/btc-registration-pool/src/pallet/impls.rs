@@ -28,7 +28,7 @@ use super::pallet::*;
 
 impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	fn get_refund_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
-		if let Some(relay_target) = Self::registration_pool(Self::current_round(), who) {
+		if let Some(relay_target) = RegistrationPool::<T>::get(CurrentRound::<T>::get(), who) {
 			Some(relay_target.refund_address)
 		} else {
 			None
@@ -36,7 +36,7 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn get_vault_address(who: &T::AccountId) -> Option<BoundedBitcoinAddress> {
-		if let Some(relay_target) = Self::registration_pool(Self::current_round(), who) {
+		if let Some(relay_target) = RegistrationPool::<T>::get(CurrentRound::<T>::get(), who) {
 			match relay_target.vault.address {
 				AddressState::Pending => None,
 				AddressState::Generated(address) => Some(address),
@@ -47,7 +47,7 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn get_system_vault(round: u32) -> Option<BoundedBitcoinAddress> {
-		if let Some(vault) = Self::system_vault(round) {
+		if let Some(vault) = SystemVault::<T>::get(round) {
 			match vault.address {
 				AddressState::Pending => None,
 				AddressState::Generated(address) => Some(address),
@@ -66,11 +66,11 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn get_service_state() -> MigrationSequence {
-		Self::service_state()
+		ServiceState::<T>::get()
 	}
 
 	fn get_current_round() -> u32 {
-		Self::current_round()
+		CurrentRound::<T>::get()
 	}
 
 	fn add_migration_tx(txid: H256) {
@@ -99,7 +99,7 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 impl<T: Config> Pallet<T> {
 	/// Get the `m` value.
 	pub fn get_m() -> u32 {
-		Self::m_n_ratio().mul_ceil(Self::get_n())
+		MultiSigRatio::<T>::get().mul_ceil(Self::get_n())
 	}
 
 	/// Get the `n` value.
