@@ -40,7 +40,7 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 
 [workspace.dependencies]
 # General
-substrate-fixed = { git = "https://github.com/encointer/substrate-fixed", default-features = false }
+substrate-fixed = { version = "0.5.9", default-features = false }
 parity-scale-codec = { version = "3.6.4", default-features = false, features = [
 	"derive",
 ] }

@@ -10593,7 +10593,8 @@ source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-po
 [[package]]
 name = "substrate-fixed"
 version = "0.5.9"
-source = "git+https://github.com/encointer/substrate-fixed#879c58bcc6fd676a74315dcd38b598f28708b0b5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e83ba2b4f68f12ec6b0f55bac0a23a5bcaaf2676f1109c7a5ead6121c7f0622"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
