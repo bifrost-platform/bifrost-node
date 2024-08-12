@@ -1,8 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
-use frame_support::pallet_prelude::ConstU32;
-use frame_support::BoundedBTreeSet;
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	pallet_prelude::ConstU32,
+	BoundedBTreeSet,
+};
 
 use pallet_evm::AddressMapping;
 use pallet_relay_manager::Call as RelayManagerCall;

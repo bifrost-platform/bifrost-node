@@ -31,12 +31,6 @@ pallet-relay-manager = { workspace = true }
 pallet-bfc-offences = { workspace = true }
 bp-staking = { workspace = true }
 
-[dev-dependencies]
-similar-asserts = { workspace = true }
-
-pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
-sp-core = { workspace = true, features = ["std"] }
-
 [features]
 default = ["std"]
 std = [

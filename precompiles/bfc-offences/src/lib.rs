@@ -5,7 +5,6 @@ use pallet_evm::AddressMapping;
 use precompile_utils::prelude::*;
 
 use bp_staking::TierType;
-use fp_evm::PrecompileHandle;
 use sp_core::{H160, H256};
 use sp_std::{collections::btree_set::BTreeSet, marker::PhantomData, vec, vec::Vec};
 
