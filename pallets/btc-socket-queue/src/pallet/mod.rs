@@ -76,6 +76,8 @@ pub mod pallet {
 		SocketDNE,
 		/// The socket message does not exist.
 		SocketMessageDNE,
+		/// U256 overflowed.
+		U256OverFlowed,
 		/// The user does not exist.
 		UserDNE,
 		/// The system vault does not exist.

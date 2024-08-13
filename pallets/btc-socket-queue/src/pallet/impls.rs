@@ -477,7 +477,9 @@ where
 						deserialized_msgs.push(msg.clone());
 						serialized_msgs.push(serialized_msg.clone());
 						msg_sequences.push(msg.req_id.sequence);
-						amount = amount.checked_add(msg.params.amount).unwrap();
+						amount = amount
+							.checked_add(msg.params.amount)
+							.ok_or_else(|| <Error<T>>::U256OverFlowed)?;
 					}
 					// verify psbt output
 					let psbt_amount = U256::from(output.value.to_sat());
