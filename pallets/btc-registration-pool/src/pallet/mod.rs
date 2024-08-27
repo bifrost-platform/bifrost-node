@@ -336,20 +336,12 @@ pub mod pallet {
 			}
 
 			if relay_target.vault.is_key_generation_ready() {
-				// generate vault address
-				let (vault_address, descriptor) =
-					Self::generate_vault_address(relay_target.vault.pub_keys())?;
-				relay_target.set_vault_address(vault_address.clone());
-				relay_target.vault.set_descriptor(descriptor.clone());
-
-				<BondedVault<T>>::insert(current_round, &vault_address, who.clone());
-				<BondedDescriptor<T>>::insert(current_round, &vault_address, descriptor);
-
-				Self::deposit_event(Event::VaultGenerated {
-					who: who.clone(),
-					refund_address,
-					vault_address,
-				});
+				Self::try_bond_vault_address(
+					&mut relay_target.vault,
+					&relay_target.refund_address,
+					who.clone(),
+					current_round,
+				)?;
 			} else {
 				Self::deposit_event(Event::VaultPending { who: who.clone(), refund_address });
 			}
@@ -439,21 +431,15 @@ pub mod pallet {
 			});
 
 			if relay_target.vault.is_key_generation_ready() {
-				// generate vault address
-				let (vault_address, descriptor) =
-					Self::generate_vault_address(relay_target.vault.pub_keys())?;
-				relay_target.set_vault_address(vault_address.clone());
-				relay_target.vault.set_descriptor(descriptor.clone());
-
-				<BondedVault<T>>::insert(current_round, &vault_address, who.clone());
-				<BondedDescriptor<T>>::insert(current_round, &vault_address, descriptor);
-				Self::deposit_event(Event::VaultGenerated {
-					who: who.clone(),
-					refund_address: relay_target.refund_address.clone(),
-					vault_address,
-				});
+				Self::try_bond_vault_address(
+					&mut relay_target.vault,
+					&relay_target.refund_address,
+					who.clone(),
+					current_round,
+				)?;
 			}
 
+			// we still bond public keys to make sure it is not used again
 			<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
 			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 
@@ -521,19 +507,12 @@ pub mod pallet {
 				});
 
 				if system_vault.is_key_generation_ready() {
-					// generate vault address
-					let (vault_address, descriptor) =
-						Self::generate_vault_address(system_vault.pub_keys())?;
-					system_vault.set_address(vault_address.clone());
-					system_vault.set_descriptor(descriptor.clone());
-
-					<BondedVault<T>>::insert(target_round, &vault_address, precompile.clone());
-					<BondedDescriptor<T>>::insert(target_round, &vault_address, descriptor);
-					Self::deposit_event(Event::VaultGenerated {
-						who: precompile.clone(),
-						refund_address: Default::default(),
-						vault_address,
-					});
+					Self::try_bond_vault_address(
+						&mut system_vault,
+						&Default::default(),
+						precompile.clone(),
+						target_round,
+					)?;
 
 					if service_state == MigrationSequence::PrepareNextSystemVault {
 						<ServiceState<T>>::put(MigrationSequence::UTXOTransfer);
