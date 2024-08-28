@@ -34,14 +34,15 @@ pallet-evm = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"scale-info/std",
-	"parity-scale-codec/std",
-	"frame-support/std",
-	"frame-system/std",
-	"sp-runtime/std",
-	"sp-std/std",
-	"sp-core/std",
-	"sp-io/std",
-	"bp-multi-sig/std",
-	"pallet-evm/std",
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "sp-core/std",
+    "sp-io/std",
+    "bp-multi-sig/std",
+    "pallet-evm/std",
 ]
+try-runtime = ["frame-support/try-runtime"]
