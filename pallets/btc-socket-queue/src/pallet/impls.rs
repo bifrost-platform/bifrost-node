@@ -1,9 +1,9 @@
-use ethabi_decode::{ParamKind, Token};
-
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
-	Txid, UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script,
+	Secp256k1, Txid, UnboundedBytes,
 };
+use ethabi_decode::{ParamKind, Token};
+use miniscript::bitcoin::FeeRate;
 use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
@@ -71,6 +71,16 @@ where
 		Ok(Address::from_str(addr)
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?
 			.assume_checked())
+	}
+
+	/// Try to verify fee was set properly in the PSBT.
+	pub fn try_psbt_fee_verification(psbt: &Psbt) -> Result<(), DispatchError> {
+		match psbt.clone().extract_tx_with_fee_rate_limit(FeeRate::from_sat_per_vb_unchecked(
+			<MaxFeeRate<T>>::get(),
+		)) {
+			Ok(_) => Ok(()),
+			Err(_) => Err(Error::<T>::InvalidFeeRate.into()),
+		}
 	}
 
 	/// Try to verify PSBT outputs with the given `SocketMessage`'s.
