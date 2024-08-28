@@ -110,6 +110,11 @@ where
 
 			if let Some(socket_messages) = unchecked_outputs_map.get(&to) {
 				if to == system_vault {
+					// Meaningless PSBT. No BRP event included.
+					if psbt_outputs.len() == 1 {
+						return Err(Error::<T>::InvalidPsbt.into());
+					}
+
 					if !socket_messages.is_empty() {
 						return Err(Error::<T>::InvalidUncheckedOutput.into());
 					}
