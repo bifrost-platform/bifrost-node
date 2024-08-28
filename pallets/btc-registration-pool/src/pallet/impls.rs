@@ -134,8 +134,7 @@ impl<T: Config> Pallet<T> {
 
 		// check if address is already in used as a refund address
 		if <BondedRefund<T>>::contains_key(current_round, &vault_address) {
-			// clear stored pubkeys
-			vault.clear_pub_keys();
+			return Err(Error::<T>::AddressAlreadyRegistered.into());
 		} else {
 			vault.set_address(vault_address.clone());
 			vault.set_descriptor(descriptor.clone());
@@ -149,7 +148,6 @@ impl<T: Config> Pallet<T> {
 				vault_address,
 			});
 		}
-
 		Ok(())
 	}
 

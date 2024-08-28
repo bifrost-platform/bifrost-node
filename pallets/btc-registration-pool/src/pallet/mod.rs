@@ -438,8 +438,6 @@ pub mod pallet {
 					current_round,
 				)?;
 			}
-
-			// we still bond public keys to make sure it is not used again
 			<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
 			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 
