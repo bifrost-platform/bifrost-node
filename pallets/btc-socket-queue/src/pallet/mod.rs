@@ -54,6 +54,8 @@ pub mod pallet {
 		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
+		/// The maximum fee rate that can be set for PSBT.
+		type DefaultMaxFeeRate: Get<u64>;
 	}
 
 	#[pallet::error]
@@ -241,6 +243,7 @@ pub mod pallet {
 			if let Some(a) = &self.authority {
 				Authority::<T>::put(a);
 			}
+			<MaxFeeRate<T>>::put(T::DefaultMaxFeeRate::get());
 		}
 	}
 
