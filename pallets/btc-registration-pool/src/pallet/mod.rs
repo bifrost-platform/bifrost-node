@@ -647,6 +647,12 @@ pub mod pallet {
 
 		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Initiates and control the current state of the vault migration.
+		/// Every specific calls will be blocked (except submitting a public key for the next system vault)
+		/// until the migration successfully ends.
+		///
+		/// # Sequence Order
+		/// * `Normal` → `SetExecutiveMembers` → `PrepareNextSystemVault` → `UTXOTransfer` → `Normal`
 		pub fn migration_control(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin.clone())?;
 
