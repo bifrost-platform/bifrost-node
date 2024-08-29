@@ -145,6 +145,8 @@ pub enum MigrationSequence {
 	/// Normal sequence.
 	#[default]
 	Normal,
+	/// Progress relay executive member update (if required).
+	SetExecutiveMembers,
 	/// Prepare next system vault.
 	PrepareNextSystemVault,
 	/// Wait till all UTXOs transferred to the new system vault.

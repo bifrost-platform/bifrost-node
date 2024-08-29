@@ -481,7 +481,7 @@ pub mod pallet {
 				MigrationSequence::PrepareNextSystemVault => {
 					target_round = Self::current_round() + 1;
 				},
-				MigrationSequence::UTXOTransfer => {
+				MigrationSequence::SetExecutiveMembers | MigrationSequence::UTXOTransfer => {
 					return Err(Error::<T>::UnderMaintenance)?;
 				},
 			}
@@ -653,6 +653,9 @@ pub mod pallet {
 			match Self::service_state() {
 				MigrationSequence::Normal => {
 					Self::deposit_event(Event::MigrationStarted);
+					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
+				},
+				MigrationSequence::SetExecutiveMembers => {
 					Self::request_system_vault(origin, true)?;
 					<ServiceState<T>>::put(MigrationSequence::PrepareNextSystemVault);
 				},
