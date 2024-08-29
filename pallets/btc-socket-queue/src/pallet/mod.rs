@@ -630,10 +630,7 @@ pub mod pallet {
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
 
 			// overflow check
-			match FeeRate::from_sat_per_vb(new) {
-				Some(_) => {},
-				None => return Err(Error::<T>::OutOfRange.into()),
-			};
+			FeeRate::from_sat_per_vb(new).ok_or(Error::<T>::OutOfRange)?;
 
 			<MaxFeeRate<T>>::put(new);
 			Self::deposit_event(Event::MaxFeeRateSet { new });
