@@ -451,6 +451,9 @@ pub mod pallet {
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
 
+			// verify if the fee rate is set properly
+			Self::try_psbt_fee_verification(&psbt_obj)?;
+
 			// prevent double spend
 			ensure!(
 				!<PendingRequests<T>>::contains_key(&psbt_txid),
@@ -585,6 +588,9 @@ pub mod pallet {
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
 			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			// verify if the fee rate is set properly
+			Self::try_psbt_fee_verification(&psbt_obj)?;
 
 			// prevent storage duplication
 			ensure!(!<PendingRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
