@@ -1,9 +1,8 @@
 mod impls;
 
 use crate::{
-	migrations, ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage,
-	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
-	WeightInfo,
+	migrations, PsbtRequest, RequestType, RollbackPollMessage, RollbackPsbtMessage,
+	RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -19,7 +18,6 @@ use bp_staking::traits::Authorities;
 use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
 use sp_core::{H160, H256, U256};
-use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
@@ -38,14 +36,8 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Required origin for setting or resetting the configuration.
 		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-		/// The signature signed by the issuer.
-		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
-		/// The signer of the message.
-		type Signer: IdentifyAccount<AccountId = Self::AccountId>
-			+ Encode
-			+ Decode
-			+ Parameter
-			+ MaxEncodedLen;
+		/// Origin from which a PSBT may be signed.
+		type PsbtSignOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// The Bifrost relayers.
@@ -307,10 +299,9 @@ pub mod pallet {
 		/// This extrinsic can only be executed by the `Authority`.
 		pub fn submit_unsigned_psbt(
 			origin: OriginFor<T>,
-			msg: UnsignedPsbtMessage<T::AccountId>,
-			_signature: T::Signature,
+			msg: UnsignedPsbtMessage,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			Self::ensure_authority(origin)?;
 
 			let UnsignedPsbtMessage { outputs, psbt, .. } = msg;
 
@@ -345,7 +336,8 @@ pub mod pallet {
 			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
-			Ok(().into())
+			// Authority does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(3)]
@@ -354,12 +346,11 @@ pub mod pallet {
 		/// This extrinsic can only be executed by relay executives.
 		pub fn submit_signed_psbt(
 			origin: OriginFor<T>,
-			msg: SignedPsbtMessage<T::AccountId>,
-			_signature: T::Signature,
+			msg: SignedPsbtMessage,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			let authority_id = T::PsbtSignOrigin::ensure_origin(origin)?;
 
-			let SignedPsbtMessage { authority_id, unsigned_psbt, signed_psbt } = msg;
+			let SignedPsbtMessage { unsigned_psbt, signed_psbt } = msg;
 
 			// verify if psbt bytes are valid
 			let unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
@@ -411,7 +402,8 @@ pub mod pallet {
 				},
 			}
 
-			Ok(().into())
+			// Relay Executives does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(4)]
@@ -419,19 +411,17 @@ pub mod pallet {
 		/// Submit an executed PSBT request.
 		pub fn submit_executed_request(
 			origin: OriginFor<T>,
-			msg: ExecutedPsbtMessage<T::AccountId>,
-			_signature: T::Signature,
+			txid: H256,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
-
-			let ExecutedPsbtMessage { txid, .. } = msg;
+			Self::ensure_authority(origin)?;
 
 			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
 			<FinalizedRequests<T>>::remove(&txid);
 			<ExecutedRequests<T>>::insert(&txid, request);
 			Self::deposit_event(Event::RequestExecuted { txid });
 
-			Ok(().into())
+			// Authority does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(5)]
@@ -534,12 +524,11 @@ pub mod pallet {
 		/// Submit a vote for a rollback request.
 		pub fn submit_rollback_poll(
 			origin: OriginFor<T>,
-			msg: RollbackPollMessage<T::AccountId>,
-			_signature: T::Signature,
+			msg: RollbackPollMessage,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			let authority_id = Self::ensure_relayer(origin)?;
 
-			let RollbackPollMessage { authority_id, txid, is_approved } = msg;
+			let RollbackPollMessage { txid, is_approved } = msg;
 
 			let mut rollback_request =
 				<RollbackRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
@@ -572,7 +561,8 @@ pub mod pallet {
 			}
 			<RollbackRequests<T>>::insert(&txid, rollback_request);
 
-			Ok(().into())
+			// Relayers does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(7)]
@@ -645,89 +635,6 @@ pub mod pallet {
 			Self::deposit_event(Event::MaxFeeRateSet { new });
 
 			Ok(().into())
-		}
-	}
-
-	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T>
-	where
-		T::AccountId: Into<H160>,
-		H160: Into<T::AccountId>,
-	{
-		type Call = Call<T>;
-
-		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-			match call {
-				Call::submit_unsigned_psbt { msg, signature } => {
-					let UnsignedPsbtMessage { authority_id, psbt, .. } = msg;
-					Self::verify_authority(authority_id)?;
-
-					// verify if the signature was originated from the authority_id.
-					if !signature.verify(psbt.as_ref(), authority_id) {
-						return InvalidTransaction::BadProof.into();
-					}
-
-					ValidTransaction::with_tag_prefix("UnsignedPsbtSubmission")
-						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
-						.propagate(true)
-						.build()
-				},
-				Call::submit_signed_psbt { msg, signature } => {
-					let SignedPsbtMessage { authority_id, signed_psbt, .. } = msg;
-
-					// verify if the authority is a relay executive member.
-					if !T::Executives::contains(&authority_id) {
-						return InvalidTransaction::BadSigner.into();
-					}
-
-					// verify if the signature was originated from the authority.
-					if !signature.verify(signed_psbt.as_ref(), authority_id) {
-						return InvalidTransaction::BadProof.into();
-					}
-
-					ValidTransaction::with_tag_prefix("SignedPsbtSubmission")
-						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
-						.propagate(true)
-						.build()
-				},
-				Call::submit_executed_request { msg, signature } => {
-					let ExecutedPsbtMessage { authority_id, txid } = msg;
-					Self::verify_authority(authority_id)?;
-
-					// verify if the signature was originated from the authority_id.
-					if !signature.verify(txid.as_ref(), authority_id) {
-						return InvalidTransaction::BadProof.into();
-					}
-
-					ValidTransaction::with_tag_prefix("ExecutedPsbtSubmission")
-						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
-						.propagate(true)
-						.build()
-				},
-				Call::submit_rollback_poll { msg, signature } => {
-					let RollbackPollMessage { authority_id, txid, .. } = msg;
-
-					// verify if the authority is a selected relayer.
-					if !T::Relayers::is_authority(&authority_id) {
-						return InvalidTransaction::BadSigner.into();
-					}
-
-					// verify if the signature was originated from the authority_id.
-					if !signature.verify(txid.as_ref(), authority_id) {
-						return InvalidTransaction::BadProof.into();
-					}
-
-					ValidTransaction::with_tag_prefix("RollbackPollSubmission")
-						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
-						.propagate(true)
-						.build()
-				},
-				_ => InvalidTransaction::Call.into(),
-			}
 		}
 	}
 }

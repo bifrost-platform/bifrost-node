@@ -7100,7 +7100,6 @@ name = "precompile-btc-socket-queue"
 version = "1.0.0"
 dependencies = [
  "bp-multi-sig",
- "fp-account",
  "fp-evm",
  "frame-support",
  "frame-system",
