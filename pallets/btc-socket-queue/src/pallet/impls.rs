@@ -26,6 +26,7 @@ where
 	T::AccountId: Into<H160>,
 	H160: Into<T::AccountId>,
 {
+	/// Ensure that the caller is the `Authority`.
 	pub fn ensure_authority(origin: OriginFor<T>) -> DispatchResult {
 		let who = ensure_signed(origin)?;
 
@@ -37,6 +38,7 @@ where
 		Err(DispatchError::BadOrigin.into())
 	}
 
+	/// Ensure that the caller is one of the `Relayers`.
 	pub fn ensure_relayer(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
 		let who = ensure_signed(origin)?;
 

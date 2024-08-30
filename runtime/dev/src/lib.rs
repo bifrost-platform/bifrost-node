@@ -971,7 +971,6 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
 	type PsbtSignOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
-	type Executives = RelayExecutiveMembership;
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
