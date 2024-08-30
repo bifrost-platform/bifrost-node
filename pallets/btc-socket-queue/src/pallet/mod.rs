@@ -1,14 +1,13 @@
 mod impls;
 
 use crate::{
-	migrations, ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage,
-	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
-	WeightInfo,
+	migrations, PsbtRequest, RequestType, RollbackPollMessage, RollbackPsbtMessage,
+	RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, SortedMembers, StorageVersion},
+	traits::{OnRuntimeUpgrade, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -309,10 +308,9 @@ pub mod pallet {
 		/// This extrinsic can only be executed by the `Authority`.
 		pub fn submit_unsigned_psbt(
 			origin: OriginFor<T>,
-			msg: UnsignedPsbtMessage<T::AccountId>,
-			_signature: T::Signature,
+			msg: UnsignedPsbtMessage,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			Self::ensure_authority(origin)?;
 
 			let UnsignedPsbtMessage { outputs, psbt, .. } = msg;
 
@@ -347,7 +345,8 @@ pub mod pallet {
 			);
 			Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
-			Ok(().into())
+			// Authority does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(3)]
@@ -356,12 +355,11 @@ pub mod pallet {
 		/// This extrinsic can only be executed by relay executives.
 		pub fn submit_signed_psbt(
 			origin: OriginFor<T>,
-			msg: SignedPsbtMessage<T::AccountId>,
-			_signature: T::Signature,
+			msg: SignedPsbtMessage,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			let authority_id = T::PsbtSignOrigin::ensure_origin(origin)?;
 
-			let SignedPsbtMessage { authority_id, unsigned_psbt, signed_psbt } = msg;
+			let SignedPsbtMessage { unsigned_psbt, signed_psbt } = msg;
 
 			// verify if psbt bytes are valid
 			let unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
@@ -413,7 +411,8 @@ pub mod pallet {
 				},
 			}
 
-			Ok(().into())
+			// Relay Executives does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(4)]
@@ -421,12 +420,9 @@ pub mod pallet {
 		/// Submit an executed PSBT request.
 		pub fn submit_executed_request(
 			origin: OriginFor<T>,
-			msg: ExecutedPsbtMessage<T::AccountId>,
-			_signature: T::Signature,
+			txid: H256,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
-
-			let ExecutedPsbtMessage { txid, .. } = msg;
+			Self::ensure_authority(origin)?;
 
 			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
 			if request.request_type == RequestType::Migration {
@@ -436,7 +432,8 @@ pub mod pallet {
 			<ExecutedRequests<T>>::insert(&txid, request);
 			Self::deposit_event(Event::RequestExecuted { txid });
 
-			Ok(().into())
+			// Authority does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(5)]
@@ -542,12 +539,11 @@ pub mod pallet {
 		/// Submit a vote for a rollback request.
 		pub fn submit_rollback_poll(
 			origin: OriginFor<T>,
-			msg: RollbackPollMessage<T::AccountId>,
-			_signature: T::Signature,
+			msg: RollbackPollMessage,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			let authority_id = Self::ensure_relayer(origin)?;
 
-			let RollbackPollMessage { authority_id, txid, is_approved } = msg;
+			let RollbackPollMessage { txid, is_approved } = msg;
 
 			let mut rollback_request =
 				<RollbackRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
@@ -580,7 +576,8 @@ pub mod pallet {
 			}
 			<RollbackRequests<T>>::insert(&txid, rollback_request);
 
-			Ok(().into())
+			// Relayers does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(7)]

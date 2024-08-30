@@ -994,8 +994,7 @@ parameter_types! {
 
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type Signature = EthereumSignature;
-	type Signer = EthereumSigner;
+	type KeySubmitOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
 	type Executives = RelayExecutiveMembership;
 	type SocketQueue = BtcSocketQueue;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;
@@ -1054,8 +1053,8 @@ construct_runtime!(
 		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
 
 		// Bitcoin
-		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
+		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, Event<T>, Config<T>} = 60,
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, Event<T>, Config<T>} = 61,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,

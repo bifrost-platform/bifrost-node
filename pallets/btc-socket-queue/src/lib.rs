@@ -159,9 +159,7 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for unsigned PSBT submission.
-pub struct UnsignedPsbtMessage<AccountId> {
-	/// The authority's account address.
-	pub authority_id: AccountId,
+pub struct UnsignedPsbtMessage {
 	/// The PSBT output information.
 	/// key: the output `to` address. (=refund / system vault)
 	/// value: the `SocketMessage`'s related to the output. (system vault output will have empty socket messages)
@@ -172,22 +170,11 @@ pub struct UnsignedPsbtMessage<AccountId> {
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for signed PSBT submission.
-pub struct SignedPsbtMessage<AccountId> {
-	/// The authority's account address.
-	pub authority_id: AccountId,
+pub struct SignedPsbtMessage {
 	/// The unsigned PSBT (in bytes).
 	pub unsigned_psbt: UnboundedBytes,
 	/// The signed PSBT (in bytes).
 	pub signed_psbt: UnboundedBytes,
-}
-
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-/// The message payload for PSBT finalization.
-pub struct ExecutedPsbtMessage<AccountId> {
-	/// The authority's account address.
-	pub authority_id: AccountId,
-	/// The executed PSBT's txid.
-	pub txid: H256,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
@@ -207,9 +194,7 @@ pub struct RollbackPsbtMessage<AccountId> {
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for rollback poll submission.
-pub struct RollbackPollMessage<AccountId> {
-	/// The authority's account address.
-	pub authority_id: AccountId,
+pub struct RollbackPollMessage {
 	/// The rollback PSBT's txid.
 	pub txid: H256,
 	/// The voting side. Approved or not.

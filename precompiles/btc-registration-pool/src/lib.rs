@@ -30,9 +30,7 @@ pub struct BtcRegistrationPoolPrecompile<Runtime>(PhantomData<Runtime>);
 #[precompile]
 impl<Runtime> BtcRegistrationPoolPrecompile<Runtime>
 where
-	Runtime: pallet_btc_registration_pool::Config<Signature = EthereumSignature>
-		+ pallet_evm::Config
-		+ frame_system::Config,
+	Runtime: pallet_btc_registration_pool::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::AccountId: Into<H160> + From<H160>,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
