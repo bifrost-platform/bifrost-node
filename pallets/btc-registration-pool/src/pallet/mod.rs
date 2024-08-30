@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
-	VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -13,10 +13,7 @@ use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::{MigrationSequence, Network, Public, PublicKey, UnboundedBytes};
 use sp_core::H160;
-use sp_runtime::{
-	traits::{IdentifyAccount, Verify},
-	Percent,
-};
+use sp_runtime::Percent;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 #[frame_support::pallet]
@@ -33,14 +30,8 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-		/// The signature signed by the issuer.
-		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
-		/// The signer of the message.
-		type Signer: IdentifyAccount<AccountId = Self::AccountId>
-			+ Encode
-			+ Decode
-			+ Parameter
-			+ MaxEncodedLen;
+		/// Origin from which a public key may be submitted.
+		type KeySubmitOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// The minimum required number of signatures to send a transaction with the vault account. (in percentage)
@@ -396,10 +387,8 @@ pub mod pallet {
 		pub fn submit_vault_key(
 			origin: OriginFor<T>,
 			key_submission: VaultKeySubmission<T::AccountId>,
-			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
-			// make sure this cannot be executed by a signed transaction.
-			ensure_none(origin)?;
+			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
@@ -408,7 +397,7 @@ pub mod pallet {
 
 			let current_round = Self::current_round();
 
-			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+			let VaultKeySubmission { who, pub_key } = key_submission;
 			let mut relay_target =
 				<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 
@@ -457,7 +446,8 @@ pub mod pallet {
 			<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
 			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 
-			Ok(().into())
+			// Relay Executives does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(4)]
@@ -466,10 +456,8 @@ pub mod pallet {
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
 			key_submission: VaultKeySubmission<T::AccountId>,
-			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
-			// make sure this cannot be executed by a signed transaction.
-			ensure_none(origin)?;
+			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
 
 			let service_state = Self::service_state();
 
@@ -486,7 +474,7 @@ pub mod pallet {
 				},
 			}
 
-			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+			let VaultKeySubmission { who, pub_key } = key_submission;
 
 			let precompile: T::AccountId = H160::from_low_u64_be(ADDRESS_U64).into();
 			ensure!(precompile == who, Error::<T>::VaultDNE);
@@ -545,7 +533,8 @@ pub mod pallet {
 				return Err(Error::<T>::VaultDNE)?;
 			}
 
-			Ok(().into())
+			// Relay Executives does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(5)]
@@ -553,17 +542,14 @@ pub mod pallet {
 		/// Submit public keys for prepare for the fast registration.
 		pub fn vault_key_presubmission(
 			origin: OriginFor<T>,
-			key_submission: VaultKeyPreSubmission<T::AccountId>,
-			_signature: T::Signature,
+			pub_keys: Vec<Public>,
 		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
+			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
-
-			let VaultKeyPreSubmission { authority_id, pub_keys } = key_submission;
 
 			// validate public keys
 			for pub_key in &pub_keys {
@@ -598,7 +584,8 @@ pub mod pallet {
 				len: pub_keys.len() as u32,
 			});
 
-			Ok(().into())
+			// Relay Executives does not pay a fee.
+			Ok(Pays::No.into())
 		}
 
 		#[pallet::call_index(6)]
@@ -729,29 +716,6 @@ pub mod pallet {
 			Self::deposit_event(Event::MultiSigRatioSet { old, new });
 
 			Ok(().into())
-		}
-	}
-
-	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T>
-	where
-		H160: Into<T::AccountId>,
-	{
-		type Call = Call<T>;
-
-		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-			match call {
-				Call::submit_vault_key { key_submission, signature } => {
-					Self::verify_key_submission(key_submission, signature, "RegPoolKeySubmission")
-				},
-				Call::submit_system_vault_key { key_submission, signature } => {
-					Self::verify_key_submission(key_submission, signature, "SystemKeySubmission")
-				},
-				Call::vault_key_presubmission { key_submission, signature } => {
-					Self::verify_key_presubmission(key_submission, signature)
-				},
-				_ => InvalidTransaction::Call.into(),
-			}
 		}
 	}
 }
