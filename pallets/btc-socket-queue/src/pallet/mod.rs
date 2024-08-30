@@ -7,7 +7,7 @@ use crate::{
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, StorageVersion},
+	traits::{OnRuntimeUpgrade, SortedMembers, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -36,8 +36,8 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Required origin for setting or resetting the configuration.
 		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-		/// Origin from which a PSBT may be signed.
-		type PsbtSignOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
+		/// The relay executive members.
+		type Executives: SortedMembers<Self::AccountId>;
 		/// The Bifrost relayers.
 		type Relayers: Authorities<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
@@ -346,7 +346,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			msg: SignedPsbtMessage,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::PsbtSignOrigin::ensure_origin(origin)?;
+			let authority_id = Self::ensure_executive(origin)?;
 
 			let SignedPsbtMessage { unsigned_psbt, signed_psbt } = msg;
 

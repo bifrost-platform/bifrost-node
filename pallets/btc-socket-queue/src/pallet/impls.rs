@@ -4,6 +4,7 @@ use bp_multi_sig::{
 };
 use bp_staking::traits::Authorities;
 use ethabi_decode::{ParamKind, Token};
+use frame_support::traits::SortedMembers;
 use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 use miniscript::bitcoin::FeeRate;
 use pallet_evm::Runner;
@@ -36,6 +37,16 @@ where
 			}
 		} else {
 			return Err(Error::<T>::AuthorityDNE.into());
+		}
+		Err(DispatchError::BadOrigin.into())
+	}
+
+	/// Ensure that the caller is one of the `Executives`.
+	pub fn ensure_executive(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
+		let who = ensure_signed(origin)?;
+
+		if T::Executives::contains(&who) {
+			return Ok(who);
 		}
 		Err(DispatchError::BadOrigin.into())
 	}

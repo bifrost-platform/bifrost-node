@@ -30,8 +30,6 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-		/// Origin from which a public key may be submitted.
-		type KeySubmitOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// The minimum required number of signatures to send a transaction with the vault account. (in percentage)
@@ -388,7 +386,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			key_submission: VaultKeySubmission<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
+			let authority_id = Self::ensure_executive(origin)?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
@@ -449,7 +447,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			key_submission: VaultKeySubmission<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
+			let authority_id = Self::ensure_executive(origin)?;
 
 			let service_state = Self::service_state();
 
@@ -529,7 +527,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pub_keys: Vec<Public>,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
+			let authority_id = Self::ensure_executive(origin)?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
