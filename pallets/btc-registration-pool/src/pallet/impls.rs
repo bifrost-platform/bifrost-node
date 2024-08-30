@@ -1,6 +1,6 @@
 use bp_multi_sig::{
 	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, MigrationSequence,
-	Network, PublicKey, UnboundedBytes,
+	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
 use scale_info::prelude::string::ToString;
@@ -112,6 +112,37 @@ impl<T: Config> Pallet<T> {
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
 			desc.to_string().as_bytes().to_vec(),
 		))
+	}
+
+	/// Tries to generate a vault address with the given public keys.
+	/// If the generated address is already used as a refund address, the stored public keys will be cleared.
+	/// If not, the address will be bonded successfully.
+	pub fn try_bond_vault_address(
+		vault: &mut MultiSigAccount<T::AccountId>,
+		refund_address: &BoundedBitcoinAddress,
+		who: T::AccountId,
+		current_round: u32,
+	) -> Result<(), DispatchError> {
+		// generate vault address
+		let (vault_address, descriptor) = Self::generate_vault_address(vault.pub_keys())?;
+
+		// check if address is already in used as a refund address
+		if <BondedRefund<T>>::contains_key(current_round, &vault_address) {
+			return Err(Error::<T>::AddressAlreadyRegistered.into());
+		} else {
+			vault.set_address(vault_address.clone());
+			vault.set_descriptor(descriptor.clone());
+
+			<BondedVault<T>>::insert(current_round, &vault_address, who.clone());
+			<BondedDescriptor<T>>::insert(current_round, &vault_address, descriptor);
+
+			Self::deposit_event(Event::VaultGenerated {
+				who: who.clone(),
+				refund_address: refund_address.clone(),
+				vault_address,
+			});
+		}
+		Ok(())
 	}
 
 	/// Check if the given address is valid on the target Bitcoin network. Then returns the checked address.
