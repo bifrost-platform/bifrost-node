@@ -481,7 +481,7 @@ pub mod pallet {
 				MigrationSequence::PrepareNextSystemVault => {
 					target_round = Self::current_round() + 1;
 				},
-				MigrationSequence::UTXOTransfer => {
+				MigrationSequence::SetExecutiveMembers | MigrationSequence::UTXOTransfer => {
 					return Err(Error::<T>::UnderMaintenance)?;
 				},
 			}
@@ -647,12 +647,21 @@ pub mod pallet {
 
 		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Initiates and control the current state of the vault migration.
+		/// Every specific calls will be blocked (except submitting a public key for the next system vault)
+		/// until the migration successfully ends.
+		///
+		/// # Sequence Order
+		/// * `Normal` → `SetExecutiveMembers` → `PrepareNextSystemVault` → `UTXOTransfer` → `Normal`
 		pub fn migration_control(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin.clone())?;
 
 			match Self::service_state() {
 				MigrationSequence::Normal => {
 					Self::deposit_event(Event::MigrationStarted);
+					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
+				},
+				MigrationSequence::SetExecutiveMembers => {
 					Self::request_system_vault(origin, true)?;
 					<ServiceState<T>>::put(MigrationSequence::PrepareNextSystemVault);
 				},
