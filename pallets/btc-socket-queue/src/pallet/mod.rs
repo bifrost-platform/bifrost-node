@@ -485,7 +485,7 @@ pub mod pallet {
 				T::RegistrationPool::get_refund_address(&who).ok_or(Error::<T>::UserDNE)?,
 			)?;
 
-			// the request must not exist on-chain
+			// the request must not exist on-chain (=BitcoinSocket contract)
 			let hash_key = Self::generate_hash_key(rollback_txid, vout, who.clone(), amount);
 			let tx_info = Self::try_get_tx_info(hash_key)?;
 			ensure!(tx_info.to.is_zero(), Error::<T>::RequestAlreadyExists);
@@ -502,9 +502,11 @@ pub mod pallet {
 
 			for output in outputs {
 				let to =
-					Self::try_convert_to_address_from_script(outputs[0].script_pubkey.as_script())?;
+					Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?;
 
 				if to == system_vault {
+					// if change exsits, the psbt must contain exactly two outputs.
+					ensure!(outputs.len() == 2, Error::<T>::InvalidPsbt);
 					continue;
 				}
 				if to == refund {
@@ -516,6 +518,7 @@ pub mod pallet {
 					);
 					continue;
 				}
+				// addresses that are not either system vault or refund will be rejected.
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
 
