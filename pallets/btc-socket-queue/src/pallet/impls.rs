@@ -34,6 +34,8 @@ where
 			if a == who {
 				return Ok(());
 			}
+		} else {
+			return Err(Error::<T>::AuthorityDNE.into());
 		}
 		Err(DispatchError::BadOrigin.into())
 	}
