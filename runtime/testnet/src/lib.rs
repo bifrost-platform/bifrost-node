@@ -983,12 +983,14 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
+	type DefaultMaxFeeRate = DefaultMaxFeeRate;
 }
 
 parameter_types! {
 	pub const BitcoinChainId: u32 = 10001;
 	pub const BitcoinNetwork: Network = Network::Testnet;
 	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
+	pub const DefaultMaxFeeRate: u64 = 15;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {

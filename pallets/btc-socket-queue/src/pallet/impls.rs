@@ -1,9 +1,9 @@
-use ethabi_decode::{ParamKind, Token};
-
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
-	Txid, UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script,
+	Secp256k1, Txid, UnboundedBytes,
 };
+use ethabi_decode::{ParamKind, Token};
+use miniscript::bitcoin::FeeRate;
 use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
@@ -73,6 +73,16 @@ where
 			.assume_checked())
 	}
 
+	/// Try to verify fee was set properly in the PSBT.
+	pub fn try_psbt_fee_verification(psbt: &Psbt) -> Result<(), DispatchError> {
+		match psbt.clone().extract_tx_with_fee_rate_limit(FeeRate::from_sat_per_vb_unchecked(
+			<MaxFeeRate<T>>::get(),
+		)) {
+			Ok(_) => Ok(()),
+			Err(_) => Err(Error::<T>::InvalidFeeRate.into()),
+		}
+	}
+
 	/// Try to verify PSBT outputs with the given `SocketMessage`'s.
 	pub fn try_psbt_output_verification(
 		psbt: &Psbt,
@@ -110,6 +120,11 @@ where
 
 			if let Some(socket_messages) = unchecked_outputs_map.get(&to) {
 				if to == system_vault {
+					// Meaningless PSBT. No BRP event included.
+					if psbt_outputs.len() == 1 {
+						return Err(Error::<T>::InvalidPsbt.into());
+					}
+
 					if !socket_messages.is_empty() {
 						return Err(Error::<T>::InvalidUncheckedOutput.into());
 					}

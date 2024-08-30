@@ -16,6 +16,7 @@ use bp_multi_sig::{
 	traits::PoolManager, Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
+use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
@@ -53,6 +54,8 @@ pub mod pallet {
 		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
+		/// The maximum fee rate that can be set for PSBT.
+		type DefaultMaxFeeRate: Get<u64>;
 	}
 
 	#[pallet::error]
@@ -101,6 +104,8 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// Service is under maintenance mode.
 		UnderMaintenance,
+		/// The PSBT fee rate was not set properly.
+		InvalidFeeRate,
 	}
 
 	#[pallet::event]
@@ -126,6 +131,8 @@ pub mod pallet {
 		AuthoritySet { new: T::AccountId },
 		/// A socket contract has been set.
 		SocketSet { new: T::AccountId, is_bitcoin: bool },
+		/// The maximum PSBT fee rate has been set.
+		MaxFeeRateSet { new: u64 },
 	}
 
 	#[pallet::storage]
@@ -207,6 +214,10 @@ pub mod pallet {
 	pub type BondedRollbackOutputs<T: Config> =
 		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, H256>;
 
+	#[pallet::storage]
+	/// The maximum fee rate(sat/vb) that can be set for PSBT.
+	pub type MaxFeeRate<T: Config> = StorageValue<_, u64, ValueQuery>;
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
 	where
@@ -232,6 +243,7 @@ pub mod pallet {
 			if let Some(a) = &self.authority {
 				Authority::<T>::put(a);
 			}
+			<MaxFeeRate<T>>::put(T::DefaultMaxFeeRate::get());
 		}
 	}
 
@@ -310,6 +322,9 @@ pub mod pallet {
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
 			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			// verify if the fee rate is set properly
+			Self::try_psbt_fee_verification(&psbt_obj)?;
 
 			// prevent storage duplication
 			ensure!(!<PendingRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
@@ -438,6 +453,9 @@ pub mod pallet {
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+
+			// verify if the fee rate is set properly
+			Self::try_psbt_fee_verification(&psbt_obj)?;
 
 			// prevent double spend
 			ensure!(
@@ -574,6 +592,9 @@ pub mod pallet {
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
 			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
 
+			// verify if the fee rate is set properly
+			Self::try_psbt_fee_verification(&psbt_obj)?;
+
 			// prevent storage duplication
 			ensure!(!<PendingRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
 			ensure!(!<FinalizedRequests<T>>::contains_key(&txid), Error::<T>::RequestAlreadyExists);
@@ -606,6 +627,23 @@ pub mod pallet {
 				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
 			);
 			Self::deposit_event(Event::MigrationPsbtSubmitted { txid });
+			Ok(().into())
+		}
+
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn set_max_fee_rate(origin: OriginFor<T>, new: u64) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			let old = <MaxFeeRate<T>>::get();
+			ensure!(old != new, Error::<T>::NoWritingSameValue);
+
+			// overflow check
+			FeeRate::from_sat_per_vb(new).ok_or(Error::<T>::OutOfRange)?;
+
+			<MaxFeeRate<T>>::put(new);
+			Self::deposit_event(Event::MaxFeeRateSet { new });
+
 			Ok(().into())
 		}
 	}
