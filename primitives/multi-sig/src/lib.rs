@@ -115,6 +115,10 @@ impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 	pub fn pub_keys(&self) -> Vec<Public> {
 		self.pub_keys.values().cloned().collect()
 	}
+
+	pub fn clear_pub_keys(&mut self) {
+		self.pub_keys = BoundedBTreeMap::new();
+	}
 }
 
 #[derive(Decode, Encode, TypeInfo, MaxEncodedLen)]

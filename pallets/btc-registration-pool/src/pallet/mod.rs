@@ -311,10 +311,6 @@ pub mod pallet {
 				Error::<T>::AddressAlreadyRegistered
 			);
 
-			<BondedRefund<T>>::mutate(current_round, &refund_address, |users| {
-				users.push(who.clone());
-			});
-
 			let mut relay_target =
 				BitcoinRelayTarget::new::<T>(refund_address.clone(), Self::get_m(), Self::get_n());
 
@@ -325,7 +321,6 @@ pub mod pallet {
 						keys.pop_first()
 					}) {
 					if <BondedPubKey<T>>::get(current_round, &pub_key).is_none() {
-						<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
 						relay_target
 							.vault
 							.pub_keys
@@ -336,16 +331,29 @@ pub mod pallet {
 			}
 
 			if relay_target.vault.is_key_generation_ready() {
-				Self::try_bond_vault_address(
+				match Self::try_bond_vault_address(
 					&mut relay_target.vault,
 					&relay_target.refund_address,
 					who.clone(),
 					current_round,
-				)?;
-			} else {
-				Self::deposit_event(Event::VaultPending { who: who.clone(), refund_address });
+				) {
+					Ok(_) => {
+						for pub_key in relay_target.vault.pub_keys() {
+							<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
+						}
+					},
+					Err(_) => {
+						relay_target.vault.clear_pub_keys();
+						Self::deposit_event(Event::VaultPending {
+							who: who.clone(),
+							refund_address: refund_address.clone(),
+						});
+					},
+				}
 			}
-
+			<BondedRefund<T>>::mutate(current_round, &refund_address, |users| {
+				users.push(who.clone());
+			});
 			<RegistrationPool<T>>::insert(current_round, who.clone(), relay_target);
 
 			Ok(().into())
