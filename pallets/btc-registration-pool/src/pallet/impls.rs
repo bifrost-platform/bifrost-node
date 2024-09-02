@@ -3,6 +3,7 @@ use bp_multi_sig::{
 	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
+use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 use scale_info::prelude::string::ToString;
 use sp_core::Get;
 use sp_runtime::{BoundedVec, DispatchError};
@@ -61,6 +62,16 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 }
 
 impl<T: Config> Pallet<T> {
+	/// Ensure that the caller is one of the `Executives`.
+	pub fn ensure_executive(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
+		let who = ensure_signed(origin)?;
+
+		if T::Executives::contains(&who) {
+			return Ok(who);
+		}
+		Err(DispatchError::BadOrigin.into())
+	}
+
 	/// Get the `m` value.
 	pub fn get_m() -> u32 {
 		Self::m_n_ratio().mul_ceil(Self::get_n())
