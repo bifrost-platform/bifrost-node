@@ -18,7 +18,8 @@ use bp_multi_sig::{
 use bp_staking::traits::Authorities;
 use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
-use sp_core::{keccak_256, H160, H256, U256};
+use sp_core::{H160, H256, U256};
+use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{vec, vec::Vec};
 

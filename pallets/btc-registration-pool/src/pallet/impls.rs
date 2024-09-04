@@ -3,7 +3,10 @@ use bp_multi_sig::{
 	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
-use scale_info::prelude::string::{String, ToString};
+use scale_info::prelude::{
+	format,
+	string::{String, ToString},
+};
 use sp_core::Get;
 use sp_runtime::{
 	traits::Verify,
