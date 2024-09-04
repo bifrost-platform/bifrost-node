@@ -85,6 +85,8 @@ pub mod pallet {
 		DoNotInterceptMigration,
 		/// Presubmission does not exist.
 		PreSubmissionDNE,
+		/// The pool round is outdated.
+		PoolRoundOutdated,
 	}
 
 	#[pallet::event]
@@ -406,9 +408,11 @@ pub mod pallet {
 				Error::<T>::UnderMaintenance
 			);
 
-			let current_round = Self::current_round();
+			let VaultKeySubmission { authority_id, who, pub_key, pool_round } = key_submission;
 
-			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+			let current_round = Self::current_round();
+			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
+
 			let mut relay_target =
 				<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 
@@ -478,7 +482,8 @@ pub mod pallet {
 				},
 			}
 
-			let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+			let VaultKeySubmission { authority_id, who, pub_key, pool_round } = key_submission;
+			ensure!(target_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			let precompile: T::AccountId = H160::from_low_u64_be(ADDRESS_U64).into();
 			ensure!(precompile == who, Error::<T>::VaultDNE);
@@ -548,7 +553,10 @@ pub mod pallet {
 				Error::<T>::UnderMaintenance
 			);
 
-			let VaultKeyPreSubmission { authority_id, pub_keys } = key_submission;
+			let VaultKeyPreSubmission { authority_id, pub_keys, pool_round } = key_submission;
+
+			let current_round = Self::current_round();
+			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			// validate public keys
 			for pub_key in &pub_keys {
@@ -557,8 +565,6 @@ pub mod pallet {
 					Error::<T>::InvalidPublicKey
 				);
 			}
-
-			let current_round = Self::current_round();
 
 			let mut presubmitted = Self::presubmitted_pubkeys(current_round, &authority_id);
 			ensure!(

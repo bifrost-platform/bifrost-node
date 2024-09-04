@@ -173,7 +173,7 @@ impl<T: Config> Pallet<T> {
 		signature: &T::Signature,
 		tag_prefix: &'static str,
 	) -> TransactionValidity {
-		let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+		let VaultKeySubmission { authority_id, who, pub_key, pool_round } = key_submission;
 
 		// verify if the authority is a relay executive member.
 		if !T::Executives::contains(authority_id) {
@@ -181,7 +181,7 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// verify if the signature was originated from the authority.
-		let message = array_bytes::bytes2hex("0x", pub_key);
+		let message = format!("{}:{}", pool_round, array_bytes::bytes2hex("0x", pub_key));
 		if !signature.verify(message.as_bytes(), authority_id) {
 			return Err(InvalidTransaction::BadProof.into());
 		}
@@ -197,7 +197,7 @@ impl<T: Config> Pallet<T> {
 		vault_key_pre_submission: &VaultKeyPreSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let VaultKeyPreSubmission { authority_id, pub_keys } = vault_key_pre_submission;
+		let VaultKeyPreSubmission { authority_id, pub_keys, pool_round } = vault_key_pre_submission;
 
 		// verify if the authority is a relay executive member.
 		if !T::Executives::contains(&authority_id) {
@@ -205,11 +205,15 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// verify if the signature was originated from the authority.
-		let message = pub_keys
-			.iter()
-			.map(|x| array_bytes::bytes2hex("0x", x))
-			.collect::<Vec<String>>()
-			.concat();
+		let message = format!(
+			"{}:{}",
+			pool_round,
+			pub_keys
+				.iter()
+				.map(|x| array_bytes::bytes2hex("0x", x))
+				.collect::<Vec<String>>()
+				.concat()
+		);
 		if !signature.verify(message.as_bytes(), &authority_id) {
 			return Err(InvalidTransaction::BadProof.into());
 		}

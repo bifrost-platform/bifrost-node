@@ -64,11 +64,17 @@ pub struct VaultKeySubmission<AccountId> {
 	pub who: AccountId,
 	/// The generated public key. (33 bytes)
 	pub pub_key: Public,
+	/// The pool round.
+	pub pool_round: PoolRound,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// The payload used for public key submission.
 pub struct VaultKeyPreSubmission<AccountId> {
+	/// The authority Ethereum address. (Relay executive)
 	pub authority_id: AccountId,
+	/// The public keys. (all in 33 bytes)
 	pub pub_keys: Vec<Public>,
+	/// The pool round.
+	pub pool_round: PoolRound,
 }
