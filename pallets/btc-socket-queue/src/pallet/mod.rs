@@ -24,6 +24,8 @@ use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
+	use crate::SigDomain;
+
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
@@ -666,7 +668,12 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(psbt.as_ref(), authority_id) {
+					let message = format!(
+						"0x{:?}:{:?}",
+						SigDomain::UnsignedPsbt,
+						array_bytes::bytes2hex("", psbt)
+					);
+					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -685,7 +692,12 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					if !signature.verify(signed_psbt.as_ref(), authority_id) {
+					let message = format!(
+						"0x{:?}:{:?}",
+						SigDomain::SignedPsbt,
+						array_bytes::bytes2hex("", signed_psbt)
+					);
+					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -700,7 +712,8 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(txid.as_ref(), authority_id) {
+					let message = format!("0x{:?}:{:?}", SigDomain::ExecutedPsbt, txid);
+					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -719,7 +732,8 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(txid.as_ref(), authority_id) {
+					let message = format!("0x{:?}:{:?}", SigDomain::RollbackPoll, txid);
+					if !signature.verify(message.as_bytes(), authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 

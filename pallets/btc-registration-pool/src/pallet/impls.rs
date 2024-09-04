@@ -181,7 +181,7 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// verify if the signature was originated from the authority.
-		let message = format!("{}:{}", pool_round, array_bytes::bytes2hex("0x", pub_key));
+		let message = format!("{}:{:?}", pool_round, array_bytes::bytes2hex("0x", pub_key));
 		if !signature.verify(message.as_bytes(), authority_id) {
 			return Err(InvalidTransaction::BadProof.into());
 		}
@@ -206,7 +206,7 @@ impl<T: Config> Pallet<T> {
 
 		// verify if the signature was originated from the authority.
 		let message = format!(
-			"{}:{}",
+			"{}:{:?}",
 			pool_round,
 			pub_keys
 				.iter()
