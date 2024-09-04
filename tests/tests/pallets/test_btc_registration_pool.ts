@@ -35,11 +35,13 @@ describeDevNode('pallet_btc_registration_pool - request_system_vault', (context)
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const who = '0x0000000000000000000000000000000000000100';
     const submit = {
+      authorityId: alithRelayer.address,
       who,
       pubKey
     };
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitSystemVaultKey(submit).signAndSend(alithRelayer);
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
+    await context.polkadotApi.tx.btcRegistrationPool.submitSystemVaultKey(submit, signature).send();
     await context.createBlock();
 
     const rawSystemVault: any = await context.polkadotApi.query.btcRegistrationPool.systemVault(await getCurrentRound(context));
@@ -168,28 +170,56 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
     await context.createBlock();
   });
 
-  it('should fail to submit a key due to unknown relay executive', async function () {
+  it('should fail to submit a key due to invalid signature', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
+      authorityId: alithRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0x012088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(charlethRelayer);
+    let errorMsg = '';
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send().catch(err => {
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+    });
     await context.createBlock();
 
-    const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
-    expect(extrinsicResult).eq('BadOrigin');
+    expect(errorMsg).eq('1010: Invalid Transaction: Transaction has a bad signature');
+  });
+
+  it('should fail to submit a key due to unknown relay executive', async function () {
+    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
+    const keySubmission = {
+      authorityId: charlethRelayer.address,
+      who: baltathar.address,
+      pubKey,
+    };
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
+
+    let errorMsg = '';
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send().catch(err => {
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+    });
+    await context.createBlock();
+
+    expect(errorMsg).eq('1010: Invalid Transaction: Invalid signing address');
   });
 
   it('should successfully submit public key', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
+      authorityId: alithRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(alithRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
@@ -213,11 +243,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
   it('should fail to submit a key due to vault address already generated', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
+      authorityId: alithRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(alithRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
@@ -284,11 +316,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   it('should successfully submit public key', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
+      authorityId: alithRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(alithRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);
@@ -301,11 +335,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   it('should fail to submit a key due to already submitted authority', async function () {
     const pubKey = '0x0200c708c3eef9658fd000b3262a5ddc4821f2adcd3f777eb3b2d002dcc04efb87';
     const keySubmission = {
+      authorityId: alithRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0xa1446489cfe7890ae4283f0a46993741025876a090858834f6a34fb0f9483517299c096cb6542aa790a26155f00292b5b17dd813033310cd46bf61833c4611041c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(alithRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
@@ -315,11 +351,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   it('should fail to submit a key due to already submitted key', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
+      authorityId: charlethRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0xbd0acef6dab6157ce6f3992b450c59c81265adcb09d006f9062ff9fe36c227ca4001cd6929aee93166baf6e2ff057fbe57473274c70d563de99d4ee1217e7de41b';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(charlethRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
@@ -329,11 +367,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   it('should fail to submit a key due unknown user', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
+      authorityId: charlethRelayer.address,
       who: alith.address,
       pubKey,
     };
+    const signature = '0xbd0acef6dab6157ce6f3992b450c59c81265adcb09d006f9062ff9fe36c227ca4001cd6929aee93166baf6e2ff057fbe57473274c70d563de99d4ee1217e7de41b';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(charlethRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
@@ -343,11 +383,13 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   it('should successfully submit public key', async function () {
     const pubKey = '0x03495cb39c9c8a5c20f78e7eb33569bc12f583af7ed956b5f171edefaa5b1e5bd3';
     const keySubmission = {
+      authorityId: charlethRelayer.address,
       who: baltathar.address,
       pubKey,
     };
+    const signature = '0x97f5cebf5e669c81c3cb3cdc34519d9e7455235e40ffba92d3cf555d7523c7ca5e1d6d6895adbbeb936d1791753dbd70fdab4ae33f604a8857853b3fa02671771c';
 
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission).signAndSend(charlethRelayer);
+    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const rawRegisteredBitcoinPair: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(await getCurrentRound(context), baltathar.address);

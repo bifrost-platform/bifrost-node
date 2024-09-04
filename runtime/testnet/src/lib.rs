@@ -976,7 +976,7 @@ impl pallet_base_fee::Config for Runtime {
 impl pallet_btc_socket_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
-	type Executives = RelayExecutiveMembership;
+	type PsbtSignOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
@@ -992,6 +992,7 @@ parameter_types! {
 
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type KeySubmitOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
 	type Executives = RelayExecutiveMembership;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;
 	type BitcoinChainId = BitcoinChainId;
