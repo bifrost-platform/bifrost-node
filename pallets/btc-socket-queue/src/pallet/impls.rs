@@ -1,16 +1,17 @@
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
-	Txid, UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script,
+	Secp256k1, Txid, UnboundedBytes,
 };
-use bp_staking::traits::Authorities;
 use ethabi_decode::{ParamKind, Token};
-use frame_system::{ensure_signed, pallet_prelude::OriginFor};
 use miniscript::bitcoin::FeeRate;
 use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::{BoundedVec, DispatchError, DispatchResult};
+use sp_runtime::{
+	transaction_validity::{InvalidTransaction, TransactionValidityError},
+	BoundedVec, DispatchError,
+};
 use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
 
 use crate::{
@@ -26,28 +27,16 @@ where
 	T::AccountId: Into<H160>,
 	H160: Into<T::AccountId>,
 {
-	/// Ensure that the caller is the `Authority`.
-	pub fn ensure_authority(origin: OriginFor<T>) -> DispatchResult {
-		let who = ensure_signed(origin)?;
-
+	/// Verify if the authority_id is valid
+	pub fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
 		if let Some(a) = <Authority<T>>::get() {
-			if a == who {
-				return Ok(());
+			if a != *authority_id {
+				return Err(InvalidTransaction::BadSigner.into());
 			}
+			return Ok(());
 		} else {
-			return Err(Error::<T>::AuthorityDNE.into());
+			return Err(InvalidTransaction::BadSigner.into());
 		}
-		Err(DispatchError::BadOrigin.into())
-	}
-
-	/// Ensure that the caller is one of the `Relayers`.
-	pub fn ensure_relayer(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
-		let who = ensure_signed(origin)?;
-
-		if T::Relayers::is_authority(&who) {
-			return Ok(who);
-		}
-		Err(DispatchError::BadOrigin.into())
 	}
 
 	/// Try to finalize the latest combined PSBT.

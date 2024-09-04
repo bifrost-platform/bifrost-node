@@ -14,6 +14,7 @@ pub use bifrost_testnet_constants::{
 
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
 use bp_multi_sig::Network;
+use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
@@ -976,7 +977,9 @@ impl pallet_base_fee::Config for Runtime {
 impl pallet_btc_socket_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
-	type PsbtSignOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
@@ -992,7 +995,8 @@ parameter_types! {
 
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type KeySubmitOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;
 	type BitcoinChainId = BitcoinChainId;
@@ -1050,8 +1054,8 @@ construct_runtime!(
 		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
 
 		// Bitcoin
-		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, Event<T>, Config<T>} = 60,
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, Event<T>, Config<T>} = 61,
+		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,

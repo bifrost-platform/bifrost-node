@@ -3,12 +3,18 @@ use bp_multi_sig::{
 	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
-use scale_info::prelude::string::ToString;
+use scale_info::prelude::string::{String, ToString};
 use sp_core::Get;
-use sp_runtime::{BoundedVec, DispatchError};
+use sp_runtime::{
+	traits::Verify,
+	transaction_validity::{
+		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
+	},
+	BoundedVec, DispatchError,
+};
 use sp_std::{str, str::FromStr, vec::Vec};
 
-use crate::{BoundedBitcoinAddress, Public};
+use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
 
 use super::pallet::*;
 
@@ -159,5 +165,59 @@ impl<T: Config> Pallet<T> {
 
 		Ok(BoundedVec::try_from(checked_address.as_bytes().to_vec())
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
+	}
+
+	/// Verify the key submission signature.
+	pub fn verify_key_submission(
+		key_submission: &VaultKeySubmission<T::AccountId>,
+		signature: &T::Signature,
+		tag_prefix: &'static str,
+	) -> TransactionValidity {
+		let VaultKeySubmission { authority_id, who, pub_key } = key_submission;
+
+		// verify if the authority is a relay executive member.
+		if !T::Executives::contains(authority_id) {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = array_bytes::bytes2hex("0x", pub_key);
+		if !signature.verify(message.as_bytes(), authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
+		ValidTransaction::with_tag_prefix(tag_prefix)
+			.priority(TransactionPriority::MAX)
+			.and_provides((authority_id, who))
+			.propagate(true)
+			.build()
+	}
+
+	pub fn verify_key_presubmission(
+		vault_key_pre_submission: &VaultKeyPreSubmission<T::AccountId>,
+		signature: &T::Signature,
+	) -> TransactionValidity {
+		let VaultKeyPreSubmission { authority_id, pub_keys } = vault_key_pre_submission;
+
+		// verify if the authority is a relay executive member.
+		if !T::Executives::contains(&authority_id) {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = pub_keys
+			.iter()
+			.map(|x| array_bytes::bytes2hex("0x", x))
+			.collect::<Vec<String>>()
+			.concat();
+		if !signature.verify(message.as_bytes(), &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
+		ValidTransaction::with_tag_prefix("KeyPreSubmission")
+			.priority(TransactionPriority::MAX)
+			.and_provides((authority_id, pub_keys))
+			.propagate(true)
+			.build()
 	}
 }
