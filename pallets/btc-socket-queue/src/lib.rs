@@ -13,7 +13,7 @@ use scale_info::TypeInfo;
 
 use bp_multi_sig::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use bp_staking::MAX_AUTHORITIES;
-use sp_core::{keccak_256, ConstU32, RuntimeDebug, H160, H256, U256};
+use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
 
@@ -37,29 +37,6 @@ macro_rules! log {
 			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
 		)
 	};
-}
-
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-pub enum SigDomain {
-	UnsignedPsbt,
-	SignedPsbt,
-	ExecutedPsbt,
-	RollbackPoll,
-}
-
-impl core::fmt::Display for SigDomain {
-	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		write!(
-			f,
-			"{}",
-			match self {
-				SigDomain::UnsignedPsbt => hex::encode(keccak_256("UnsignedPsbt".as_bytes())),
-				SigDomain::SignedPsbt => hex::encode(keccak_256("SignedPsbt".as_bytes())),
-				SigDomain::ExecutedPsbt => hex::encode(keccak_256("ExecutedPsbt".as_bytes())),
-				SigDomain::RollbackPoll => hex::encode(keccak_256("RollbackPoll".as_bytes())),
-			}
-		)
-	}
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]

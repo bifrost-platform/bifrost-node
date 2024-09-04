@@ -18,14 +18,12 @@ use bp_multi_sig::{
 use bp_staking::traits::Authorities;
 use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
-use sp_core::{H160, H256, U256};
+use sp_core::{keccak_256, H160, H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::SigDomain;
-
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
@@ -668,12 +666,8 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message = format!(
-						"0x{:?}:{:?}",
-						SigDomain::UnsignedPsbt,
-						array_bytes::bytes2hex("", psbt)
-					);
-					if !signature.verify(message.as_bytes(), authority_id) {
+					let message = [keccak_256("UnsignedPsbt".as_bytes()).as_slice(), psbt].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -692,12 +686,9 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					let message = format!(
-						"0x{:?}:{:?}",
-						SigDomain::SignedPsbt,
-						array_bytes::bytes2hex("", signed_psbt)
-					);
-					if !signature.verify(message.as_bytes(), authority_id) {
+					let message =
+						[keccak_256("SignedPsbt".as_bytes()).as_slice(), signed_psbt].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -712,8 +703,9 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message = format!("0x{:?}:{:?}", SigDomain::ExecutedPsbt, txid);
-					if !signature.verify(message.as_bytes(), authority_id) {
+					let message =
+						[keccak_256("ExecutedPsbt".as_bytes()).as_slice(), txid.as_ref()].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -732,8 +724,9 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority_id.
-					let message = format!("0x{:?}:{:?}", SigDomain::RollbackPoll, txid);
-					if !signature.verify(message.as_bytes(), authority_id) {
+					let message =
+						[keccak_256("RollbackPoll".as_bytes()).as_slice(), txid.as_ref()].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
