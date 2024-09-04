@@ -902,7 +902,8 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(psbt.as_ref(), authority_id) {
+					let message = [keccak_256("UnsignedPsbt".as_bytes()).as_slice(), psbt].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -921,7 +922,9 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority.
-					if !signature.verify(signed_psbt.as_ref(), authority_id) {
+					let message =
+						[keccak_256("SignedPsbt".as_bytes()).as_slice(), signed_psbt].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -936,7 +939,9 @@ pub mod pallet {
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(txid.as_ref(), authority_id) {
+					let message =
+						[keccak_256("ExecutedPsbt".as_bytes()).as_slice(), txid.as_ref()].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
@@ -955,7 +960,9 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority_id.
-					if !signature.verify(txid.as_ref(), authority_id) {
+					let message =
+						[keccak_256("RollbackPoll".as_bytes()).as_slice(), txid.as_ref()].concat();
+					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
 
