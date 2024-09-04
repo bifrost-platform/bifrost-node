@@ -10,6 +10,7 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::RuntimeDebug;
+use sp_std::vec::Vec;
 
 use bp_btc_relay::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
@@ -57,6 +58,8 @@ impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// The payload used for public key submission.
 pub struct VaultKeySubmission<AccountId> {
+	/// The authority Ethereum address. (Relay executive)
+	pub authority_id: AccountId,
 	/// The target Ethereum address.
 	pub who: AccountId,
 	/// The generated public key. (33 bytes)
@@ -96,4 +99,11 @@ pub struct SetRefundState {
 	pub old: BoundedBitcoinAddress,
 	/// The new refund address.
 	pub new: BoundedBitcoinAddress,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// The payload used for public key submission.
+pub struct VaultKeyPreSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub pub_keys: Vec<Public>,
 }

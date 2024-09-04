@@ -40,8 +40,14 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-		/// Origin from which a public key may be submitted.
-		type KeySubmitOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
+		/// The signature signed by the issuer.
+		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
+		/// The signer of the message.
+		type Signer: IdentifyAccount<AccountId = Self::AccountId>
+			+ Encode
+			+ Decode
+			+ Parameter
+			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// Interface of Bitcoin Socket Queue pallet.
@@ -440,8 +446,10 @@ pub mod pallet {
 		pub fn submit_vault_key(
 			origin: OriginFor<T>,
 			key_submission: VaultKeySubmission<T::AccountId>,
+			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
+			// make sure this cannot be executed by a signed transaction.
+			ensure_none(origin)?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
@@ -493,8 +501,7 @@ pub mod pallet {
 			<BondedPubKey<T>>::insert(current_round, &pub_key, who.clone());
 			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 
-			// Relay Executives does not pay a fee.
-			Ok(Pays::No.into())
+			Ok(().into())
 		}
 
 		#[pallet::call_index(4)]
@@ -503,8 +510,10 @@ pub mod pallet {
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
 			key_submission: VaultKeySubmission<T::AccountId>,
+			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
+			// make sure this cannot be executed by a signed transaction.
+			ensure_none(origin)?;
 
 			let service_state = Self::service_state();
 
@@ -574,8 +583,7 @@ pub mod pallet {
 				return Err(Error::<T>::VaultDNE)?;
 			}
 
-			// Relay Executives does not pay a fee.
-			Ok(Pays::No.into())
+			Ok(().into())
 		}
 
 		#[pallet::call_index(5)]
@@ -583,9 +591,10 @@ pub mod pallet {
 		/// Submit public keys for prepare for the fast registration.
 		pub fn vault_key_presubmission(
 			origin: OriginFor<T>,
-			pub_keys: Vec<Public>,
+			key_submission: VaultKeyPreSubmission<T::AccountId>,
+			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = T::KeySubmitOrigin::ensure_origin(origin)?;
+			ensure_none(origin)?;
 
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
@@ -628,8 +637,7 @@ pub mod pallet {
 				len: pub_keys.len() as u32,
 			});
 
-			// Relay Executives does not pay a fee.
-			Ok(Pays::No.into())
+			Ok(().into())
 		}
 
 		#[pallet::call_index(6)]
@@ -876,6 +884,29 @@ pub mod pallet {
 				},
 				Call::approve_set_refunds { approval, signature } => {
 					Self::verify_set_refunds_approval(approval, signature)
+				},
+				_ => InvalidTransaction::Call.into(),
+			}
+		}
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T>
+	where
+		H160: Into<T::AccountId>,
+	{
+		type Call = Call<T>;
+
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			match call {
+				Call::submit_vault_key { key_submission, signature } => {
+					Self::verify_key_submission(key_submission, signature, "RegPoolKeySubmission")
+				},
+				Call::submit_system_vault_key { key_submission, signature } => {
+					Self::verify_key_submission(key_submission, signature, "SystemKeySubmission")
+				},
+				Call::vault_key_presubmission { key_submission, signature } => {
+					Self::verify_key_presubmission(key_submission, signature)
 				},
 				_ => InvalidTransaction::Call.into(),
 			}

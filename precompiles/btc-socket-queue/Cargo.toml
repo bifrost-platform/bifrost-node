@@ -25,6 +25,7 @@ sp-runtime = { workspace = true }
 
 # Frontier
 fp-evm = { workspace = true }
+fp-account = { workspace = true, features = ["serde"] }
 pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
 [features]
@@ -32,6 +33,7 @@ default = ["std"]
 std = [
 	"parity-scale-codec/std",
 	"fp-evm/std",
+	"fp-account/std",
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-btc-socket-queue/std",

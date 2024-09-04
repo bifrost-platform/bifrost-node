@@ -6,7 +6,6 @@ use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager},
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
-use bp_staking::traits::Authorities;
 use ethabi_decode::{ParamKind, Token};
 use frame_support::ensure;
 use miniscript::bitcoin::{opcodes, psbt, script::Instruction, TxIn, Weight as BitcoinWeight};
@@ -14,7 +13,10 @@ use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::{BoundedVec, DispatchError, DispatchResult};
+use sp_runtime::{
+	transaction_validity::{InvalidTransaction, TransactionValidityError},
+	BoundedVec, DispatchError,
+};
 use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
 
 use super::pallet::*;

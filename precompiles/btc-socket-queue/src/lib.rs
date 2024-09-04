@@ -7,6 +7,7 @@ use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
+use fp_account::EthereumSignature;
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::{marker::PhantomData, vec, vec::Vec};
@@ -22,7 +23,9 @@ pub struct BtcSocketQueuePrecompile<Runtime>(PhantomData<Runtime>);
 #[precompile]
 impl<Runtime> BtcSocketQueuePrecompile<Runtime>
 where
-	Runtime: pallet_btc_socket_queue::Config + pallet_evm::Config + frame_system::Config,
+	Runtime: pallet_btc_socket_queue::Config<Signature = EthereumSignature>
+		+ pallet_evm::Config
+		+ frame_system::Config,
 	Runtime::AccountId: Into<H160> + From<H160>,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
