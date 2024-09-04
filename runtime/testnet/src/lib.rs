@@ -994,6 +994,7 @@ parameter_types! {
 
 impl pallet_btc_registration_pool::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type KeySubmitOrigin = pallet_collective::EnsureMember<AccountId, RelayExecutiveInstance>;
 	type Executives = RelayExecutiveMembership;
 	type SocketQueue = BtcSocketQueue;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;

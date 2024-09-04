@@ -7,7 +7,7 @@ use crate::{
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, SortedMembers, StorageVersion},
+	traits::{OnRuntimeUpgrade, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -357,7 +357,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			msg: SignedPsbtMessage,
 		) -> DispatchResultWithPostInfo {
-			let authority_id = Self::ensure_executive(origin)?;
+			let authority_id = T::PsbtSignOrigin::ensure_origin(origin)?;
 
 			let SignedPsbtMessage { unsigned_psbt, signed_psbt } = msg;
 
