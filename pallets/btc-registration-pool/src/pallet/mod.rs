@@ -371,7 +371,10 @@ pub mod pallet {
 			ensure_root(origin.clone())?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				matches!(
+					Self::service_state(),
+					MigrationSequence::Normal | MigrationSequence::PrepareNextSystemVault
+				),
 				Error::<T>::UnderMaintenance
 			);
 
@@ -653,8 +656,8 @@ pub mod pallet {
 					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
 				},
 				MigrationSequence::SetExecutiveMembers => {
-					Self::request_system_vault(origin, true)?;
 					<ServiceState<T>>::put(MigrationSequence::PrepareNextSystemVault);
+					Self::request_system_vault(origin, true)?;
 				},
 				MigrationSequence::PrepareNextSystemVault => {
 					return Err(<Error<T>>::DoNotInterceptMigration)?;
