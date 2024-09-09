@@ -1,6 +1,35 @@
 use super::*;
 use crate::set::OrderedSet;
 
+pub mod v5 {
+	use frame_support::traits::OnRuntimeUpgrade;
+
+	use super::*;
+
+	pub struct MigrateToV5<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for MigrateToV5<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::current_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 5 && onchain == 4 {
+				for mut candidate in CandidateInfo::<T>::iter() {
+					if let Some(bottom) = BottomNominations::<T>::get(&candidate.0) {
+						if !bottom.nominations.is_empty() {}
+					}
+				}
+			} else {
+				log!(warn, "Skipping bfc-staking storage migration v5 💤");
+				weight = weight.saturating_add(T::DbWeight::get().reads(1));
+			}
+			weight
+		}
+	}
+}
+
 pub mod v4 {
 	use super::*;
 	use bp_staking::MAX_AUTHORITIES;

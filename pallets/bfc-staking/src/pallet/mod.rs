@@ -30,7 +30,7 @@ pub mod pallet {
 	use super::*;
 
 	/// The current storage version.
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(5);
 
 	/// Pallet for bfc staking
 	#[pallet::pallet]
@@ -706,7 +706,7 @@ pub mod pallet {
 		}
 
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
+			migrations::v5::MigrateToV5::<T>::on_runtime_upgrade()
 		}
 	}
 
