@@ -1,6 +1,6 @@
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script,
-	Secp256k1, Txid, UnboundedBytes,
+	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
+	Txid, UnboundedBytes,
 };
 use ethabi_decode::{ParamKind, Token};
 use miniscript::bitcoin::FeeRate;
@@ -81,6 +81,82 @@ where
 			Ok(_) => Ok(()),
 			Err(_) => Err(Error::<T>::InvalidFeeRate.into()),
 		}
+	}
+
+	/// Try to verify PSBT inputs/outputs for RBF.
+	pub fn try_bump_fee_psbt_verification(
+		old_psbt: &Psbt,
+		new_psbt: &Psbt,
+	) -> Result<(), DispatchError> {
+		let old_psbt_inputs = &old_psbt.unsigned_tx.input;
+		let old_psbt_outputs = &old_psbt.unsigned_tx.output;
+
+		let new_psbt_inputs = &new_psbt.unsigned_tx.input;
+		let new_psbt_outputs = &new_psbt.unsigned_tx.output;
+
+		let current_round = T::RegistrationPool::get_current_round();
+		let system_vault = T::RegistrationPool::get_system_vault(current_round)
+			.ok_or(Error::<T>::SystemVaultDNE)?;
+
+		// input/output length check
+		if old_psbt_inputs.len() != new_psbt_inputs.len() {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
+		if old_psbt_outputs.len() != new_psbt_outputs.len() {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
+
+		// input must be identical (order doesn't matter here)
+		for input in old_psbt_inputs {
+			if !new_psbt_inputs.contains(input) {
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
+		}
+		// output must be identical except change (order doesn't matter here)
+		let new_outputs_map = new_psbt_outputs
+			.into_iter()
+			.map(|output| -> Result<(BoundedBitcoinAddress, U256), DispatchError> {
+				Ok((
+					BoundedVec::try_from(
+						Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
+							.to_string()
+							.as_bytes()
+							.to_vec(),
+					)
+					.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
+					U256::from(output.value.to_sat()),
+				))
+			})
+			.collect::<Result<BTreeMap<BoundedBitcoinAddress, U256>, DispatchError>>()?;
+
+		for output in old_psbt_outputs {
+			let to: BoundedBitcoinAddress = BoundedVec::try_from(
+				Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
+					.to_string()
+					.as_bytes()
+					.to_vec(),
+			)
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+
+			if let Some(new_amount) = new_outputs_map.get(&to) {
+				let old_amount = U256::from(output.value.to_sat());
+				if to == system_vault {
+					// change amount must be lower than previous
+					if *new_amount <= old_amount {
+						return Err(Error::<T>::InvalidPsbt.into());
+					}
+				} else {
+					// user output amount must be identical
+					if *new_amount != old_amount {
+						return Err(Error::<T>::InvalidPsbt.into());
+					}
+				}
+			} else {
+				return Err(Error::<T>::InvalidPsbt.into());
+			}
+		}
+
+		Ok(())
 	}
 
 	/// Try to verify PSBT outputs with the given `SocketMessage`'s.

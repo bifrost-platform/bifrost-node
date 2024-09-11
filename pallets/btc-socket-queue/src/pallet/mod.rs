@@ -116,6 +116,8 @@ pub mod pallet {
 		UnsignedPsbtSubmitted { txid: H256 },
 		/// A signed PSBT for an outbound request has been submitted.
 		SignedPsbtSubmitted { txid: H256, authority_id: T::AccountId },
+		/// An unsigned PSBT for RBF has been submitted.
+		BumpFeePsbtSubmitted { old_txid: H256, new_txid: H256 },
 		/// An unsigned PSBT for a vault migration request has been submitted.
 		MigrationPsbtSubmitted { txid: H256 },
 		/// An unsigned PSBT for a rollback request has been submitted.
@@ -647,6 +649,74 @@ pub mod pallet {
 
 			<MaxFeeRate<T>>::put(new);
 			Self::deposit_event(Event::MaxFeeRateSet { new });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(9)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Submit an unsigned PSBT to Replace-by-Fee (RBF) a pending outbound transaction.
+		pub fn submit_bump_fee_request(
+			origin: OriginFor<T>,
+			old_txid: H256,
+			new_unsigned_psbt: UnboundedBytes,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			// the pending request (stuck in the Bitcoin mempool) should exist as an ExecutedRequest
+			let old_request =
+				<ExecutedRequests<T>>::get(&old_txid).ok_or(Error::<T>::RequestDNE)?;
+			ensure!(old_request.unsigned_psbt != new_unsigned_psbt, Error::<T>::NoWritingSameValue);
+
+			// verify if psbt bytes are valid
+			let old_psbt_obj = Self::try_get_checked_psbt(&old_request.unsigned_psbt)?;
+			let new_psbt_obj = Self::try_get_checked_psbt(&new_unsigned_psbt)?;
+			let new_txid = Self::convert_txid(new_psbt_obj.unsigned_tx.txid());
+			ensure!(new_txid != old_txid, Error::<T>::NoWritingSameValue);
+
+			// verify if the fee rate is set properly
+			Self::try_psbt_fee_verification(&new_psbt_obj)?;
+
+			// verify if psbt is valid for RBF.
+			Self::try_bump_fee_psbt_verification(&old_psbt_obj, &new_psbt_obj)?;
+
+			// prevent storage duplication
+			ensure!(
+				!<PendingRequests<T>>::contains_key(&new_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<FinalizedRequests<T>>::contains_key(&new_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<ExecutedRequests<T>>::contains_key(&new_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+			ensure!(
+				!<RollbackRequests<T>>::contains_key(&new_txid),
+				Error::<T>::RequestAlreadyExists
+			);
+
+			// remove storage
+			for socket_message in old_request.socket_messages.clone() {
+				let msg = Self::try_decode_socket_message(&socket_message)
+					.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+				<SocketMessages<T>>::remove(msg.req_id.sequence);
+			}
+			<ExecutedRequests<T>>::remove(old_txid);
+			<BondedOutboundTx<T>>::remove(old_txid);
+
+			// insert to PendingRequests
+			<PendingRequests<T>>::insert(
+				&new_txid,
+				PsbtRequest::new(
+					new_unsigned_psbt,
+					old_request.socket_messages,
+					RequestType::Normal,
+				),
+			);
+			Self::deposit_event(Event::BumpFeePsbtSubmitted { old_txid, new_txid });
 
 			Ok(().into())
 		}
