@@ -703,6 +703,7 @@ pub mod pallet {
 				let msg = Self::try_decode_socket_message(&socket_message)
 					.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 				<SocketMessages<T>>::remove(msg.req_id.sequence);
+				<SocketMessages<T>>::insert(msg.req_id.sequence, (new_txid, msg));
 			}
 			<ExecutedRequests<T>>::remove(old_txid);
 			<BondedOutboundTx<T>>::remove(old_txid);

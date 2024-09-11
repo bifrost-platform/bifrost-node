@@ -107,6 +107,7 @@ where
 		}
 
 		// input must be identical (order doesn't matter here)
+		// new input may contain extra utxo's (for increased fee payment)
 		for input in old_psbt_inputs {
 			if !new_psbt_inputs.contains(input) {
 				return Err(Error::<T>::InvalidPsbt.into());
