@@ -17,9 +17,11 @@ pub mod v5 {
 
 			if current == 5 && onchain == 4 {
 				for mut candidate in CandidateInfo::<T>::iter() {
-					if let Some(bottom) = BottomNominations::<T>::get(&candidate.0) {
-						if !bottom.nominations.is_empty() {}
-					}
+					let bottom =
+						BottomNominations::<T>::get(&candidate.0).expect("BottomNomination DNE");
+					let top = TopNominations::<T>::get(&candidate.0).expect("TopNomination DNE");
+
+					if !bottom.nominations.is_empty() {}
 				}
 			} else {
 				log!(warn, "Skipping bfc-staking storage migration v5 💤");
