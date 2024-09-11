@@ -98,11 +98,9 @@ where
 		let system_vault = T::RegistrationPool::get_system_vault(current_round)
 			.ok_or(Error::<T>::SystemVaultDNE)?;
 
-		// input/output length check
-		if old_psbt_inputs.len() != new_psbt_inputs.len() {
-			return Err(Error::<T>::InvalidPsbt.into());
-		}
-		if old_psbt_outputs.len() != new_psbt_outputs.len() {
+		// output length check.
+		// the new output can possibly include/exclude an output for change.
+		if new_psbt_outputs.len().saturating_sub(old_psbt_outputs.len()) <= 1 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 
@@ -113,8 +111,16 @@ where
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
 		}
+
+		// fee check
+		let old_fee = old_psbt.fee().map_err(|_| Error::<T>::InvalidPsbt)?;
+		let new_fee = new_psbt.fee().map_err(|_| Error::<T>::InvalidPsbt)?;
+		if new_fee <= old_fee {
+			return Err(Error::<T>::InvalidPsbt.into());
+		}
+
 		// output must be identical except change (order doesn't matter here)
-		let new_outputs_map = new_psbt_outputs
+		let old_outputs_map = old_psbt_outputs
 			.into_iter()
 			.map(|output| -> Result<(BoundedBitcoinAddress, U256), DispatchError> {
 				Ok((
@@ -130,8 +136,8 @@ where
 			})
 			.collect::<Result<BTreeMap<BoundedBitcoinAddress, U256>, DispatchError>>()?;
 
-		for output in old_psbt_outputs {
-			let to: BoundedBitcoinAddress = BoundedVec::try_from(
+		for output in new_psbt_outputs {
+			let to = BoundedVec::try_from(
 				Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
 					.to_string()
 					.as_bytes()
@@ -139,21 +145,18 @@ where
 			)
 			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
-			if let Some(new_amount) = new_outputs_map.get(&to) {
-				let old_amount = U256::from(output.value.to_sat());
-				if to == system_vault {
-					// change amount must be lower than previous
-					if *new_amount <= old_amount {
-						return Err(Error::<T>::InvalidPsbt.into());
-					}
-				} else {
-					// user output amount must be identical
-					if *new_amount != old_amount {
-						return Err(Error::<T>::InvalidPsbt.into());
-					}
+			if let Some(old_amount) = old_outputs_map.get(&to) {
+				let new_amount = U256::from(output.value.to_sat());
+				// user output amount must be identical
+				if to != system_vault && new_amount != *old_amount {
+					return Err(Error::<T>::InvalidPsbt.into());
 				}
 			} else {
-				return Err(Error::<T>::InvalidPsbt.into());
+				// which means that a change position has been included.
+				// the address must match with the system vault.
+				if to != system_vault {
+					return Err(Error::<T>::InvalidPsbt.into());
+				}
 			}
 		}
 
