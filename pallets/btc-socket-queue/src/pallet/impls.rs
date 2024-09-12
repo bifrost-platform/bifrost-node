@@ -100,7 +100,7 @@ where
 
 		// output length check.
 		// the new output can possibly include/exclude an output for change.
-		if new_psbt_outputs.len().saturating_sub(old_psbt_outputs.len()) > 1 {
+		if (new_psbt_outputs.len() as isize - old_psbt_outputs.len() as isize).abs() > 1 {
 			return Err(Error::<T>::InvalidPsbt.into());
 		}
 
