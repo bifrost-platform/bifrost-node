@@ -16,12 +16,45 @@ pub mod v5 {
 			let onchain = Pallet::<T>::on_chain_storage_version();
 
 			if current == 5 && onchain == 4 {
-				for mut candidate in CandidateInfo::<T>::iter() {
+				for candidate in CandidateInfo::<T>::iter() {
 					let bottom =
 						BottomNominations::<T>::get(&candidate.0).expect("BottomNomination DNE");
-					let top = TopNominations::<T>::get(&candidate.0).expect("TopNomination DNE");
 
-					if !bottom.nominations.is_empty() {}
+					if !bottom.nominations.is_empty() {
+						for b in bottom.nominations {
+							let mut c =
+								CandidateInfo::<T>::get(&candidate.0).expect("CandidateInfo DNE");
+							// should be added to top
+							match c.add_nomination::<T>(
+								&candidate.0,
+								Bond { owner: b.owner.clone(), amount: b.amount },
+							) {
+								Ok((position, _)) => {
+									log!(
+										info,
+										"Nominator({}) for Candidate({}) has been moved to Top({:?})",
+										b.owner.clone(),
+										candidate.0,
+										position
+									);
+									<CandidateInfo<T>>::insert(&candidate.0, c);
+								},
+								Err(_) => {
+									log!(
+										error,
+										"Failed to move Nominator({}) for Candidate({}) to Top",
+										b.owner,
+										candidate.0
+									);
+								},
+							}
+						}
+						let mut c =
+							CandidateInfo::<T>::get(&candidate.0).expect("CandidateInfo DNE");
+						c.reset_bottom_data::<T>(&Nominations::default());
+						<CandidateInfo<T>>::insert(&candidate.0, c);
+						<BottomNominations<T>>::insert(&candidate.0, Nominations::default());
+					}
 				}
 			} else {
 				log!(warn, "Skipping bfc-staking storage migration v5 💤");
