@@ -25,17 +25,16 @@ pub mod v5 {
 							let mut c =
 								CandidateInfo::<T>::get(&candidate.0).expect("CandidateInfo DNE");
 							// should be added to top
-							match c.add_nomination::<T>(
+							match c.add_top_nomination::<T>(
 								&candidate.0,
 								Bond { owner: b.owner.clone(), amount: b.amount },
 							) {
-								Ok((position, _)) => {
+								Ok(_) => {
 									log!(
 										info,
-										"Nominator({:?}) for Candidate({:?}) has been moved to Top({:?})",
+										"Nominator({:?}) for Candidate({:?}) has been moved to Top",
 										b.owner.clone(),
 										candidate.0,
-										position
 									);
 									<CandidateInfo<T>>::insert(&candidate.0, c);
 								},
@@ -56,6 +55,7 @@ pub mod v5 {
 						<BottomNominations<T>>::insert(&candidate.0, Nominations::default());
 					}
 				}
+				current.put::<Pallet<T>>();
 			} else {
 				log!(warn, "Skipping bfc-staking storage migration v5 💤");
 				weight = weight.saturating_add(T::DbWeight::get().reads(1));
