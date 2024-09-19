@@ -405,7 +405,7 @@ pub mod pallet {
 
 			ensure!(
 				matches!(
-					Self::service_state(),
+					<ServiceState<T>>::get(),
 					MigrationSequence::Normal | MigrationSequence::PrepareNextSystemVault
 				),
 				Error::<T>::UnderMaintenance
@@ -446,7 +446,7 @@ pub mod pallet {
 
 			let VaultKeySubmission { authority_id, who, pub_key, pool_round } = key_submission;
 
-			let current_round = Self::current_round();
+			let current_round = <CurrentRound<T>>::get();
 			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			let mut relay_target =
@@ -592,7 +592,7 @@ pub mod pallet {
 
 			let VaultKeyPreSubmission { authority_id, pub_keys, pool_round } = key_submission;
 
-			let current_round = Self::current_round();
+			let current_round = <CurrentRound<T>>::get();
 			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			// validate public keys
@@ -603,7 +603,7 @@ pub mod pallet {
 				);
 			}
 
-			let mut presubmitted = Self::presubmitted_pubkeys(current_round, &authority_id);
+			let mut presubmitted = <PreSubmittedPubKeys<T>>::get(current_round, &authority_id);
 			ensure!(
 				presubmitted.len() + pub_keys.len() <= MaxPreSubmission::<T>::get() as usize,
 				Error::<T>::OutOfRange
