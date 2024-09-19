@@ -32,7 +32,7 @@ pub mod v5 {
 								Ok((position, _)) => {
 									log!(
 										info,
-										"Nominator({}) for Candidate({}) has been moved to Top({:?})",
+										"Nominator({:?}) for Candidate({:?}) has been moved to Top({:?})",
 										b.owner.clone(),
 										candidate.0,
 										position
@@ -42,7 +42,7 @@ pub mod v5 {
 								Err(_) => {
 									log!(
 										error,
-										"Failed to move Nominator({}) for Candidate({}) to Top",
+										"Failed to move Nominator({:?}) for Candidate({:?}) to Top",
 										b.owner,
 										candidate.0
 									);
