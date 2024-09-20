@@ -50,6 +50,7 @@ pub mod v5 {
 						}
 						let mut c =
 							CandidateInfo::<T>::get(&candidate.0).expect("CandidateInfo DNE");
+						c.nomination_count = c.nomination_count.saturating_sub(1);
 						c.reset_bottom_data::<T>(&Nominations::default());
 						<CandidateInfo<T>>::insert(&candidate.0, c);
 						<BottomNominations<T>>::insert(&candidate.0, Nominations::default());
