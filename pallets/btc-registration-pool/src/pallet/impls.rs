@@ -7,7 +7,7 @@ use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
-use sp_core::Get;
+use sp_core::{Get, H256};
 use sp_runtime::{
 	traits::Verify,
 	transaction_validity::{
@@ -17,7 +17,9 @@ use sp_runtime::{
 };
 use sp_std::{str, str::FromStr, vec::Vec};
 
-use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
+use crate::{
+	BoundedBitcoinAddress, MigrationTxState, Public, VaultKeyPreSubmission, VaultKeySubmission,
+};
 
 use super::pallet::*;
 
@@ -66,6 +68,13 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 
 	fn get_current_round() -> u32 {
 		Self::current_round()
+	}
+
+	fn set_latest_migration_tx(txid: H256, is_executed: bool) {
+		<LatestMigrationTx<T>>::insert(
+			Self::current_round(),
+			MigrationTxState { txid, is_executed },
+		);
 	}
 }
 

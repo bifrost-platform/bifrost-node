@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
-	VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MigrationTxState, MultiSigAccount,
+	PoolRound, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -217,6 +217,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn max_presubmission)]
 	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
+	/// The PSBT's txid used at the latest vault migration protocol.
+	pub type LatestMigrationTx<T: Config> =
+		StorageMap<_, Twox64Concat, PoolRound, MigrationTxState, OptionQuery>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -663,6 +668,16 @@ pub mod pallet {
 					return Err(<Error<T>>::DoNotInterceptMigration)?;
 				},
 				MigrationSequence::UTXOTransfer => {
+					// only permit when the latest migration transaction has been broadcasted
+					if let Some(latest_migration) =
+						<LatestMigrationTx<T>>::get(Self::current_round())
+					{
+						if !latest_migration.is_executed {
+							return Err(<Error<T>>::DoNotInterceptMigration)?;
+						}
+					} else {
+						return Err(<Error<T>>::DoNotInterceptMigration)?;
+					}
 					Self::deposit_event(Event::MigrationCompleted);
 					<CurrentRound<T>>::mutate(|r| *r += 1);
 					<ServiceState<T>>::put(MigrationSequence::Normal);
