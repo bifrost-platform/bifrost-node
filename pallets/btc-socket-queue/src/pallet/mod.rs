@@ -37,8 +37,6 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + pallet_evm::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-		/// Required origin for setting or resetting the configuration.
-		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
@@ -444,7 +442,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			msg: RollbackPsbtMessage<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
+			ensure_root(origin)?;
 
 			let RollbackPsbtMessage { who, txid: rollback_txid, vout, amount, unsigned_psbt } = msg;
 
