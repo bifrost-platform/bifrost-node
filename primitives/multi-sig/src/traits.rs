@@ -24,3 +24,8 @@ pub trait PoolManager<AccountId> {
 	/// Get the current pool round.
 	fn get_current_round() -> u32;
 }
+
+pub trait SocketQueueManager<AccountId> {
+	/// Check if the system is ready for migrate.
+	fn is_ready_for_migrate() -> bool;
+}

@@ -1,6 +1,10 @@
+use crate::{
+	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UserRequest,
+	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+};
 use bp_multi_sig::{
-	traits::PoolManager, Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1,
-	Txid, UnboundedBytes,
+	traits::{PoolManager, SocketQueueManager},
+	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
 use ethabi_decode::{ParamKind, Token};
 use frame_support::ensure;
@@ -15,12 +19,18 @@ use sp_runtime::{
 };
 use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
 
-use crate::{
-	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UserRequest,
-	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
-};
-
 use super::pallet::*;
+
+impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
+	fn is_ready_for_migrate() -> bool {
+		let has_pending_requests = <PendingRequests<T>>::iter().next().is_some();
+		let has_finalized_requests = <FinalizedRequests<T>>::iter().next().is_some();
+		let has_rollback_requests = <RollbackRequests<T>>::iter().next().is_some();
+
+		// Return true only if all request storages are empty.
+		has_pending_requests && has_finalized_requests && has_rollback_requests
+	}
+}
 
 impl<T> Pallet<T>
 where

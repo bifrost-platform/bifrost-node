@@ -998,6 +998,7 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
+	type SocketQueue = BtcSocketQueue;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;
 	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;
