@@ -788,7 +788,7 @@ pub mod pallet {
 						.build()
 				},
 				Call::submit_rollback_poll { msg, signature } => {
-					let RollbackPollMessage { authority_id, txid, .. } = msg;
+					let RollbackPollMessage { authority_id, txid, is_approved } = msg;
 
 					// verify if the authority is a selected relayer.
 					if !T::Relayers::is_authority(&authority_id) {
@@ -796,8 +796,12 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority_id.
-					let message =
-						[keccak_256("RollbackPoll".as_bytes()).as_slice(), txid.as_ref()].concat();
+					let message = [
+						keccak_256("RollbackPoll".as_bytes()).as_slice(),
+						txid.as_ref(),
+						&[*is_approved as u8],
+					]
+					.concat();
 					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
