@@ -17,9 +17,7 @@ use sp_runtime::{
 };
 use sp_std::{str, str::FromStr, vec::Vec};
 
-use crate::{
-	BoundedBitcoinAddress, MigrationTxState, Public, VaultKeyPreSubmission, VaultKeySubmission,
-};
+use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
 
 use super::pallet::*;
 
@@ -70,11 +68,20 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		Self::current_round()
 	}
 
-	fn set_latest_migration_tx(txid: H256, is_executed: bool) {
-		<LatestMigrationTx<T>>::insert(
-			Self::current_round(),
-			MigrationTxState { txid, is_executed },
-		);
+	fn add_migration_tx(txid: H256) {
+		let mut state = <OngoingVaultMigration<T>>::get();
+		if state.get(&txid).is_none() {
+			state.insert(txid, false);
+			<OngoingVaultMigration<T>>::put(state);
+		}
+	}
+
+	fn execute_migration_tx(txid: H256) {
+		let mut state = <OngoingVaultMigration<T>>::get();
+		if state.get(&txid).is_some() {
+			state.insert(txid, true);
+			<OngoingVaultMigration<T>>::put(state);
+		}
 	}
 }
 

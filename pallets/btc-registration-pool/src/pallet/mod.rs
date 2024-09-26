@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MigrationTxState, MultiSigAccount,
-	PoolRound, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
+	VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -12,12 +12,15 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::{MigrationSequence, Network, Public, PublicKey, UnboundedBytes};
-use sp_core::H160;
+use sp_core::{H160, H256};
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	Percent,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{
+	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+	vec::Vec,
+};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -219,9 +222,9 @@ pub mod pallet {
 	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	/// The PSBT's txid used at the latest vault migration protocol.
-	pub type LatestMigrationTx<T: Config> =
-		StorageMap<_, Twox64Concat, PoolRound, MigrationTxState, OptionQuery>;
+	#[pallet::unbounded]
+	/// The latest transaction(s) information used for the ongoing vault migration protocol.
+	pub type OngoingVaultMigration<T: Config> = StorageValue<_, BTreeMap<H256, bool>, ValueQuery>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -668,19 +671,23 @@ pub mod pallet {
 					return Err(<Error<T>>::DoNotInterceptMigration)?;
 				},
 				MigrationSequence::UTXOTransfer => {
-					// only permit when the latest migration transaction has been broadcasted
-					if let Some(latest_migration) =
-						<LatestMigrationTx<T>>::get(Self::current_round())
+					// only permit when the latest migration transaction(s) has been broadcasted
+					let state = <OngoingVaultMigration<T>>::get();
+					if state.is_empty()
+						|| !state
+							.values()
+							.cloned()
+							.collect::<Vec<bool>>()
+							.iter()
+							.all(|is_executed| *is_executed)
 					{
-						if !latest_migration.is_executed {
-							return Err(<Error<T>>::DoNotInterceptMigration)?;
-						}
-					} else {
 						return Err(<Error<T>>::DoNotInterceptMigration)?;
 					}
+
 					Self::deposit_event(Event::MigrationCompleted);
 					<CurrentRound<T>>::mutate(|r| *r += 1);
 					<ServiceState<T>>::put(MigrationSequence::Normal);
+					<OngoingVaultMigration<T>>::put::<BTreeMap<H256, bool>>(Default::default());
 				},
 			}
 

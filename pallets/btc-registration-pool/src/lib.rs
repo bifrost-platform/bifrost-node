@@ -7,9 +7,9 @@ pub mod weights;
 pub use pallet::pallet::*;
 use weights::WeightInfo;
 
-use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
-use sp_core::{RuntimeDebug, H256};
+use sp_core::RuntimeDebug;
 use sp_std::vec::Vec;
 
 use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
@@ -77,13 +77,4 @@ pub struct VaultKeyPreSubmission<AccountId> {
 	pub pub_keys: Vec<Public>,
 	/// The pool round.
 	pub pool_round: PoolRound,
-}
-
-#[derive(Decode, Encode, MaxEncodedLen, TypeInfo)]
-/// The state of a migration transaction
-pub struct MigrationTxState {
-	/// The transaction ID.
-	pub txid: H256,
-	/// Whether the transaction has been broadcasted to the Bitcoin network.
-	pub is_executed: bool,
 }

@@ -25,6 +25,9 @@ pub trait PoolManager<AccountId> {
 	/// Get the current pool round.
 	fn get_current_round() -> u32;
 
-	/// Set the latest migration tx.
-	fn set_latest_migration_tx(txid: H256, is_executed: bool);
+	/// Add a migration transaction.
+	fn add_migration_tx(txid: H256);
+
+	/// Execute a migration transaction.
+	fn execute_migration_tx(txid: H256);
 }
