@@ -2,7 +2,8 @@ mod impls;
 
 use crate::{
 	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
-	SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	SetRefundState, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo,
+	ADDRESS_U64,
 };
 
 use frame_support::{
@@ -247,15 +248,16 @@ pub mod pallet {
 	pub type OngoingVaultMigration<T: Config> = StorageValue<_, BTreeMap<H256, bool>, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
 	/// The pending refund sets.
-	/// The key is the pool round and user address, and the value is the pending refund address.
+	/// The key is the pool round and user address, and the value is the (current, pending) refund addresses.
 	pub type PendingSetRefunds<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
 		PoolRound,
 		Twox64Concat,
 		T::AccountId,
-		BoundedBitcoinAddress,
+		SetRefundState,
 		OptionQuery,
 	>;
 
@@ -318,7 +320,11 @@ pub mod pallet {
 				Error::<T>::RefundSetAlreadyRequested
 			);
 
-			<PendingSetRefunds<T>>::insert(current_round, who.clone(), new.clone());
+			<PendingSetRefunds<T>>::insert(
+				current_round,
+				who.clone(),
+				SetRefundState { old: old.clone(), new: new.clone() },
+			);
 			Self::deposit_event(Event::RefundSetRequested { who, old, new });
 
 			Ok(().into())
@@ -813,7 +819,7 @@ pub mod pallet {
 				let who = refund_set.0.clone();
 				let pending = <PendingSetRefunds<T>>::get(current_round, &who)
 					.ok_or(Error::<T>::RefundSetDNE)?;
-				ensure!(pending == refund_set.1, Error::<T>::RefundSetDNE);
+				ensure!(pending.new == refund_set.1, Error::<T>::RefundSetDNE);
 
 				let mut relay_target =
 					<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
@@ -823,15 +829,15 @@ pub mod pallet {
 					users.retain(|u| *u != who);
 				});
 				// add to new bond
-				<BondedRefund<T>>::mutate(current_round, &pending, |users| {
+				<BondedRefund<T>>::mutate(current_round, &pending.new, |users| {
 					users.push(who.clone());
 				});
 
-				relay_target.set_refund_address(pending.clone());
+				relay_target.set_refund_address(pending.new.clone());
 				<RegistrationPool<T>>::insert(current_round, &who, relay_target);
 				<PendingSetRefunds<T>>::remove(current_round, &who);
 
-				Self::deposit_event(Event::RefundSetApproved { who, old, new: pending });
+				Self::deposit_event(Event::RefundSetApproved { who, old, new: pending.new });
 			}
 
 			Ok(().into())

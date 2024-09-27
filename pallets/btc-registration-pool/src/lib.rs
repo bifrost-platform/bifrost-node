@@ -88,3 +88,9 @@ pub struct SetRefundsApproval<AccountId> {
 	/// The pool round.
 	pub pool_round: PoolRound,
 }
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SetRefundState {
+	pub old: BoundedBitcoinAddress,
+	pub new: BoundedBitcoinAddress,
+}

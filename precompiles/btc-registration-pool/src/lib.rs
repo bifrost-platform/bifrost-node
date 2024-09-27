@@ -177,9 +177,31 @@ where
 			target_round,
 			user_bfc_address,
 		) {
-			result = BitcoinAddressString::from(pending.into_inner());
+			result = BitcoinAddressString::from(pending.new.into_inner());
 		}
 		Ok(result)
+	}
+
+	#[precompile::public("pendingRefunds(uint32)")]
+	#[precompile::public("pending_refunds(uint32)")]
+	#[precompile::view]
+	fn pending_refunds(
+		handle: &mut impl PrecompileHandle,
+		pool_round: PoolRound,
+	) -> EvmResult<Vec<(Address, BitcoinAddressString, BitcoinAddressString)>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let target_round = Self::target_round(pool_round);
+
+		Ok(pallet_btc_registration_pool::PendingSetRefunds::<Runtime>::iter_prefix(target_round)
+			.map(|(who, pending)| {
+				(
+					Address(who.into()),
+					BitcoinAddressString::from(pending.old.into_inner()),
+					BitcoinAddressString::from(pending.new.into_inner()),
+				)
+			})
+			.collect())
 	}
 
 	#[precompile::public("vaultAddresses(uint32)")]
