@@ -36,9 +36,9 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 			if a != *authority_id {
 				return Err(InvalidTransaction::BadSigner.into());
 			}
-			return Ok(());
+			Ok(())
 		} else {
-			return Err(InvalidTransaction::BadSigner.into());
+			Err(InvalidTransaction::BadSigner.into())
 		}
 	}
 }
@@ -436,7 +436,7 @@ where
 			info,
 		) {
 			Ok(token) => Ok(token.clone().try_into()?),
-			Err(_) => return Err(()),
+			Err(_) => Err(()),
 		}
 	}
 
@@ -451,7 +451,7 @@ where
 			info,
 		) {
 			Ok(token) => Ok(token.clone().try_into()?),
-			Err(_) => return Err(()),
+			Err(_) => Err(()),
 		}
 	}
 
@@ -482,9 +482,9 @@ where
 		) {
 			Ok(socket) => match &socket[0] {
 				Token::Tuple(msg) => Ok(msg.clone().try_into()?),
-				_ => return Err(()),
+				_ => Err(()),
 			},
-			Err(_) => return Err(()),
+			Err(_) => Err(()),
 		}
 	}
 }
