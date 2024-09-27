@@ -31,3 +31,8 @@ pub trait PoolManager<AccountId> {
 	/// Execute a migration transaction.
 	fn execute_migration_tx(txid: H256);
 }
+
+pub trait SocketQueueManager<AccountId> {
+	/// Check if the system is ready for migrate.
+	fn is_ready_for_migrate() -> bool;
+}
