@@ -129,6 +129,7 @@ where
 
 	#[precompile::public("pendingRegistrations(uint32)")]
 	#[precompile::public("pending_registrations(uint32)")]
+	#[precompile::view]
 	fn pending_registrations(
 		handle: &mut impl PrecompileHandle,
 		pool_round: PoolRound,

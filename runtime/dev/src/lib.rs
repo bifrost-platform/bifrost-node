@@ -970,7 +970,6 @@ impl pallet_base_fee::Config for Runtime {
 
 impl pallet_btc_socket_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;

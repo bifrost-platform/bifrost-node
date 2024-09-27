@@ -37,8 +37,6 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + pallet_evm::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-		/// Required origin for setting or resetting the configuration.
-		type SetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
@@ -430,6 +428,9 @@ pub mod pallet {
 			let ExecutedPsbtMessage { txid, .. } = msg;
 
 			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
+			if request.request_type == RequestType::Migration {
+				T::RegistrationPool::execute_migration_tx(txid.clone());
+			}
 			<FinalizedRequests<T>>::remove(&txid);
 			<ExecutedRequests<T>>::insert(&txid, request);
 			Self::deposit_event(Event::RequestExecuted { txid });
@@ -444,7 +445,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			msg: RollbackPsbtMessage<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
-			T::SetOrigin::ensure_origin(origin)?;
+			ensure_root(origin)?;
 
 			let RollbackPsbtMessage { who, txid: rollback_txid, vout, amount, unsigned_psbt } = msg;
 
@@ -632,6 +633,7 @@ pub mod pallet {
 				&txid,
 				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
 			);
+			T::RegistrationPool::add_migration_tx(txid.clone());
 			Self::deposit_event(Event::MigrationPsbtSubmitted { txid });
 			Ok(().into())
 		}
@@ -788,7 +790,7 @@ pub mod pallet {
 						.build()
 				},
 				Call::submit_rollback_poll { msg, signature } => {
-					let RollbackPollMessage { authority_id, txid, .. } = msg;
+					let RollbackPollMessage { authority_id, txid, is_approved } = msg;
 
 					// verify if the authority is a selected relayer.
 					if !T::Relayers::is_authority(&authority_id) {
@@ -796,8 +798,12 @@ pub mod pallet {
 					}
 
 					// verify if the signature was originated from the authority_id.
-					let message =
-						[keccak_256("RollbackPoll".as_bytes()).as_slice(), txid.as_ref()].concat();
+					let message = [
+						keccak_256("RollbackPoll".as_bytes()).as_slice(),
+						txid.as_ref(),
+						&[*is_approved as u8],
+					]
+					.concat();
 					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}

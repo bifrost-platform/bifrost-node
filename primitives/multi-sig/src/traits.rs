@@ -1,4 +1,5 @@
 use miniscript::bitcoin::Network;
+use sp_core::H256;
 
 use crate::{BoundedBitcoinAddress, MigrationSequence};
 
@@ -23,6 +24,12 @@ pub trait PoolManager<AccountId> {
 
 	/// Get the current pool round.
 	fn get_current_round() -> u32;
+
+	/// Add a migration transaction.
+	fn add_migration_tx(txid: H256);
+
+	/// Execute a migration transaction.
+	fn execute_migration_tx(txid: H256);
 }
 
 pub trait SocketQueueManager<AccountId> {
