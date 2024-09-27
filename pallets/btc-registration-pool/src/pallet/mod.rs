@@ -12,12 +12,15 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::{MigrationSequence, Network, Public, PublicKey, UnboundedBytes};
-use sp_core::H160;
+use sp_core::{H160, H256};
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
 	Percent,
 };
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{
+	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+	vec::Vec,
+};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -217,6 +220,11 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn max_presubmission)]
 	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// The latest transaction(s) information used for the ongoing vault migration protocol.
+	pub type OngoingVaultMigration<T: Config> = StorageValue<_, BTreeMap<H256, bool>, ValueQuery>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -663,9 +671,23 @@ pub mod pallet {
 					return Err(<Error<T>>::DoNotInterceptMigration)?;
 				},
 				MigrationSequence::UTXOTransfer => {
+					// only permit when the latest migration transaction(s) has been broadcasted
+					let state = <OngoingVaultMigration<T>>::get();
+					if state.is_empty()
+						|| !state
+							.values()
+							.cloned()
+							.collect::<Vec<bool>>()
+							.iter()
+							.all(|is_executed| *is_executed)
+					{
+						return Err(<Error<T>>::DoNotInterceptMigration)?;
+					}
+
 					Self::deposit_event(Event::MigrationCompleted);
 					<CurrentRound<T>>::mutate(|r| *r += 1);
 					<ServiceState<T>>::put(MigrationSequence::Normal);
+					<OngoingVaultMigration<T>>::put::<BTreeMap<H256, bool>>(Default::default());
 				},
 			}
 

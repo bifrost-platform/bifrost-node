@@ -428,6 +428,9 @@ pub mod pallet {
 			let ExecutedPsbtMessage { txid, .. } = msg;
 
 			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
+			if request.request_type == RequestType::Migration {
+				T::RegistrationPool::execute_migration_tx(txid.clone());
+			}
 			<FinalizedRequests<T>>::remove(&txid);
 			<ExecutedRequests<T>>::insert(&txid, request);
 			Self::deposit_event(Event::RequestExecuted { txid });
@@ -630,6 +633,7 @@ pub mod pallet {
 				&txid,
 				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
 			);
+			T::RegistrationPool::add_migration_tx(txid.clone());
 			Self::deposit_event(Event::MigrationPsbtSubmitted { txid });
 			Ok(().into())
 		}

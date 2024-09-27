@@ -7,7 +7,7 @@ use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
-use sp_core::Get;
+use sp_core::{Get, H256};
 use sp_runtime::{
 	traits::Verify,
 	transaction_validity::{
@@ -66,6 +66,22 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 
 	fn get_current_round() -> u32 {
 		Self::current_round()
+	}
+
+	fn add_migration_tx(txid: H256) {
+		let mut state = <OngoingVaultMigration<T>>::get();
+		if state.get(&txid).is_none() {
+			state.insert(txid, false);
+			<OngoingVaultMigration<T>>::put(state);
+		}
+	}
+
+	fn execute_migration_tx(txid: H256) {
+		let mut state = <OngoingVaultMigration<T>>::get();
+		if state.get(&txid).is_some() {
+			state.insert(txid, true);
+			<OngoingVaultMigration<T>>::put(state);
+		}
 	}
 }
 
