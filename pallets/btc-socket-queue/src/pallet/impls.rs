@@ -30,16 +30,8 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 		// Return true only if all request storages are empty.
 		has_pending_requests && has_finalized_requests && has_rollback_requests
 	}
-}
 
-impl<T> Pallet<T>
-where
-	T: Config,
-	T::AccountId: Into<H160>,
-	H160: Into<T::AccountId>,
-{
-	/// Verify if the authority_id is valid
-	pub fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
+	fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
 		if let Some(a) = <Authority<T>>::get() {
 			if a != *authority_id {
 				return Err(InvalidTransaction::BadSigner.into());
@@ -49,7 +41,14 @@ where
 			return Err(InvalidTransaction::BadSigner.into());
 		}
 	}
+}
 
+impl<T> Pallet<T>
+where
+	T: Config,
+	T::AccountId: Into<H160>,
+	H160: Into<T::AccountId>,
+{
 	/// Try to finalize the latest combined PSBT.
 	pub fn try_psbt_finalization(combined: Psbt) -> Result<Psbt, DispatchError> {
 		let secp = Secp256k1::new();

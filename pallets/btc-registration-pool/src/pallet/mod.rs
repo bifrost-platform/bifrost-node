@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
-	VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
+	SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -84,6 +84,8 @@ pub mod pallet {
 		UserDNE,
 		/// The (system) vault does not exist.
 		VaultDNE,
+		/// The refund set request does not exist.
+		RefundSetDNE,
 		/// Some value is out of the permitted range.
 		OutOfRange,
 		/// Service is under maintenance mode.
@@ -96,6 +98,8 @@ pub mod pallet {
 		PreSubmissionDNE,
 		/// The pool round is outdated.
 		PoolRoundOutdated,
+		/// Refund set is already requested.
+		RefundSetAlreadyRequested,
 	}
 
 	#[pallet::event]
@@ -111,8 +115,18 @@ pub mod pallet {
 			refund_address: BoundedBitcoinAddress,
 			vault_address: BoundedBitcoinAddress,
 		},
-		/// A user's refund address has been (re-)set.
-		RefundSet { who: T::AccountId, old: BoundedBitcoinAddress, new: BoundedBitcoinAddress },
+		/// A user's refund address (re-)set has been requested.
+		RefundSetRequested {
+			who: T::AccountId,
+			old: BoundedBitcoinAddress,
+			new: BoundedBitcoinAddress,
+		},
+		/// A user's refund address (re-)set has been approved.
+		RefundSetApproved {
+			who: T::AccountId,
+			old: BoundedBitcoinAddress,
+			new: BoundedBitcoinAddress,
+		},
 		/// Round's infos dropped.
 		RoundDropped(PoolRound),
 		/// The migration sequence has started. Waiting for prepare next system vault.
@@ -232,6 +246,19 @@ pub mod pallet {
 	/// The latest transaction(s) information used for the ongoing vault migration protocol.
 	pub type OngoingVaultMigration<T: Config> = StorageValue<_, BTreeMap<H256, bool>, ValueQuery>;
 
+	#[pallet::storage]
+	/// The pending refund sets.
+	/// The key is the pool round and user address, and the value is the pending refund address.
+	pub type PendingSetRefunds<T: Config> = StorageDoubleMap<
+		_,
+		Twox64Concat,
+		PoolRound,
+		Twox64Concat,
+		T::AccountId,
+		BoundedBitcoinAddress,
+		OptionQuery,
+	>;
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
@@ -263,8 +290,11 @@ pub mod pallet {
 	{
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// (Re-)set the user's refund address.
-		pub fn set_refund(origin: OriginFor<T>, new: UnboundedBytes) -> DispatchResultWithPostInfo {
+		/// Request to (re-)set the user's refund address.
+		pub fn request_set_refund(
+			origin: OriginFor<T>,
+			new: UnboundedBytes,
+		) -> DispatchResultWithPostInfo {
 			ensure!(
 				Self::service_state() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
@@ -274,7 +304,7 @@ pub mod pallet {
 			let new: BoundedBitcoinAddress = Self::get_checked_bitcoin_address(&new)?;
 			let current_round = Self::current_round();
 
-			let mut relay_target =
+			let relay_target =
 				<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 			let old = relay_target.refund_address.clone();
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -283,20 +313,13 @@ pub mod pallet {
 				!<BondedVault<T>>::contains_key(current_round, &new),
 				Error::<T>::AddressAlreadyRegistered
 			);
+			ensure!(
+				<PendingSetRefunds<T>>::get(current_round, &who).is_none(),
+				Error::<T>::RefundSetAlreadyRequested
+			);
 
-			// remove from previous bond
-			<BondedRefund<T>>::mutate(current_round, &old, |users| {
-				users.retain(|u| *u != who);
-			});
-			// add to new bond
-			<BondedRefund<T>>::mutate(current_round, &new, |users| {
-				users.push(who.clone());
-			});
-
-			relay_target.set_refund_address(new.clone());
-			<RegistrationPool<T>>::insert(current_round, &who, relay_target);
-
-			Self::deposit_event(Event::RefundSet { who, old, new });
+			<PendingSetRefunds<T>>::insert(current_round, who.clone(), new.clone());
+			Self::deposit_event(Event::RefundSetRequested { who, old, new });
 
 			Ok(().into())
 		}
@@ -666,7 +689,10 @@ pub mod pallet {
 
 			match Self::service_state() {
 				MigrationSequence::Normal => {
-					ensure!(T::SocketQueue::is_ready_for_migrate(), Error::<T>::SocketQueueNotReady);
+					ensure!(
+						T::SocketQueue::is_ready_for_migrate(),
+						Error::<T>::SocketQueueNotReady
+					);
 					Self::deposit_event(Event::MigrationStarted);
 					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
 				},
@@ -762,6 +788,54 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(11)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Approves the given pending set refund requests.
+		pub fn approve_set_refunds(
+			origin: OriginFor<T>,
+			approval: SetRefundsApproval<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			ensure!(
+				Self::service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
+			let SetRefundsApproval { refund_sets, pool_round, .. } = approval;
+
+			let current_round = Self::current_round();
+			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
+
+			for refund_set in &refund_sets {
+				let who = refund_set.0.clone();
+				let pending = <PendingSetRefunds<T>>::get(current_round, &who)
+					.ok_or(Error::<T>::RefundSetDNE)?;
+				ensure!(pending == refund_set.1, Error::<T>::RefundSetDNE);
+
+				let mut relay_target =
+					<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
+				// remove from previous bond
+				let old = relay_target.refund_address.clone();
+				<BondedRefund<T>>::mutate(current_round, &old, |users| {
+					users.retain(|u| *u != who);
+				});
+				// add to new bond
+				<BondedRefund<T>>::mutate(current_round, &pending, |users| {
+					users.push(who.clone());
+				});
+
+				relay_target.set_refund_address(pending.clone());
+				<RegistrationPool<T>>::insert(current_round, &who, relay_target);
+				<PendingSetRefunds<T>>::remove(current_round, &who);
+
+				Self::deposit_event(Event::RefundSetApproved { who, old, new: pending });
+			}
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -781,6 +855,9 @@ pub mod pallet {
 				},
 				Call::vault_key_presubmission { key_submission, signature } => {
 					Self::verify_key_presubmission(key_submission, signature)
+				},
+				Call::approve_set_refunds { approval, signature } => {
+					Self::verify_set_refunds_approval(approval, signature)
 				},
 				_ => InvalidTransaction::Call.into(),
 			}
