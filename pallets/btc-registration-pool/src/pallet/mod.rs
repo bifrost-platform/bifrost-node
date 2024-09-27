@@ -11,7 +11,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{MigrationSequence, Network, Public, PublicKey, UnboundedBytes};
+use bp_multi_sig::{
+	traits::SocketQueueManager, MigrationSequence, Network, Public, PublicKey, UnboundedBytes,
+};
 use sp_core::{H160, H256};
 use sp_runtime::{
 	traits::{IdentifyAccount, Verify},
@@ -46,6 +48,8 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
+		/// Interface of Bitcoin Socket Queue pallet.
+		type SocketQueue: SocketQueueManager<Self::AccountId>;
 		/// The minimum required number of signatures to send a transaction with the vault account. (in percentage)
 		#[pallet::constant]
 		type DefaultMultiSigRatio: Get<Percent>;
@@ -84,6 +88,8 @@ pub mod pallet {
 		OutOfRange,
 		/// Service is under maintenance mode.
 		UnderMaintenance,
+		/// SocketQueue is not ready for migration.
+		SocketQueueNotReady,
 		/// Do not control migration sequence in this state.
 		DoNotInterceptMigration,
 		/// Presubmission does not exist.
@@ -660,6 +666,7 @@ pub mod pallet {
 
 			match Self::service_state() {
 				MigrationSequence::Normal => {
+					ensure!(T::SocketQueue::is_ready_for_migrate(), Error::<T>::SocketQueueNotReady);
 					Self::deposit_event(Event::MigrationStarted);
 					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
 				},
