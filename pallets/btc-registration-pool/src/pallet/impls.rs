@@ -251,7 +251,10 @@ impl<T: Config> Pallet<T> {
 	pub fn verify_set_refunds_approval(
 		approval: &SetRefundsApproval<T::AccountId>,
 		signature: &T::Signature,
-	) -> TransactionValidity {
+	) -> TransactionValidity
+	where
+		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
+	{
 		let SetRefundsApproval { authority_id, refund_sets, pool_round } = approval;
 
 		// verify if the authority matches with the `SocketQueue::Authority`.
@@ -262,8 +265,8 @@ impl<T: Config> Pallet<T> {
 			"{}:{}",
 			pool_round,
 			refund_sets
-				.iter()
-				.map(|x| format!("{:?}:{}", x.0, array_bytes::bytes2hex("", &x.1.to_vec())))
+				.into_iter()
+				.map(|x| hex::encode(x.0.clone()))
 				.collect::<Vec<String>>()
 				.concat()
 		);

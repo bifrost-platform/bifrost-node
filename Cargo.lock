@@ -6235,6 +6235,7 @@ dependencies = [
  "bp-multi-sig",
  "frame-support",
  "frame-system",
+ "hex",
  "log",
  "parity-scale-codec",
  "scale-info",

@@ -848,6 +848,7 @@ pub mod pallet {
 	impl<T: Config> ValidateUnsigned for Pallet<T>
 	where
 		H160: Into<T::AccountId>,
+		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
 	{
 		type Call = Call<T>;
 
