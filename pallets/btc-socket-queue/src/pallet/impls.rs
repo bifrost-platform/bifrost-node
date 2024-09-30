@@ -23,12 +23,15 @@ use super::pallet::*;
 
 impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 	fn is_ready_for_migrate() -> bool {
-		let has_pending_requests = <PendingRequests<T>>::iter().next().is_some();
-		let has_finalized_requests = <FinalizedRequests<T>>::iter().next().is_some();
-		let has_rollback_requests = <RollbackRequests<T>>::iter().next().is_some();
+		let is_pending_requests_empty = <PendingRequests<T>>::iter().next().is_none();
+		let is_finalized_requests_empty = <FinalizedRequests<T>>::iter().next().is_none();
+		let is_pending_rollback_requests_empty =
+			<RollbackRequests<T>>::iter().all(|x| x.1.is_approved);
 
 		// Return true only if all request storages are empty.
-		has_pending_requests && has_finalized_requests && has_rollback_requests
+		is_pending_requests_empty
+			&& is_finalized_requests_empty
+			&& is_pending_rollback_requests_empty
 	}
 
 	fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
