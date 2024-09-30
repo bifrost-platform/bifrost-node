@@ -908,6 +908,9 @@ pub mod pallet {
 				Call::vault_key_presubmission { key_submission, signature } => {
 					Self::verify_key_presubmission(key_submission, signature)
 				},
+				Call::approve_set_refunds { approval, signature } => {
+					Self::verify_set_refunds_approval(approval, signature)
+				},
 				_ => InvalidTransaction::Call.into(),
 			}
 		}

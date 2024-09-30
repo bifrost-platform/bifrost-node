@@ -44,6 +44,17 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 			Err(InvalidTransaction::BadSigner.into())
 		}
 	}
+
+	fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
+		if let Some(a) = <Authority<T>>::get() {
+			if a != *authority_id {
+				return Err(InvalidTransaction::BadSigner.into());
+			}
+			Ok(())
+		} else {
+			Err(InvalidTransaction::BadSigner.into())
+		}
+	}
 }
 
 impl<T> Pallet<T>
