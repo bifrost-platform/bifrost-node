@@ -724,6 +724,29 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(10)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Drop a pending rollback request from `RollbackRequests`.
+		pub fn drop_pending_rollback_request(
+			origin: OriginFor<T>,
+			txid: H256,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				T::RegistrationPool::get_service_state() == MigrationSequence::Normal,
+				Error::<T>::UnderMaintenance
+			);
+
+			let pending_request =
+				<RollbackRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
+			ensure!(!pending_request.is_approved, Error::<T>::RequestDNE);
+
+			<RollbackRequests<T>>::remove(&txid);
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
