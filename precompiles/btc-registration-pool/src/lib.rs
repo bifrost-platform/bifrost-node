@@ -159,6 +159,51 @@ where
 		Ok((user_bfc_addresses, refund_addresses))
 	}
 
+	#[precompile::public("pendingRefund(address,uint32)")]
+	#[precompile::public("pending_refund(address,uint32)")]
+	#[precompile::view]
+	fn pending_refund(
+		handle: &mut impl PrecompileHandle,
+		user_bfc_address: Address,
+		pool_round: PoolRound,
+	) -> EvmResult<BitcoinAddressString> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
+
+		let target_round = Self::target_round(pool_round);
+		let mut result = BitcoinAddressString::from(vec![]);
+		if let Some(pending) = pallet_btc_registration_pool::PendingSetRefunds::<Runtime>::get(
+			target_round,
+			user_bfc_address,
+		) {
+			result = BitcoinAddressString::from(pending.new.into_inner());
+		}
+		Ok(result)
+	}
+
+	#[precompile::public("pendingRefunds(uint32)")]
+	#[precompile::public("pending_refunds(uint32)")]
+	#[precompile::view]
+	fn pending_refunds(
+		handle: &mut impl PrecompileHandle,
+		pool_round: PoolRound,
+	) -> EvmResult<Vec<(Address, BitcoinAddressString, BitcoinAddressString)>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let target_round = Self::target_round(pool_round);
+
+		Ok(pallet_btc_registration_pool::PendingSetRefunds::<Runtime>::iter_prefix(target_round)
+			.map(|(who, pending)| {
+				(
+					Address(who.into()),
+					BitcoinAddressString::from(pending.old.into_inner()),
+					BitcoinAddressString::from(pending.new.into_inner()),
+				)
+			})
+			.collect())
+	}
+
 	#[precompile::public("vaultAddresses(uint32)")]
 	#[precompile::public("vault_addresses(uint32)")]
 	#[precompile::view]
@@ -363,9 +408,9 @@ where
 		Ok(())
 	}
 
-	#[precompile::public("set_refund(string)")]
-	#[precompile::public("setRefund(string)")]
-	fn set_refund(
+	#[precompile::public("request_set_refund(string)")]
+	#[precompile::public("requestSetRefund(string)")]
+	fn request_set_refund(
 		handle: &mut impl PrecompileHandle,
 		refund_address: BitcoinAddressString,
 	) -> EvmResult {
@@ -379,7 +424,8 @@ where
 		let refund_address = Self::convert_string_to_bitcoin_address(raw_refund_address.clone())
 			.in_field("refund_address")?;
 
-		let call = BtcRegistrationPoolCall::<Runtime>::set_refund { new: refund_address.to_vec() };
+		let call =
+			BtcRegistrationPoolCall::<Runtime>::request_set_refund { new: refund_address.to_vec() };
 		let origin = Runtime::AddressMapping::into_account_id(caller);
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 

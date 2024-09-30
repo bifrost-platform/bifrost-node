@@ -78,3 +78,19 @@ pub struct VaultKeyPreSubmission<AccountId> {
 	/// The pool round.
 	pub pool_round: PoolRound,
 }
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SetRefundsApproval<AccountId> {
+	/// The authority Ethereum address. (`SocketQueue::Authority`)
+	pub authority_id: AccountId,
+	/// The approved set refunds. (0: The user's Bifrost address, 1: The user's new refund address)
+	pub refund_sets: Vec<(AccountId, BoundedBitcoinAddress)>,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SetRefundState {
+	pub old: BoundedBitcoinAddress,
+	pub new: BoundedBitcoinAddress,
+}

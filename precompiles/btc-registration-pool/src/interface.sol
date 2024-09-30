@@ -9,6 +9,12 @@ pragma solidity >=0.8.0;
  */
 
 interface BtcRegistrationPool {
+    struct pending_refund_state {
+        address who;
+        string old_refund;
+        string new_refund;
+    }
+
     /// @dev A new user registered to the pool and requested a vault address.
     /// @custom:selector 74c27c8e12077f7a75a6835488f5eb938a8f9f8b66aaac0ebcf7dcbb6d1324f2
     /// @param user_bfc_address The registered Bifrost address.
@@ -54,6 +60,22 @@ interface BtcRegistrationPool {
     function pending_registrations(
         uint32 pool_round
     ) external view returns (address[] memory, string[] memory);
+
+    /// @dev Returns the pending refund address of the given user
+    /// @custom:selector f2fb9475
+    /// @param user_bfc_address the address that we want to check
+    /// @return A pending Bitcoin refund address
+    function pending_refund(
+        address user_bfc_address,
+        uint32 pool_round
+    ) external view returns (string memory);
+
+    /// @dev Returns the pending refunds of the given round
+    /// @custom:selector c828b379
+    /// @return The list of the pending refunds
+    function pending_refunds(
+        uint32 pool_round
+    ) external view returns (pending_refund_state[] memory);
 
     /// @dev Returns the current bonded vault addresses
     /// @custom:selector fd26a335
@@ -118,7 +140,7 @@ interface BtcRegistrationPool {
     function request_vault(string memory refund_address) external;
 
     /// @dev (Re-)set the user's refund address.
-    /// @custom:selector 7d538c00
+    /// @custom:selector 0e9212a7
     /// @param refund_address The Bitcoin refund address
-    function set_refund(string memory refund_address) external;
+    function request_set_refund(string memory refund_address) external;
 }

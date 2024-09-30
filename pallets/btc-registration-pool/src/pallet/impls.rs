@@ -1,6 +1,7 @@
 use bp_multi_sig::{
-	traits::PoolManager, Address, AddressState, Descriptor, Error as KeyError, MigrationSequence,
-	MultiSigAccount, Network, PublicKey, UnboundedBytes,
+	traits::{PoolManager, SocketQueueManager},
+	Address, AddressState, Descriptor, Error as KeyError, MigrationSequence, MultiSigAccount,
+	Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
 use scale_info::prelude::{
@@ -17,7 +18,9 @@ use sp_runtime::{
 };
 use sp_std::{str, str::FromStr, vec::Vec};
 
-use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
+use crate::{
+	BoundedBitcoinAddress, Public, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission,
+};
 
 use super::pallet::*;
 
@@ -240,6 +243,37 @@ impl<T: Config> Pallet<T> {
 		ValidTransaction::with_tag_prefix("KeyPreSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides((authority_id, pub_keys))
+			.propagate(true)
+			.build()
+	}
+
+	/// Verifies the refund set approval signature.
+	pub fn verify_set_refunds_approval(
+		approval: &SetRefundsApproval<T::AccountId>,
+		signature: &T::Signature,
+	) -> TransactionValidity {
+		let SetRefundsApproval { authority_id, refund_sets, pool_round } = approval;
+
+		// verify if the authority matches with the `SocketQueue::Authority`.
+		T::SocketQueue::verify_authority(authority_id)?;
+
+		// verify if the signature was originated from the authority.
+		let message = format!(
+			"{}:{}",
+			pool_round,
+			refund_sets
+				.iter()
+				.map(|x| format!("{:?}:{:?}", x.0, x.1))
+				.collect::<Vec<String>>()
+				.concat()
+		);
+		if !signature.verify(message.as_bytes(), &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
+		ValidTransaction::with_tag_prefix("SetRefundsApproval")
+			.priority(TransactionPriority::MAX)
+			.and_provides((authority_id, refund_sets))
 			.propagate(true)
 			.build()
 	}

@@ -1,5 +1,6 @@
 use miniscript::bitcoin::Network;
 use sp_core::H256;
+use sp_runtime::transaction_validity::TransactionValidityError;
 
 use crate::{BoundedBitcoinAddress, MigrationSequence};
 
@@ -35,4 +36,7 @@ pub trait PoolManager<AccountId> {
 pub trait SocketQueueManager<AccountId> {
 	/// Check if the system is ready for migrate.
 	fn is_ready_for_migrate() -> bool;
+
+	/// Verify if the `authority_id` is valid.
+	fn verify_authority(authority_id: &AccountId) -> Result<(), TransactionValidityError>;
 }

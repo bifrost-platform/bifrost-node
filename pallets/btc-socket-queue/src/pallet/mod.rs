@@ -13,7 +13,8 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_multi_sig::{
-	traits::PoolManager, Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
+	traits::{PoolManager, SocketQueueManager},
+	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
 use miniscript::bitcoin::FeeRate;
