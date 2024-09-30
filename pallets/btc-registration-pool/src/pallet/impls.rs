@@ -263,7 +263,7 @@ impl<T: Config> Pallet<T> {
 			pool_round,
 			refund_sets
 				.iter()
-				.map(|x| format!("{:?}:{:?}", x.0, x.1))
+				.map(|x| format!("{:?}:{}", x.0, array_bytes::bytes2hex("", &x.1.to_vec())))
 				.collect::<Vec<String>>()
 				.concat()
 		);
