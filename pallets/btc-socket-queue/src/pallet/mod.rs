@@ -741,7 +741,7 @@ pub mod pallet {
 					let mut rollback_request =
 						<RollbackRequests<T>>::take(&old_txid).ok_or(Error::<T>::RequestDNE)?;
 					rollback_request.unsigned_psbt = new_unsigned_psbt.clone();
-					<RollbackRequests<T>>::insert(&old_txid, rollback_request.clone());
+					<RollbackRequests<T>>::insert(&new_txid, rollback_request.clone());
 
 					// (re-)insert BondedRollbackOutputs
 					<BondedRollbackOutputs<T>>::insert(
