@@ -231,14 +231,21 @@ where
 
 			if let Some(old_amount) = old_outputs_map.get(&to) {
 				let new_amount = U256::from(output.value.to_sat());
+				let fee_diff = U256::from(
+					new_fee.checked_sub(old_fee).ok_or(Error::<T>::InvalidPsbt)?.to_sat(),
+				);
+				let amount_diff =
+					old_amount.checked_sub(new_amount).ok_or(Error::<T>::InvalidPsbt)?;
 				match request_type {
-					RequestType::Migration | RequestType::Rollback => {
-						let fee_diff = U256::from(
-							new_fee.checked_sub(old_fee).ok_or(Error::<T>::InvalidPsbt)?.to_sat(),
-						);
-						let amount_diff =
-							old_amount.checked_sub(new_amount).ok_or(Error::<T>::InvalidPsbt)?;
-						if fee_diff != amount_diff {
+					RequestType::Migration => {
+						// fees are subtracted from the system vault output
+						if to == system_vault && fee_diff != amount_diff {
+							return Err(Error::<T>::InvalidPsbt.into());
+						}
+					},
+					RequestType::Rollback => {
+						// fees are subtracted from the user output
+						if to != system_vault && fee_diff != amount_diff {
 							return Err(Error::<T>::InvalidPsbt.into());
 						}
 					},
