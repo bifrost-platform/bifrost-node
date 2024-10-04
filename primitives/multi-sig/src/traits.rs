@@ -29,6 +29,9 @@ pub trait PoolManager<AccountId> {
 	/// Add a migration transaction.
 	fn add_migration_tx(txid: H256);
 
+	/// Remove a migration transaction.
+	fn remove_migration_tx(txid: H256);
+
 	/// Execute a migration transaction.
 	fn execute_migration_tx(txid: H256);
 }

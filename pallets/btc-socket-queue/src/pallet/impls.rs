@@ -1,5 +1,5 @@
 use crate::{
-	HashKeyRequest, RequestInfo, SocketMessage, TxInfo, UserRequest,
+	HashKeyRequest, RequestInfo, RequestType, SocketMessage, TxInfo, UserRequest,
 	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 use bp_multi_sig::{
@@ -170,6 +170,7 @@ where
 	pub fn try_bump_fee_psbt_verification(
 		old_psbt: &Psbt,
 		new_psbt: &Psbt,
+		request_type: &RequestType,
 	) -> Result<(), DispatchError> {
 		let old_psbt_inputs = &old_psbt.unsigned_tx.input;
 		let old_psbt_outputs = &old_psbt.unsigned_tx.output;
@@ -230,11 +231,29 @@ where
 
 			if let Some(old_amount) = old_outputs_map.get(&to) {
 				let new_amount = U256::from(output.value.to_sat());
-				// user output amount must be identical
-				if to != system_vault && new_amount != *old_amount {
-					return Err(Error::<T>::InvalidPsbt.into());
+				match request_type {
+					RequestType::Migration | RequestType::Rollback => {
+						let fee_diff = U256::from(
+							new_fee.checked_sub(old_fee).ok_or(Error::<T>::InvalidPsbt)?.to_sat(),
+						);
+						let amount_diff =
+							old_amount.checked_sub(new_amount).ok_or(Error::<T>::InvalidPsbt)?;
+						if fee_diff != amount_diff {
+							return Err(Error::<T>::InvalidPsbt.into());
+						}
+					},
+					_ => {
+						// user output amount must be identical
+						if to != system_vault && new_amount != *old_amount {
+							return Err(Error::<T>::InvalidPsbt.into());
+						}
+					},
 				}
 			} else {
+				// every single output should match and exist for migration requests
+				if matches!(request_type, RequestType::Migration) {
+					return Err(Error::<T>::InvalidPsbt.into());
+				}
 				// which means that a change position has been included.
 				// the address must match with the system vault.
 				if to != system_vault {
