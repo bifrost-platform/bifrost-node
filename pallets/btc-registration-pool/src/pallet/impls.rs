@@ -72,25 +72,25 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn add_migration_tx(txid: H256) {
-		let mut state = <OngoingVaultMigration<T>>::get();
-		if state.get(&txid).is_none() {
-			state.insert(txid, false);
-			<OngoingVaultMigration<T>>::put(state);
-		}
+		<OngoingVaultMigration<T>>::mutate(|states| {
+			if states.get(&txid).is_none() {
+				states.insert(txid, false);
+			}
+		});
 	}
 
 	fn remove_migration_tx(txid: H256) {
-		let mut state = <OngoingVaultMigration<T>>::get();
-		state.remove(&txid);
-		<OngoingVaultMigration<T>>::put(state);
+		<OngoingVaultMigration<T>>::mutate(|states| {
+			states.remove(&txid);
+		});
 	}
 
 	fn execute_migration_tx(txid: H256) {
-		let mut state = <OngoingVaultMigration<T>>::get();
-		if state.get(&txid).is_some() {
-			state.insert(txid, true);
-			<OngoingVaultMigration<T>>::put(state);
-		}
+		<OngoingVaultMigration<T>>::mutate(|states| {
+			if states.get(&txid).is_some() {
+				states.insert(txid, true);
+			}
+		});
 	}
 }
 
