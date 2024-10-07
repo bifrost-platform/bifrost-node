@@ -17,11 +17,12 @@ use bp_multi_sig::{
 };
 use sp_core::{H160, H256};
 use sp_runtime::{
-	traits::{IdentifyAccount, Verify},
+	traits::{Block, Header, IdentifyAccount, Verify},
 	Percent,
 };
 use sp_std::{
 	collections::{btree_map::BTreeMap, btree_set::BTreeSet},
+	fmt::Display,
 	vec::Vec,
 };
 
@@ -857,6 +858,7 @@ pub mod pallet {
 	where
 		H160: Into<T::AccountId>,
 		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
+		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
 	{
 		type Call = Call<T>;
 

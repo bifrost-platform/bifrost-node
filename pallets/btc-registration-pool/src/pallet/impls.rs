@@ -12,13 +12,13 @@ use scale_info::prelude::{
 use sp_core::{Get, H256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::Verify,
+	traits::{Block, Header, Verify},
 	transaction_validity::{
 		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 	},
 	BoundedVec, DispatchError,
 };
-use sp_std::{str, str::FromStr, vec::Vec};
+use sp_std::{fmt::Display, str, str::FromStr, vec::Vec};
 
 use crate::{
 	BoundedBitcoinAddress, Public, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission,
@@ -256,6 +256,7 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity
 	where
 		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
+		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
 	{
 		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
 
@@ -272,7 +273,7 @@ impl<T: Config> Pallet<T> {
 		let message = [
 			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
 			format!(
-				"{}:{:?}:{}",
+				"{}:{}:{}",
 				pool_round,
 				deadline,
 				refund_sets
