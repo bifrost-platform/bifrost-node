@@ -4,6 +4,7 @@ use bp_multi_sig::{
 	Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
+use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::{
 	format,
 	string::{String, ToString},
@@ -249,21 +250,28 @@ impl<T: Config> Pallet<T> {
 
 	/// Verifies the refund set approval signature.
 	pub fn verify_set_refunds_approval(
-		approval: &SetRefundsApproval<T::AccountId>,
+		approval: &SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
 		signature: &T::Signature,
 	) -> TransactionValidity
 	where
 		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
 	{
-		let SetRefundsApproval { authority_id, refund_sets, pool_round } = approval;
+		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
 
 		// verify if the authority matches with the `SocketQueue::Authority`.
 		T::SocketQueue::verify_authority(authority_id)?;
 
+		// verify if the deadline is not expired.
+		let now = <frame_system::Pallet<T>>::block_number();
+		if now > *deadline {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
 		// verify if the signature was originated from the authority.
 		let message = format!(
-			"{}:{}",
+			"{}:{}:{}",
 			pool_round,
+			deadline,
 			refund_sets
 				.into_iter()
 				.map(|x| hex::encode(x.0.clone()))

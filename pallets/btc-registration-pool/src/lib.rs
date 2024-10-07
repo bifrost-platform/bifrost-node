@@ -80,13 +80,15 @@ pub struct VaultKeyPreSubmission<AccountId> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct SetRefundsApproval<AccountId> {
+pub struct SetRefundsApproval<AccountId, BlockNumber> {
 	/// The authority Ethereum address. (`SocketQueue::Authority`)
 	pub authority_id: AccountId,
 	/// The approved set refunds. (0: The user's Bifrost address, 1: The user's new refund address)
 	pub refund_sets: Vec<(AccountId, BoundedBitcoinAddress)>,
 	/// The pool round.
 	pub pool_round: PoolRound,
+	/// The deadline of the approval.
+	pub deadline: BlockNumber,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]

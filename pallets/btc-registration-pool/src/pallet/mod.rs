@@ -800,7 +800,7 @@ pub mod pallet {
 		/// Approves the given pending set refund requests.
 		pub fn approve_set_refunds(
 			origin: OriginFor<T>,
-			approval: SetRefundsApproval<T::AccountId>,
+			approval: SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
