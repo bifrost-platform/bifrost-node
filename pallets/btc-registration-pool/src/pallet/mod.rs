@@ -805,13 +805,13 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
 			let SetRefundsApproval { refund_sets, pool_round, .. } = approval;
 
-			let current_round = Self::current_round();
+			let current_round = CurrentRound::<T>::get();
 			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			for refund_set in &refund_sets {
