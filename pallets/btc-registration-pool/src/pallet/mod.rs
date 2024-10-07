@@ -821,23 +821,31 @@ pub mod pallet {
 					.ok_or(Error::<T>::RefundSetDNE)?;
 				ensure!(pending.new == refund_set.1, Error::<T>::RefundSetDNE);
 
-				let mut relay_target =
-					<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
-				// remove from previous bond
-				let old = relay_target.refund_address.clone();
-				<BondedRefund<T>>::mutate(current_round, &old, |users| {
-					users.retain(|u| *u != who);
-				});
-				// add to new bond
-				<BondedRefund<T>>::mutate(current_round, &pending.new, |users| {
-					users.push(who.clone());
-				});
+				// check if the new refund address is already bonded as a vault
+				// if it is, then we just remove the pending refund set and do nothing
+				if !<BondedVault<T>>::contains_key(current_round, &pending.new) {
+					let mut relay_target = <RegistrationPool<T>>::get(current_round, &who)
+						.ok_or(Error::<T>::UserDNE)?;
+					// remove from previous bond
+					let old = relay_target.refund_address.clone();
+					<BondedRefund<T>>::mutate(current_round, &old, |users| {
+						users.retain(|u| *u != who);
+					});
+					// add to new bond
+					<BondedRefund<T>>::mutate(current_round, &pending.new, |users| {
+						users.push(who.clone());
+					});
 
-				relay_target.set_refund_address(pending.new.clone());
-				<RegistrationPool<T>>::insert(current_round, &who, relay_target);
+					relay_target.set_refund_address(pending.new.clone());
+					<RegistrationPool<T>>::insert(current_round, &who, relay_target);
+
+					Self::deposit_event(Event::RefundSetApproved {
+						who: who.clone(),
+						old,
+						new: pending.new,
+					});
+				}
 				<PendingSetRefunds<T>>::remove(current_round, &who);
-
-				Self::deposit_event(Event::RefundSetApproved { who, old, new: pending.new });
 			}
 
 			Ok(().into())

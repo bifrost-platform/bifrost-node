@@ -9,7 +9,8 @@ use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
-use sp_core::{keccak_256, Get, H256};
+use sp_core::{Get, H256};
+use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	traits::Verify,
 	transaction_validity::{
@@ -271,7 +272,7 @@ impl<T: Config> Pallet<T> {
 		let message = [
 			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
 			format!(
-				"{}:{}:{}",
+				"{}:{:?}:{}",
 				pool_round,
 				deadline,
 				refund_sets
