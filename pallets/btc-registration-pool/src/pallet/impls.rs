@@ -9,7 +9,7 @@ use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
-use sp_core::{Get, H256};
+use sp_core::{keccak_256, Get, H256};
 use sp_runtime::{
 	traits::Verify,
 	transaction_validity::{
@@ -268,17 +268,22 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// verify if the signature was originated from the authority.
-		let message = format!(
-			"{}:{}:{}",
-			pool_round,
-			deadline,
-			refund_sets
-				.into_iter()
-				.map(|x| hex::encode(x.0.clone()))
-				.collect::<Vec<String>>()
-				.concat()
-		);
-		if !signature.verify(message.as_bytes(), &authority_id) {
+		let message = [
+			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
+			format!(
+				"{}:{}:{}",
+				pool_round,
+				deadline,
+				refund_sets
+					.into_iter()
+					.map(|x| hex::encode(x.0.clone()))
+					.collect::<Vec<String>>()
+					.concat()
+			)
+			.as_bytes(),
+		]
+		.concat();
+		if !signature.verify(&*message, &authority_id) {
 			return Err(InvalidTransaction::BadProof.into());
 		}
 
