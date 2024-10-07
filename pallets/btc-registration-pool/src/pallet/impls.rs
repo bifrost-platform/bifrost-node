@@ -265,7 +265,7 @@ impl<T: Config> Pallet<T> {
 		// verify if the deadline is not expired.
 		let now = <frame_system::Pallet<T>>::block_number();
 		if now > *deadline {
-			return Err(InvalidTransaction::BadProof.into());
+			return Err(InvalidTransaction::Stale.into());
 		}
 
 		// verify if the signature was originated from the authority.
