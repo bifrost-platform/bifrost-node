@@ -1,7 +1,7 @@
 [package]
-name = "bp-multi-sig"
+name = "bp-btc-relay"
 version = "0.0.1"
-description = "Primitives for multi-signature accounts"
+description = "Primitives for the Bitcoin Relay Protocol (BRP)"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }

@@ -7,7 +7,7 @@ use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
-use bp_multi_sig::{AddressState, BoundedBitcoinAddress, MigrationSequence};
+use bp_btc_relay::{AddressState, BoundedBitcoinAddress, MigrationSequence};
 use fp_account::EthereumSignature;
 use sp_core::H160;
 use sp_runtime::{traits::Dispatchable, BoundedVec};

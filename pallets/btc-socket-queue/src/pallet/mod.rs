@@ -12,7 +12,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{
+use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };

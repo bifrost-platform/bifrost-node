@@ -1,4 +1,4 @@
-use bp_multi_sig::ADDRESS_MAX_LENGTH;
+use bp_btc_relay::ADDRESS_MAX_LENGTH;
 use sp_core::{ConstU32, H256, U256};
 use sp_std::{vec, vec::Vec};
 

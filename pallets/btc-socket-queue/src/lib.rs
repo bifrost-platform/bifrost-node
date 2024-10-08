@@ -11,7 +11,7 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use bp_multi_sig::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_btc_relay::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use bp_staking::MAX_AUTHORITIES;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;

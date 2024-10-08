@@ -12,7 +12,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{
+use bp_btc_relay::{
 	traits::SocketQueueManager, MigrationSequence, Network, Public, PublicKey, UnboundedBytes,
 };
 use sp_core::{H160, H256};

@@ -12,8 +12,8 @@ pub use bifrost_testnet_constants::{
 	time::*,
 };
 
+use bp_btc_relay::Network;
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
-use bp_multi_sig::Network;
 use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;

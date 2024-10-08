@@ -1,4 +1,4 @@
-use bp_multi_sig::{
+use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager},
 	Address, AddressState, Descriptor, Error as KeyError, MigrationSequence, MultiSigAccount,
 	Network, PublicKey, UnboundedBytes,

@@ -12,7 +12,7 @@ use scale_info::TypeInfo;
 use sp_core::RuntimeDebug;
 use sp_std::vec::Vec;
 
-use bp_multi_sig::{BoundedBitcoinAddress, MultiSigAccount, Public};
+use bp_btc_relay::{BoundedBitcoinAddress, MultiSigAccount, Public};
 
 pub const ADDRESS_U64: u64 = 256;
 
