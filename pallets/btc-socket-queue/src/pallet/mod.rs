@@ -510,7 +510,7 @@ pub mod pallet {
 					Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?;
 
 				if to == system_vault {
-					// if change exsits, the psbt must contain exactly two outputs.
+					// if change exists, the psbt must contain exactly two outputs.
 					ensure!(outputs.len() == 2, Error::<T>::InvalidPsbt);
 					continue;
 				}
