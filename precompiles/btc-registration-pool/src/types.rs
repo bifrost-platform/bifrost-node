@@ -1,4 +1,4 @@
-use bp_multi_sig::{ADDRESS_MAX_LENGTH, PUBLIC_KEY_LENGTH};
+use bp_btc_relay::{ADDRESS_MAX_LENGTH, PUBLIC_KEY_LENGTH};
 
 use precompile_utils::prelude::{Address, BoundedBytes, BoundedString};
 use sp_core::ConstU32;

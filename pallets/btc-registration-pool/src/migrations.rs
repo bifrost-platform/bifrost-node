@@ -4,7 +4,7 @@ pub mod init_v1 {
 	use core::marker::PhantomData;
 
 	use super::*;
-	use bp_multi_sig::MigrationSequence;
+	use bp_btc_relay::MigrationSequence;
 	use frame_support::{
 		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
 		weights::Weight,

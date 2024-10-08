@@ -12,7 +12,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{
+use bp_btc_relay::{
 	traits::SocketQueueManager, MigrationSequence, Network, Public, PublicKey, UnboundedBytes,
 };
 use sp_core::{H160, H256};
@@ -241,6 +241,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn max_presubmission)]
+	/// The maximum number of pre-submitted public keys.
 	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
@@ -641,6 +642,7 @@ pub mod pallet {
 
 		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Clear a vault and all its related data.
 		pub fn clear_vault(
 			origin: OriginFor<T>,
 			vault_address: UnboundedBytes,
@@ -691,6 +693,9 @@ pub mod pallet {
 		///
 		/// # Sequence Order
 		/// * `Normal` → `SetExecutiveMembers` → `PrepareNextSystemVault` → `UTXOTransfer` → `Normal`
+		///
+		/// # Note
+		/// The migration control is only available when the service is in `Normal` state.
 		pub fn migration_control(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin.clone())?;
 
@@ -734,9 +739,10 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		#[allow(unused_must_use)]
 		#[pallet::call_index(8)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		#[allow(deprecated)]
+		/// Drop a previous round and all its related data.
 		pub fn drop_previous_round(
 			origin: OriginFor<T>,
 			round: PoolRound,
@@ -751,12 +757,14 @@ pub mod pallet {
 
 			// remove all data related to the round
 			<SystemVault<T>>::remove(round);
-			<RegistrationPool<T>>::remove_prefix(round, None);
-			<BondedVault<T>>::remove_prefix(round, None);
-			<BondedRefund<T>>::remove_prefix(round, None);
-			<BondedPubKey<T>>::remove_prefix(round, None);
-			<BondedDescriptor<T>>::remove_prefix(round, None);
-			<PreSubmittedPubKeys<T>>::remove_prefix(round, None);
+
+			const REMOVE_LIMIT: u32 = u32::MAX;
+			<RegistrationPool<T>>::clear_prefix(round, REMOVE_LIMIT, None);
+			<BondedVault<T>>::clear_prefix(round, REMOVE_LIMIT, None);
+			<BondedRefund<T>>::clear_prefix(round, REMOVE_LIMIT, None);
+			<BondedPubKey<T>>::clear_prefix(round, REMOVE_LIMIT, None);
+			<BondedDescriptor<T>>::clear_prefix(round, REMOVE_LIMIT, None);
+			<PreSubmittedPubKeys<T>>::clear_prefix(round, REMOVE_LIMIT, None);
 
 			Self::deposit_event(Event::RoundDropped(round));
 
@@ -765,6 +773,7 @@ pub mod pallet {
 
 		#[pallet::call_index(9)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Set the maximum number of public keys that can be presubmitted.
 		pub fn set_max_presubmission(origin: OriginFor<T>, max: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
@@ -777,7 +786,7 @@ pub mod pallet {
 
 		#[pallet::call_index(10)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// (Re-)set a new `MultiSigRatio`.
+		/// Set the ratio of the multi-signature threshold.
 		pub fn set_multi_sig_ratio(
 			origin: OriginFor<T>,
 			new: Percent,
@@ -798,7 +807,7 @@ pub mod pallet {
 
 		#[pallet::call_index(11)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Approves the given pending set refund requests.
+		/// Approve the given pending set refund requests.
 		pub fn approve_set_refunds(
 			origin: OriginFor<T>,
 			approval: SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,

@@ -26,7 +26,7 @@ members = [
 	"precompiles/btc-socket-queue",
 	"primitives/core",
 	"primitives/bfc-staking",
-	"primitives/multi-sig",
+	"primitives/btc-relay",
 ]
 [profile.release]
 panic = "unwind"
@@ -84,7 +84,7 @@ array-bytes = "6.1"
 # Bifrost Primitive
 bp-core = { default-features = false, path = "primitives/core" }
 bp-staking = { default-features = false, path = "primitives/bfc-staking" }
-bp-multi-sig = { default-features = false, path = "primitives/multi-sig" }
+bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }
 
 # Bifrost Runtime
 bifrost-common-constants = { default-features = false, path = "runtime/common/constants" }

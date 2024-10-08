@@ -25,7 +25,7 @@ sp-std = { workspace = true }
 sp-io = { workspace = true }
 
 # Bifrost
-bp-multi-sig = { workspace = true }
+bp-btc-relay = { workspace = true }
 
 [features]
 default = ["std"]
@@ -38,6 +38,6 @@ std = [
 	"sp-std/std",
 	"sp-core/std",
 	"sp-io/std",
-	"bp-multi-sig/std",
+	"bp-btc-relay/std",
 ]
 try-runtime = ["frame-support/try-runtime"]

@@ -12,7 +12,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_multi_sig::{
+use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
@@ -510,7 +510,7 @@ pub mod pallet {
 					Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?;
 
 				if to == system_vault {
-					// if change exsits, the psbt must contain exactly two outputs.
+					// if change exists, the psbt must contain exactly two outputs.
 					ensure!(outputs.len() == 2, Error::<T>::InvalidPsbt);
 					continue;
 				}
@@ -585,6 +585,7 @@ pub mod pallet {
 
 		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Submit a migration PSBT request.
 		pub fn submit_migration_request(
 			origin: OriginFor<T>,
 			psbt: UnboundedBytes,
@@ -641,6 +642,7 @@ pub mod pallet {
 
 		#[pallet::call_index(8)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Set the maximum fee rate for the PSBT.
 		pub fn set_max_fee_rate(origin: OriginFor<T>, new: u64) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 

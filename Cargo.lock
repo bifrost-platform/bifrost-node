@@ -799,8 +799,8 @@ version = "1.0.0"
 dependencies = [
  "bifrost-common-runtime",
  "bifrost-dev-constants",
+ "bp-btc-relay",
  "bp-core",
- "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",
@@ -1129,8 +1129,8 @@ version = "1.0.0"
 dependencies = [
  "bifrost-common-runtime",
  "bifrost-testnet-constants",
+ "bp-btc-relay",
  "bp-core",
- "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",
@@ -1402,17 +1402,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bp-core"
-version = "0.0.1"
-dependencies = [
- "fp-account",
- "fp-self-contained",
- "sp-core",
- "sp-runtime",
-]
-
-[[package]]
-name = "bp-multi-sig"
+name = "bp-btc-relay"
 version = "0.0.1"
 dependencies = [
  "miniscript",
@@ -1421,6 +1411,16 @@ dependencies = [
  "sp-core",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "bp-core"
+version = "0.0.1"
+dependencies = [
+ "fp-account",
+ "fp-self-contained",
+ "sp-core",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -6232,7 +6232,7 @@ name = "pallet-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.2",
- "bp-multi-sig",
+ "bp-btc-relay",
  "frame-support",
  "frame-system",
  "hex",
@@ -6250,7 +6250,7 @@ name = "pallet-btc-socket-queue"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.2",
- "bp-multi-sig",
+ "bp-btc-relay",
  "bp-staking",
  "ethabi-decode",
  "frame-support",
@@ -7083,7 +7083,7 @@ dependencies = [
 name = "precompile-btc-registration-pool"
 version = "1.0.0"
 dependencies = [
- "bp-multi-sig",
+ "bp-btc-relay",
  "fp-account",
  "fp-evm",
  "frame-support",
@@ -7102,7 +7102,7 @@ dependencies = [
 name = "precompile-btc-socket-queue"
 version = "1.0.0"
 dependencies = [
- "bp-multi-sig",
+ "bp-btc-relay",
  "fp-account",
  "fp-evm",
  "frame-support",

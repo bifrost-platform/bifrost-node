@@ -11,7 +11,7 @@ use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 
-use bp_multi_sig::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
+use bp_btc_relay::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
 use bp_staking::MAX_AUTHORITIES;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedBTreeMap;
@@ -86,6 +86,7 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The type of the PSBT request.
 pub enum RequestType {
 	/// PSBT for normal requests.
 	Normal,
@@ -302,7 +303,9 @@ impl TryFrom<Vec<Token>> for TaskParams {
 /// The `UserRequest`.
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct UserRequest {
+	/// The instruction code.
 	pub ins_code: Instruction,
+	/// The task parameters.
 	pub params: TaskParams,
 }
 
@@ -386,16 +389,20 @@ impl TryFrom<Vec<Token>> for TxInfo {
 			Token::Tuple(token) => token.clone().try_into()?,
 			_ => return Err(()),
 		};
-		return Ok(TxInfo { to, amount, vote_count, request_id });
+		Ok(TxInfo { to, amount, vote_count, request_id })
 	}
 }
 
 /// The `SocketMessage`.
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct SocketMessage {
+	/// The request ID.
 	pub req_id: RequestID,
+	/// The status of the message.
 	pub status: U256,
+	/// The instruction code.
 	pub ins_code: Instruction,
+	/// The task parameters.
 	pub params: TaskParams,
 }
 
@@ -447,7 +454,7 @@ impl TryFrom<Vec<Token>> for SocketMessage {
 			Token::Tuple(token) => token.clone().try_into()?,
 			_ => return Err(()),
 		};
-		return Ok(SocketMessage { req_id, status, ins_code, params });
+		Ok(SocketMessage { req_id, status, ins_code, params })
 	}
 }
 

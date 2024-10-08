@@ -12,7 +12,7 @@ repository = { workspace = true }
 # Bifrost
 pallet-btc-socket-queue = { workspace = true }
 precompile-utils = { workspace = true }
-bp-multi-sig = { workspace = true }
+bp-btc-relay = { workspace = true }
 
 # Substrate
 parity-scale-codec = { workspace = true, features = ["max-encoded-len"] }
@@ -41,5 +41,5 @@ std = [
 	"sp-core/std",
 	"sp-std/std",
 	"sp-runtime/std",
-	"bp-multi-sig/std",
+	"bp-btc-relay/std",
 ]

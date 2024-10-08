@@ -2,7 +2,7 @@ use crate::{
 	HashKeyRequest, RequestInfo, RequestType, SocketMessage, TxInfo, UserRequest,
 	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
-use bp_multi_sig::{
+use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager},
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
