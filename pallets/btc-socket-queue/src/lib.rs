@@ -86,6 +86,7 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The type of the PSBT request.
 pub enum RequestType {
 	/// PSBT for normal requests.
 	Normal,
@@ -302,7 +303,9 @@ impl TryFrom<Vec<Token>> for TaskParams {
 /// The `UserRequest`.
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct UserRequest {
+	/// The instruction code.
 	pub ins_code: Instruction,
+	/// The task parameters.
 	pub params: TaskParams,
 }
 
@@ -393,9 +396,13 @@ impl TryFrom<Vec<Token>> for TxInfo {
 /// The `SocketMessage`.
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct SocketMessage {
+	/// The request ID.
 	pub req_id: RequestID,
+	/// The status of the message.
 	pub status: U256,
+	/// The instruction code.
 	pub ins_code: Instruction,
+	/// The task parameters.
 	pub params: TaskParams,
 }
 

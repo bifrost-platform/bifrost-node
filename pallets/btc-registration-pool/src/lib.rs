@@ -80,6 +80,7 @@ pub struct VaultKeyPreSubmission<AccountId> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// The payload used for set refund approval.
 pub struct SetRefundsApproval<AccountId, BlockNumber> {
 	/// The authority Ethereum address. (`SocketQueue::Authority`)
 	pub authority_id: AccountId,
@@ -92,7 +93,10 @@ pub struct SetRefundsApproval<AccountId, BlockNumber> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// The payload used for set refund state.
 pub struct SetRefundState {
+	/// The old refund address.
 	pub old: BoundedBitcoinAddress,
+	/// The new refund address.
 	pub new: BoundedBitcoinAddress,
 }

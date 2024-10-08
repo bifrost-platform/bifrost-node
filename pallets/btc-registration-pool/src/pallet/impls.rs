@@ -223,6 +223,7 @@ impl<T: Config> Pallet<T> {
 			.build()
 	}
 
+	/// Verify the key pre-submission signature.
 	pub fn verify_key_presubmission(
 		vault_key_pre_submission: &VaultKeyPreSubmission<T::AccountId>,
 		signature: &T::Signature,
