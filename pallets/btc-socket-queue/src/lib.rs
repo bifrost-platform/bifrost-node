@@ -389,7 +389,7 @@ impl TryFrom<Vec<Token>> for TxInfo {
 			Token::Tuple(token) => token.clone().try_into()?,
 			_ => return Err(()),
 		};
-		return Ok(TxInfo { to, amount, vote_count, request_id });
+		Ok(TxInfo { to, amount, vote_count, request_id })
 	}
 }
 
@@ -454,7 +454,7 @@ impl TryFrom<Vec<Token>> for SocketMessage {
 			Token::Tuple(token) => token.clone().try_into()?,
 			_ => return Err(()),
 		};
-		return Ok(SocketMessage { req_id, status, ins_code, params });
+		Ok(SocketMessage { req_id, status, ins_code, params })
 	}
 }
 
