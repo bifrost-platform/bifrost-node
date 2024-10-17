@@ -72,7 +72,7 @@ export const provideWeb3Api = async (port: number, protocol: "ws" | "http" = "ht
 };
 
 export const provideEthersApi = async (port: number) => {
-  return new ethers.providers.JsonRpcProvider(`http://127.0.0.1:${port}`);
+  return new ethers.JsonRpcProvider(`http://127.0.0.1:${port}`);
 };
 
 export const providePolkadotApi = async (port: number, isNotBifrost?: boolean) => {

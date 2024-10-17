@@ -14,14 +14,19 @@ members = [
 	"pallets/bfc-utility",
 	"pallets/bfc-offences",
 	"pallets/relay-manager",
+	"pallets/btc-registration-pool",
+	"pallets/btc-socket-queue",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
 	"precompiles/governance",
 	"precompiles/collective",
 	"precompiles/balance",
+	"precompiles/btc-registration-pool",
+	"precompiles/btc-socket-queue",
 	"primitives/core",
 	"primitives/bfc-staking",
+	"primitives/btc-relay",
 ]
 [profile.release]
 panic = "unwind"
@@ -56,6 +61,10 @@ serde = { version = "1.0.101", default-features = false }
 jsonrpsee = { version = "0.16.3", default-features = false }
 rustc-hex = { version = "2.0.1", default-features = false }
 log = { version = "0.4.20", default-features = false }
+miniscript = { version = "11.0.0", default-features = false, features = [
+	"no-std",
+] }
+ethabi-decode = { version = "1.0.0", default-features = false }
 impl-trait-for-tuples = "0.2.2"
 similar-asserts = "1.1.0"
 prettyplease = "0.1.18"
@@ -70,10 +79,12 @@ affix = "0.1.2"
 quote = "1.0"
 case = "1.0"
 syn = "1.0"
+array-bytes = "6.1"
 
 # Bifrost Primitive
 bp-core = { default-features = false, path = "primitives/core" }
 bp-staking = { default-features = false, path = "primitives/bfc-staking" }
+bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }
 
 # Bifrost Runtime
 bifrost-common-constants = { default-features = false, path = "runtime/common/constants" }
@@ -96,6 +107,8 @@ pallet-bfc-staking = { default-features = false, path = "pallets/bfc-staking" }
 pallet-bfc-utility = { default-features = false, path = "pallets/bfc-utility" }
 pallet-bfc-offences = { default-features = false, path = "pallets/bfc-offences" }
 pallet-relay-manager = { default-features = false, path = "pallets/relay-manager" }
+pallet-btc-registration-pool = { default-features = false, path = "pallets/btc-registration-pool" }
+pallet-btc-socket-queue = { default-features = false, path = "pallets/btc-socket-queue" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -104,6 +117,8 @@ precompile-relay-manager = { default-features = false, path = "precompiles/relay
 precompile-governance = { default-features = false, path = "precompiles/governance" }
 precompile-collective = { default-features = false, path = "precompiles/collective" }
 precompile-balance = { default-features = false, path = "precompiles/balance" }
+precompile-btc-registration-pool = { default-features = false, path = "precompiles/btc-registration-pool" }
+precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-v1.3.0" }

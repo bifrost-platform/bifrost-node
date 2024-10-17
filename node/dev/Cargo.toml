@@ -64,6 +64,7 @@ fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }
 fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate"] }
 
+fp-evm = { workspace = true }
 fp-storage = { workspace = true }
 fp-ext = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }

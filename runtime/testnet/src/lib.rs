@@ -12,7 +12,9 @@ pub use bifrost_testnet_constants::{
 	time::*,
 };
 
+use bp_btc_relay::Network;
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
+use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
@@ -143,7 +145,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 464,
+	spec_version: 471,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -445,7 +447,32 @@ parameter_types! {
 	/// The maximum number of technical committee members.
 	pub const TechCommitteeMaxMembers: u32 = 100;
 
+	/// The maximum amount of time (in blocks) for relay executive members to vote on motions.
+	/// Motions may end in fewer blocks if enough votes are cast to determine the result.
+	pub const RelayExecutivesMotionDuration: BlockNumber = 1 * DAYS;
+	/// The maximum number of Proposals that can be open in the relay executives at once.
+	pub const RelayExecutivesMaxProposals: u32 = 100;
+	/// The maximum number of relay executive members.
+	pub const RelayExecutivesMaxMembers: u32 = 100;
+
 	pub MaxProposalWeight: Weight = BlockWeights::get().max_block;
+}
+
+/// A type that represents a relay executive member for governance
+type RelayExecutiveInstance = pallet_collective::Instance3;
+
+/// A module that grants relay executive members to participate for governance
+impl pallet_collective::Config<RelayExecutiveInstance> for Runtime {
+	type RuntimeOrigin = RuntimeOrigin;
+	type RuntimeEvent = RuntimeEvent;
+	type Proposal = RuntimeCall;
+	type MotionDuration = RelayExecutivesMotionDuration;
+	type MaxProposals = RelayExecutivesMaxProposals;
+	type MaxMembers = RelayExecutivesMaxMembers;
+	type DefaultVote = pallet_collective::MoreThanMajorityThenPrimeDefaultVote;
+	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
+	type MaxProposalWeight = MaxProposalWeight;
 }
 
 /// A type that represents a council member for governance
@@ -512,6 +539,25 @@ impl pallet_membership::Config<pallet_membership::Instance2> for Runtime {
 	type RemoveOrigin = MoreThanHalfCouncil;
 	type ResetOrigin = MoreThanHalfCouncil;
 	type SwapOrigin = MoreThanHalfCouncil;
+	type WeightInfo = ();
+}
+
+type MoreThanTwoThirdsRelayExecutives = EitherOfDiverse<
+	EnsureRoot<AccountId>,
+	pallet_collective::EnsureProportionAtLeast<AccountId, RelayExecutiveInstance, 2, 3>,
+>;
+
+/// A module that manages relay executive member authorities
+impl pallet_membership::Config<pallet_membership::Instance3> for Runtime {
+	type AddOrigin = MoreThanTwoThirdsRelayExecutives;
+	type RuntimeEvent = RuntimeEvent;
+	type MaxMembers = RelayExecutivesMaxMembers;
+	type MembershipChanged = RelayExecutive;
+	type MembershipInitialized = RelayExecutive;
+	type PrimeOrigin = MoreThanTwoThirdsRelayExecutives;
+	type RemoveOrigin = MoreThanTwoThirdsRelayExecutives;
+	type ResetOrigin = MoreThanTwoThirdsRelayExecutives;
+	type SwapOrigin = MoreThanTwoThirdsRelayExecutives;
 	type WeightInfo = ();
 }
 
@@ -928,6 +974,36 @@ impl pallet_base_fee::Config for Runtime {
 	type DefaultElasticity = DefaultElasticity;
 }
 
+impl pallet_btc_socket_queue::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
+	type Relayers = RelayManager;
+	type RegistrationPool = BtcRegistrationPool;
+	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
+	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+}
+
+parameter_types! {
+	pub const BitcoinChainId: u32 = 10001;
+	pub const BitcoinNetwork: Network = Network::Testnet;
+	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
+	pub const DefaultMaxFeeRate: u64 = 15;
+}
+
+impl pallet_btc_registration_pool::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
+	type SocketQueue = BtcSocketQueue;
+	type DefaultMultiSigRatio = DefaultMultiSigRatio;
+	type BitcoinChainId = BitcoinChainId;
+	type BitcoinNetwork = BitcoinNetwork;
+	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime {
@@ -974,6 +1050,12 @@ construct_runtime!(
 		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
 		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
 		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>, HoldReason} = 57,
+		RelayExecutive: pallet_collective::<Instance3>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 58,
+		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
+
+		// Bitcoin
+		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
+		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
 
 		// Temporary
 		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,
