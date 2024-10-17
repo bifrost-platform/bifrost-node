@@ -1,6 +1,6 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "author": "bifrost-platform",
   "scripts": {
     "test": "mocha -r ts-node/register tests/**/**/*.ts --exit",
