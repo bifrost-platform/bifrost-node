@@ -12,8 +12,8 @@ pub use bifrost_mainnet_constants::{
 	time::*,
 };
 
+use bp_btc_relay::Network;
 pub use bp_core::{AccountId, Address, Balance, BlockNumber, Hash, Header, Nonce, Signature};
-use bp_multi_sig::Network;
 use fp_account::{EthereumSignature, EthereumSigner};
 use fp_rpc::TransactionStatus;
 use fp_rpc_txpool::TxPoolResponse;
@@ -988,7 +988,6 @@ impl pallet_base_fee::Config for Runtime {
 
 impl pallet_btc_socket_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type SetOrigin = MoreThanTwoThirdsRelayExecutives;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
@@ -1001,7 +1000,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 parameter_types! {
 	pub const BitcoinChainId: u32 = 10000;
 	pub const BitcoinNetwork: Network = Network::Bitcoin;
-	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
+	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(60);
 	pub const DefaultMaxFeeRate: u64 = 10000;
 }
 
@@ -1010,6 +1009,7 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
+	type SocketQueue = BtcSocketQueue;
 	type DefaultMultiSigRatio = DefaultMultiSigRatio;
 	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;

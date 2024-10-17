@@ -957,8 +957,8 @@ version = "1.0.0"
 dependencies = [
  "bifrost-common-runtime",
  "bifrost-mainnet-constants",
+ "bp-btc-relay",
  "bp-core",
- "bp-multi-sig",
  "evm-tracer",
  "fp-account",
  "fp-evm",
