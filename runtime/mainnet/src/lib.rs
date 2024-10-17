@@ -1001,7 +1001,7 @@ parameter_types! {
 	pub const BitcoinChainId: u32 = 10000;
 	pub const BitcoinNetwork: Network = Network::Bitcoin;
 	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(60);
-	pub const DefaultMaxFeeRate: u64 = 10000;
+	pub const DefaultMaxFeeRate: u64 = 100;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {
