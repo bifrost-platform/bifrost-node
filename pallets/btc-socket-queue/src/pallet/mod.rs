@@ -227,7 +227,7 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v2::V2::<T>::on_runtime_upgrade()
+			migrations::init_v2::InitV2::<T>::on_runtime_upgrade()
 		}
 	}
 
