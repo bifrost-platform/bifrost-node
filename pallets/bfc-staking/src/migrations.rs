@@ -1,6 +1,76 @@
 use super::*;
 use crate::set::OrderedSet;
 
+pub mod v5 {
+	use frame_support::traits::OnRuntimeUpgrade;
+
+	use super::*;
+
+	pub struct MigrateToV5<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for MigrateToV5<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::current_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 5 && onchain == 4 {
+				for (who, _) in CandidateInfo::<T>::iter() {
+					if let Some(bottom) = BottomNominations::<T>::get(&who) {
+						if !bottom.nominations.is_empty() {
+							for bottom in bottom.nominations {
+								let mut candidate_info =
+									CandidateInfo::<T>::get(&who).expect("CandidateInfo DNE");
+								// should be added to top
+								match candidate_info.add_top_nomination::<T>(
+									&who,
+									Bond { owner: bottom.owner.clone(), amount: bottom.amount },
+								) {
+									Ok(_) => {
+										log!(
+											info,
+											"Nominator({:?}) for Candidate({:?}) has been moved to Top",
+											bottom.owner.clone(),
+											who,
+										);
+										<CandidateInfo<T>>::insert(&who, candidate_info);
+									},
+									Err(_) => {
+										log!(
+											error,
+											"Failed to move Nominator({:?}) for Candidate({:?}) to Top",
+											bottom.owner,
+											who
+										);
+									},
+								}
+							}
+							let mut after_candidate_info =
+								CandidateInfo::<T>::get(&who).expect("CandidateInfo DNE");
+							after_candidate_info.nomination_count = <TopNominations<T>>::get(&who)
+								.expect("TopNomination DNE")
+								.nominations
+								.len() as u32;
+							after_candidate_info.reset_bottom_data::<T>(&Nominations::default());
+							<CandidateInfo<T>>::insert(&who, after_candidate_info);
+							<BottomNominations<T>>::insert(&who, Nominations::default());
+						}
+					}
+				}
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(info, "bfc-staking storage migration v5 completed successfully ✅");
+			} else {
+				log!(warn, "Skipping bfc-staking storage migration v5 💤");
+				weight = weight.saturating_add(T::DbWeight::get().reads(1));
+			}
+			weight
+		}
+	}
+}
+
 pub mod v4 {
 	use super::*;
 	use bp_staking::MAX_AUTHORITIES;
