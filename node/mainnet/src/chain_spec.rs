@@ -89,7 +89,7 @@ pub fn mainnet_config() -> ChainSpec {
 				get_from_seed::<AuraId>("Alice"),
 				get_from_seed::<GrandpaId>("Alice"),
 				get_from_seed::<ImOnlineId>("Alice"),
-				100_000 * BFC * SUPPLY_FACTOR,
+				4_000_000 * BFC * SUPPLY_FACTOR,
 			)],
 			// Nominations
 			vec![],
@@ -150,7 +150,7 @@ fn mainnet_genesis(
 			"balances": endowed_accounts
 				.iter()
 				.cloned()
-				.map(|k| (k, 200_000 * BFC))
+				.map(|k| (k, 10_000_000 * BFC))
 				.collect::<Vec<_>>()
 		},
 		"session": {
