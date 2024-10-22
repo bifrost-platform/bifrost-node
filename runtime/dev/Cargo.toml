@@ -118,7 +118,6 @@ std = [
 	"bifrost-common-runtime/std",
 	"bifrost-dev-constants/std",
 	"bp-core/std",
-	"bp-multi-sig/std",
 	"frame-executive/std",
 	"frame-support/std",
 	"frame-system-rpc-runtime-api/std",

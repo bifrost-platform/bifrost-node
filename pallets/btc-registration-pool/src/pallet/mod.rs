@@ -878,30 +878,4 @@ pub mod pallet {
 			}
 		}
 	}
-
-	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T>
-	where
-		H160: Into<T::AccountId>,
-	{
-		type Call = Call<T>;
-
-		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-			match call {
-				Call::submit_vault_key { key_submission, signature } => {
-					Self::verify_key_submission(key_submission, signature, "RegPoolKeySubmission")
-				},
-				Call::submit_system_vault_key { key_submission, signature } => {
-					Self::verify_key_submission(key_submission, signature, "SystemKeySubmission")
-				},
-				Call::vault_key_presubmission { key_submission, signature } => {
-					Self::verify_key_presubmission(key_submission, signature)
-				},
-				Call::approve_set_refunds { approval, signature } => {
-					Self::verify_set_refunds_approval(approval, signature)
-				},
-				_ => InvalidTransaction::Call.into(),
-			}
-		}
-	}
 }

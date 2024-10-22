@@ -44,17 +44,6 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 			Err(InvalidTransaction::BadSigner.into())
 		}
 	}
-
-	fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
-		if let Some(a) = <Authority<T>>::get() {
-			if a != *authority_id {
-				return Err(InvalidTransaction::BadSigner.into());
-			}
-			Ok(())
-		} else {
-			Err(InvalidTransaction::BadSigner.into())
-		}
-	}
 }
 
 impl<T> Pallet<T>
@@ -182,111 +171,6 @@ where
 		old_psbt: &Psbt,
 		new_psbt: &Psbt,
 		request_type: &RequestType,
-	) -> Result<(), DispatchError> {
-		let old_psbt_inputs = &old_psbt.unsigned_tx.input;
-		let old_psbt_outputs = &old_psbt.unsigned_tx.output;
-
-		let new_psbt_inputs = &new_psbt.unsigned_tx.input;
-		let new_psbt_outputs = &new_psbt.unsigned_tx.output;
-
-		let current_round = T::RegistrationPool::get_current_round();
-		let system_vault = T::RegistrationPool::get_system_vault(current_round)
-			.ok_or(Error::<T>::SystemVaultDNE)?;
-
-		// output length check.
-		// the new output can possibly include/exclude an output for change.
-		if (new_psbt_outputs.len() as isize - old_psbt_outputs.len() as isize).abs() > 1 {
-			return Err(Error::<T>::InvalidPsbt.into());
-		}
-
-		// input must be identical (order doesn't matter here)
-		// new input may contain extra utxo's (for increased fee payment)
-		for input in old_psbt_inputs {
-			if !new_psbt_inputs.contains(input) {
-				return Err(Error::<T>::InvalidPsbt.into());
-			}
-		}
-
-		// fee check
-		let old_fee = old_psbt.fee().map_err(|_| Error::<T>::InvalidPsbt)?;
-		let new_fee = new_psbt.fee().map_err(|_| Error::<T>::InvalidPsbt)?;
-		if new_fee <= old_fee {
-			return Err(Error::<T>::InvalidPsbt.into());
-		}
-
-		// output must be identical except change (order doesn't matter here)
-		let old_outputs_map = old_psbt_outputs
-			.into_iter()
-			.map(|output| -> Result<(BoundedBitcoinAddress, U256), DispatchError> {
-				Ok((
-					BoundedVec::try_from(
-						Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
-							.to_string()
-							.as_bytes()
-							.to_vec(),
-					)
-					.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
-					U256::from(output.value.to_sat()),
-				))
-			})
-			.collect::<Result<BTreeMap<BoundedBitcoinAddress, U256>, DispatchError>>()?;
-
-		for output in new_psbt_outputs {
-			let to = BoundedVec::try_from(
-				Self::try_convert_to_address_from_script(output.script_pubkey.as_script())?
-					.to_string()
-					.as_bytes()
-					.to_vec(),
-			)
-			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
-
-			if let Some(old_amount) = old_outputs_map.get(&to) {
-				let new_amount = U256::from(output.value.to_sat());
-				let fee_diff = U256::from(
-					new_fee.checked_sub(old_fee).ok_or(Error::<T>::InvalidPsbt)?.to_sat(),
-				);
-				let amount_diff =
-					old_amount.checked_sub(new_amount).ok_or(Error::<T>::InvalidPsbt)?;
-				match request_type {
-					RequestType::Migration => {
-						// fees are subtracted from the system vault output
-						if to == system_vault && fee_diff != amount_diff {
-							return Err(Error::<T>::InvalidPsbt.into());
-						}
-					},
-					RequestType::Rollback => {
-						// fees are subtracted from the user output
-						if to != system_vault && fee_diff != amount_diff {
-							return Err(Error::<T>::InvalidPsbt.into());
-						}
-					},
-					_ => {
-						// user output amount must be identical
-						if to != system_vault && new_amount != *old_amount {
-							return Err(Error::<T>::InvalidPsbt.into());
-						}
-					},
-				}
-			} else {
-				// every single output should match and exist for migration requests
-				if matches!(request_type, RequestType::Migration) {
-					return Err(Error::<T>::InvalidPsbt.into());
-				}
-				// which means that a change position has been included.
-				// the address must match with the system vault.
-				if to != system_vault {
-					return Err(Error::<T>::InvalidPsbt.into());
-				}
-			}
-		}
-
-		Ok(())
-	}
-
-	/// Try to verify PSBT inputs/outputs for RBF.
-	pub fn try_bump_fee_psbt_verification(
-		old_psbt: &Psbt,
-		new_psbt: &Psbt,
 	) -> Result<(), DispatchError> {
 		let old_psbt_inputs = &old_psbt.unsigned_tx.input;
 		let old_psbt_outputs = &old_psbt.unsigned_tx.output;

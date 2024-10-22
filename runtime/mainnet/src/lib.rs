@@ -1094,21 +1094,8 @@ mod runtime {
 	#[runtime::pallet_index(6)]
 	pub type Historical = pallet_session::historical;
 
-		// Governance
-		Scheduler: pallet_scheduler::{Pallet, Storage, Event<T>, Call} = 50,
-		Democracy: pallet_democracy::{Pallet, Storage, Config<T>, Event<T>, Call} = 51,
-		Council: pallet_collective::<Instance1>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 52,
-		TechnicalCommittee: pallet_collective::<Instance2>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 53,
-		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
-		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
-		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
-		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>, HoldReason} = 57,
-		RelayExecutive: pallet_collective::<Instance3>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 58,
-		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
-
-		// Bitcoin
-		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
+	#[runtime::pallet_index(7)]
+	pub type Offences = pallet_offences;
 
 	#[runtime::pallet_index(8)]
 	pub type ImOnline = pallet_im_online;
@@ -1178,6 +1165,18 @@ mod runtime {
 
 	#[runtime::pallet_index(57)]
 	pub type Preimage = pallet_preimage;
+
+	#[runtime::pallet_index(58)]
+	pub type RelayExecutive = pallet_collective<Instance3>;
+
+	#[runtime::pallet_index(59)]
+	pub type RelayExecutiveMembership = pallet_membership<Instance3>;
+
+	#[runtime::pallet_index(60)]
+	pub type BtcSocketQueue = pallet_btc_socket_queue;
+
+	#[runtime::pallet_index(61)]
+	pub type BtcRegistrationPool = pallet_btc_registration_pool;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
