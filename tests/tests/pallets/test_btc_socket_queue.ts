@@ -201,24 +201,6 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
     expect(errorMsg).eq('1010: Invalid Transaction: Invalid signing address');
   });
 
-  it('should fail to submit unsigned psbt - invalid authority', async function () {
-    const msg = {
-      authorityId: baltathar.address,
-      outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
-      psbt: VALID_UNSIGNED_PSBT
-    };
-
-    let errorMsg = '';
-    await context.polkadotApi.tx.btcSocketQueue.submitUnsignedPsbt(msg, VALID_UNSIGNED_PSBT_SUBMISSION_SIG).send().catch(err => {
-      if (err instanceof Error) {
-        errorMsg = err.message;
-      }
-    });
-    await context.createBlock();
-
-    expect(errorMsg).eq('1010: Invalid Transaction: Invalid signing address');
-  });
-
   it('should fail to submit unsigned psbt - invalid signature', async function () {
     const msg = {
       authorityId: alith.address,

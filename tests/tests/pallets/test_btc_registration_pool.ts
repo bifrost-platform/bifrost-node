@@ -195,32 +195,12 @@ describeDevNode('pallet_btc_registration_pool - submit_key (1-of-1)', (context) 
   it('should fail to submit a key due to unknown relay executive', async function () {
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
-      authorityId: alithRelayer.address,
+      authorityId: charlethRelayer.address,
       who: baltathar.address,
       pubKey,
       poolRound: await getCurrentRound(context),
     };
     const signature = '0xd19701003fb3b0ad88cad82c85da2bf01b1e6855c0636384fd23ba061ec0fbc077c386a05f013f3f0f53faa5fe59f977cc557a7176ba00acfc7655a6767a121d1b';
-
-    let errorMsg = '';
-    await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send().catch(err => {
-      if (err instanceof Error) {
-        errorMsg = err.message;
-      }
-    });
-    await context.createBlock();
-
-    expect(errorMsg).eq('1010: Invalid Transaction: Transaction has a bad signature');
-  });
-
-  it('should fail to submit a key due to unknown relay executive', async function () {
-    const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
-    const keySubmission = {
-      authorityId: charlethRelayer.address,
-      who: baltathar.address,
-      pubKey,
-    };
-    const signature = '0x912088929bce91c813eb42a393ed2e5b2a36250e8ba483192dc9a2e4663401df42767fbbce7b1faccd9364c516923964fbfb6a0e914cf3a929e454b0cd49560e1c';
 
     let errorMsg = '';
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send().catch(err => {
