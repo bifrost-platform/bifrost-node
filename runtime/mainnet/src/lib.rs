@@ -265,9 +265,9 @@ impl pallet_tx_pause::Config for Runtime {
 
 parameter_types! {
 	pub const EnterDuration: BlockNumber = 6 * HOURS;
-	pub const EnterDepositAmount: Balance = 200_000 * BFC;
+	pub const EnterDepositAmount: Option<Balance> = None;
 	pub const ExtendDuration: BlockNumber = 1 * HOURS;
-	pub const ExtendDepositAmount: Balance = 100_000 * BFC;
+	pub const ExtendDepositAmount: Option<Balance> = None;
 	pub const ReleaseDelay: u32 = 1 * HOURS;
 }
 
