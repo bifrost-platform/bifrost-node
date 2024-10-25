@@ -245,9 +245,12 @@ impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
 	fn contains(call: &RuntimeCall) -> bool {
 		match call {
 			RuntimeCall::System(_)
+			| RuntimeCall::Sudo(_)
 			| RuntimeCall::Timestamp(_)
 			| RuntimeCall::SafeMode(_)
-			| RuntimeCall::TxPause(_) => true,
+			| RuntimeCall::TxPause(_)
+			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
 			_ => false,
 		}
 	}
@@ -264,7 +267,7 @@ impl pallet_tx_pause::Config for Runtime {
 }
 
 parameter_types! {
-	pub const EnterDuration: BlockNumber = 6 * HOURS;
+	pub const EnterDuration: BlockNumber = 12 * HOURS;
 	pub const EnterDepositAmount: Option<Balance> = None;
 	pub const ExtendDuration: BlockNumber = 1 * HOURS;
 	pub const ExtendDepositAmount: Option<Balance> = None;

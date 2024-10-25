@@ -236,9 +236,12 @@ impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
 	fn contains(call: &RuntimeCall) -> bool {
 		match call {
 			RuntimeCall::System(_)
+			| RuntimeCall::Sudo(_)
 			| RuntimeCall::Timestamp(_)
 			| RuntimeCall::SafeMode(_)
-			| RuntimeCall::TxPause(_) => true,
+			| RuntimeCall::TxPause(_)
+			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
 			_ => false,
 		}
 	}
