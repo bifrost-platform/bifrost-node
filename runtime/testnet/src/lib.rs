@@ -50,7 +50,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -117,6 +117,12 @@ pub type UncheckedExtrinsic =
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
 type Migrations = ();
+
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+type Migrations = (
+	pallet_identity::migration::versioned::V0ToV1<Runtime, { u64::MAX }>,
+	pallet_grandpa::migrations::MigrateV4ToV5<Runtime>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
