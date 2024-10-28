@@ -3,6 +3,7 @@ use crate::cli_opt::{BackendTypeConfig, RpcConfig};
 use std::{path::Path, sync::Arc};
 
 use fc_db::DatabaseSource;
+use fc_rpc::StorageOverrideHandler;
 use sc_client_api::{
 	backend::{Backend, StateBackend},
 	AuxStore, StorageProvider,
@@ -14,8 +15,13 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::BlakeTwo256;
 
+/// Only enable the benchmarking host functions when we actually want to benchmark.
+#[cfg(feature = "runtime-benchmarks")]
 pub type HostFunctions =
-	(frame_benchmarking::benchmarking::HostFunctions, fp_ext::bifrost_ext::HostFunctions);
+	(sp_io::SubstrateHostFunctions, frame_benchmarking::benchmarking::HostFunctions);
+/// Otherwise we use empty host functions for ext host functions.
+#[cfg(not(feature = "runtime-benchmarks"))]
+pub type HostFunctions = (sp_io::SubstrateHostFunctions, fp_ext::bifrost_ext::HostFunctions);
 
 /// Configure frontier database.
 pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {
@@ -28,7 +34,7 @@ pub fn open_frontier_backend<C, BE>(
 	client: Arc<C>,
 	config: &Configuration,
 	rpc_config: &RpcConfig,
-) -> Result<fc_db::Backend<Block>, String>
+) -> Result<fc_db::Backend<Block, C>, String>
 where
 	C: ProvideRuntimeApi<Block> + StorageProvider<Block, BE> + AuxStore,
 	C: HeaderBackend<Block> + HeaderMetadata<Block, Error = BlockChainError>,
@@ -38,32 +44,34 @@ where
 	BE::State: StateBackend<BlakeTwo256>,
 {
 	let frontier_backend = match rpc_config.frontier_backend_type {
-		BackendTypeConfig::KeyValue => fc_db::Backend::KeyValue(fc_db::kv::Backend::<Block>::new(
-			client,
-			&fc_db::kv::DatabaseSettings {
-				source: match config.database {
-					DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
-						path: frontier_database_dir(config, "db"),
-						cache_size: 0,
-					},
-					DatabaseSource::ParityDb { .. } => {
-						DatabaseSource::ParityDb { path: frontier_database_dir(config, "paritydb") }
-					},
-					DatabaseSource::Auto { .. } => DatabaseSource::Auto {
-						rocksdb_path: frontier_database_dir(config, "db"),
-						paritydb_path: frontier_database_dir(config, "paritydb"),
-						cache_size: 0,
-					},
-					_ => {
-						return Err(
-							"Supported db sources: `rocksdb` | `paritydb` | `auto`".to_string()
-						)
+		BackendTypeConfig::KeyValue => {
+			fc_db::Backend::KeyValue(Arc::new(fc_db::kv::Backend::<Block, C>::new(
+				client,
+				&fc_db::kv::DatabaseSettings {
+					source: match config.database {
+						DatabaseSource::RocksDb { .. } => DatabaseSource::RocksDb {
+							path: frontier_database_dir(config, "db"),
+							cache_size: 0,
+						},
+						DatabaseSource::ParityDb { .. } => DatabaseSource::ParityDb {
+							path: frontier_database_dir(config, "paritydb"),
+						},
+						DatabaseSource::Auto { .. } => DatabaseSource::Auto {
+							rocksdb_path: frontier_database_dir(config, "db"),
+							paritydb_path: frontier_database_dir(config, "paritydb"),
+							cache_size: 0,
+						},
+						_ => {
+							return Err(
+								"Supported db sources: `rocksdb` | `paritydb` | `auto`".to_string()
+							)
+						},
 					},
 				},
-			},
-		)?),
+			)?))
+		},
 		BackendTypeConfig::Sql { pool_size, num_ops_timeout, thread_count, cache_size } => {
-			let overrides = crate::rpc::overrides_handle(client.clone());
+			let overrides = Arc::new(StorageOverrideHandler::<Block, _, _>::new(client.clone()));
 			let sqlite_db_path = frontier_database_dir(config, "sql");
 			std::fs::create_dir_all(&sqlite_db_path).expect("failed creating sql db directory");
 			let backend = futures::executor::block_on(fc_db::sql::Backend::new(
@@ -82,7 +90,7 @@ where
 				overrides.clone(),
 			))
 			.unwrap_or_else(|err| panic!("failed creating sql backend: {:?}", err));
-			fc_db::Backend::Sql(backend)
+			fc_db::Backend::Sql(Arc::new(backend))
 		},
 	};
 

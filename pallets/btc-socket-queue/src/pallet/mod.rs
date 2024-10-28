@@ -76,6 +76,8 @@ pub mod pallet {
 		SocketDNE,
 		/// The socket message does not exist.
 		SocketMessageDNE,
+		/// U256 overflowed.
+		U256OverFlowed,
 		/// The user does not exist.
 		UserDNE,
 		/// The system vault does not exist.
@@ -138,23 +140,19 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	#[pallet::getter(fn socket_contract)]
 	/// The `Socket` contract address.
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn bitcoin_socket_contract)]
 	/// The `BitcoinSocket` contract address.
 	pub type BitcoinSocket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn authority)]
 	/// The core authority address. The account that is permitted to submit unsigned PSBT's.
 	pub type Authority<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn socket_messages)]
 	/// The submitted `SocketMessage` instances.
 	/// key: Request sequence ID.
 	/// value:
@@ -164,7 +162,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn pending_requests)]
 	/// Pending outbound requests that are not ready to be finalized.
 	/// key: The pending PSBT's txid.
 	/// value: The PSBT information.
@@ -173,7 +170,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn finalized_requests)]
 	/// Finalized outbound requests.
 	/// key: The finalized PSBT's txid.
 	/// value: The PSBT information.
@@ -182,7 +178,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn executed_requests)]
 	/// Outbound requests that has been broadcasted to the Bitcoin network.
 	/// key: The executed PSBT's txid.
 	/// value: The PSBT information.
@@ -191,7 +186,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn rollback_requests)]
 	/// Pending or approved rollback requests.
 	/// key: The PSBT's txid.
 	/// value: The rollback information.
@@ -200,7 +194,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn bonded_outbound_tx)]
 	/// Mapped outbound txids.
 	/// key: The PSBT's txid.
 	/// value: The composed socket messages.
@@ -208,7 +201,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn bonded_rollback_outputs)]
 	/// Mapped rollback outputs.
 	/// key #1: The rollback transaction txid.
 	/// key #2: The rollback transaction output index.

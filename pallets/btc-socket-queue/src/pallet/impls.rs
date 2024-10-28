@@ -356,7 +356,7 @@ where
 						) {
 							return Err(Error::<T>::InvalidSocketMessage.into());
 						}
-						if Self::socket_messages(&msg.req_id.sequence).is_some() {
+						if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
 							return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
 						}
 
@@ -374,7 +374,9 @@ where
 						deserialized_msgs.push(msg.clone());
 						serialized_msgs.push(serialized_msg.clone());
 						msg_sequences.push(msg.req_id.sequence);
-						amount = amount.checked_add(msg.params.amount).unwrap();
+						amount = amount
+							.checked_add(msg.params.amount)
+							.ok_or_else(|| <Error<T>>::U256OverFlowed)?;
 					}
 					// verify psbt output
 					let psbt_amount = U256::from(output.value.to_sat());

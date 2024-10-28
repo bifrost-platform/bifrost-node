@@ -7,16 +7,18 @@ use bifrost_mainnet_runtime as mainnet;
 
 use fp_evm::GenesisAccount;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
+use sc_chain_spec::Properties;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_consensus_grandpa::AuthorityId as GrandpaId;
-use sp_core::{Pair, Public};
-use sp_runtime::{BoundedVec, Perbill};
+use sp_core::{Pair, Public, H160};
+use sp_runtime::Perbill;
 
 use hex_literal::hex;
+use std::collections::BTreeMap;
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
-pub type ChainSpec = sc_service::GenericChainSpec<mainnet::RuntimeGenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec;
 
 /// Generate a crypto pair from key.
 pub fn inspect_key<TPublic: Public>(key: &str) -> <TPublic::Pair as Pair>::Public {
@@ -62,83 +64,68 @@ pub fn inflation_config() -> InflationInfo<Balance> {
 	}
 }
 
-pub fn mainnet_config() -> Result<ChainSpec, String> {
-	let wasm_binary = WASM_BINARY.ok_or_else(|| "Mainnet wasm not available".to_string())?;
+fn properties() -> Properties {
+	let mut properties = Properties::new();
+	properties.insert("tokenDecimals".into(), 18.into());
+	properties.insert("tokenSymbol".into(), "BFC".into());
+	properties
+}
 
-	Ok(ChainSpec::from_genesis(
-		// Name
-		"Bifrost Mainnet",
-		// ID
-		"mainnet",
-		ChainType::Live,
-		move || {
-			mainnet_genesis(
-				wasm_binary,
-				// Validator candidates
-				vec![(
-					// Stash account
-					AccountId::from(hex!("912F9D002E46DF70C78495D29Faa523c2c0382a2")),
-					// Controller account
-					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
-					// Relayer account
-					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
-					get_from_seed::<AuraId>("Alice"),
-					get_from_seed::<GrandpaId>("Alice"),
-					get_from_seed::<ImOnlineId>("Alice"),
-					4_000_000 * BFC * SUPPLY_FACTOR,
-				)],
-				// Nominations
-				vec![],
-				// Council Members
-				vec![
-					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
-					AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
-					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
-				],
-				// Technical Committee Members
-				vec![
-					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
-					AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
-					AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
-				],
-				// Relay Executives
-				vec![AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58"))],
-				// Sudo account
+pub fn mainnet_config() -> ChainSpec {
+	ChainSpec::builder(WASM_BINARY.expect("WASM not available"), Default::default())
+		.with_name("Bifrost Mainnet")
+		.with_id("mainnet")
+		.with_chain_type(ChainType::Live)
+		.with_properties(properties())
+		.with_genesis_config_patch(mainnet_genesis(
+			// Validator candidates
+			vec![(
+				// Stash account
+				AccountId::from(hex!("912F9D002E46DF70C78495D29Faa523c2c0382a2")),
+				// Controller account
 				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
-				// Socket queue authority
+				// Relayer account
+				AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
+				get_from_seed::<AuraId>("Alice"),
+				get_from_seed::<GrandpaId>("Alice"),
+				get_from_seed::<ImOnlineId>("Alice"),
+				4_000_000 * BFC * SUPPLY_FACTOR,
+			)],
+			// Nominations
+			vec![],
+			// Council Members
+			vec![
 				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
-				// Pre-funded accounts
-				vec![
-					// Stash accounts
-					AccountId::from(hex!("912F9D002E46DF70C78495D29Faa523c2c0382a2")),
-					// Controller accounts
-					AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
-					// Relayer accounts
-					AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
-				],
-			)
-		},
-		// Bootnodes
-		vec![],
-		// Telemetry
-		None,
-		// Protocol ID
-		None,
-		// Fork ID
-		None,
-		// Properties
-		Some(
-			serde_json::from_str("{\"tokenDecimals\": 18, \"tokenSymbol\": \"BFC\"}")
-				.expect("Provided valid json map"),
-		),
-		// Extensions
-		None,
-	))
+				AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
+				AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
+			],
+			// Technical Committee Members
+			vec![
+				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+				AccountId::from(hex!("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0")),
+				AccountId::from(hex!("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc")),
+			],
+			// Relay Executives
+			vec![AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58"))],
+			// Sudo account
+			AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+			// Socket queue authority
+			AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+			// Pre-funded accounts
+			vec![
+				// Stash accounts
+				AccountId::from(hex!("912F9D002E46DF70C78495D29Faa523c2c0382a2")),
+				// Controller accounts
+				AccountId::from(hex!("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac")),
+				// Relayer accounts
+				AccountId::from(hex!("d6D3f3a35Fab64F69b7885D6162e81B62e44bF58")),
+			],
+		))
+		.build()
 }
 
 /// Configure initial storage state for FRAME modules.
 fn mainnet_genesis(
-	wasm_binary: &[u8],
 	initial_validators: Vec<(
 		AccountId,
 		AccountId,
@@ -155,91 +142,72 @@ fn mainnet_genesis(
 	root_key: AccountId,
 	authority: AccountId,
 	endowed_accounts: Vec<AccountId>,
-) -> mainnet::RuntimeGenesisConfig {
+) -> serde_json::Value {
 	let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
-	mainnet::RuntimeGenesisConfig {
-		system: mainnet::SystemConfig {
-			// Add Wasm runtime to storage.
-			code: wasm_binary.to_vec(),
-			..Default::default()
+
+	serde_json::json!({
+		"balances": {
+			"balances": endowed_accounts
+				.iter()
+				.cloned()
+				.map(|k| (k, 10_000_000 * BFC))
+				.collect::<Vec<_>>()
 		},
-		balances: mainnet::BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k| (k, 10_000_000 * BFC)).collect(),
-		},
-		session: mainnet::SessionConfig {
-			keys: initial_validators
+		"session": {
+			"keys": initial_validators
 				.iter()
 				.map(|x| {
 					(x.1.clone(), x.1.clone(), session_keys(x.3.clone(), x.4.clone(), x.5.clone()))
 				})
-				.collect::<Vec<_>>(),
+				.collect::<Vec<_>>()
 		},
-		aura: Default::default(),
-		grandpa: Default::default(),
-		im_online: Default::default(),
-		sudo: mainnet::SudoConfig { key: Some(root_key) },
-		transaction_payment: Default::default(),
-		evm: mainnet::EVMConfig {
-			// We need _some_ code inserted at the precompile address so that
-			// the evm will actually call the address.
-			accounts: mainnet::Precompiles::used_addresses()
-				.map(|addr| {
-					(
-						addr.into(),
-						GenesisAccount {
-							nonce: Default::default(),
-							balance: Default::default(),
-							storage: Default::default(),
-							code: revert_bytecode.clone(),
-						},
-					)
-				})
-				.collect(),
-			..Default::default()
+		"sudo": {
+			"key": Some(root_key)
 		},
-		ethereum: Default::default(),
-		base_fee: mainnet::BaseFeeConfig::new(
-			sp_core::U256::from(1_000 * GWEI * SUPPLY_FACTOR),
-			sp_runtime::Permill::zero(),
-		),
-		relay_manager: Default::default(),
-		bfc_staking: mainnet::BfcStakingConfig {
-			candidates: initial_validators
+		"evm": {
+			"accounts":
+				// We need _some_ code inserted at the precompile address so that
+				// the evm will actually call the address.
+				mainnet::Precompiles::used_addresses()
+					.map(|addr| {
+						(
+							addr.into(),
+							GenesisAccount {
+								nonce: Default::default(),
+								balance: Default::default(),
+								storage: Default::default(),
+								code: revert_bytecode.clone(),
+							},
+						)
+					})
+					.collect::<BTreeMap<H160, GenesisAccount>>()
+		},
+		"baseFee": {
+			"baseFeePerGas": sp_core::U256::from(1_000 * GWEI * SUPPLY_FACTOR),
+			"elasticity": sp_runtime::Permill::zero()
+		},
+		"bfcStaking": {
+			"candidates": initial_validators
 				.iter()
 				.cloned()
 				.map(|(stash, controller, relayer, _, _, _, bond)| {
 					(stash, controller, relayer, bond)
 				})
-				.collect(),
-			nominations: initial_nominators,
-			inflation_config: inflation_config(),
+				.collect::<Vec<_>>(),
+			"nominations": initial_nominators,
+			"inflationConfig": inflation_config()
 		},
-		bfc_utility: Default::default(),
-		bfc_offences: Default::default(),
-		democracy: Default::default(),
-		council: Default::default(),
-		technical_committee: Default::default(),
-		relay_executive: Default::default(),
-		council_membership: mainnet::CouncilMembershipConfig {
-			phantom: Default::default(),
-			members: BoundedVec::try_from(initial_council_members.clone())
-				.expect("Membership must be initialized."),
+		"councilMembership": {
+			"members": initial_council_members.clone()
 		},
-		technical_membership: mainnet::TechnicalMembershipConfig {
-			phantom: Default::default(),
-			members: BoundedVec::try_from(initial_tech_committee_members.clone())
-				.expect("Membership must be initialized"),
+		"technicalMembership": {
+			"members": initial_tech_committee_members.clone()
 		},
-		relay_executive_membership: mainnet::RelayExecutiveMembershipConfig {
-			phantom: Default::default(),
-			members: BoundedVec::try_from(initial_relay_executives.clone())
-				.expect("Membership must be initialized"),
+		"relayExecutiveMembership": {
+			"members": initial_relay_executives.clone()
 		},
-		treasury: Default::default(),
-		btc_registration_pool: Default::default(),
-		btc_socket_queue: mainnet::BtcSocketQueueConfig {
-			authority: Some(authority),
-			..Default::default()
-		},
-	}
+		"btcSocketQueue": {
+			"authority": Some(authority)
+		}
+	})
 }

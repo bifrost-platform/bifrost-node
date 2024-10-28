@@ -15,8 +15,6 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 mod types;
 use types::{BitcoinAddressString, EvmRollbackRequestOf, RollbackRequest};
 
-type BtcSocketQueueOf<Runtime> = pallet_btc_socket_queue::Pallet<Runtime>;
-
 /// A precompile to wrap the functionality from `pallet_btc_socket_queue`.
 pub struct BtcSocketQueuePrecompile<Runtime>(PhantomData<Runtime>);
 
@@ -44,9 +42,11 @@ where
 
 		let authority_id = Runtime::AddressMapping::into_account_id(authority_id.0);
 
-		if let Some(pending_request) = BtcSocketQueueOf::<Runtime>::pending_requests(txid) {
+		if let Some(pending_request) =
+			pallet_btc_socket_queue::PendingRequests::<Runtime>::get(txid)
+		{
 			if let Some(submitted) = pending_request.signed_psbts.get(&authority_id) {
-				Ok(UnboundedBytes::from(submitted.clone()) == signed_psbt)
+				Ok(UnboundedBytes::from(submitted.clone()).as_bytes() == signed_psbt.as_bytes())
 			} else {
 				Ok(false)
 			}
@@ -108,7 +108,7 @@ where
 
 		let mut result = RollbackRequest::default();
 
-		if let Some(request) = BtcSocketQueueOf::<Runtime>::rollback_requests(txid) {
+		if let Some(request) = pallet_btc_socket_queue::RollbackRequests::<Runtime>::get(txid) {
 			result.unsigned_psbt = request.unsigned_psbt.into();
 			result.who = Address(request.who.into());
 			result.txid = request.txid;
@@ -135,7 +135,7 @@ where
 	) -> EvmResult<Vec<UnboundedBytes>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		Ok(match BtcSocketQueueOf::<Runtime>::bonded_outbound_tx(txid) {
+		Ok(match pallet_btc_socket_queue::BondedOutboundTx::<Runtime>::get(txid) {
 			Some(socket_messages) => {
 				socket_messages.into_iter().map(|m| UnboundedBytes::from(m)).collect()
 			},
@@ -149,7 +149,7 @@ where
 	fn sequence_to_tx_id(handle: &mut impl PrecompileHandle, sequence: U256) -> EvmResult<H256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		Ok(match BtcSocketQueueOf::<Runtime>::socket_messages(sequence) {
+		Ok(match pallet_btc_socket_queue::SocketMessages::<Runtime>::get(sequence) {
 			Some((txid, _)) => txid,
 			None => H256::zero(),
 		})
@@ -165,7 +165,7 @@ where
 	) -> EvmResult<H256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		Ok(match BtcSocketQueueOf::<Runtime>::bonded_rollback_outputs(txid, vout) {
+		Ok(match pallet_btc_socket_queue::BondedRollbackOutputs::<Runtime>::get(txid, vout) {
 			Some(psbt_txid) => psbt_txid,
 			None => H256::zero(),
 		})
@@ -182,7 +182,7 @@ where
 
 		Ok(sequences
 			.into_iter()
-			.filter(|seq| BtcSocketQueueOf::<Runtime>::socket_messages(seq).is_none())
+			.filter(|seq| pallet_btc_socket_queue::SocketMessages::<Runtime>::get(seq).is_none())
 			.collect())
 	}
 }

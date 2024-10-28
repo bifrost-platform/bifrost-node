@@ -2,8 +2,7 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
-use fp_evm::PrecompileHandle;
-use precompile_utils::{substrate::RuntimeHelper, EvmResult};
+use precompile_utils::prelude::*;
 
 use sp_core::{H160, U256};
 use sp_runtime::traits::Dispatchable;
