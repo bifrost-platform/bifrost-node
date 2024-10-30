@@ -328,14 +328,12 @@ pub mod pallet {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
-			in_top: bool,
 		},
 		/// Nomination decreased.
 		NominationDecreased {
 			nominator: T::AccountId,
 			candidate: T::AccountId,
 			amount: BalanceOf<T>,
-			in_top: bool,
 		},
 		/// Nominator requested to leave the set of nominators.
 		NominatorExitScheduled {
@@ -1729,7 +1727,12 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.increase_nomination::<T>(candidate.clone(), more)?;
+			state.increase_nomination::<T>(candidate.clone(), more, true)?;
+			Pallet::<T>::deposit_event(Event::NominationIncreased {
+				nominator,
+				candidate,
+				amount: more,
+			});
 			Ok(().into())
 		}
 
@@ -1743,8 +1746,27 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let caller = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&caller).ok_or(Error::<T>::NominatorDNE)?;
+			// TODO: allow multiple decrease requests
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
+
+			// immediately decrease nomination and apply to state (without unreserving)
+			let nomination =
+				state.nominations.get_mut(&candidate).ok_or(Error::<T>::NominationDNE)?;
+			let amount_before = nomination.clone();
+			*nomination = nomination.saturating_sub(less);
+			let mut validator =
+				<CandidateInfo<T>>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
+			let _ = validator.decrease_nomination::<T>(
+				&candidate,
+				caller.clone(),
+				amount_before,
+				less,
+			)?;
+			<CandidateInfo<T>>::insert(&candidate, validator);
+			let new_total_staked = <Total<T>>::get().saturating_sub(less);
+			<Total<T>>::put(new_total_staked);
+
 			<NominatorState<T>>::insert(&caller, state);
 			Self::deposit_event(Event::NominationDecreaseScheduled {
 				nominator: caller,
