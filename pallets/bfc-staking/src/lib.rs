@@ -1704,6 +1704,7 @@ impl<
 		&mut self,
 		candidate: AccountId,
 		amount: Balance,
+		do_reserve: bool,
 	) -> DispatchResult
 	where
 		BalanceOf<T>: From<Balance>,
@@ -1721,8 +1722,10 @@ impl<
 			// update validator state nomination
 			let mut validator_state =
 				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
-			T::Currency::reserve(&self.id.clone().into(), balance_amt)?;
-			let in_top = validator_state.increase_nomination::<T>(
+			if do_reserve {
+				T::Currency::reserve(&self.id.clone().into(), balance_amt)?;
+			}
+			let _ = validator_state.increase_nomination::<T>(
 				&candidate_id,
 				nominator_id.clone(),
 				before_amount.into(),
@@ -1735,12 +1738,6 @@ impl<
 			<Total<T>>::put(new_total_staked);
 			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
 			<NominatorState<T>>::insert(&nominator_id, nom_st);
-			Pallet::<T>::deposit_event(Event::NominationIncreased {
-				nominator: nominator_id,
-				candidate: candidate_id,
-				amount: balance_amt,
-				in_top,
-			});
 			return Ok(());
 		}
 		Err(Error::<T>::NominationDNE.into())
@@ -1853,50 +1850,14 @@ impl<
 			NominationChange::Decrease => {
 				// remove from pending requests
 				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
-				// decrease nomination
-				if let Some(candidate_amount) = self.nominations.get_mut(&candidate) {
-					if *candidate_amount > amount {
-						let amount_before = candidate_amount.clone();
-						*candidate_amount = candidate_amount.saturating_sub(amount);
-						self.total = self.total.saturating_sub(amount);
-						let new_total: BalanceOf<T> = self.total.into();
-						ensure!(
-							new_total >= T::MinNomination::get(),
-							Error::<T>::NominationBelowMin
-						);
-						ensure!(
-							new_total >= T::MinNominatorStk::get(),
-							Error::<T>::NominatorBondBelowMin
-						);
-						let mut validator = <CandidateInfo<T>>::get(&candidate_id)
-							.ok_or(Error::<T>::CandidateDNE)?;
-						T::Currency::unreserve(&nominator_id, balance_amt);
-						// need to go into decrease_nomination
-						let in_top = validator.decrease_nomination::<T>(
-							&candidate_id,
-							nominator_id.clone(),
-							amount_before.into(),
-							balance_amt,
-						)?;
-						<CandidateInfo<T>>::insert(&candidate_id, validator);
-						let new_total_staked = <Total<T>>::get().saturating_sub(balance_amt);
-						<Total<T>>::put(new_total_staked);
-						let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-						<NominatorState<T>>::insert(&nominator_id, nom_st);
-						Pallet::<T>::deposit_event(Event::NominationDecreased {
-							nominator: nominator_id,
-							candidate: candidate_id,
-							amount: balance_amt,
-							in_top,
-						});
-						Ok(())
-					} else {
-						// must rm entire nomination if x.amount <= less or cancel request
-						Err(Error::<T>::NominationBelowMin.into())
-					}
-				} else {
-					Err(Error::<T>::NominationDNE.into())
-				}
+				// unreserve nomination
+				T::Currency::unreserve(&nominator_id, balance_amt);
+				Pallet::<T>::deposit_event(Event::NominationDecreased {
+					nominator: nominator_id,
+					candidate: candidate_id,
+					amount: balance_amt,
+				});
+				Ok(())
 			},
 		}
 	}
@@ -1905,7 +1866,12 @@ impl<
 	pub fn cancel_pending_request<T: Config>(
 		&mut self,
 		candidate: AccountId,
-	) -> Result<NominationRequest<AccountId, Balance>, DispatchError> {
+	) -> Result<NominationRequest<AccountId, Balance>, DispatchError>
+	where
+		BalanceOf<T>: From<Balance>,
+		T::AccountId: From<AccountId>,
+		Nominator<T::AccountId, BalanceOf<T>>: From<Nominator<AccountId, Balance>>,
+	{
 		let order = self
 			.requests
 			.requests
@@ -1919,6 +1885,8 @@ impl<
 			},
 			NominationChange::Decrease => {
 				self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+				// increase nomination without reserving
+				self.increase_nomination::<T>(candidate, order.amount, false)?;
 			},
 		}
 		Ok(order)
