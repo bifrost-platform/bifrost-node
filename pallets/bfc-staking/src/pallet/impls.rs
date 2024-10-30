@@ -347,7 +347,7 @@ impl<T: Config> Pallet<T> {
 						nominator_state.increment_awarded_tokens(&controller, reward);
 						// auto-compound nomination
 						if nominator_state
-							.increase_nomination::<T>(controller.clone(), reward)
+							.increase_nomination::<T>(controller.clone(), reward, true)
 							.is_ok()
 						{
 							<NominatorState<T>>::insert(&nominator, nominator_state);
