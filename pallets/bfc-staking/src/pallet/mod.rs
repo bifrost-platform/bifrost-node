@@ -1270,7 +1270,7 @@ pub mod pallet {
 				 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
 					T::Currency::unreserve(&bond.owner, bond.amount);
 					// remove nomination from nominator state
-					if let Some(remaining) = nominator.rm_nomination(&controller) {
+					if let Some(remaining) = nominator.rm_nomination(&controller, true) {
 						if remaining.is_zero() {
 							<NominatorState<T>>::remove(&bond.owner);
 						} else {
@@ -1644,7 +1644,15 @@ pub mod pallet {
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 			ensure!(state.requests().is_empty(), Error::<T>::PendingNominationRequestAlreadyExists);
 			let (now, when) = state.schedule_leave::<T>();
+
+			for (candidate, amount) in &mut state.nominations {
+				state.requests.leave::<T>(candidate.clone(), *amount, when)?;
+				Self::nominator_leaves_candidate(candidate.clone(), acc.clone(), *amount)?;
+				*amount = Zero::zero();
+			}
+			state.total = Zero::zero();
 			<NominatorState<T>>::insert(&acc, state);
+
 			Self::deposit_event(Event::NominatorExitScheduled {
 				round: now,
 				nominator: acc,
@@ -1663,18 +1671,13 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.can_execute_leave::<T>(nomination_count)?;
-			for bond in state.nominations {
-				if let Err(error) =
-					Self::nominator_leaves_candidate(bond.0.clone(), nominator.clone(), bond.1)
-				{
-					log::warn!(
-						"STORAGE CORRUPTED \nNominator leaving validator failed with error: {:?}",
-						error
-					);
-				}
-			}
+
+			T::Currency::unreserve(&nominator, state.requests.less_total);
 			<NominatorState<T>>::remove(&nominator);
-			Self::deposit_event(Event::NominatorLeft { nominator, unstaked_amount: state.total });
+			Self::deposit_event(Event::NominatorLeft {
+				nominator,
+				unstaked_amount: state.requests.less_total,
+			});
 			Ok(().into())
 		}
 
@@ -1688,9 +1691,14 @@ pub mod pallet {
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			// ensure state is leaving
 			ensure!(state.is_leaving(), Error::<T>::NominatorDNE);
+
 			// cancel exit request
+			for candidate in state.nominations.clone().keys() {
+				state.cancel_pending_request::<T>(candidate.clone())?;
+			}
 			state.cancel_leave();
 			<NominatorState<T>>::insert(&nominator, state);
+
 			Self::deposit_event(Event::NominatorExitCancelled { nominator });
 			Ok(().into())
 		}
@@ -1755,6 +1763,7 @@ pub mod pallet {
 				state.nominations.get_mut(&candidate).ok_or(Error::<T>::NominationDNE)?;
 			let amount_before = nomination.clone();
 			*nomination = nomination.saturating_sub(less);
+			state.total = state.total.saturating_sub(less);
 			let mut validator =
 				<CandidateInfo<T>>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
 			let _ = validator.decrease_nomination::<T>(
@@ -1764,8 +1773,9 @@ pub mod pallet {
 				less,
 			)?;
 			<CandidateInfo<T>>::insert(&candidate, validator);
-			let new_total_staked = <Total<T>>::get().saturating_sub(less);
-			<Total<T>>::put(new_total_staked);
+			<Total<T>>::mutate(|total| {
+				*total = total.saturating_sub(less);
+			});
 
 			<NominatorState<T>>::insert(&caller, state);
 			Self::deposit_event(Event::NominationDecreaseScheduled {
