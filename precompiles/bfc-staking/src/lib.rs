@@ -999,6 +999,7 @@ where
 				let action: u32 = match request.action {
 					NominationChange::Revoke => 1u32.into(),
 					NominationChange::Decrease => 2u32.into(),
+					NominationChange::Leave => 3u32.into(),
 				};
 				actions.push(action.into());
 			}

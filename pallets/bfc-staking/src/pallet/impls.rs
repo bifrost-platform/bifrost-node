@@ -25,7 +25,7 @@ use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, EstimateNextSessionRotation, Get, Imbalance, ReservableCurrency},
+	traits::{Currency, EstimateNextSessionRotation, Get, Imbalance},
 	weights::Weight,
 	BoundedBTreeSet,
 };
@@ -256,17 +256,10 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		let mut state = CandidateInfo::<T>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
 		state.rm_nomination_if_exists::<T>(&candidate, nominator.clone(), amount)?;
-		T::Currency::unreserve(&nominator, amount);
-		let new_total_locked = Total::<T>::get().saturating_sub(amount);
-		<Total<T>>::put(new_total_locked);
-		let new_total = state.voting_power;
-		<CandidateInfo<T>>::insert(&candidate, state);
-		Self::deposit_event(Event::NominatorLeftCandidate {
-			nominator,
-			candidate,
-			unstaked_amount: amount,
-			total_candidate_staked: new_total,
+		<Total<T>>::mutate(|total| {
+			*total = total.saturating_sub(amount);
 		});
+		<CandidateInfo<T>>::insert(&candidate, state);
 		Ok(())
 	}
 
