@@ -1857,10 +1857,13 @@ impl<
 			.remove(&candidate)
 			.ok_or(Error::<T>::PendingNominationRequestDNE)?;
 		self.requests.less_total = self.requests.less_total.saturating_sub(order.amount);
+
+		if order.action == NominationChange::Revoke {
+			self.requests.revocations_count = self.requests.revocations_count.saturating_sub(1u32);
+		}
+
 		match order.action {
-			NominationChange::Revoke => {
-				self.requests.revocations_count =
-					self.requests.revocations_count.saturating_sub(1u32);
+			NominationChange::Revoke | NominationChange::Leave => {
 				if let Some(amount) = self.nominations.get_mut(&candidate) {
 					*amount = amount.saturating_add(order.amount);
 					self.total = self.total.saturating_add(order.amount);
@@ -1891,7 +1894,6 @@ impl<
 				// increase nomination without reserving
 				self.increase_nomination::<T>(candidate, order.amount, false)?;
 			},
-			NominationChange::Leave => return Err(Error::<T>::NominatorCannotLeaveYet.into()),
 		};
 		Ok(order)
 	}
