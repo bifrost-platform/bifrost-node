@@ -2,9 +2,9 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, InflationInfo, NominationRequest, Nominations, Nominator,
-	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
-	TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
+	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
+	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -1735,7 +1735,35 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.increase_nomination::<T>(candidate.clone(), more, true)?;
+
+			if let Some(request) = state.requests.requests.get_mut(&candidate) {
+				// for revoke and leave requests, we have to increase the pending revoke amount to
+				// check & try if it can be cancelled and increased
+				match request.action {
+					NominationChange::Revoke => {
+						// increase and try to cancel
+						request.amount = request.amount.saturating_add(more);
+						state.cancel_pending_request::<T>(candidate.clone())?;
+					},
+					NominationChange::Leave => {
+						// increase and try to cancel
+						request.amount = request.amount.saturating_add(more);
+						state.cancel_pending_request::<T>(candidate.clone())?;
+						// cancel leave request and switch any other requests to revoke
+						state.cancel_leave();
+						state.requests.requests.iter_mut().for_each(|(_, request)| {
+							request.action = NominationChange::Revoke;
+						});
+					},
+					NominationChange::Decrease => {
+						state.increase_nomination::<T>(candidate.clone(), more, true)?;
+					},
+				}
+			} else {
+				state.increase_nomination::<T>(candidate.clone(), more, true)?;
+			}
+			<NominatorState<T>>::insert(&nominator, state);
+
 			Pallet::<T>::deposit_event(Event::NominationIncreased {
 				nominator,
 				candidate,
