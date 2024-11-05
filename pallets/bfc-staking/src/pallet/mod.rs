@@ -145,6 +145,8 @@ pub mod pallet {
 		TopNominationDNE,
 		/// A bottom nomination does not exist with the target nominator and candidate account.
 		BottomNominationDNE,
+		/// An unstaking nomination does not exist with the target nominator and candidate account.
+		UnstakingNominationDNE,
 		/// A commission set request does not exist with the target controller account.
 		CommissionSetDNE,
 		/// A controller set request does not exist with the target controller account.
@@ -543,7 +545,7 @@ pub mod pallet {
 		Twox64Concat,
 		T::AccountId,
 		Nominations<T::AccountId, BalanceOf<T>>,
-		ValueQuery,
+		OptionQuery,
 	>;
 
 	#[pallet::storage]
@@ -1203,7 +1205,9 @@ pub mod pallet {
 			// insert empty top nominations
 			<TopNominations<T>>::insert(&controller, empty_nominations.clone());
 			// insert empty bottom nominations
-			<BottomNominations<T>>::insert(&controller, empty_nominations);
+			<BottomNominations<T>>::insert(&controller, empty_nominations.clone());
+			// insert empty unstaking nominations
+			<UnstakingNominations<T>>::insert(&controller, empty_nominations);
 			candidates
 				.try_insert(controller.clone(), bond)
 				.map_err(|_| Error::<T>::TooManyCandidates)?;
@@ -1312,7 +1316,8 @@ pub mod pallet {
 			total_backing += bottom_nominations.total;
 			// return all unstaking nominations
 			// we do not increment total_backing here because it is already subtracted from Total
-			let unstaking_nominations = <UnstakingNominations<T>>::take(&controller);
+			let unstaking_nominations = <UnstakingNominations<T>>::take(&controller)
+				.ok_or(<Error<T>>::UnstakingNominationDNE)?;
 			for bond in unstaking_nominations.nominations {
 				return_stake(
 					bond.clone(),
@@ -1325,6 +1330,7 @@ pub mod pallet {
 			<BondedStash<T>>::remove(&stash);
 			<TopNominations<T>>::remove(&controller);
 			<BottomNominations<T>>::remove(&controller);
+			<UnstakingNominations<T>>::remove(&controller);
 			let new_total_staked = <Total<T>>::get().saturating_sub(total_backing);
 			<Total<T>>::put(new_total_staked);
 
@@ -1667,13 +1673,10 @@ pub mod pallet {
 				state.requests.leave::<T>(candidate.clone(), *amount, when)?;
 				Self::nominator_leaves_candidate(candidate.clone(), acc.clone(), *amount)?;
 				*amount = Zero::zero();
-
-				// add to unstaking nominations
-				let mut unstaking_nominations = <UnstakingNominations<T>>::get(&candidate);
-				unstaking_nominations
-					.insert_sorted_greatest_to_least(Bond { owner: acc.clone(), amount: *amount });
-				unstaking_nominations.total = unstaking_nominations.total.saturating_add(*amount);
-				<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
+				Self::add_to_unstaking_nominations(
+					candidate.clone(),
+					Bond { owner: acc.clone(), amount: *amount },
+				)?;
 			}
 			state.total = Zero::zero();
 			<NominatorState<T>>::insert(&acc, state);
@@ -1698,17 +1701,10 @@ pub mod pallet {
 			state.can_execute_leave::<T>(nomination_count)?;
 
 			for (candidate, request) in state.requests.requests {
-				// remove from unstaking nominations
-				<UnstakingNominations<T>>::mutate(&candidate, |unstaking_nominations| {
-					unstaking_nominations.nominations = unstaking_nominations
-						.nominations
-						.clone()
-						.into_iter()
-						.filter(|n| n.owner != state.id.clone().into())
-						.collect();
-					unstaking_nominations.total =
-						unstaking_nominations.total.saturating_sub(request.amount);
-				});
+				Self::remove_unstaking_nomination(
+					candidate.clone(),
+					Bond { owner: nominator.clone(), amount: request.amount },
+				)?;
 			}
 
 			T::Currency::unreserve(&nominator, state.requests.less_total);
