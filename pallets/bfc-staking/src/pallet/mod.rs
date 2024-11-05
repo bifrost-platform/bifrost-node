@@ -536,6 +536,18 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Unstaking nominations for a certain validator candidate.
+	/// This contains pending decrease, revoke, and leave requests.
+	pub type UnstakingNominations<T: Config> = StorageMap<
+		_,
+		Twox64Concat,
+		T::AccountId,
+		Nominations<T::AccountId, BalanceOf<T>>,
+		ValueQuery,
+	>;
+
+	#[pallet::storage]
 	/// The active validator set (full and basic) selected for the current round. This storage is sorted by address.
 	pub type SelectedCandidates<T: Config> =
 		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
@@ -1301,6 +1313,15 @@ pub mod pallet {
 				);
 			}
 			total_backing += bottom_nominations.total;
+			// return all unstaking nominations
+			// we do not increment total_backing here because it is already subtracted from Total
+			let unstaking_nominations = <UnstakingNominations<T>>::take(&controller);
+			for bond in unstaking_nominations.nominations {
+				return_stake(
+					bond.clone(),
+					NominatorState::<T>::get(&bond.owner).ok_or(<Error<T>>::NominatorDNE)?,
+				);
+			}
 			// return stake to stash account
 			T::Currency::unreserve(&stash, state.bond);
 			<CandidateInfo<T>>::remove(&controller);
@@ -1649,6 +1670,13 @@ pub mod pallet {
 				state.requests.leave::<T>(candidate.clone(), *amount, when)?;
 				Self::nominator_leaves_candidate(candidate.clone(), acc.clone(), *amount)?;
 				*amount = Zero::zero();
+
+				// add to unstaking nominations
+				let mut unstaking_nominations = <UnstakingNominations<T>>::get(&candidate);
+				unstaking_nominations
+					.insert_sorted_greatest_to_least(Bond { owner: acc.clone(), amount: *amount });
+				unstaking_nominations.total = unstaking_nominations.total.saturating_add(*amount);
+				<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
 			}
 			state.total = Zero::zero();
 			<NominatorState<T>>::insert(&acc, state);
@@ -1671,6 +1699,20 @@ pub mod pallet {
 			let nominator = ensure_signed(origin)?;
 			let state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			state.can_execute_leave::<T>(nomination_count)?;
+
+			for (candidate, request) in state.requests.requests {
+				// remove from unstaking nominations
+				<UnstakingNominations<T>>::mutate(&candidate, |unstaking_nominations| {
+					unstaking_nominations.nominations = unstaking_nominations
+						.nominations
+						.clone()
+						.into_iter()
+						.filter(|n| n.owner != state.id.clone().into())
+						.collect();
+					unstaking_nominations.total =
+						unstaking_nominations.total.saturating_sub(request.amount);
+				});
+			}
 
 			T::Currency::unreserve(&nominator, state.requests.less_total);
 			<NominatorState<T>>::remove(&nominator);
