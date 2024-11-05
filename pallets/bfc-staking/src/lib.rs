@@ -1024,14 +1024,23 @@ impl<
 				bottom_nominations.total.saturating_sub(lowest_bottom_to_be_kicked.amount);
 			// update nominator state
 			// unreserve kicked bottom
-			T::Currency::unreserve(
-				&lowest_bottom_to_be_kicked.owner,
-				lowest_bottom_to_be_kicked.amount,
-			);
-			// total staked is updated via propagation of lowest bottom nomination amount prior
-			// to call
+			let mut unreserved_amount = lowest_bottom_to_be_kicked.amount;
+			// we have to unreserve any existing unstaking nominations
 			let mut nominator_state = <NominatorState<T>>::get(&lowest_bottom_to_be_kicked.owner)
 				.ok_or(<Error<T>>::NominatorDNE)?;
+			if let Some(request) = nominator_state.requests.requests.get(&candidate) {
+				Pallet::<T>::remove_unstaking_nomination(
+					candidate.clone(),
+					Bond {
+						owner: lowest_bottom_to_be_kicked.owner.clone(),
+						amount: request.amount,
+					},
+				)?;
+				unreserved_amount = unreserved_amount.saturating_add(request.amount);
+			}
+			T::Currency::unreserve(&lowest_bottom_to_be_kicked.owner, unreserved_amount);
+			// total staked is updated via propagation of lowest bottom nomination amount prior
+			// to call
 			let leaving = nominator_state.nominations.len() == 1usize;
 			nominator_state.rm_nomination(candidate, true);
 			nominator_state.requests.remove_request(&candidate);
