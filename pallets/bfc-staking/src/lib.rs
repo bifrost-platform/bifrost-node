@@ -535,22 +535,6 @@ impl<
 	pub fn highest_nomination_amount(&self) -> Balance {
 		self.nominations.first().map(|x| x.amount).unwrap_or(Balance::zero())
 	}
-
-	/// Slash nominator's bonding and total amount with given slashing value.
-	pub fn slash_nomination_amount<T: Config>(
-		&mut self,
-		nominator: &AccountId,
-		value: Balance,
-	) -> bool {
-		for bond in self.nominations.iter_mut() {
-			if bond.owner == *nominator {
-				bond.amount = bond.amount.saturating_sub(value);
-				self.total = self.total.saturating_sub(value);
-				return true;
-			}
-		}
-		false
-	}
 }
 
 #[derive(
@@ -1756,6 +1740,7 @@ impl<
 	) -> Result<RoundIndex, DispatchError>
 	where
 		BalanceOf<T>: Into<Balance> + From<Balance>,
+		T::AccountId: From<AccountId>,
 	{
 		// get nomination amount
 		return if let Some(amount) = self.nominations.get(&validator) {
@@ -1768,7 +1753,18 @@ impl<
 				Error::<T>::NominatorBondBelowMin
 			);
 			let when = <Round<T>>::get().current_round_index + T::NominationBondLessDelay::get();
-			self.requests.bond_less::<T>(validator, less, when)?;
+			self.requests.bond_less::<T>(validator.clone(), less, when)?;
+			// add to unstaking nominations
+			let validator_id: T::AccountId = validator.into();
+			let balance_less: BalanceOf<T> = less.into();
+			<UnstakingNominations<T>>::mutate(&validator_id, |unstaking_nominations| {
+				unstaking_nominations.insert_sorted_greatest_to_least(Bond {
+					owner: self.id.clone().into(),
+					amount: balance_less,
+				});
+				unstaking_nominations.total =
+					unstaking_nominations.total.saturating_add(balance_less);
+			});
 			Ok(when)
 		} else {
 			Err(Error::<T>::NominationDNE.into())
@@ -1796,10 +1792,21 @@ impl<
 			self.requests.revoke::<T>(validator.clone(), *amount, when)?;
 			// remove nomination from validator state nominations
 			Pallet::<T>::nominator_leaves_candidate(
-				validator.into(),
+				validator.clone().into(),
 				self.id.clone().into(),
 				amount.clone().into(),
 			)?;
+			// add to unstaking nominations
+			let validator_id: T::AccountId = validator.into();
+			let balance_amount: BalanceOf<T> = amount.clone().into();
+			<UnstakingNominations<T>>::mutate(&validator_id, |unstaking_nominations| {
+				unstaking_nominations.insert_sorted_greatest_to_least(Bond {
+					owner: self.id.clone().into(),
+					amount: balance_amount,
+				});
+				unstaking_nominations.total =
+					unstaking_nominations.total.saturating_add(balance_amount);
+			});
 			self.total = self.total.saturating_sub(*amount);
 			// decrease nomination to zero
 			*amount = Balance::zero();
@@ -1825,6 +1832,18 @@ impl<
 		ensure!(when_executable <= now, Error::<T>::PendingNominationRequestNotDueYet);
 		let (balance_amt, candidate_id, nominator_id): (BalanceOf<T>, T::AccountId, T::AccountId) =
 			(amount.into(), candidate.clone().into(), self.id.clone().into());
+
+		// remove from unstaking nominations
+		<UnstakingNominations<T>>::mutate(&candidate_id, |unstaking_nominations| {
+			unstaking_nominations.nominations = unstaking_nominations
+				.nominations
+				.clone()
+				.into_iter()
+				.filter(|n| n.owner != nominator_id)
+				.collect();
+			unstaking_nominations.total = unstaking_nominations.total.saturating_sub(balance_amt);
+		});
+
 		match action {
 			NominationChange::Revoke => {
 				// revoking last nomination => leaving set of nominators
@@ -1893,6 +1912,8 @@ impl<
 		if order.action == NominationChange::Revoke {
 			self.requests.revocations_count = self.requests.revocations_count.saturating_sub(1u32);
 		}
+		let candidate_id: T::AccountId = candidate.clone().into();
+		let balance_amount: BalanceOf<T> = order.amount.into();
 
 		match order.action {
 			NominationChange::Revoke | NominationChange::Leave => {
@@ -1903,8 +1924,6 @@ impl<
 					return Err(Error::<T>::NominationDNE.into());
 				}
 
-				let candidate_id: T::AccountId = candidate.clone().into();
-				let balance_amount: BalanceOf<T> = order.amount.into();
 				let mut validator_state =
 					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
 				let (_, less_total_staked) = validator_state.add_nomination::<T>(
@@ -1927,6 +1946,19 @@ impl<
 				self.increase_nomination::<T>(candidate, order.amount, false)?;
 			},
 		};
+
+		// remove from unstaking nominations
+		<UnstakingNominations<T>>::mutate(&candidate_id, |unstaking_nominations| {
+			unstaking_nominations.nominations = unstaking_nominations
+				.nominations
+				.clone()
+				.into_iter()
+				.filter(|n| n.owner != self.id.clone().into())
+				.collect();
+			unstaking_nominations.total =
+				unstaking_nominations.total.saturating_sub(balance_amount);
+		});
+
 		Ok(order)
 	}
 }
