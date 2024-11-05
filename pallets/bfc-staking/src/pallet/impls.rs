@@ -77,6 +77,37 @@ impl<T: Config> Pallet<T> {
 		return commission_sets.into_iter().any(|c| c.who == *who);
 	}
 
+	/// Adds a new nomination to the unstaking nominations for the given candidate
+	pub fn add_to_unstaking_nominations(
+		candidate: T::AccountId,
+		nomination: Bond<T::AccountId, BalanceOf<T>>,
+	) -> DispatchResult {
+		let mut unstaking_nominations =
+			<UnstakingNominations<T>>::get(&candidate).ok_or(Error::<T>::UnstakingNominationDNE)?;
+		unstaking_nominations.insert_sorted_greatest_to_least(nomination.clone());
+		unstaking_nominations.total = unstaking_nominations.total.saturating_add(nomination.amount);
+		<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
+		Ok(())
+	}
+
+	/// Removes a nomination from the unstaking nominations for the given candidate
+	pub fn remove_unstaking_nomination(
+		candidate: T::AccountId,
+		nomination: Bond<T::AccountId, BalanceOf<T>>,
+	) -> DispatchResult {
+		let mut unstaking_nominations =
+			<UnstakingNominations<T>>::get(&candidate).ok_or(Error::<T>::UnstakingNominationDNE)?;
+		unstaking_nominations.nominations = unstaking_nominations
+			.nominations
+			.clone()
+			.into_iter()
+			.filter(|n| n.owner != nomination.owner)
+			.collect();
+		unstaking_nominations.total = unstaking_nominations.total.saturating_sub(nomination.amount);
+		<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
+		Ok(())
+	}
+
 	/// Adds a new controller set request. The state reflection will be applied in the next round.
 	pub fn add_to_controller_sets(
 		stash: T::AccountId,
@@ -448,6 +479,15 @@ impl<T: Config> Pallet<T> {
 						&c.new,
 					);
 					<BottomNominations<T>>::insert(&c.new, bottom_nominations);
+				}
+				// replace `UnstakingNominations`
+				if let Some(unstaking_nominations) = <UnstakingNominations<T>>::take(&c.old) {
+					Self::replace_nominator_nominations(
+						&unstaking_nominations.nominators(),
+						&c.old,
+						&c.new,
+					);
+					<UnstakingNominations<T>>::insert(&c.new, unstaking_nominations);
 				}
 				// replace `AwardedPts`
 				let points = <AwardedPts<T>>::take(now, &c.old);
