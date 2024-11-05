@@ -1722,17 +1722,10 @@ impl<
 			);
 			let when = <Round<T>>::get().current_round_index + T::NominationBondLessDelay::get();
 			self.requests.bond_less::<T>(validator.clone(), less, when)?;
-			// add to unstaking nominations
-			let validator_id: T::AccountId = validator.into();
-			let balance_less: BalanceOf<T> = less.into();
-			<UnstakingNominations<T>>::mutate(&validator_id, |unstaking_nominations| {
-				unstaking_nominations.insert_sorted_greatest_to_least(Bond {
-					owner: self.id.clone().into(),
-					amount: balance_less,
-				});
-				unstaking_nominations.total =
-					unstaking_nominations.total.saturating_add(balance_less);
-			});
+			Pallet::<T>::add_to_unstaking_nominations(
+				validator.into(),
+				Bond { owner: self.id.clone().into(), amount: less.into() },
+			)?;
 			Ok(when)
 		} else {
 			Err(Error::<T>::NominationDNE.into())
@@ -1764,17 +1757,10 @@ impl<
 				self.id.clone().into(),
 				amount.clone().into(),
 			)?;
-			// add to unstaking nominations
-			let validator_id: T::AccountId = validator.into();
-			let balance_amount: BalanceOf<T> = amount.clone().into();
-			<UnstakingNominations<T>>::mutate(&validator_id, |unstaking_nominations| {
-				unstaking_nominations.insert_sorted_greatest_to_least(Bond {
-					owner: self.id.clone().into(),
-					amount: balance_amount,
-				});
-				unstaking_nominations.total =
-					unstaking_nominations.total.saturating_add(balance_amount);
-			});
+			Pallet::<T>::add_to_unstaking_nominations(
+				validator.into(),
+				Bond { owner: self.id.clone().into(), amount: amount.clone().into() },
+			)?;
 			self.total = self.total.saturating_sub(*amount);
 			// decrease nomination to zero
 			*amount = Balance::zero();
@@ -1800,17 +1786,10 @@ impl<
 		ensure!(when_executable <= now, Error::<T>::PendingNominationRequestNotDueYet);
 		let (balance_amt, candidate_id, nominator_id): (BalanceOf<T>, T::AccountId, T::AccountId) =
 			(amount.into(), candidate.clone().into(), self.id.clone().into());
-
-		// remove from unstaking nominations
-		<UnstakingNominations<T>>::mutate(&candidate_id, |unstaking_nominations| {
-			unstaking_nominations.nominations = unstaking_nominations
-				.nominations
-				.clone()
-				.into_iter()
-				.filter(|n| n.owner != nominator_id)
-				.collect();
-			unstaking_nominations.total = unstaking_nominations.total.saturating_sub(balance_amt);
-		});
+		Pallet::<T>::remove_unstaking_nomination(
+			candidate_id.clone(),
+			Bond { owner: nominator_id.clone(), amount: balance_amt },
+		)?;
 
 		match action {
 			NominationChange::Revoke => {
@@ -1827,7 +1806,7 @@ impl<
 
 				Pallet::<T>::deposit_event(Event::NominationRevoked {
 					nominator: nominator_id.clone(),
-					candidate: candidate_id,
+					candidate: candidate_id.clone(),
 					unstaked_amount: balance_amt,
 				});
 				if leaving {
@@ -1914,18 +1893,10 @@ impl<
 				self.increase_nomination::<T>(candidate, order.amount, false)?;
 			},
 		};
-
-		// remove from unstaking nominations
-		<UnstakingNominations<T>>::mutate(&candidate_id, |unstaking_nominations| {
-			unstaking_nominations.nominations = unstaking_nominations
-				.nominations
-				.clone()
-				.into_iter()
-				.filter(|n| n.owner != self.id.clone().into())
-				.collect();
-			unstaking_nominations.total =
-				unstaking_nominations.total.saturating_sub(balance_amount);
-		});
+		Pallet::<T>::remove_unstaking_nomination(
+			candidate_id,
+			Bond { owner: self.id.clone().into(), amount: balance_amount },
+		)?;
 
 		Ok(order)
 	}
