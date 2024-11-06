@@ -1515,7 +1515,7 @@ pub struct Nominator<AccountId, Balance> {
 	pub initial_nominations: BTreeMap<AccountId, Balance>,
 	/// Total balance locked for this nominator
 	pub total: Balance,
-	/// Requests to change nominations, relevant if active (not leaving)
+	/// Requests to change nominations (decrease, revoke, and leave)
 	pub requests: PendingNominationRequests<AccountId, Balance>,
 	/// Status for this nominator
 	pub status: NominatorStatus,
