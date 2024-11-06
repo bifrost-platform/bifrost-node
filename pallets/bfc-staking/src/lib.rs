@@ -1020,7 +1020,7 @@ impl<
 			// total staked is updated via propagation of lowest bottom nomination amount prior
 			// to call
 			let leaving = nominator_state.nominations.len() == 1usize;
-			nominator_state.rm_nomination(candidate, true);
+			nominator_state.rm_nomination(candidate);
 			nominator_state.requests.remove_request(&candidate);
 			Pallet::<T>::deposit_event(Event::NominationKicked {
 				nominator: lowest_bottom_to_be_kicked.owner.clone(),
@@ -1649,18 +1649,11 @@ impl<
 
 	// Return Some(remaining balance), must be more than MinNominatorStk
 	// Return None if nomination not found
-	pub fn rm_nomination(
-		&mut self,
-		validator: &AccountId,
-		do_total_decrease: bool,
-	) -> Option<Balance> {
+	pub fn rm_nomination(&mut self, validator: &AccountId) -> Option<Balance> {
 		if let Some(amount) = self.nominations.remove(validator) {
 			self.initial_nominations.remove(validator);
 			self.awarded_tokens_per_candidate.remove(validator);
-
-			if do_total_decrease {
-				self.total = self.total.saturating_sub(amount);
-			}
+			self.total = self.total.saturating_sub(amount);
 			Some(self.total)
 		} else {
 			None
@@ -1808,8 +1801,8 @@ impl<
 				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
 				self.requests.revocations_count =
 					self.requests.revocations_count.saturating_sub(1u32);
-				// remove nomination from nominator state (without decreasing total. already done)
-				self.rm_nomination(&candidate, false);
+				// remove nomination from nominator state
+				self.rm_nomination(&candidate);
 				// unreserve nomination
 				T::Currency::unreserve(&nominator_id, balance_amt);
 
