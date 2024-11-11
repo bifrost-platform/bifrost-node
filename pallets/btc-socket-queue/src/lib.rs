@@ -63,7 +63,7 @@ pub struct RollbackRequest<AccountId> {
 	pub is_approved: bool,
 }
 
-impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
+impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> RollbackRequest<AccountId> {
 	pub fn new(
 		unsigned_psbt: UnboundedBytes,
 		who: AccountId,
@@ -81,6 +81,15 @@ impl<AccountId: PartialEq + Clone + Ord> RollbackRequest<AccountId> {
 			amount,
 			votes: Default::default(),
 			is_approved: false,
+		}
+	}
+
+	/// Replace the authority's vote.
+	pub fn replace_authority(&mut self, old: &AccountId, new: &AccountId) {
+		if let Some(vote) = self.votes.remove(old) {
+			self.votes
+				.try_insert(new.clone(), vote)
+				.expect("Should not fail as we just removed an element");
 		}
 	}
 }
@@ -114,7 +123,7 @@ pub struct PsbtRequest<AccountId> {
 	pub request_type: RequestType,
 }
 
-impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
+impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> PsbtRequest<AccountId> {
 	/// Instantiates a new `PsbtRequest` instance.
 	pub fn new(
 		unsigned_psbt: UnboundedBytes,
@@ -154,6 +163,15 @@ impl<AccountId: PartialEq + Clone + Ord> PsbtRequest<AccountId> {
 	/// Update the finalized PSBT.
 	pub fn set_finalized_psbt(&mut self, psbt: UnboundedBytes) {
 		self.finalized_psbt = psbt;
+	}
+
+	/// Replace the authority's signed PSBT.
+	pub fn replace_authority(&mut self, old: &AccountId, new: &AccountId) {
+		if let Some(psbt) = self.signed_psbts.remove(old) {
+			self.signed_psbts
+				.try_insert(new.clone(), psbt)
+				.expect("Should not fail as we just removed an element");
+		}
 	}
 }
 

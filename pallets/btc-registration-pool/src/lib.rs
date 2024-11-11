@@ -41,7 +41,7 @@ pub struct BitcoinRelayTarget<AccountId> {
 	pub vault: MultiSigAccount<AccountId>,
 }
 
-impl<AccountId: PartialEq + Clone + Ord> BitcoinRelayTarget<AccountId> {
+impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> BitcoinRelayTarget<AccountId> {
 	pub fn new<T: Config>(refund_address: BoundedBitcoinAddress, m: u32, n: u32) -> Self {
 		Self { refund_address, vault: MultiSigAccount::new(m, n) }
 	}

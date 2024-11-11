@@ -751,6 +751,8 @@ parameter_types! {
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type SocketQueue = BtcSocketQueue;
+	type RegistrationPool = BtcRegistrationPool;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;

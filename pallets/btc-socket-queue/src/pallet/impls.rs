@@ -44,6 +44,19 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 			Err(InvalidTransaction::BadSigner.into())
 		}
 	}
+
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// replace authority in pending requests
+		<PendingRequests<T>>::iter().for_each(|(_, mut request)| {
+			request.replace_authority(old, new);
+		});
+		// replace authority in rollback requests (if not approved yet)
+		<RollbackRequests<T>>::iter().for_each(|(_, mut request)| {
+			if !request.is_approved {
+				request.replace_authority(old, new);
+			}
+		});
+	}
 }
 
 impl<T> Pallet<T>
