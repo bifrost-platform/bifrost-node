@@ -99,7 +99,9 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		let round = Self::current_round();
 		// move pre-submitted pub keys from old to new
 		let pre_submitted_pub_keys = <PreSubmittedPubKeys<T>>::take(round, old);
-		<PreSubmittedPubKeys<T>>::insert(round, &new, pre_submitted_pub_keys);
+		if !pre_submitted_pub_keys.is_empty() {
+			<PreSubmittedPubKeys<T>>::insert(round, new, pre_submitted_pub_keys);
+		}
 		// replace authority in system vault (if it's pending)
 		if let Some(mut vault) = Self::system_vault(round) {
 			if vault.address == AddressState::Pending {
