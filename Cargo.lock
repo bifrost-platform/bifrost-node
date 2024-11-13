@@ -6515,6 +6515,7 @@ dependencies = [
  "frame-system",
  "log",
  "pallet-balances",
+ "pallet-membership",
  "pallet-session",
  "parity-scale-codec",
  "scale-info",

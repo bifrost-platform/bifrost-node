@@ -22,6 +22,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sp-staking = { workspace = true }
 pallet-session = { workspace = true, features = ["historical"] }
+pallet-membership = { workspace = true }
 
 # Bifrost
 bp-btc-relay = { workspace = true }
@@ -48,6 +49,7 @@ std = [
 	"sp-io/std",
 	"sp-staking/std",
 	"pallet-session/std",
+	"pallet-membership/std",
 	"bp-staking/std",
 	"bp-btc-relay/std",
 ]
