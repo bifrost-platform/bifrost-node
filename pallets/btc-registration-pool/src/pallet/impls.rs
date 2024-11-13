@@ -94,6 +94,27 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 			}
 		});
 	}
+
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		let round = Self::current_round();
+		// move pre-submitted pub keys from old to new
+		let pre_submitted_pub_keys = <PreSubmittedPubKeys<T>>::take(round, old);
+		if !pre_submitted_pub_keys.is_empty() {
+			<PreSubmittedPubKeys<T>>::insert(round, new, pre_submitted_pub_keys);
+		}
+		// replace authority in system vault (if it's pending)
+		if let Some(mut vault) = Self::system_vault(round) {
+			if vault.address == AddressState::Pending {
+				vault.replace_authority(old, new);
+			}
+		}
+		// replace authority in all registration pools (if they are pending)
+		<RegistrationPool<T>>::iter_prefix(round).for_each(|(_, mut relay_target)| {
+			if relay_target.vault.address == AddressState::Pending {
+				relay_target.vault.replace_authority(old, new);
+			}
+		});
+	}
 }
 
 impl<T: Config> Pallet<T> {

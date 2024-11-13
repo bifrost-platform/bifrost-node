@@ -8,10 +8,11 @@ use crate::{
 use frame_support::{
 	pallet_prelude::*,
 	traits::{OnRuntimeUpgrade, StorageVersion, ValidatorSetWithIdentification},
-	Twox64Concat,
+	BoundedBTreeSet, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
 
+use bp_btc_relay::traits::{PoolManager, SocketQueueManager};
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
@@ -20,7 +21,6 @@ use sp_std::{collections::btree_map::BTreeMap, prelude::*};
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::BoundedBTreeSet;
 
 	/// The current storage version.
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
@@ -35,6 +35,10 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		/// Interface of Bitcoin Socket Queue pallet.
+		type SocketQueue: SocketQueueManager<Self::AccountId>;
+		/// Interface of Bitcoin Registration Pool pallet.
+		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// A type for retrieving the validators supposed to be well-behaved in a session.
 		type ValidatorSet: ValidatorSetWithIdentification<Self::AccountId>;
 		/// A type that gives us the ability to submit unresponsiveness offence reports.

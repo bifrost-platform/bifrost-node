@@ -11,6 +11,7 @@ use frame_support::{
 	traits::{ValidatorSet, ValidatorSetWithIdentification},
 	BoundedBTreeSet,
 };
+use pallet_membership::{Instance3, Members, Prime};
 use sp_runtime::traits::Convert;
 use sp_staking::offence::ReportOffence;
 use sp_std::{vec, vec::Vec};
@@ -31,6 +32,7 @@ impl<T: Config> Authorities<T::AccountId> for Pallet<T> {
 
 impl<T: Config> RelayManager<T::AccountId> for Pallet<T>
 where
+	T: pallet_membership::Config<Instance3>,
 	<T as frame_system::Config>::AccountId: From<
 		<<T as Config>::ValidatorSet as ValidatorSet<
 			<T as frame_system::Config>::AccountId,
@@ -213,6 +215,22 @@ where
 		let relayer_sets = <DelayedRelayerSets<T>>::take(delayed_round);
 		relayer_sets.into_iter().for_each(|r| {
 			Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success");
+			T::SocketQueue::replace_authority(&r.old, &r.new);
+			T::RegistrationPool::replace_authority(&r.old, &r.new);
+
+			// replace member of RelayExecutive (only if it's the old member)
+			let mut members = Members::<T, Instance3>::get();
+			if let Some(location) = members.binary_search(&r.old).ok() {
+				if members.binary_search(&r.new).is_err() {
+					members[location] = r.new.clone();
+					members.sort();
+
+					Members::<T, Instance3>::put(members);
+					if Prime::<T, Instance3>::get() == Some(r.old) {
+						Prime::<T, Instance3>::put(&r.new);
+					}
+				}
+			}
 		});
 	}
 }

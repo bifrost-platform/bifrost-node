@@ -6508,12 +6508,14 @@ dependencies = [
 name = "pallet-relay-manager"
 version = "1.0.0"
 dependencies = [
+ "bp-btc-relay",
  "bp-staking",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
  "log",
  "pallet-balances",
+ "pallet-membership",
  "pallet-session",
  "parity-scale-codec",
  "scale-info",

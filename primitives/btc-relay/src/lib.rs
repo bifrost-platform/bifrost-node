@@ -70,7 +70,7 @@ pub struct MultiSigAccount<AccountId> {
 	pub n: u32,
 }
 
-impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
+impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> MultiSigAccount<AccountId> {
 	pub fn new(m: u32, n: u32) -> Self {
 		Self {
 			address: AddressState::Pending,
@@ -119,9 +119,17 @@ impl<AccountId: PartialEq + Clone + Ord> MultiSigAccount<AccountId> {
 	pub fn clear_pub_keys(&mut self) {
 		self.pub_keys = BoundedBTreeMap::new();
 	}
+
+	pub fn replace_authority(&mut self, old: &AccountId, new: &AccountId) {
+		if let Some(key) = self.pub_keys.remove(old) {
+			self.pub_keys
+				.try_insert(new.clone(), key)
+				.expect("Should not fail as we just removed an element");
+		}
+	}
 }
 
-#[derive(Decode, Encode, TypeInfo, MaxEncodedLen)]
+#[derive(Eq, PartialEq, Decode, Encode, TypeInfo, MaxEncodedLen)]
 /// The vault address state.
 pub enum AddressState {
 	/// Required number of public keys has not been submitted yet.

@@ -34,6 +34,9 @@ pub trait PoolManager<AccountId> {
 
 	/// Execute a migration transaction.
 	fn execute_migration_tx(txid: H256);
+
+	/// Replace an authority.
+	fn replace_authority(old: &AccountId, new: &AccountId);
 }
 
 pub trait SocketQueueManager<AccountId> {
@@ -42,4 +45,7 @@ pub trait SocketQueueManager<AccountId> {
 
 	/// Verify if the `authority_id` is valid.
 	fn verify_authority(authority_id: &AccountId) -> Result<(), TransactionValidityError>;
+
+	/// Replace an authority.
+	fn replace_authority(old: &AccountId, new: &AccountId);
 }

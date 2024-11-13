@@ -22,8 +22,10 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sp-staking = { workspace = true }
 pallet-session = { workspace = true, features = ["historical"] }
+pallet-membership = { workspace = true }
 
 # Bifrost
+bp-btc-relay = { workspace = true }
 bp-staking = { workspace = true }
 
 [dev-dependencies]
@@ -47,7 +49,9 @@ std = [
 	"sp-io/std",
 	"sp-staking/std",
 	"pallet-session/std",
+	"pallet-membership/std",
 	"bp-staking/std",
+	"bp-btc-relay/std",
 ]
 runtime-benchmarks = ["frame-benchmarking"]
 try-runtime = ["frame-support/try-runtime"]
