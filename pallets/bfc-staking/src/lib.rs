@@ -1702,7 +1702,7 @@ impl<
 		Ok(())
 	}
 
-	/// Schedule a decrease of a nomination for a candidate. This adds a pending request to the
+	/// Schedule a decrease for a candidate. This adds a pending request to the
 	/// nominator's state and also adds a nomination to the `UnstakingNominations`.
 	pub fn schedule_decrease_nomination<T: Config>(
 		&mut self,
@@ -1735,43 +1735,39 @@ impl<
 		};
 	}
 
-	/// Schedule revocation for the given validator
+	/// Schedule a revocation for a candidate. This adds a pending request to the nominator's state
+	/// and also adds a nomination to the `UnstakingNominations`. It also removes the nomination
+	/// from the `TopNominations`/`BottomNominations`.
 	pub fn schedule_revoke<T: Config>(
 		&mut self,
-		validator: AccountId,
+		candidate: AccountId,
 	) -> Result<(RoundIndex, RoundIndex), DispatchError>
 	where
 		BalanceOf<T>: From<Balance> + Into<Balance>,
 		T::AccountId: From<AccountId>,
 	{
-		// get nomination amount
-		return if let Some(amount) = self.nominations.get_mut(&validator) {
-			// if last nomination, request `schedule_leave_nominators` in order to leave
-			ensure!(
-				self.total.saturating_sub(*amount) >= T::MinNominatorStk::get().into(),
-				Error::<T>::NominatorBondBelowMin
-			);
-			let now = <Round<T>>::get().current_round_index;
-			let when = now + T::RevokeNominationDelay::get();
-			// add revocation to pending requests
-			self.requests.revoke::<T>(validator.clone(), *amount, when)?;
-			// remove nomination from validator state nominations (Top/Bottom)
-			Pallet::<T>::nominator_leaves_candidate(
-				validator.clone().into(),
-				self.id.clone().into(),
-				amount.clone().into(),
-			)?;
-			Pallet::<T>::add_to_unstaking_nominations(
-				validator.into(),
-				Bond { owner: self.id.clone().into(), amount: amount.clone().into() },
-			)?;
-			self.total = self.total.saturating_sub(*amount);
-			*amount = Balance::zero();
+		let amount = self.nominations.get_mut(&candidate).ok_or(Error::<T>::NominationDNE)?;
+		// if last nomination, request `schedule_leave_nominators` in order to leave
+		ensure!(
+			self.total.saturating_sub(*amount) >= T::MinNominatorStk::get().into(),
+			Error::<T>::NominatorBondBelowMin
+		);
+		let now = <Round<T>>::get().current_round_index;
+		let when = now + T::RevokeNominationDelay::get();
+		self.requests.revoke::<T>(candidate.clone(), *amount, when)?;
+		Pallet::<T>::nominator_leaves_candidate(
+			candidate.clone().into(),
+			self.id.clone().into(),
+			amount.clone().into(),
+		)?;
+		Pallet::<T>::add_to_unstaking_nominations(
+			candidate.into(),
+			Bond { owner: self.id.clone().into(), amount: amount.clone().into() },
+		)?;
+		self.total = self.total.saturating_sub(*amount);
+		*amount = Balance::zero();
 
-			Ok((now, when))
-		} else {
-			Err(Error::<T>::NominationDNE.into())
-		};
+		Ok((now, when))
 	}
 
 	/// Execute pending nomination change request
