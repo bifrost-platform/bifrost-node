@@ -1770,7 +1770,8 @@ impl<
 		Ok((now, when))
 	}
 
-	/// Execute pending nomination change request
+	/// Execute a pending request (decrease or revoke) that has reached its executable round.
+	/// For revocations, this also removes the nomination from storage.
 	pub fn execute_pending_request<T: Config>(
 		&mut self,
 		candidate: AccountId,
@@ -1805,6 +1806,7 @@ impl<
 			// remove the specific when_executable if it's not the last one
 			if let Some(req) = self.requests.requests.get_mut(&candidate) {
 				req.when_executable.remove(&when);
+				req.amount = req.amount.saturating_sub(order_amount);
 			}
 		}
 
@@ -1820,7 +1822,6 @@ impl<
 
 		match action {
 			NominationChange::Revoke => {
-				// revoking last nomination => leaving set of nominators
 				let leaving = self.nominations.len() == 1;
 				self.requests.less_total = self.requests.less_total.saturating_sub(order_amount);
 				self.requests.revocations_count = self.requests.revocations_count.saturating_sub(1);
