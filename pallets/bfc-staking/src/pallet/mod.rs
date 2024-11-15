@@ -1670,27 +1670,27 @@ pub mod pallet {
 		/// from `TopNominations`/`BottomNominations` and moved to `UnstakingNominations`.
 		/// The actual exit is available after `LeaveNominatorsDelay` rounds.
 		pub fn schedule_leave_nominators(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-			let acc = ensure_signed(origin)?;
-			let mut state = <NominatorState<T>>::get(&acc).ok_or(Error::<T>::NominatorDNE)?;
+			let nominator = ensure_signed(origin)?;
+			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 			ensure!(state.requests().is_empty(), Error::<T>::PendingNominationRequestAlreadyExists);
 			let (now, when) = state.schedule_leave::<T>();
 
 			for (candidate, amount) in &mut state.nominations {
 				state.requests.leave::<T>(candidate.clone(), *amount, when)?;
-				Self::nominator_leaves_candidate(candidate.clone(), acc.clone(), *amount)?;
+				Self::nominator_leaves_candidate(candidate.clone(), nominator.clone(), *amount)?;
 				Self::add_to_unstaking_nominations(
 					candidate.clone(),
-					Bond { owner: acc.clone(), amount: *amount },
+					Bond { owner: nominator.clone(), amount: *amount },
 				)?;
 				*amount = Zero::zero();
 			}
 			state.total = Zero::zero();
-			<NominatorState<T>>::insert(&acc, state);
+			<NominatorState<T>>::insert(&nominator, state);
 
 			Self::deposit_event(Event::NominatorExitScheduled {
 				round: now,
-				nominator: acc,
+				nominator,
 				scheduled_exit: when,
 			});
 			Ok(().into())
@@ -1842,8 +1842,8 @@ pub mod pallet {
 			candidate: T::AccountId,
 			less: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
-			let caller = ensure_signed(origin)?;
-			let mut state = <NominatorState<T>>::get(&caller).ok_or(Error::<T>::NominatorDNE)?;
+			let nominator = ensure_signed(origin)?;
+			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
 
@@ -1857,7 +1857,7 @@ pub mod pallet {
 				<CandidateInfo<T>>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
 			let _ = validator.decrease_nomination::<T>(
 				&candidate,
-				caller.clone(),
+				nominator.clone(),
 				amount_before,
 				less,
 			)?;
@@ -1866,9 +1866,9 @@ pub mod pallet {
 				*total = total.saturating_sub(less);
 			});
 
-			<NominatorState<T>>::insert(&caller, state);
+			<NominatorState<T>>::insert(&nominator, state);
 			Self::deposit_event(Event::NominationDecreaseScheduled {
-				nominator: caller,
+				nominator,
 				candidate,
 				amount_to_decrease: less,
 				execute_round: when,
