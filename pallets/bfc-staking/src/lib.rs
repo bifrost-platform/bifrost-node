@@ -1702,10 +1702,11 @@ impl<
 		Ok(())
 	}
 
-	/// Schedule decrease nomination
+	/// Schedule a decrease of a nomination for a candidate. This adds a pending request to the
+	/// nominator's state and also adds a nomination to the `UnstakingNominations`.
 	pub fn schedule_decrease_nomination<T: Config>(
 		&mut self,
-		validator: AccountId,
+		candidate: AccountId,
 		less: Balance,
 	) -> Result<RoundIndex, DispatchError>
 	where
@@ -1713,7 +1714,7 @@ impl<
 		T::AccountId: From<AccountId>,
 	{
 		// get nomination amount
-		return if let Some(amount) = self.nominations.get(&validator) {
+		return if let Some(amount) = self.nominations.get(&candidate) {
 			ensure!(
 				*amount >= less + T::MinNomination::get().into(),
 				Error::<T>::NominationBelowMin
@@ -1723,9 +1724,9 @@ impl<
 				Error::<T>::NominatorBondBelowMin
 			);
 			let when = <Round<T>>::get().current_round_index + T::NominationBondLessDelay::get();
-			self.requests.bond_less::<T>(validator.clone(), less, when)?;
+			self.requests.bond_less::<T>(candidate.clone(), less, when)?;
 			Pallet::<T>::add_to_unstaking_nominations(
-				validator.into(),
+				candidate.into(),
 				Bond { owner: self.id.clone().into(), amount: less.into() },
 			)?;
 			Ok(when)
