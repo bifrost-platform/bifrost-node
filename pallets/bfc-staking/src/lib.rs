@@ -1863,7 +1863,9 @@ impl<
 		}
 	}
 
-	/// Cancel pending nomination change request
+	/// Cancel a pending request (decrease or revoke) that is executable in the given round.
+	/// For revocations and leaves, this will reset the nomination back to the nominator's state.
+	/// And for decreases, this will increase the existing nomination without reserving.
 	pub fn cancel_pending_request<T: Config>(
 		&mut self,
 		candidate: AccountId,
@@ -1896,6 +1898,8 @@ impl<
 			request.when_executable.remove(&when);
 			if request.when_executable.is_empty() {
 				self.requests.requests.remove(&candidate);
+			} else {
+				request.amount = request.amount.saturating_sub(order_amount);
 			}
 		}
 
@@ -1905,13 +1909,12 @@ impl<
 		match action {
 			NominationChange::Revoke | NominationChange::Leave => {
 				// add nomination back to nominator state
-				if let Some(amount) = self.nominations.get_mut(&candidate) {
-					*amount = amount.saturating_add(order_amount);
-					self.total = self.total.saturating_add(order_amount);
-				} else {
-					return Err(Error::<T>::NominationDNE.into());
-				}
+				let amount =
+					self.nominations.get_mut(&candidate).ok_or(Error::<T>::NominationDNE)?;
+				*amount = amount.saturating_add(order_amount);
+				self.total = self.total.saturating_add(order_amount);
 
+				// add nomination back to validator state (top or bottom)
 				let mut validator_state =
 					<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
 				let (_, less_total_staked) = validator_state.add_nomination::<T>(
@@ -1919,14 +1922,15 @@ impl<
 					Bond { owner: self.id.clone().into(), amount: balance_amount },
 				)?;
 
-				// only is_some if kicked the lowest bottom as a consequence of this new nomination
+				// after adding the nomination back, update the total staked
+				// the lowest bottom could possibly be kicked as a consequence of this new nomination
 				let net_total_increase = if let Some(less) = less_total_staked {
 					balance_amount - less
 				} else {
 					balance_amount
 				};
-				<Total<T>>::mutate(|total_locked| {
-					*total_locked += net_total_increase;
+				<Total<T>>::mutate(|total| {
+					*total = total.saturating_add(net_total_increase);
 				});
 				<CandidateInfo<T>>::insert(&candidate_id, validator_state);
 			},
