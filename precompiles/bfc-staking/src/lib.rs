@@ -980,7 +980,6 @@ where
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let zero = 0u32;
-		let mut revocations_count: u32 = zero.into();
 		let mut less_total: U256 = zero.into();
 		let mut candidates: Vec<Address> = vec![];
 		let mut amounts: Vec<U256> = vec![];
@@ -988,7 +987,6 @@ where
 		let mut actions: Vec<u32> = vec![];
 
 		if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
-			revocations_count = state.requests.revocations_count.into();
 			less_total = state.requests.less_total.into();
 
 			for (candidate, request) in state.requests.requests {
@@ -1013,7 +1011,6 @@ where
 
 		Ok((
 			Address(nominator.into()),
-			revocations_count,
 			less_total,
 			candidates,
 			amounts.into(),

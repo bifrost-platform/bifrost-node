@@ -1824,7 +1824,6 @@ impl<
 			NominationChange::Revoke => {
 				let leaving = self.nominations.len() == 1;
 				self.requests.less_total = self.requests.less_total.saturating_sub(order_amount);
-				self.requests.revocations_count = self.requests.revocations_count.saturating_sub(1);
 
 				self.rm_nomination(&candidate);
 				T::Currency::unreserve(&nominator_id, balance_amount);
@@ -1891,9 +1890,6 @@ impl<
 		let order_amount = *order_amount;
 
 		self.requests.less_total = self.requests.less_total.saturating_sub(order_amount);
-		if action == NominationChange::Revoke {
-			self.requests.revocations_count = self.requests.revocations_count.saturating_sub(1);
-		}
 		if let Some(request) = self.requests.requests.get_mut(&candidate) {
 			request.when_executable.remove(&when);
 			if request.when_executable.is_empty() {
@@ -1949,26 +1945,26 @@ impl<
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
-/// Changes requested by the nominator
-/// - limit of 1 ongoing change per nomination
+/// Nomination changes requested by the nominator. Limits to 1 ongoing change per nomination.
 pub enum NominationChange {
-	/// Requests to leave the set of nominators
+	/// Requests to leave the set of nominators.
 	Leave,
-	/// Requests to unbond the entire nomination
+	/// Requests to unbond the entire nomination.
 	Revoke,
-	/// Requests to unbond a certain amount of nomination
+	/// Requests to unbond a certain amount of nomination.
+	/// Multiple decrease requests are allowed to be pending for a single nomination.
 	Decrease,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
-/// The nomination unbonding request of a specific nominator
+/// The change request for a specific nomination.
 pub struct NominationRequest<AccountId, Balance> {
 	/// The validator who owns this nomination
 	pub validator: AccountId,
 	/// The total unbonding amount of this request
 	pub amount: Balance,
-	/// The unbonding amount for each round
-	/// - Decrease requests are allowed to be pending for multiple rounds
+	/// The unbonding amount for each round.
+	/// `Decrease` requests are allowed to be pending for multiple rounds.
 	pub when_executable: BTreeMap<RoundIndex, Balance>,
 	/// The requested unbonding action
 	pub action: NominationChange,
@@ -1977,9 +1973,6 @@ pub struct NominationRequest<AccountId, Balance> {
 #[derive(Clone, Encode, PartialEq, Decode, RuntimeDebug, TypeInfo)]
 /// Pending requests to mutate nominations for each nominator
 pub struct PendingNominationRequests<AccountId, Balance> {
-	/// Number of pending revocations (necessary for determining whether revoke is exit)
-	/// (we don't need to count leave requests)
-	pub revocations_count: u32,
 	/// Map from validator -> Request (enforces at most 1 pending request per nomination)
 	pub requests: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
 	/// Sum of pending revocation amounts + bond less amounts
@@ -1988,11 +1981,7 @@ pub struct PendingNominationRequests<AccountId, Balance> {
 
 impl<A: Ord, B: Zero> Default for PendingNominationRequests<A, B> {
 	fn default() -> PendingNominationRequests<A, B> {
-		PendingNominationRequests {
-			revocations_count: 0u32,
-			requests: BTreeMap::new(),
-			less_total: B::zero(),
-		}
+		PendingNominationRequests { requests: BTreeMap::new(), less_total: B::zero() }
 	}
 }
 
@@ -2004,9 +1993,6 @@ impl<
 	pub fn remove_request(&mut self, address: &A) {
 		if let Some(request) = self.requests.remove(address) {
 			self.less_total = self.less_total.saturating_sub(request.amount);
-			if matches!(request.action, NominationChange::Revoke) {
-				self.revocations_count = self.revocations_count.saturating_sub(1u32);
-			}
 		}
 	}
 }
@@ -2029,7 +2015,7 @@ impl<
 		PendingNominationRequests::default()
 	}
 
-	/// Add leave order to pending requests
+	/// Add a leave request to pending requests.
 	pub fn leave<T: Config>(
 		&mut self,
 		validator: A,
@@ -2049,13 +2035,13 @@ impl<
 				action: NominationChange::Leave,
 			},
 		);
-		self.less_total += amount;
+		self.less_total = self.less_total.saturating_add(amount);
 		Ok(())
 	}
 
-	/// Add bond less order to pending requests, only succeeds if returns true
-	/// - limit is the maximum amount allowed that can be subtracted from the nomination
-	/// before it would be below the minimum nomination amount
+	/// Add a decrease request to pending requests.
+	/// If the nomination is already scheduled for a decrease in the given round, the amount is
+	/// added to the existing request.
 	pub fn bond_less<T: Config>(
 		&mut self,
 		validator: A,
@@ -2080,13 +2066,11 @@ impl<
 				},
 			);
 		}
-		self.less_total += amount;
+		self.less_total = self.less_total.saturating_add(amount);
 		Ok(())
 	}
 
-	/// Add revoke order to pending requests
-	/// - limit is the maximum amount allowed that can be subtracted from the nomination
-	/// before it would be below the minimum nomination amount
+	/// Add a revoke request to pending requests.
 	pub fn revoke<T: Config>(
 		&mut self,
 		validator: A,
@@ -2106,8 +2090,7 @@ impl<
 				action: NominationChange::Revoke,
 			},
 		);
-		self.revocations_count += 1u32;
-		self.less_total += amount;
+		self.less_total = self.less_total.saturating_add(amount);
 		Ok(())
 	}
 }
