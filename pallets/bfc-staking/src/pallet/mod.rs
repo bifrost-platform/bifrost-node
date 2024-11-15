@@ -1727,16 +1727,13 @@ pub mod pallet {
 
 		#[pallet::call_index(28)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_nominators())]
-		/// Cancel a pending request to exit the set of nominators. Success clears the pending exit
-		/// request, thereby resetting the reduced and removed nominations.
+		/// Cancel a pending request to exit the set of nominators. If successful, it clears the pending exit
+		/// request, thereby resetting the priorly reduced and removed nominations.
 		pub fn cancel_leave_nominators(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
-			// ensure nominator state exists
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			// ensure state is leaving
 			ensure!(state.is_leaving(), Error::<T>::NominatorDNE);
 
-			// cancel exit request
 			let to_cancel: Vec<_> = state
 				.requests
 				.requests
