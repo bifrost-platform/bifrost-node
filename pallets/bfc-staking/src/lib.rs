@@ -1561,9 +1561,11 @@ impl<
 		if let Some(amount) = self.nominations.remove(old) {
 			self.nominations.insert(new.clone(), amount);
 		}
-
 		if let Some(amount) = self.initial_nominations.remove(old) {
 			self.initial_nominations.insert(new.clone(), amount);
+		}
+		if let Some(amount) = self.awarded_tokens_per_candidate.remove(old) {
+			self.awarded_tokens_per_candidate.insert(new.clone(), amount);
 		}
 	}
 
