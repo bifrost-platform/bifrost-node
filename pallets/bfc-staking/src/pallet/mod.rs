@@ -2,9 +2,9 @@ mod impls;
 
 use crate::{
 	migrations, BalanceOf, BlockNumberFor, Bond, CandidateMetadata, DelayedCommissionSet,
-	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, NominationRequest,
-	Nominations, Nominator, NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex,
-	RoundInfo, TierType, TotalSnapshot, ValidatorSnapshot, WeightInfo,
+	DelayedControllerSet, DelayedPayout, InflationInfo, NominationChange, Nominations, Nominator,
+	NominatorAdded, Range, RewardDestination, RewardPoint, RoundIndex, RoundInfo, TierType,
+	TotalSnapshot, ValidatorSnapshot, WeightInfo,
 };
 
 use bp_staking::{
@@ -369,7 +369,10 @@ pub mod pallet {
 		/// Cancelled request to change an existing nomination.
 		CancelledNominationRequest {
 			nominator: T::AccountId,
-			cancelled_request: NominationRequest<T::AccountId, BalanceOf<T>>,
+			candidate: T::AccountId,
+			amount: BalanceOf<T>,
+			scheduled_at: RoundIndex,
+			action: NominationChange,
 		},
 		/// New nomination (increase of the existing one).
 		Nomination {
@@ -1675,11 +1678,11 @@ pub mod pallet {
 			for (candidate, amount) in &mut state.nominations {
 				state.requests.leave::<T>(candidate.clone(), *amount, when)?;
 				Self::nominator_leaves_candidate(candidate.clone(), acc.clone(), *amount)?;
-				*amount = Zero::zero();
 				Self::add_to_unstaking_nominations(
 					candidate.clone(),
 					Bond { owner: acc.clone(), amount: *amount },
 				)?;
+				*amount = Zero::zero();
 			}
 			state.total = Zero::zero();
 			<NominatorState<T>>::insert(&acc, state);
@@ -1712,6 +1715,7 @@ pub mod pallet {
 
 			T::Currency::unreserve(&nominator, state.requests.less_total);
 			<NominatorState<T>>::remove(&nominator);
+
 			Self::deposit_event(Event::NominatorLeft {
 				nominator,
 				unstaked_amount: state.requests.less_total,
@@ -1731,8 +1735,17 @@ pub mod pallet {
 			ensure!(state.is_leaving(), Error::<T>::NominatorDNE);
 
 			// cancel exit request
-			for candidate in state.nominations.clone().keys() {
-				state.cancel_pending_request::<T>(candidate.clone())?;
+			let to_cancel: Vec<_> = state
+				.requests
+				.requests
+				.iter()
+				.map(|(candidate, request)| {
+					let when = request.when_executable.keys().next().unwrap();
+					(candidate.clone(), when.clone())
+				})
+				.collect();
+			for (candidate, when) in to_cancel {
+				state.cancel_pending_request::<T>(candidate, when)?;
 			}
 			state.cancel_leave();
 			<NominatorState<T>>::insert(&nominator, state);
@@ -1766,6 +1779,7 @@ pub mod pallet {
 		#[pallet::call_index(30)]
 		#[pallet::weight(<T as Config>::WeightInfo::nominator_bond_more())]
 		/// Bond more for nominators wrt a specific validator candidate.
+		/// If pending revoke or leave request exists, it will be cancelled and then increased.
 		pub fn nominator_bond_more(
 			origin: OriginFor<T>,
 			candidate: T::AccountId,
@@ -1777,21 +1791,23 @@ pub mod pallet {
 			if let Some(request) = state.requests.requests.get_mut(&candidate) {
 				// for revoke and leave requests, we have to increase the pending revoke amount to
 				// check & try if it can be cancelled and increased
-				match request.action {
-					NominationChange::Revoke => {
+				let action = request.action.clone();
+				match action {
+					NominationChange::Revoke | NominationChange::Leave => {
 						// increase and try to cancel
+						let when = *request.when_executable.keys().next().unwrap();
+						let amount = request.when_executable.get_mut(&when).unwrap();
+						*amount = amount.saturating_add(more);
 						request.amount = request.amount.saturating_add(more);
-						state.cancel_pending_request::<T>(candidate.clone())?;
-					},
-					NominationChange::Leave => {
-						// increase and try to cancel
-						request.amount = request.amount.saturating_add(more);
-						state.cancel_pending_request::<T>(candidate.clone())?;
-						// cancel leave request and switch any other requests to revoke
-						state.cancel_leave();
-						state.requests.requests.iter_mut().for_each(|(_, request)| {
-							request.action = NominationChange::Revoke;
-						});
+						state.cancel_pending_request::<T>(candidate.clone(), when)?;
+
+						if matches!(action, NominationChange::Leave) {
+							// cancel leave request and switch any other requests to revoke
+							state.cancel_leave();
+							state.requests.requests.iter_mut().for_each(|(_, request)| {
+								request.action = NominationChange::Revoke;
+							});
+						}
 					},
 					NominationChange::Decrease => {
 						state.increase_nomination::<T>(candidate.clone(), more, true)?;
@@ -1820,7 +1836,6 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let caller = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&caller).ok_or(Error::<T>::NominatorDNE)?;
-			// TODO: allow multiple decrease requests
 			ensure!(!state.is_leaving(), Error::<T>::NominatorAlreadyLeaving);
 			let when = state.schedule_decrease_nomination::<T>(candidate.clone(), less)?;
 
@@ -1856,30 +1871,37 @@ pub mod pallet {
 		#[pallet::call_index(32)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_nominator_bond_less())]
 		/// Execute pending request to change an existing nomination
+		/// - `when` is the round index when the request is executable
 		pub fn execute_nomination_request(
 			origin: OriginFor<T>,
 			candidate: T::AccountId,
+			when: RoundIndex,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			state.execute_pending_request::<T>(candidate)?;
+			state.execute_pending_request::<T>(candidate, when)?;
 			Ok(().into())
 		}
 
 		#[pallet::call_index(33)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_nominator_bond_less())]
 		/// Cancel request to change an existing nomination.
+		/// - `when` is the round index when the request is executable
 		pub fn cancel_nomination_request(
 			origin: OriginFor<T>,
 			candidate: T::AccountId,
+			when: RoundIndex,
 		) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&nominator).ok_or(Error::<T>::NominatorDNE)?;
-			let request = state.cancel_pending_request::<T>(candidate)?;
+			let request = state.cancel_pending_request::<T>(candidate.clone(), when)?;
 			<NominatorState<T>>::insert(&nominator, state);
 			Self::deposit_event(Event::CancelledNominationRequest {
 				nominator,
-				cancelled_request: request,
+				candidate,
+				amount: request.amount,
+				scheduled_at: when,
+				action: request.action,
 			});
 			Ok(().into())
 		}

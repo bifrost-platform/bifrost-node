@@ -984,7 +984,7 @@ where
 		let mut less_total: U256 = zero.into();
 		let mut candidates: Vec<Address> = vec![];
 		let mut amounts: Vec<U256> = vec![];
-		let mut when_executables: Vec<u32> = vec![];
+		let mut when_executables: Vec<Vec<(u32, U256)>> = vec![];
 		let mut actions: Vec<u32> = vec![];
 
 		if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
@@ -994,7 +994,13 @@ where
 			for (candidate, request) in state.requests.requests {
 				candidates.push(Address(candidate.into()));
 				amounts.push(request.amount.into());
-				when_executables.push(request.when_executable.into());
+				when_executables.push(
+					request
+						.when_executable
+						.into_iter()
+						.map(|(when, amount)| (when, amount.into()))
+						.collect(),
+				);
 
 				let action: u32 = match request.action {
 					NominationChange::Revoke => 1u32.into(),
@@ -1343,11 +1349,12 @@ where
 	fn execute_nomination_request(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
+		when: u32,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::execute_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::execute_nomination_request { candidate, when };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
@@ -1370,11 +1377,12 @@ where
 	fn cancel_nomination_request(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
+		when: u32,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate, when };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
