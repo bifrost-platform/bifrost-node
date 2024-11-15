@@ -963,10 +963,9 @@ impl<
 		Ok(less_total_staked)
 	}
 
-	/// Add nomination to bottom nominations
-	/// Check before call that if capacity is full, inserted nomination is higher than lowest
-	/// bottom nomination (and if so, need to adjust the total storage item)
-	/// CALLER MUST ensure(lowest_bottom_to_be_kicked.amount < nomination.amount)
+	/// Add a nomination to the `BottomNominations`.
+	/// If the nomination bumps a nomination from the top, `bumped_from_top` is set to true.
+	/// If the maximum capacity is reached, the lowest nomination is kicked and removed from storage.
 	pub fn add_bottom_nomination<T: Config>(
 		&mut self,
 		bumped_from_top: bool,
@@ -978,22 +977,19 @@ impl<
 	{
 		let mut bottom_nominations =
 			<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
-		// if bottom is full, kick the lowest bottom (which is expected to be lower than input
-		// as per check)
+		// if bottom is full, kick the lowest bottom (which is expected to be lower than input.
+		// previously checked before function call)
 		let increase_nomination_count = if bottom_nominations.nominations.len() as u32
 			== T::MaxBottomNominationsPerCandidate::get()
 		{
 			let lowest_bottom_to_be_kicked =
 				bottom_nominations.nominations.pop().ok_or(<Error<T>>::BottomNominationDNE)?;
-			// EXPECT lowest_bottom_to_be_kicked.amount < nomination.amount enforced by caller
-			// if lowest_bottom_to_be_kicked.amount == nomination.amount, we will still kick
-			// the lowest bottom to enforce first come first served
 			bottom_nominations.total =
 				bottom_nominations.total.saturating_sub(lowest_bottom_to_be_kicked.amount);
-			// update nominator state
-			// unreserve kicked bottom
+
+			// unreserve the kicked bottom nomination
+			// we also have to ensure that any existing pending requests are also unreserved
 			let mut unreserved_amount = lowest_bottom_to_be_kicked.amount;
-			// we have to unreserve any existing unstaking nominations
 			let mut nominator_state = <NominatorState<T>>::get(&lowest_bottom_to_be_kicked.owner)
 				.ok_or(<Error<T>>::NominatorDNE)?;
 			if let Some(request) = nominator_state.requests.requests.get(&candidate) {
@@ -1007,11 +1003,11 @@ impl<
 				unreserved_amount = unreserved_amount.saturating_add(request.amount);
 			}
 			T::Currency::unreserve(&lowest_bottom_to_be_kicked.owner, unreserved_amount);
-			// total staked is updated via propagation of lowest bottom nomination amount prior
-			// to call
-			let leaving = nominator_state.nominations.len() == 1usize;
+
+			let leaving = nominator_state.nominations.len() == 1;
 			nominator_state.rm_nomination(candidate);
 			nominator_state.requests.remove_request(&candidate);
+
 			Pallet::<T>::deposit_event(Event::NominationKicked {
 				nominator: lowest_bottom_to_be_kicked.owner.clone(),
 				candidate: candidate.clone(),
@@ -1033,7 +1029,7 @@ impl<
 		// only increase nomination count if new bottom nomination (1) doesn't come from top &&
 		// (2) doesn't pop the lowest nomination from the bottom
 		if increase_nomination_count {
-			self.nomination_count += 1u32;
+			self.nomination_count = self.nomination_count.saturating_add(1);
 		}
 		bottom_nominations.insert_sorted_greatest_to_least(nomination);
 		self.reset_bottom_data::<T>(&bottom_nominations);
