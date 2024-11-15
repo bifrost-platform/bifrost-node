@@ -1,35 +1,3 @@
-//! # Bfc Staking
-//! Minimal staking pallet that implements validator selection by total backed stake.
-//! The main difference between this pallet and `frame/pallet-staking` is that this pallet
-//! uses direct nomination. Nominators choose exactly who they nominate and with what stake.
-//! This is different from `frame/pallet-staking` where nominators approval vote and run Phragmen.
-//!
-//! ### Rules
-//! There is a new round every `<Round<T>>::get().length` blocks.
-//!
-//! At the start of every round,
-//! * issuance is calculated for validators (and their nominators) for block authoring
-//! `T::RewardPaymentDelay` rounds ago
-//! * a new set of validators is chosen from the candidates
-//!
-//! Immediately following a round change, payments are made once-per-block until all payments have
-//! been made. In each such block, one validator is chosen for a rewards payment and is paid along
-//! with each of its top `T::MaxTopNominationsPerCandidate` nominators.
-//!
-//! To join the set of candidates, call `join_candidates` with `bond >= MinCandidateStk`.
-//! To leave the set of candidates, call `schedule_leave_candidates`. If the call succeeds,
-//! the validator is removed from the pool of candidates so they cannot be selected for future
-//! validator sets, but they are not unbonded until their exit request is executed. Any signed
-//! account may trigger the exit `T::LeaveCandidatesDelay` rounds after the round in which the
-//! original request was made.
-//!
-//! To join the set of nominators, call `nominate` and pass in an account that is
-//! already a validator candidate and `bond >= MinNominatorStk`. Each nominator can nominate up to
-//! `T::MaxNominationsPerNominator` validator candidates by calling `nominate`.
-//!
-//! To revoke a nomination, call `revoke_nomination` with the validator candidate's account.
-//! To leave the set of nominators and revoke all nominations, call `leave_nominators`.
-
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 

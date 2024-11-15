@@ -1666,8 +1666,9 @@ pub mod pallet {
 		#[pallet::call_index(26)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_leave_nominators())]
 		/// Request to leave the set of nominators. If successful, the caller is scheduled
-		/// to be allowed to exit. Success forbids future nominator actions until the request is
-		/// invoked or cancelled.
+		/// to be allowed to exit. Every nomination will be set to zero and it will be removed
+		/// from `TopNominations`/`BottomNominations` and moved to `UnstakingNominations`.
+		/// The actual exit is available after `LeaveNominatorsDelay` rounds.
 		pub fn schedule_leave_nominators(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let acc = ensure_signed(origin)?;
 			let mut state = <NominatorState<T>>::get(&acc).ok_or(Error::<T>::NominatorDNE)?;
@@ -1697,7 +1698,8 @@ pub mod pallet {
 
 		#[pallet::call_index(27)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_leave_nominators(*nomination_count))]
-		/// Execute the right to exit the set of nominators and revoke all ongoing nominations.
+		/// Execute the pending leave request. All nominations will be revoked and removed from storage.
+		/// The actual balance unreservation is done if successful.
 		pub fn execute_leave_nominators(
 			origin: OriginFor<T>,
 			nomination_count: u32,
@@ -1726,7 +1728,7 @@ pub mod pallet {
 		#[pallet::call_index(28)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_leave_nominators())]
 		/// Cancel a pending request to exit the set of nominators. Success clears the pending exit
-		/// request (thereby resetting the delay upon another `leave_nominators` call).
+		/// request, thereby resetting the reduced and removed nominations.
 		pub fn cancel_leave_nominators(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let nominator = ensure_signed(origin)?;
 			// ensure nominator state exists
@@ -1758,6 +1760,9 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_revoke_nomination())]
 		/// Request to revoke an existing nomination. If successful, the nomination is scheduled
 		/// to be allowed to be revoked via the `execute_nomination_request` extrinsic.
+		/// The nomination will be set to zero and it will be removed
+		/// from `TopNominations`/`BottomNominations` and moved to `UnstakingNominations`.
+		/// The actual exit is available after `RevokeNominationDelay` rounds.
 		pub fn schedule_revoke_nomination(
 			origin: OriginFor<T>,
 			validator: T::AccountId,
@@ -1778,8 +1783,9 @@ pub mod pallet {
 
 		#[pallet::call_index(30)]
 		#[pallet::weight(<T as Config>::WeightInfo::nominator_bond_more())]
-		/// Bond more for nominators wrt a specific validator candidate.
-		/// If pending revoke or leave request exists, it will be cancelled and then increased.
+		/// Bond more for a specific validator candidate.
+		/// If a pending revoke or leave request exists, it will be cancelled and then increased.
+		/// For leave requests, all other requests will be switched to revoke.
 		pub fn nominator_bond_more(
 			origin: OriginFor<T>,
 			candidate: T::AccountId,
@@ -1828,7 +1834,9 @@ pub mod pallet {
 
 		#[pallet::call_index(31)]
 		#[pallet::weight(<T as Config>::WeightInfo::schedule_nominator_bond_less())]
-		/// Request bond less for nominators wrt a specific validator candidate.
+		/// Request to decrease bond for a specific validator candidate. If successful, the nomination
+		/// will be immediately decreased and moved to `UnstakingNominations`. The actual exit is
+		/// available after `NominationBondLessDelay` rounds.
 		pub fn schedule_nominator_bond_less(
 			origin: OriginFor<T>,
 			candidate: T::AccountId,
@@ -1870,7 +1878,7 @@ pub mod pallet {
 
 		#[pallet::call_index(32)]
 		#[pallet::weight(<T as Config>::WeightInfo::execute_nominator_bond_less())]
-		/// Execute pending request to change an existing nomination
+		/// Execute a pending request (Decrease, Revoke) to modify an existing nomination.
 		/// - `when` is the round index when the request is executable
 		pub fn execute_nomination_request(
 			origin: OriginFor<T>,
@@ -1885,7 +1893,7 @@ pub mod pallet {
 
 		#[pallet::call_index(33)]
 		#[pallet::weight(<T as Config>::WeightInfo::cancel_nominator_bond_less())]
-		/// Cancel request to change an existing nomination.
+		/// Cancel a pending request (Decrease, Revoke) that modifies an existing nomination.
 		/// - `when` is the round index when the request is executable
 		pub fn cancel_nomination_request(
 			origin: OriginFor<T>,
