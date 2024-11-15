@@ -1658,6 +1658,8 @@ impl<
 		}
 	}
 
+	/// Increase the nomination for a candidate. `do_reserve` exists to allow for skipping the
+	/// reserve step in the case where the nomination is already reserved.
 	pub fn increase_nomination<T: Config>(
 		&mut self,
 		candidate: AccountId,
@@ -1672,32 +1674,32 @@ impl<
 		let nominator_id: T::AccountId = self.id.clone().into();
 		let candidate_id: T::AccountId = candidate.clone().into();
 		let balance_more: BalanceOf<T> = more.into();
-		// increase nomination
-		if let Some(amount) = self.nominations.get_mut(&candidate) {
-			let before_amount = amount.clone();
-			*amount += more;
-			self.total += more;
-			// update validator state nomination
-			let mut validator_state =
-				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
-			if do_reserve {
-				T::Currency::reserve(&self.id.clone().into(), balance_more)?;
-			}
-			let _ = validator_state.increase_nomination::<T>(
-				&candidate_id,
-				nominator_id.clone(),
-				before_amount.into(),
-				balance_more,
-			)?;
-			<CandidateInfo<T>>::insert(&candidate_id, validator_state);
-			<Total<T>>::mutate(|total| {
-				*total = total.saturating_add(balance_more);
-			});
-			let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
-			<NominatorState<T>>::insert(&nominator_id, nom_st);
-			return Ok(());
+
+		let amount = self.nominations.get_mut(&candidate).ok_or(Error::<T>::NominationDNE)?;
+		let before_amount = amount.clone();
+		*amount = amount.saturating_add(more);
+		self.total = self.total.saturating_add(more);
+
+		let mut validator_state =
+			<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
+		if do_reserve {
+			T::Currency::reserve(&self.id.clone().into(), balance_more)?;
 		}
-		Err(Error::<T>::NominationDNE.into())
+		let _ = validator_state.increase_nomination::<T>(
+			&candidate_id,
+			nominator_id.clone(),
+			before_amount.into(),
+			balance_more,
+		)?;
+		<CandidateInfo<T>>::insert(&candidate_id, validator_state);
+		<Total<T>>::mutate(|total| {
+			*total = total.saturating_add(balance_more);
+		});
+
+		let nom_st: Nominator<T::AccountId, BalanceOf<T>> = self.clone().into();
+		<NominatorState<T>>::insert(&nominator_id, nom_st);
+
+		Ok(())
 	}
 
 	/// Schedule decrease nomination
