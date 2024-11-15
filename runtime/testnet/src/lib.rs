@@ -160,19 +160,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 	spec_version: 485,
-=======
-	spec_version: 475,
->>>>>>> a8b2100 (feat: update cargo - Cancun support)
-=======
-	spec_version: 476,
->>>>>>> c456931 (deps: update cargo (bifrost-frontier))
-=======
-	spec_version: 477,
->>>>>>> 46903b2 ((rollback): include system vault address)
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
