@@ -1523,14 +1523,17 @@ impl<
 		}
 	}
 
+	/// Get the pending requests for the nominator.
 	pub fn requests(&self) -> BTreeMap<AccountId, NominationRequest<AccountId, Balance>> {
 		self.requests.requests.clone()
 	}
 
+	/// Check if the nominator is active.
 	pub fn is_active(&self) -> bool {
 		matches!(self.status, NominatorStatus::Active)
 	}
 
+	/// Check if the nominator is scheduled to revoke a nomination.
 	pub fn is_revoking(&self, candidate: &AccountId) -> bool {
 		if let Some(request) = self.requests().get(candidate) {
 			if request.action == NominationChange::Revoke {
@@ -1540,6 +1543,7 @@ impl<
 		false
 	}
 
+	/// Check if the nominator is scheduled to decrease a nomination.
 	pub fn is_decreasing(&self, candidate: &AccountId) -> bool {
 		if let Some(request) = self.requests().get(candidate) {
 			if request.action == NominationChange::Decrease {
@@ -1549,10 +1553,12 @@ impl<
 		false
 	}
 
+	/// Check if the nominator is scheduled to leave.
 	pub fn is_leaving(&self) -> bool {
 		matches!(self.status, NominatorStatus::Leaving(_))
 	}
 
+	/// Replace the mapped validator address in the nominations, due to a controller re-set.
 	pub fn replace_nominations(&mut self, old: &AccountId, new: &AccountId) {
 		if let Some(amount) = self.nominations.remove(old) {
 			self.nominations.insert(new.clone(), amount);
@@ -1565,6 +1571,7 @@ impl<
 		}
 	}
 
+	/// Replace the mapped validator address in the pending requests, due to a controller re-set.
 	pub fn replace_requests(&mut self, old: &AccountId, new: &AccountId) {
 		if let Some(request) = self.requests.requests.get(old) {
 			let request_clone = request.clone();
@@ -1581,15 +1588,15 @@ impl<
 		}
 	}
 
+	/// Increment the amount of awarded tokens for a validator.
 	pub fn increment_awarded_tokens(&mut self, validator: &AccountId, tokens: Balance) {
 		if let Some(x) = self.awarded_tokens_per_candidate.get_mut(validator) {
-			*x += tokens;
+			*x = x.saturating_add(tokens);
 		}
-		self.awarded_tokens += tokens;
+		self.awarded_tokens = self.awarded_tokens.saturating_add(tokens);
 	}
 
-	/// Can only leave if the current round is less than or equal to scheduled execution round
-	/// - returns None if not in leaving state
+	/// Check if the nominator can leave.
 	pub fn can_execute_leave<T: Config>(&self, nomination_weight_hint: u32) -> DispatchResult {
 		ensure!(
 			nomination_weight_hint >= (self.nominations.len() as u32),
@@ -1606,16 +1613,17 @@ impl<
 		}
 	}
 
-	/// Set status to leaving
+	/// Set the nominator's status to leaving.
 	pub(crate) fn set_leaving(&mut self, when: RoundIndex) {
 		self.status = NominatorStatus::Leaving(when);
 	}
 
+	/// Set the destination for round rewards.
 	pub fn set_reward_dst(&mut self, reward_dst: RewardDestination) {
 		self.reward_dst = reward_dst;
 	}
 
-	/// Schedule status to exit
+	/// Schedule the nominator to leave with a delay.
 	pub fn schedule_leave<T: Config>(&mut self) -> (RoundIndex, RoundIndex) {
 		let now = <Round<T>>::get().current_round_index;
 		let when = now + T::LeaveNominatorsDelay::get();
@@ -1623,12 +1631,12 @@ impl<
 		(now, when)
 	}
 
-	/// Set nominator status to active
+	/// Cancel the leave state of the nominator and reset to active.
 	pub fn cancel_leave(&mut self) {
 		self.status = NominatorStatus::Active
 	}
 
-	// pub fn add_nomination(&mut self, bond: Bond<AccountId, Balance>) -> bool {
+	/// Add a nomination to the nominator's state.
 	pub fn add_nomination<T: Config>(
 		&mut self,
 		candidate: AccountId,
@@ -1638,15 +1646,14 @@ impl<
 			Err(<Error<T>>::AlreadyNominatedCandidate.into())
 		} else {
 			self.nominations.insert(candidate.clone(), amount);
-			self.total += amount;
+			self.total = self.total.saturating_add(amount);
 			self.initial_nominations.insert(candidate.clone(), amount);
 			self.awarded_tokens_per_candidate.insert(candidate, Zero::zero());
 			Ok(())
 		}
 	}
 
-	// Return Some(remaining balance), must be more than MinNominatorStk
-	// Return None if nomination not found
+	/// Remove a nomination from the nominator's state and return the remaining balance.
 	pub fn rm_nomination(&mut self, validator: &AccountId) -> Option<Balance> {
 		if let Some(amount) = self.nominations.remove(validator) {
 			self.initial_nominations.remove(validator);
