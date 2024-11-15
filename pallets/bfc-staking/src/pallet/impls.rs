@@ -380,8 +380,7 @@ impl<T: Config> Pallet<T> {
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
 		if let Some(mut nominator_state) = NominatorState::<T>::get(&nominator) {
-			// the nominator must be active (not leaving)
-			// and not revoking/decreasing the current validator
+			// the nominator must not be leaving and not revoking the current validator
 			if nominator_state.is_active() && !nominator_state.is_revoking(&controller) {
 				// mint rewards to the nominator account
 				Self::mint_reward(reward, nominator.clone());
