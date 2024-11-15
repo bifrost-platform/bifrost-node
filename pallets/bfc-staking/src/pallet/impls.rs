@@ -77,20 +77,33 @@ impl<T: Config> Pallet<T> {
 		return commission_sets.into_iter().any(|c| c.who == *who);
 	}
 
-	/// Adds a new nomination to the unstaking nominations for the given candidate
+	/// Adds a new nomination to the unstaking nominations for the given candidate.
+	/// If the nomination already exists, it will increase the amount
 	pub fn add_to_unstaking_nominations(
 		candidate: T::AccountId,
 		nomination: Bond<T::AccountId, BalanceOf<T>>,
 	) -> DispatchResult {
 		let mut unstaking_nominations =
 			<UnstakingNominations<T>>::get(&candidate).ok_or(Error::<T>::UnstakingNominationDNE)?;
-		unstaking_nominations.insert_sorted_greatest_to_least(nomination.clone());
+		let mut is_exist = false;
+		for n in &mut unstaking_nominations.nominations {
+			if n.owner == nomination.owner {
+				n.amount = n.amount.saturating_add(nomination.amount);
+				is_exist = true;
+				break;
+			}
+		}
+		if !is_exist {
+			unstaking_nominations.nominations.push(nomination.clone());
+		}
 		unstaking_nominations.total = unstaking_nominations.total.saturating_add(nomination.amount);
+		unstaking_nominations.sort_greatest_to_least();
 		<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
 		Ok(())
 	}
 
-	/// Removes a nomination from the unstaking nominations for the given candidate
+	/// Removes a nomination from the unstaking nominations for the given candidate.
+	/// If the nomination amount is zero, it will remove the nomination
 	pub fn remove_unstaking_nomination(
 		candidate: T::AccountId,
 		nomination: Bond<T::AccountId, BalanceOf<T>>,
@@ -101,9 +114,21 @@ impl<T: Config> Pallet<T> {
 			.nominations
 			.clone()
 			.into_iter()
-			.filter(|n| n.owner != nomination.owner)
+			.filter_map(|n| {
+				if n.owner == nomination.owner {
+					let amount = n.amount.saturating_sub(nomination.amount);
+					if amount.is_zero() {
+						None
+					} else {
+						Some(Bond { owner: n.owner, amount })
+					}
+				} else {
+					Some(n)
+				}
+			})
 			.collect();
 		unstaking_nominations.total = unstaking_nominations.total.saturating_sub(nomination.amount);
+		unstaking_nominations.sort_greatest_to_least();
 		<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
 		Ok(())
 	}
