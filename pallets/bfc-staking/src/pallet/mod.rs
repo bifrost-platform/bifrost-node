@@ -1811,6 +1811,7 @@ pub mod pallet {
 								request.action = NominationChange::Revoke;
 							});
 						}
+						T::Currency::reserve(&nominator, more)?;
 					},
 					NominationChange::Decrease => {
 						state.increase_nomination::<T>(candidate.clone(), more, true)?;
