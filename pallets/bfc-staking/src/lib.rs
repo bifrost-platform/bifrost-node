@@ -1435,6 +1435,7 @@ impl<
 			})
 			.collect();
 		ensure!(in_bottom, Error::<T>::NominationDNE);
+		bottom_nominations.total = bottom_nominations.total.saturating_sub(less);
 		bottom_nominations.sort_greatest_to_least();
 		self.reset_bottom_data::<T>(&bottom_nominations);
 		<BottomNominations<T>>::insert(candidate, bottom_nominations);
