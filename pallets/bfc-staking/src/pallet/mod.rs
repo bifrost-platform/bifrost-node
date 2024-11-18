@@ -1325,7 +1325,11 @@ pub mod pallet {
 			let unstaking_nominations = <UnstakingNominations<T>>::take(&controller)
 				.ok_or(<Error<T>>::UnstakingNominationDNE)?;
 			for bond in unstaking_nominations.nominations {
-				T::Currency::unreserve(&bond.owner, bond.amount);
+				if let Some(nominator) = NominatorState::<T>::get(&bond.owner) {
+					return_stake(bond.clone(), nominator);
+				} else {
+					T::Currency::unreserve(&bond.owner, bond.amount);
+				}
 			}
 			// return stake to stash account
 			T::Currency::unreserve(&stash, state.bond);
