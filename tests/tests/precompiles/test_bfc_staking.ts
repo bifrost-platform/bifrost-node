@@ -316,8 +316,8 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       max_nominations_per_candidate,
     );
     expect(decoded_max_nominations_per_candidate.__length__).equal(2);
-    expect(Number(decoded_max_nominations_per_candidate[0])).equal(10);
-    expect(Number(decoded_max_nominations_per_candidate[1])).equal(2);
+    expect(Number(decoded_max_nominations_per_candidate[0])).equal(2);
+    expect(Number(decoded_max_nominations_per_candidate[1])).equal(1);
 
     const candidate_bond_less_delay = await callPrecompile(
       context,
@@ -586,7 +586,6 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
         'uint256',
         'uint256',
         'uint256',
-        'uint256',
         'address[]',
         'uint256[]',
         'uint256[]',
@@ -610,10 +609,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       [
         'address',
         'uint256',
-        'uint256',
         'address[]',
         'uint256[]',
-        'uint256[]',
+        'tuple(uint256,uint256)[]',
         'uint256[]',
       ],
       nominator_requests,
