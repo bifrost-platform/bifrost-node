@@ -864,9 +864,9 @@ parameter_types! {
 	/// Default maximum basicvalidators selected per round, default at genesis.
 	pub const DefaultMaxSelectedBasicCandidates: u32 = 10;
 	/// Maximum top nominations per candidate.
-	pub const MaxTopNominationsPerCandidate: u32 = 10;
+	pub const MaxTopNominationsPerCandidate: u32 = 2;
 	/// Maximum bottom nominations per candidate.
-	pub const MaxBottomNominationsPerCandidate: u32 = 2;
+	pub const MaxBottomNominationsPerCandidate: u32 = 1;
 	/// Maximum nominations per nominator.
 	pub const MaxNominationsPerNominator: u32 = 3;
 	/// Default commission rate for full validators.
