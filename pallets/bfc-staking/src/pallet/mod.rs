@@ -1289,13 +1289,12 @@ pub mod pallet {
 				 mut nominator: Nominator<T::AccountId, BalanceOf<T>>| {
 					T::Currency::unreserve(&bond.owner, bond.amount);
 					// remove nomination from nominator state
-					if let Some(remaining) = nominator.rm_nomination(&controller) {
-						if remaining.is_zero() {
-							<NominatorState<T>>::remove(&bond.owner);
-						} else {
-							nominator.requests.remove_request(&controller);
-							<NominatorState<T>>::insert(&bond.owner, nominator);
-						}
+					nominator.rm_nomination(&controller);
+					if nominator.nominations.is_empty() {
+						<NominatorState<T>>::remove(&bond.owner);
+					} else {
+						nominator.requests.remove_request(&controller);
+						<NominatorState<T>>::insert(&bond.owner, nominator);
 					}
 				};
 			// total backing stake is at least the candidate self bond
