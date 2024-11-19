@@ -921,7 +921,7 @@ parameter_types! {
 	/// Maximum top nominations per candidate.
 	pub const MaxTopNominationsPerCandidate: u32 = 2;
 	/// Maximum bottom nominations per candidate.
-	pub const MaxBottomNominationsPerCandidate: u32 = 2;
+	pub const MaxBottomNominationsPerCandidate: u32 = 1;
 	/// Maximum nominations per nominator.
 	pub const MaxNominationsPerNominator: u32 = 3;
 	/// Default commission rate for full validators.
