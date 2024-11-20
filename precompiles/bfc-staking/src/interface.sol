@@ -444,8 +444,8 @@ interface BfcStaking {
             address,
             uint256,
             address[] memory,
-            uint256[] memory,
-            uint256[2][] memory,
+            uint256[][] memory,
+            uint256[][] memory,
             uint256[] memory
         );
 

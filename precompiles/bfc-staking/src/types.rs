@@ -93,7 +93,7 @@ pub type EvmNominatorStateOf =
 	(Address, U256, u32, U256, Vec<Address>, Vec<U256>, Vec<U256>, u32, U256, Vec<U256>);
 
 pub type EvmNominatorRequestsOf =
-	(Address, U256, Vec<Address>, Vec<U256>, Vec<Vec<(u32, U256)>>, Vec<u32>);
+	(Address, U256, Vec<Address>, Vec<Vec<U256>>, Vec<Vec<u32>>, Vec<u32>);
 
 /// EVM struct for candidate states
 pub struct CandidateStates<Runtime: pallet_bfc_staking::Config> {
