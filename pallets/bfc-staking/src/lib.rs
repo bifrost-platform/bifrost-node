@@ -1951,7 +1951,7 @@ pub struct NominationRequest<AccountId, Balance> {
 pub struct PendingNominationRequests<AccountId, Balance> {
 	/// Map from validator -> Request (enforces at most 1 pending request per nomination)
 	pub requests: BTreeMap<AccountId, NominationRequest<AccountId, Balance>>,
-	/// Sum of pending revocation amounts + bond less amounts
+	/// Total amount of pending requests.
 	pub less_total: Balance,
 }
 
