@@ -982,8 +982,8 @@ where
 		let zero = 0u32;
 		let mut less_total: U256 = zero.into();
 		let mut candidates: Vec<Address> = vec![];
-		let mut amounts: Vec<U256> = vec![];
-		let mut when_executables: Vec<Vec<(u32, U256)>> = vec![];
+		let mut amounts: Vec<Vec<U256>> = vec![];
+		let mut when_executables: Vec<Vec<u32>> = vec![];
 		let mut actions: Vec<u32> = vec![];
 
 		if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
@@ -991,14 +991,15 @@ where
 
 			for (candidate, request) in state.requests.requests {
 				candidates.push(Address(candidate.into()));
-				amounts.push(request.amount.into());
-				when_executables.push(
-					request
-						.when_executable
-						.into_iter()
-						.map(|(when, amount)| (when, amount.into()))
-						.collect(),
-				);
+
+				let mut inner_when = vec![];
+				let mut inner_amount = vec![];
+				for (when, amount) in request.when_executable {
+					inner_when.push(when.into());
+					inner_amount.push(amount.into());
+				}
+				when_executables.push(inner_when);
+				amounts.push(inner_amount);
 
 				let action: u32 = match request.action {
 					NominationChange::Revoke => 1u32.into(),
@@ -1009,14 +1010,7 @@ where
 			}
 		}
 
-		Ok((
-			Address(nominator.into()),
-			less_total,
-			candidates,
-			amounts.into(),
-			when_executables,
-			actions,
-		))
+		Ok((Address(nominator.into()), less_total, candidates, amounts, when_executables, actions))
 	}
 
 	/// Returns the count of nominations of the given `nominator`
