@@ -1028,8 +1028,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let result =
 			if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
-				let nominator_nomination_count: u32 = state.nominations.len() as u32;
-				nominator_nomination_count
+				state.nomination_count(false)
 			} else {
 				0u32
 			};
