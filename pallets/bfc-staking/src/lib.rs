@@ -1521,16 +1521,6 @@ impl<
 		false
 	}
 
-	/// Check if the nominator is scheduled to decrease a nomination.
-	pub fn is_decreasing(&self, candidate: &AccountId) -> bool {
-		if let Some(request) = self.requests().get(candidate) {
-			if request.action == NominationChange::Decrease {
-				return true;
-			}
-		}
-		false
-	}
-
 	/// Check if the nominator is scheduled to leave.
 	pub fn is_leaving(&self) -> bool {
 		matches!(self.status, NominatorStatus::Leaving(_))
