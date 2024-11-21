@@ -940,7 +940,7 @@ impl<
 		let mut top_nominations =
 			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
 		let max_top_nominations_per_candidate = T::MaxTopNominationsPerCandidate::get();
-		if top_nominations.nominations.len() as u32 == max_top_nominations_per_candidate {
+		if top_nominations.count() as u32 == max_top_nominations_per_candidate {
 			// pop lowest top nomination
 			let new_bottom_nomination =
 				top_nominations.nominations.pop().ok_or(<Error<T>>::TopNominationDNE)?;
@@ -979,7 +979,7 @@ impl<
 			<BottomNominations<T>>::get(candidate).ok_or(<Error<T>>::BottomNominationDNE)?;
 		// if bottom is full, kick the lowest bottom (which is expected to be lower than input.
 		// previously checked before function call)
-		let increase_nomination_count = if bottom_nominations.nominations.len() as u32
+		let increase_nomination_count = if bottom_nominations.count()
 			== T::MaxBottomNominationsPerCandidate::get()
 		{
 			let lowest_bottom_to_be_kicked =
@@ -1004,7 +1004,7 @@ impl<
 			}
 			T::Currency::unreserve(&lowest_bottom_to_be_kicked.owner, unreserved_amount);
 
-			let leaving = nominator_state.nominations.len() == 1;
+			let leaving = nominator_state.nomination_count(false) == 1;
 			nominator_state.rm_nomination(candidate);
 			nominator_state.requests.remove_request(&candidate);
 
@@ -1524,6 +1524,15 @@ impl<
 		}
 	}
 
+	/// Get the number of nominations for the nominator.
+	pub fn nomination_count(&self, is_active: bool) -> u32 {
+		if is_active {
+			self.nominations.iter().filter(|(_, amount)| *amount > &Zero::zero()).count() as u32
+		} else {
+			self.nominations.clone().len() as u32
+		}
+	}
+
 	/// Get the pending requests for the nominator.
 	pub fn requests(&self) -> BTreeMap<AccountId, NominationRequest<AccountId, Balance>> {
 		self.requests.requests.clone()
@@ -1600,7 +1609,7 @@ impl<
 	/// Check if the nominator can leave.
 	pub fn can_execute_leave<T: Config>(&self, nomination_weight_hint: u32) -> DispatchResult {
 		ensure!(
-			nomination_weight_hint >= (self.nominations.len() as u32),
+			nomination_weight_hint >= self.nomination_count(false),
 			Error::<T>::TooLowNominationCountToLeaveNominators
 		);
 		if let NominatorStatus::Leaving(when) = self.status {
@@ -1754,12 +1763,15 @@ impl<
 		BalanceOf<T>: From<Balance> + Into<Balance>,
 		T::AccountId: From<AccountId>,
 	{
+		let nomination_count = self.nomination_count(true);
 		let amount = self.nominations.get_mut(&candidate).ok_or(Error::<T>::NominationDNE)?;
-		// if last nomination, request `schedule_leave_nominators` in order to leave
-		ensure!(
-			self.total.saturating_sub(*amount) >= T::MinNominatorStk::get().into(),
-			Error::<T>::NominatorBondBelowMin
-		);
+		// if there is more than one active nomination, ensure the nominator has enough bond to revoke
+		if nomination_count > 1 {
+			ensure!(
+				self.total.saturating_sub(*amount) >= T::MinNominatorStk::get().into(),
+				Error::<T>::NominatorBondBelowMin
+			);
+		}
 		let now = <Round<T>>::get().current_round_index;
 		let when = now + T::RevokeNominationDelay::get();
 		self.requests.revoke::<T>(candidate.clone(), *amount, when)?;
@@ -1830,7 +1842,7 @@ impl<
 
 		match action {
 			NominationChange::Revoke => {
-				let leaving = self.nominations.len() == 1;
+				let leaving = self.nomination_count(false) == 1;
 				self.requests.less_total = self.requests.less_total.saturating_sub(order_amount);
 
 				self.rm_nomination(&candidate);

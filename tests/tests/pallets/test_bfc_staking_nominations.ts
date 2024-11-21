@@ -481,18 +481,6 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     expect(new BigNumber(topNominationsAfter.nominations[0].amount.toString()).toFixed()).equal(new BigNumber(topNominationsBefore.nominations[0].amount.toString()).plus(less).toFixed());
   });
 
-  it('should fail to schedule a revoke request due to last nomination', async function () {
-    await context.polkadotApi.tx.bfcStaking
-      .scheduleRevokeNomination(alith.address)
-      .signAndSend(ethan);
-
-    await context.createBlock();
-
-    // last nomination should be scheduled by `schedule_leave_nominators`
-    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleRevokeNomination');
-    expect(extrinsicResult).equal('NominatorBondBelowMin');
-  });
-
   it('should successfully schedule a revoke request', async function () {
     const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
 
@@ -1506,5 +1494,156 @@ describeDevNode('pallet_bfc_staking - bond more with existing pending requests',
     const selfBond = new BigNumber(candidateState.bond.toString());
     const expectedStake = selfBond.plus(stake.plus(stake.multipliedBy(3)));
     expect(candidateState.votingPower.toString()).equal(expectedStake.toFixed());
+  });
+});
+
+describeDevNode('pallet_bfc_staking - revoke last nomination', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const ethan = keyring.addFromUri(TEST_CONTROLLERS[4].private);
+
+  const faith = keyring.addFromUri(TEST_CONTROLLERS[5].private);
+  const faithStash = keyring.addFromUri(TEST_STASHES[5].private);
+
+  before('should successfully join candidate pool', async function () {
+    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+
+    await context.polkadotApi.tx.bfcStaking
+      .joinCandidates(faith.address, null, stake.toFixed(), 1)
+      .signAndSend(faithStash);
+
+    await context.createBlock();
+
+    await context.polkadotApi.tx.bfcStaking
+      .nominate(alith.address, stake.toFixed(), 10, 10)
+      .signAndSend(ethan);
+
+    await context.createBlock();
+  });
+
+  it('should successfully revoke last nomination', async function () {
+    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+
+    const rawTotalBefore: any = await context.polkadotApi.query.bfcStaking.total();
+    const totalBefore = rawTotalBefore.toJSON();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleRevokeNomination(alith.address)
+      .signAndSend(ethan);
+
+    await context.createBlock();
+
+    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(ethan.address);
+    const nominatorState = rawNominatorState.unwrap().toJSON();
+    const nominatorRequests = rawNominatorState.unwrap().requests.toJSON();
+    // nomination should be set to zero
+    expect(new BigNumber(nominatorState.nominations[alith.address].toString()).toFixed()).equal(new BigNumber(0).toFixed());
+    // total nomination should be decreased
+    expect(new BigNumber(nominatorState.total.toString()).toFixed()).equal(new BigNumber(0).toFixed());
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    // a revoke request should be scheduled
+    expect(new BigNumber(nominatorRequests.lessTotal.toString()).toFixed()).equal(stake.toFixed());
+    expect(new BigNumber(nominatorRequests.requests[alith.address].amount.toString()).toFixed()).equal(stake.toFixed());
+    expect(new BigNumber(nominatorRequests.requests[alith.address].whenExecutable[currentRound + 1].toString()).toFixed()).equal(stake.toFixed());
+    expect(Object.keys(nominatorRequests.requests[alith.address].whenExecutable).length).equal(1);
+    expect(nominatorRequests.requests[alith.address].action).equal('Revoke');
+
+    // empty top and bottom nominations
+    const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
+    const topNominations = rawTopNominations.unwrap().toJSON();
+    expect(topNominations.nominations.length).equal(0);
+    const rawBottomNominations: any = await context.polkadotApi.query.bfcStaking.bottomNominations(alith.address);
+    const bottomNominations = rawBottomNominations.unwrap().toJSON();
+    expect(bottomNominations.nominations.length).equal(0);
+
+    // it should be moved to unstaking nominations
+    const rawUnstakingNominations: any = await context.polkadotApi.query.bfcStaking.unstakingNominations(alith.address);
+    const unstakingNominations = rawUnstakingNominations.unwrap().toJSON();
+    expect(unstakingNominations.nominations.length).equal(1);
+    expect(unstakingNominations.nominations[0].owner.toString().toLowerCase()).equal(ethan.address.toLowerCase());
+    expect(new BigNumber(unstakingNominations.nominations[0].amount.toString()).toFixed()).equal(stake.toFixed());
+
+    // total should be decreased
+    const rawTotalAfter: any = await context.polkadotApi.query.bfcStaking.total();
+    const totalAfter = rawTotalAfter.toJSON();
+    expect(new BigNumber(totalAfter.toString()).toFixed()).equal(new BigNumber(totalBefore.toString()).minus(stake).toFixed());
+  });
+
+  it('should successfully revoke last nomination with existing revoke request', async function () {
+    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const totalRevoke = stake.multipliedBy(2);
+
+    await context.polkadotApi.tx.bfcStaking
+      .nominate(faith.address, stake.toFixed(), 10, 10)
+      .signAndSend(ethan);
+
+    await context.createBlock();
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+
+    await context.polkadotApi.tx.bfcStaking
+      .cancelNominationRequest(alith.address, currentRound + 1)
+      .signAndSend(ethan);
+
+    await context.createBlock();
+
+    const rawTotalBefore: any = await context.polkadotApi.query.bfcStaking.total();
+    const totalBefore = rawTotalBefore.toJSON();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleRevokeNomination(alith.address)
+      .signAndSend(ethan);
+
+    await context.createBlock();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleRevokeNomination(faith.address)
+      .signAndSend(ethan);
+
+    await context.createBlock();
+
+    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(ethan.address);
+    const nominatorState = rawNominatorState.unwrap().toJSON();
+    const nominatorRequests = rawNominatorState.unwrap().requests.toJSON();
+    // nomination should be set to zero
+    expect(new BigNumber(nominatorState.nominations[alith.address].toString()).toFixed()).equal(new BigNumber(0).toFixed());
+    expect(new BigNumber(nominatorState.nominations[faith.address].toString()).toFixed()).equal(new BigNumber(0).toFixed());
+    // total nomination should be decreased
+    expect(new BigNumber(nominatorState.total.toString()).toFixed()).equal(new BigNumber(0).toFixed());
+
+    // a revoke request should be scheduled
+    expect(new BigNumber(nominatorRequests.lessTotal.toString()).toFixed()).equal(totalRevoke.toFixed());
+    expect(new BigNumber(nominatorRequests.requests[alith.address].amount.toString()).toFixed()).equal(stake.toFixed());
+    expect(new BigNumber(nominatorRequests.requests[alith.address].whenExecutable[currentRound + 1].toString()).toFixed()).equal(stake.toFixed());
+    expect(Object.keys(nominatorRequests.requests[alith.address].whenExecutable).length).equal(1);
+    expect(nominatorRequests.requests[alith.address].action).equal('Revoke');
+    expect(new BigNumber(nominatorRequests.requests[faith.address].amount.toString()).toFixed()).equal(stake.toFixed());
+    expect(new BigNumber(nominatorRequests.requests[faith.address].whenExecutable[currentRound + 1].toString()).toFixed()).equal(stake.toFixed());
+    expect(Object.keys(nominatorRequests.requests[faith.address].whenExecutable).length).equal(1);
+    expect(nominatorRequests.requests[faith.address].action).equal('Revoke');
+
+    // empty top and bottom nominations
+    const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
+    const topNominations = rawTopNominations.unwrap().toJSON();
+    expect(topNominations.nominations.length).equal(0);
+    const rawBottomNominations: any = await context.polkadotApi.query.bfcStaking.bottomNominations(alith.address);
+    const bottomNominations = rawBottomNominations.unwrap().toJSON();
+    expect(bottomNominations.nominations.length).equal(0);
+
+    // it should be moved to unstaking nominations
+    const rawUnstakingNominations: any = await context.polkadotApi.query.bfcStaking.unstakingNominations(alith.address);
+    const unstakingNominations = rawUnstakingNominations.unwrap().toJSON();
+    expect(unstakingNominations.nominations.length).equal(1);
+    expect(unstakingNominations.nominations[0].owner.toString().toLowerCase()).equal(ethan.address.toLowerCase());
+    expect(new BigNumber(unstakingNominations.nominations[0].amount.toString()).toFixed()).equal(stake.toFixed());
+
+    // total should be decreased
+    const rawTotalAfter: any = await context.polkadotApi.query.bfcStaking.total();
+    const totalAfter = rawTotalAfter.toJSON();
+    expect(new BigNumber(totalAfter.toString()).toFixed()).equal(new BigNumber(totalBefore.toString()).minus(totalRevoke).toFixed());
   });
 });
