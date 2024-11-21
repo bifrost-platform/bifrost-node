@@ -1620,11 +1620,11 @@ pub mod pallet {
 				// nomination after first
 				ensure!(amount >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
 				ensure!(
-					nomination_count >= state.nominations.len() as u32,
+					nomination_count >= state.nomination_count(false),
 					Error::<T>::TooLowNominationCountToNominate
 				);
 				ensure!(
-					(state.nominations.len() as u32) < T::MaxNominationsPerNominator::get(),
+					state.nomination_count(false) < T::MaxNominationsPerNominator::get(),
 					Error::<T>::ExceedMaxNominationsPerNominator
 				);
 				state.add_nomination::<T>(candidate.clone(), amount)?;
