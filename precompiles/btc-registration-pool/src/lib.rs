@@ -213,7 +213,7 @@ where
 	) -> EvmResult<Vec<BitcoinAddressString>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let vault_addresses: Vec<BitcoinAddressString> =
+		let mut vault_addresses: Vec<BitcoinAddressString> =
 			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter_prefix(
 				Self::target_round(pool_round),
 			)
@@ -224,6 +224,17 @@ where
 				},
 			})
 			.collect();
+		// add system vault if it exists
+		if let Some(system_vault) =
+			BtcRegistrationPoolOf::<Runtime>::system_vault(Self::target_round(pool_round))
+		{
+			match system_vault.address {
+				AddressState::Pending => (),
+				AddressState::Generated(address) => {
+					vault_addresses.push(BitcoinAddressString::from(address.into_inner()));
+				},
+			}
+		}
 
 		Ok(vault_addresses)
 	}
