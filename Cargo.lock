@@ -342,7 +342,7 @@ dependencies = [
  "ark-ff",
  "ark-serialize",
  "ark-std",
- "ark-transcript 0.0.2 (git+https://github.com/w3f/ring-vrf?rev=4b09416)",
+ "ark-transcript",
  "digest 0.10.7",
  "rand_core 0.6.4",
  "zeroize",
@@ -379,20 +379,6 @@ checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
 dependencies = [
  "num-traits",
  "rand 0.8.5",
-]
-
-[[package]]
-name = "ark-transcript"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "563084372d89271122bd743ef0a608179726f5fad0566008ba55bd0f756489b8"
-dependencies = [
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "digest 0.10.7",
- "rand_core 0.6.4",
- "sha3",
 ]
 
 [[package]]
@@ -1799,7 +1785,7 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/w3f/ring-proof#652286c32f96beb9ce7f5793f5e2c2c923f63b73"
+source = "git+https://github.com/w3f/ring-proof#b273d33f9981e2bb3375ab45faeb537f7ee35224"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -1808,7 +1794,8 @@ dependencies = [
  "ark-std",
  "fflonk",
  "getrandom_or_panic",
- "rand_core 0.6.4",
+ "merlin 3.0.0",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -2450,7 +2437,7 @@ dependencies = [
  "ark-secret-scalar",
  "ark-serialize",
  "ark-std",
- "ark-transcript 0.0.2 (git+https://github.com/w3f/ring-vrf?rev=4b09416)",
+ "ark-transcript",
  "arrayvec 0.7.4",
  "rand_core 0.6.4",
  "zeroize",
@@ -4001,7 +3988,6 @@ version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea1015b5a70616b688dc230cfe50c8af89d972cb132d5a622814d29773b10b9"
 dependencies = [
- "rand 0.8.5",
  "rand_core 0.6.4",
 ]
 
@@ -7810,18 +7796,17 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.1.0"
-source = "git+https://github.com/w3f/ring-proof#652286c32f96beb9ce7f5793f5e2c2c923f63b73"
+source = "git+https://github.com/w3f/ring-proof#b273d33f9981e2bb3375ab45faeb537f7ee35224"
 dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-poly",
  "ark-serialize",
  "ark-std",
- "ark-transcript 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "arrayvec 0.7.4",
  "blake2 0.10.6",
  "common",
  "fflonk",
+ "merlin 3.0.0",
 ]
 
 [[package]]
