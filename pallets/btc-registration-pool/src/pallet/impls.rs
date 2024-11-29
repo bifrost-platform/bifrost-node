@@ -96,14 +96,14 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
-		let round = Self::current_round();
+		let round = CurrentRound::<T>::get();
 		// move pre-submitted pub keys from old to new
 		let pre_submitted_pub_keys = <PreSubmittedPubKeys<T>>::take(round, old);
 		if !pre_submitted_pub_keys.is_empty() {
 			<PreSubmittedPubKeys<T>>::insert(round, new, pre_submitted_pub_keys);
 		}
 		// replace authority in system vault (if it's pending)
-		if let Some(mut vault) = Self::system_vault(round) {
+		if let Some(mut vault) = SystemVault::<T>::get(round) {
 			if vault.address == AddressState::Pending {
 				vault.replace_authority(old, new);
 			}
