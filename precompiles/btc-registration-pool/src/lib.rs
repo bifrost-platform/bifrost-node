@@ -218,17 +218,27 @@ where
 	) -> EvmResult<Vec<BitcoinAddressString>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let vault_addresses: Vec<BitcoinAddressString> =
-			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter_prefix(
-				Self::target_round(pool_round),
-			)
-			.filter_map(|(_, relay_target)| match relay_target.vault.address {
-				AddressState::Pending => None,
+		let target_round = Self::target_round(pool_round);
+		let mut vault_addresses: Vec<BitcoinAddressString> =
+			pallet_btc_registration_pool::RegistrationPool::<Runtime>::iter_prefix(target_round)
+				.filter_map(|(_, relay_target)| match relay_target.vault.address {
+					AddressState::Pending => None,
+					AddressState::Generated(address) => {
+						Some(BitcoinAddressString::from(address.into_inner()))
+					},
+				})
+				.collect();
+		// add system vault if it exists
+		if let Some(system_vault) =
+			pallet_btc_registration_pool::SystemVault::<Runtime>::get(target_round)
+		{
+			match system_vault.address {
+				AddressState::Pending => (),
 				AddressState::Generated(address) => {
-					Some(BitcoinAddressString::from(address.into_inner()))
+					vault_addresses.push(BitcoinAddressString::from(address.into_inner()));
 				},
-			})
-			.collect();
+			}
+		}
 
 		Ok(vault_addresses)
 	}
