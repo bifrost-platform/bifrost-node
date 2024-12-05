@@ -1,6 +1,6 @@
 [package]
 name = "bifrost-node"
-version = "2.0.0"
+version = "2.0.1"
 description = "The node client implementation for Bifrost"
 authors = { workspace = true }
 homepage = { workspace = true }
@@ -18,6 +18,9 @@ name = "bifrost-node"
 [dependencies]
 # third-party dependencies
 clap = { workspace = true }
+
+# substrate primitive dependencies
+sp-runtime = { workspace = true, features = ["std"] }
 
 # substrate client dependencies
 sc-cli = { workspace = true }

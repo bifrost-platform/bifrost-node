@@ -25,8 +25,8 @@ use sp_std::{
 
 mod types;
 use types::{
-	AccountVotes, BalanceOf, DemocracyOf, EvmAccountVotes, EvmVotingOf,
-	GetEncodedProposalSizeLimit, HashOf, ReferendaVotes,
+	AccountVotes, BalanceOf, EvmAccountVotes, EvmVotingOf, GetEncodedProposalSizeLimit, HashOf,
+	ReferendaVotes,
 };
 
 /// A precompile to wrap the functionality from governance related pallets.
@@ -56,7 +56,7 @@ where
 	#[precompile::view]
 	fn public_prop_count(handle: &mut impl PrecompileHandle) -> EvmResult<u32> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let prop_count = DemocracyOf::<Runtime>::public_prop_count();
+		let prop_count = pallet_democracy::PublicPropCount::<Runtime>::get();
 
 		Ok(prop_count)
 	}
@@ -75,7 +75,7 @@ where
 		let mut initial_deposit: U256 = zero.into();
 		let mut depositors: Vec<Address> = vec![];
 
-		if let Some(deposit_of) = DemocracyOf::<Runtime>::deposit_of(prop_index) {
+		if let Some(deposit_of) = pallet_democracy::DepositOf::<Runtime>::get(prop_index) {
 			initial_deposit = deposit_of.1.into();
 			for depositor in deposit_of.0 {
 				depositors.push(Address(depositor.into()));
@@ -93,7 +93,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let mut referenda_votes = ReferendaVotes::<Runtime>::default(ref_index);
 
-		let _ref_status = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
+		let _ref_status = match pallet_democracy::ReferendumInfoOf::<Runtime>::get(ref_index) {
 			Some(ReferendumInfo::Ongoing(ref_status)) => ref_status,
 			Some(ReferendumInfo::Finished { .. }) => Err(revert("Referendum is finished"))?,
 			None => Err(revert("Unknown referendum"))?,
@@ -183,7 +183,7 @@ where
 	#[precompile::view]
 	fn lowest_unbaked(handle: &mut impl PrecompileHandle) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let lowest_unbaked = DemocracyOf::<Runtime>::lowest_unbaked();
+		let lowest_unbaked = pallet_democracy::LowestUnbaked::<Runtime>::get();
 
 		Ok(lowest_unbaked.into())
 	}
@@ -196,7 +196,7 @@ where
 		ref_index: u32,
 	) -> EvmResult<(U256, H256, u8, U256, U256, U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let ref_status = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
+		let ref_status = match pallet_democracy::ReferendumInfoOf::<Runtime>::get(ref_index) {
 			Some(ReferendumInfo::Ongoing(ref_status)) => ref_status,
 			Some(ReferendumInfo::Finished { .. }) => Err(revert("Referendum is finished"))?,
 			None => Err(revert("Unknown referendum"))?,
@@ -227,7 +227,7 @@ where
 		ref_index: u32,
 	) -> EvmResult<(bool, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let (approved, end) = match DemocracyOf::<Runtime>::referendum_info(ref_index) {
+		let (approved, end) = match pallet_democracy::ReferendumInfoOf::<Runtime>::get(ref_index) {
 			Some(ReferendumInfo::Ongoing(_)) => Err(revert("Referendum is ongoing"))?,
 			Some(ReferendumInfo::Finished { approved, end }) => (approved, end),
 			None => Err(revert("Unknown referendum"))?,
@@ -243,7 +243,7 @@ where
 		handle.record_log_costs_manual(2, 32)?;
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let _prop_count = DemocracyOf::<Runtime>::public_prop_count();
+		let _prop_count = pallet_democracy::PublicPropCount::<Runtime>::get();
 
 		let value = Self::u256_to_amount(value).in_field("value")?;
 

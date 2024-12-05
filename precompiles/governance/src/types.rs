@@ -17,8 +17,6 @@ pub type BalanceOf<Runtime> = <<Runtime as pallet_democracy::Config>::Currency a
 
 pub type HashOf<Runtime> = <Runtime as frame_system::Config>::Hash;
 
-pub type DemocracyOf<Runtime> = pallet_democracy::Pallet<Runtime>;
-
 pub type EvmVotingOf = (U256, Vec<Address>, Vec<U256>, Vec<bool>, Vec<u32>);
 
 pub type EvmAccountVotes = (Vec<u32>, Vec<U256>, Vec<bool>, Vec<u32>, U256, U256, U256, U256);

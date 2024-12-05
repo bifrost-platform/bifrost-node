@@ -62,7 +62,7 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 		bond: BalanceOf<T>,
 	) -> BalanceOf<T> {
 		// slash bonds only if activated
-		if Self::is_slash_active() {
+		if IsSlashActive::<T>::get() {
 			let slash_amount = slash_fraction * bond;
 			// slash the validator's reserved self bond
 			// the slashed imbalance will be reserved to the treasury
@@ -76,7 +76,7 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 	fn refresh_offences(session_index: SessionIndex) {
 		<ValidatorOffences<T>>::iter().for_each(|offences| {
 			if (session_index - offences.1.latest_offence_session_index)
-				> Self::offence_expiration_in_sessions()
+				> OffenceExpirationInSessions::<T>::get()
 			{
 				<ValidatorOffences<T>>::remove(&offences.0);
 			}
@@ -86,8 +86,8 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 	fn is_offence_count_exceeds(count: u32, tier: TierType) -> bool {
 		// if offence count exceeds the configured limit
 		return match tier {
-			TierType::Full => count > Self::full_maximum_offence_count(),
-			_ => count > Self::basic_maximum_offence_count(),
+			TierType::Full => count > FullMaximumOffenceCount::<T>::get(),
+			_ => count > BasicMaximumOffenceCount::<T>::get(),
 		};
 	}
 }

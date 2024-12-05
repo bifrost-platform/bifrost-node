@@ -1,6 +1,6 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "bifrost-platform",
   "scripts": {
     "test": "mocha -r ts-node/register tests/**/**/*.ts --exit",
@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@polkadot/api": "10.11.2",
-    "axios": "1.6.5",
+    "axios": "1.7.8",
     "bignumber.js": "9.1.2",
     "ethers": "6.13.1",
     "shelljs": "0.8.5",

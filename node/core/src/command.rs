@@ -64,12 +64,12 @@ impl SubstrateCli for Cli {
 
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
 		Ok(match id {
-			"dev" => Box::new(bifrost_dev_node::chain_spec::development_config()?),
-			"testnet-local" => Box::new(bifrost_testnet_node::chain_spec::testnet_config()?),
+			"dev" => Box::new(bifrost_dev_node::chain_spec::development_config()),
+			"testnet-local" => Box::new(bifrost_testnet_node::chain_spec::testnet_config()),
 			"testnet" => Box::new(bifrost_testnet_node::chain_spec::ChainSpec::from_json_file(
 				std::path::PathBuf::from("./specs/bifrost-testnet.json"),
 			)?),
-			"mainnet-local" => Box::new(bifrost_mainnet_node::chain_spec::mainnet_config()?),
+			"mainnet-local" => Box::new(bifrost_mainnet_node::chain_spec::mainnet_config()),
 			"mainnet" => Box::new(bifrost_mainnet_node::chain_spec::ChainSpec::from_json_file(
 				std::path::PathBuf::from("./specs/bifrost-mainnet.json"),
 			)?),
@@ -294,7 +294,9 @@ pub fn run() -> sc_cli::Result<()> {
 							);
 						}
 
-						cmd.run::<Block, bifrost_common_node::service::HostFunctions>(config)
+						cmd.run_with_spec::<sp_runtime::traits::HashingFor<Block>, ()>(Some(
+							config.chain_spec,
+						))
 					},
 					BenchmarkCmd::Block(cmd) => {
 						let PartialComponents { client, .. } =

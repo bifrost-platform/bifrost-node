@@ -5,14 +5,11 @@ use pallet_evm::AddressMapping;
 use precompile_utils::prelude::*;
 
 use bp_staking::TierType;
-use fp_evm::PrecompileHandle;
 use sp_core::{H160, H256};
 use sp_std::{collections::btree_set::BTreeSet, marker::PhantomData, vec, vec::Vec};
 
 mod types;
-use types::{
-	EvmValidatorOffenceOf, EvmValidatorOffencesOf, OffencesOf, ValidatorOffence, ValidatorOffences,
-};
+use types::{EvmValidatorOffenceOf, EvmValidatorOffencesOf, ValidatorOffence, ValidatorOffences};
 
 /// A precompile to wrap the functionality from pallet_bfc_offences
 pub struct BfcOffencesPrecompile<Runtime>(PhantomData<Runtime>);
@@ -41,14 +38,18 @@ where
 		let mut maximum_offence_count = vec![];
 		match tier {
 			TierType::Full => {
-				maximum_offence_count.push(OffencesOf::<Runtime>::full_maximum_offence_count());
+				maximum_offence_count
+					.push(pallet_bfc_offences::FullMaximumOffenceCount::<Runtime>::get());
 			},
 			TierType::Basic => {
-				maximum_offence_count.push(OffencesOf::<Runtime>::basic_maximum_offence_count());
+				maximum_offence_count
+					.push(pallet_bfc_offences::BasicMaximumOffenceCount::<Runtime>::get());
 			},
 			TierType::All => {
-				maximum_offence_count.push(OffencesOf::<Runtime>::full_maximum_offence_count());
-				maximum_offence_count.push(OffencesOf::<Runtime>::basic_maximum_offence_count());
+				maximum_offence_count
+					.push(pallet_bfc_offences::FullMaximumOffenceCount::<Runtime>::get());
+				maximum_offence_count
+					.push(pallet_bfc_offences::BasicMaximumOffenceCount::<Runtime>::get());
 			},
 		}
 
@@ -66,7 +67,7 @@ where
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		if let Some(offence) = OffencesOf::<Runtime>::validator_offences(&validator) {
+		if let Some(offence) = pallet_bfc_offences::ValidatorOffences::<Runtime>::get(&validator) {
 			Ok(ValidatorOffence::<Runtime>::set_offence(validator, offence).into())
 		} else {
 			Ok(ValidatorOffence::<Runtime>::set_empty(validator).into())
@@ -92,7 +93,7 @@ where
 
 		let mut validator_offences = ValidatorOffences::<Runtime>::default();
 		unique_validators.clone().into_iter().for_each(|v| {
-			if let Some(offence) = OffencesOf::<Runtime>::validator_offences(&v) {
+			if let Some(offence) = pallet_bfc_offences::ValidatorOffences::<Runtime>::get(&v) {
 				validator_offences
 					.insert_offence(ValidatorOffence::<Runtime>::set_offence(v, offence));
 			} else {

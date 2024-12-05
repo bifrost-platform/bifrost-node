@@ -12,11 +12,11 @@ use sc_client_api::{backend::Backend, BlockOf, BlockchainEvents, StateBackend, S
 use substrate_prometheus_endpoint::Registry as PrometheusRegistry;
 use tokio::sync::Semaphore;
 
-use sp_api::{BlockT, HeaderT, ProvideRuntimeApi};
+use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
-use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::traits::{BlakeTwo256, Block as BlockT, Header as HeaderT};
 
 use std::{sync::Arc, time::Duration};
 
@@ -66,9 +66,9 @@ where
 		let (debug_task, debug_requester) = DebugHandler::task(
 			Arc::clone(&params.client),
 			Arc::clone(&params.substrate_backend),
-			match params.frontier_backend {
-				fc_db::Backend::KeyValue(b) => Arc::new(b),
-				fc_db::Backend::Sql(b) => Arc::new(b),
+			match &*params.frontier_backend {
+				fc_db::Backend::KeyValue(b) => b.clone(),
+				fc_db::Backend::Sql(b) => b.clone(),
 			},
 			Arc::clone(&permit_pool),
 			Arc::clone(&params.overrides),

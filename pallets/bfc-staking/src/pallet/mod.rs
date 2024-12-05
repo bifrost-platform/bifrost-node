@@ -446,65 +446,53 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	#[pallet::getter(fn session)]
 	/// Current session index of current round
 	pub type Session<T> = StorageValue<_, SessionIndex, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn round)]
 	/// Current round index and next round scheduled transition
-	pub(crate) type Round<T: Config> = StorageValue<_, RoundInfo<BlockNumberFor<T>>, ValueQuery>;
+	pub type Round<T: Config> = StorageValue<_, RoundInfo<BlockNumberFor<T>>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn storage_cache_lifetime)]
 	/// The max storage lifetime for storage data to be cached
 	pub type StorageCacheLifetime<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn default_full_validator_commission)]
 	/// Default commission rate for full validators
 	pub type DefaultFullValidatorCommission<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn default_basic_validator_commission)]
 	/// Default commission rate for basic validators
 	pub type DefaultBasicValidatorCommission<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn min_full_validator_commission)]
 	/// Maximum commission rate for full validators
 	pub type MaxFullValidatorCommission<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn min_basic_validator_commission)]
 	/// Maximum commission rate for basic validators
 	pub type MaxBasicValidatorCommission<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn max_total_selected)]
 	/// The maximum node candidates selected every round
 	pub type MaxTotalSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn max_full_selected)]
 	/// The maximum full node candidates selected every round
 	pub type MaxFullSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn max_basic_selected)]
 	/// The maximum basic node candidates selected every round
 	pub type MaxBasicSelected<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn productivity_per_block)]
 	/// The productivity rate per block in the current round
 	pub type ProductivityPerBlock<T: Config> = StorageValue<_, Perbill, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn nominator_state)]
 	/// Get nominator state associated with an account if account is nominating else None
-	pub(crate) type NominatorState<T: Config> = StorageMap<
+	pub type NominatorState<T: Config> = StorageMap<
 		_,
 		Twox64Concat,
 		T::AccountId,
@@ -513,7 +501,6 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn candidate_info)]
 	/// Get validator candidate info associated with an account if account is candidate else None
 	pub type CandidateInfo<T: Config> = StorageMap<
 		_,
@@ -524,15 +511,13 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn bonded_stash)]
 	/// Map from all locked "stash" accounts to the controller account.
 	pub type BondedStash<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, T::AccountId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn top_nominations)]
 	/// Top nominations for validator candidate
-	pub(crate) type TopNominations<T: Config> = StorageMap<
+	pub type TopNominations<T: Config> = StorageMap<
 		_,
 		Twox64Concat,
 		T::AccountId,
@@ -542,9 +527,8 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn bottom_nominations)]
 	/// Bottom nominations for validator candidate
-	pub(crate) type BottomNominations<T: Config> = StorageMap<
+	pub type BottomNominations<T: Config> = StorageMap<
 		_,
 		Twox64Concat,
 		T::AccountId,
@@ -553,26 +537,22 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn selected_candidates)]
 	/// The active validator set (full and basic) selected for the current round. This storage is sorted by address.
 	pub type SelectedCandidates<T: Config> =
 		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn selected_full_candidates)]
 	/// The active full validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedFullCandidates<T: Config> =
 		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn selected_basic_candidates)]
 	/// The active basic validator set selected for the current round. This storage is sorted by address.
 	pub type SelectedBasicCandidates<T: Config> =
 		StorageValue<_, BoundedBTreeSet<T::AccountId, ConstU32<MAX_AUTHORITIES>>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn cached_selected_candidates)]
 	/// The cached active validator set selected from previous rounds. This storage is sorted by address.
 	pub type CachedSelectedCandidates<T: Config> = StorageValue<
 		_,
@@ -581,25 +561,21 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn majority)]
 	/// The majority of the current active validator set
 	pub type Majority<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn cached_majority)]
 	/// The cached majority based on the active validator set selected from previous rounds
 	pub type CachedMajority<T: Config> = StorageValue<_, BTreeMap<RoundIndex, u32>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn total)]
 	/// Total capital locked by this staking pallet
-	pub(crate) type Total<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+	pub type Total<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn candidate_pool)]
 	/// The pool of validator candidates, each with their total voting power.
-	pub(crate) type CandidatePool<T: Config> = StorageValue<
+	pub type CandidatePool<T: Config> = StorageValue<
 		_,
 		BoundedBTreeMap<T::AccountId, BalanceOf<T>, ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
@@ -607,7 +583,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn at_stake)]
 	/// Snapshot of validator nomination stake at the start of the round
 	pub type AtStake<T: Config> = StorageDoubleMap<
 		_,
@@ -620,19 +595,16 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn total_at_stake)]
 	/// Snapshot of the network state at the start of the round
 	pub type TotalAtStake<T: Config> =
 		StorageMap<_, Twox64Concat, RoundIndex, TotalSnapshot<BalanceOf<T>>, OptionQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn delayed_payouts)]
 	/// Delayed reward payouts
 	pub type DelayedPayouts<T: Config> =
 		StorageMap<_, Twox64Concat, RoundIndex, DelayedPayout<BalanceOf<T>>, OptionQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn delayed_controller_sets)]
 	/// Delayed new controller account set requests
 	pub type DelayedControllerSets<T: Config> = StorageMap<
 		_,
@@ -643,7 +615,6 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn delayed_commission_sets)]
 	/// Delayed candidate commission rate set requests
 	pub type DelayedCommissionSets<T: Config> = StorageMap<
 		_,
@@ -654,22 +625,18 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn staked)]
 	/// Total counted stake for selected candidates in the round
 	pub type Staked<T: Config> = StorageMap<_, Twox64Concat, RoundIndex, BalanceOf<T>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn inflation_config)]
 	/// Inflation configuration
 	pub type InflationConfig<T: Config> = StorageValue<_, InflationInfo<BalanceOf<T>>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn points)]
 	/// Total points awarded to validators for block production in the round
 	pub type Points<T: Config> = StorageMap<_, Twox64Concat, RoundIndex, RewardPoint, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn awarded_pts)]
 	/// Points for each validator per round
 	pub type AwardedPts<T: Config> = StorageDoubleMap<
 		_,
@@ -682,7 +649,6 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn awarded_tokens)]
 	/// The amount of awarded tokens to validators and nominators since genesis
 	pub type AwardedTokens<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
@@ -1092,7 +1058,7 @@ pub mod pallet {
 			relayer: Option<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
-			let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let controller = BondedStash::<T>::get(&stash).ok_or(Error::<T>::StashDNE)?;
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			let old = state.tier;
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
@@ -1291,7 +1257,7 @@ pub mod pallet {
 			candidate_nomination_count: u32,
 		) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
-			let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let controller = BondedStash::<T>::get(&stash).ok_or(Error::<T>::StashDNE)?;
 			let state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			ensure!(
 				state.nomination_count <= candidate_nomination_count,
@@ -1392,7 +1358,7 @@ pub mod pallet {
 			new: T::AccountId,
 		) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
-			let old = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let old = BondedStash::<T>::get(&stash).ok_or(Error::<T>::StashDNE)?;
 			let state = <CandidateInfo<T>>::get(&old).ok_or(Error::<T>::CandidateDNE)?;
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
 			ensure!(!Self::is_candidate(&new, TierType::All), Error::<T>::AlreadyPaired);
@@ -1541,7 +1507,7 @@ pub mod pallet {
 			more: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
-			let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let controller = BondedStash::<T>::get(&stash).ok_or(Error::<T>::StashDNE)?;
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			// check that caller can reserve the amount before any changes to storage
 			ensure!(T::Currency::can_reserve(&stash, more), Error::<T>::InsufficientBalance);
@@ -1578,7 +1544,7 @@ pub mod pallet {
 		/// - origin should be the stash account
 		pub fn execute_candidate_bond_less(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let stash = ensure_signed(origin)?;
-			let controller = Self::bonded_stash(&stash).ok_or(Error::<T>::StashDNE)?;
+			let controller = BondedStash::<T>::get(&stash).ok_or(Error::<T>::StashDNE)?;
 			let mut state = <CandidateInfo<T>>::get(&controller).ok_or(Error::<T>::CandidateDNE)?;
 			state.execute_bond_less::<T>(stash.clone(), controller.clone())?;
 			<CandidateInfo<T>>::insert(&controller, state);

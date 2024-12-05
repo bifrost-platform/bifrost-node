@@ -77,33 +77,27 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn validator_offences)]
 	/// The current offence state of a specific validator
 	pub type ValidatorOffences<T: Config> =
 		StorageMap<_, Twox64Concat, T::AccountId, ValidatorOffenceInfo<BalanceOf<T>>, OptionQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn offence_expiration_in_sessions)]
 	/// The current offence expiration in sessions
 	pub type OffenceExpirationInSessions<T: Config> = StorageValue<_, SessionIndex, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn full_maximum_offence_count)]
 	/// The current maximum offence count for all full nodes
 	pub type FullMaximumOffenceCount<T: Config> = StorageValue<_, OffenceCount, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn basic_maximum_offence_count)]
 	/// The current maximum offence count for all basic nodes
 	pub type BasicMaximumOffenceCount<T: Config> = StorageValue<_, OffenceCount, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn is_offence_active)]
 	/// The current activation of validator offence management
 	pub type IsOffenceActive<T: Config> = StorageValue<_, bool, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn is_slash_active)]
 	/// The current activation of validator slashing
 	pub type IsSlashActive<T: Config> = StorageValue<_, bool, ValueQuery>;
 

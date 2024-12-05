@@ -13,4 +13,4 @@ bp-core = { workspace = true }
 
 [features]
 default = ["std"]
-std = []
+std = ["bp-core/std"]

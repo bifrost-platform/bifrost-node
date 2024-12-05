@@ -12,8 +12,6 @@ pub type BalanceOf<Runtime> = <<Runtime as pallet_bfc_offences::Config>::Currenc
 	<Runtime as frame_system::Config>::AccountId,
 >>::Balance;
 
-pub type OffencesOf<Runtime> = pallet_bfc_offences::Pallet<Runtime>;
-
 pub type EvmValidatorOffenceOf = (Address, RoundIndex, SessionIndex, OffenceCount);
 
 pub type EvmValidatorOffencesOf =

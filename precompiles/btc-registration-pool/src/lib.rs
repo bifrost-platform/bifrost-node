@@ -19,8 +19,6 @@ use types::{
 	RegistrationInfo,
 };
 
-type BtcRegistrationPoolOf<Runtime> = pallet_btc_registration_pool::Pallet<Runtime>;
-
 /// Solidity selector of the VaultPending log, which is the Keccak of the Log signature.
 pub(crate) const SELECTOR_LOG_VAULT_PENDING: [u8; 32] = keccak256!("VaultPending(address,string)");
 
@@ -60,7 +58,8 @@ where
 		let target_round = Self::target_round(pool_round);
 
 		if user_bfc_address == Address(handle.context().address) {
-			if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault(target_round)
+			if let Some(system_vault) =
+				pallet_btc_registration_pool::SystemVault::<Runtime>::get(target_round)
 			{
 				info.user_bfc_address = Address(handle.context().address);
 				for (authority_id, pub_key) in system_vault.pub_keys.iter() {
@@ -76,8 +75,10 @@ where
 		} else {
 			let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 			if let Some(relay_target) =
-				BtcRegistrationPoolOf::<Runtime>::registration_pool(target_round, &user_bfc_address)
-			{
+				pallet_btc_registration_pool::RegistrationPool::<Runtime>::get(
+					target_round,
+					&user_bfc_address,
+				) {
 				info.user_bfc_address = Address(user_bfc_address.into());
 				info.refund_address =
 					BitcoinAddressString::from(relay_target.refund_address.into_inner());
@@ -141,7 +142,9 @@ where
 		let mut user_bfc_addresses: Vec<Address> = vec![];
 		let mut refund_addresses: Vec<BitcoinAddressString> = vec![];
 
-		if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault(target_round) {
+		if let Some(system_vault) =
+			pallet_btc_registration_pool::SystemVault::<Runtime>::get(target_round)
+		{
 			if matches!(system_vault.address, AddressState::Pending) {
 				user_bfc_addresses.push(Address(handle.context().address));
 				refund_addresses.push(BitcoinAddressString::from(vec![]));
@@ -252,7 +255,8 @@ where
 
 		let mut vault_address = BitcoinAddressString::from(vec![]);
 		if user_bfc_address == Address(handle.context().address) {
-			if let Some(system_vault) = BtcRegistrationPoolOf::<Runtime>::system_vault(target_round)
+			if let Some(system_vault) =
+				pallet_btc_registration_pool::SystemVault::<Runtime>::get(target_round)
 			{
 				match system_vault.address {
 					AddressState::Pending => (),
@@ -264,7 +268,7 @@ where
 		} else {
 			let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 
-			match BtcRegistrationPoolOf::<Runtime>::registration_pool(
+			match pallet_btc_registration_pool::RegistrationPool::<Runtime>::get(
 				target_round,
 				user_bfc_address,
 			) {
@@ -310,7 +314,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let user_bfc_address = Runtime::AddressMapping::into_account_id(user_bfc_address.0);
 
-		let refund_address = match BtcRegistrationPoolOf::<Runtime>::registration_pool(
+		let refund_address = match pallet_btc_registration_pool::RegistrationPool::<Runtime>::get(
 			Self::target_round(pool_round),
 			user_bfc_address,
 		) {
@@ -336,7 +340,7 @@ where
 			Self::convert_string_to_bitcoin_address(vault_address).in_field("vault_address")?;
 
 		Ok(
-			match BtcRegistrationPoolOf::<Runtime>::bonded_vault(
+			match pallet_btc_registration_pool::BondedVault::<Runtime>::get(
 				Self::target_round(pool_round),
 				vault_address,
 			) {
@@ -375,7 +379,7 @@ where
 			Self::convert_string_to_bitcoin_address(vault_address).in_field("vault_address")?;
 
 		Ok(
-			match BtcRegistrationPoolOf::<Runtime>::bonded_descriptor(
+			match pallet_btc_registration_pool::BondedDescriptor::<Runtime>::get(
 				Self::target_round(pool_round),
 				vault_address,
 			) {
@@ -391,7 +395,8 @@ where
 		handle: &mut impl PrecompileHandle,
 		refund_address: BitcoinAddressString,
 	) -> EvmResult {
-		if BtcRegistrationPoolOf::<Runtime>::service_state() != MigrationSequence::Normal {
+		if pallet_btc_registration_pool::ServiceState::<Runtime>::get() != MigrationSequence::Normal
+		{
 			return Err(RevertReason::custom("Service is under maintenance").into());
 		}
 
@@ -424,7 +429,8 @@ where
 		handle: &mut impl PrecompileHandle,
 		refund_address: BitcoinAddressString,
 	) -> EvmResult {
-		if BtcRegistrationPoolOf::<Runtime>::service_state() != MigrationSequence::Normal {
+		if pallet_btc_registration_pool::ServiceState::<Runtime>::get() != MigrationSequence::Normal
+		{
 			return Err(RevertReason::custom("Service is under maintenance").into());
 		}
 
@@ -452,7 +458,7 @@ where
 
 	/// Get current round of the BTC registration pool.
 	fn get_current_round() -> PoolRound {
-		BtcRegistrationPoolOf::<Runtime>::current_round()
+		pallet_btc_registration_pool::CurrentRound::<Runtime>::get()
 	}
 
 	/// Get the target round of the BTC registration pool.

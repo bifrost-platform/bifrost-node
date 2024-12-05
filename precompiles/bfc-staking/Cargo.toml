@@ -9,20 +9,15 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-num_enum = { workspace = true }
-rustc-hex = { workspace = true }
-
 # Bifrost
 pallet-bfc-staking = { workspace = true }
 bp-staking = { workspace = true }
 precompile-utils = { workspace = true }
 
 # Substrate
-parity-scale-codec = { workspace = true, features = ["max-encoded-len"] }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-core = { workspace = true }
-sp-io = { workspace = true }
 sp-std = { workspace = true }
 sp-runtime = { workspace = true }
 
@@ -30,21 +25,9 @@ sp-runtime = { workspace = true }
 fp-evm = { workspace = true }
 pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
-[dev-dependencies]
-derive_more = { workspace = true }
-serde = { workspace = true }
-sha3 = { workspace = true }
-
-# Substrate
-pallet-balances = { workspace = true, features = ["insecure_zero_ed", "std"] }
-pallet-timestamp = { workspace = true, features = ["std"] }
-sp-runtime = { workspace = true, features = ["std"] }
-scale-info = { workspace = true }
-
 [features]
 default = ["std"]
 std = [
-	"parity-scale-codec/std",
 	"fp-evm/std",
 	"frame-support/std",
 	"frame-system/std",

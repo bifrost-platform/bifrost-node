@@ -1,9 +1,6 @@
 //! Helper methods for computing issuance based on inflation
 
-use crate::{
-	pallet::pallet::{Config, Pallet},
-	BalanceOf,
-};
+use crate::{pallet::pallet::Config, BalanceOf, Round};
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +21,7 @@ const SECONDS_PER_BLOCK: u32 = 3;
 pub const BLOCKS_PER_YEAR: u32 = SECONDS_PER_YEAR / SECONDS_PER_BLOCK;
 
 pub fn rounds_per_year<T: Config>() -> u32 {
-	let blocks_per_round = <Pallet<T>>::round().round_length;
+	let blocks_per_round = <Round<T>>::get().round_length;
 	BLOCKS_PER_YEAR / blocks_per_round
 }
 

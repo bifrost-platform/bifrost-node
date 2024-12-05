@@ -4,10 +4,6 @@ fn main() {
 		#[cfg(target_arch = "aarch64")]
 		std::env::set_var("CFLAGS", "-mcpu=mvp");
 
-		substrate_wasm_builder::WasmBuilder::new()
-			.with_current_project()
-			.export_heap_base()
-			.import_memory()
-			.build();
+		substrate_wasm_builder::WasmBuilder::build_using_defaults();
 	}
 }
