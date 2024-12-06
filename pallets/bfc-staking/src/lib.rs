@@ -1722,10 +1722,19 @@ impl<
 	{
 		// get nomination amount
 		return if let Some(amount) = self.nominations.get(&candidate) {
+			let after_less = amount.saturating_sub(less.into());
+			let candidate_id: T::AccountId = candidate.clone().into();
+			let validator =
+				<CandidateInfo<T>>::get(&candidate_id).ok_or(Error::<T>::CandidateDNE)?;
 			ensure!(
-				*amount >= less + T::MinNomination::get().into(),
-				Error::<T>::NominationBelowMin
+				*amount > validator.highest_bottom_nomination_amount.into(),
+				Error::<T>::CannotDecreaseWhenInvolvedInBottom
 			);
+			ensure!(
+				after_less > validator.highest_bottom_nomination_amount.into(),
+				Error::<T>::CannotDecreaseLessThanHighestBottom
+			);
+			ensure!(after_less >= T::MinNomination::get().into(), Error::<T>::NominationBelowMin);
 			ensure!(
 				self.total.saturating_sub(less) >= T::MinNominatorStk::get().into(),
 				Error::<T>::NominatorBondBelowMin

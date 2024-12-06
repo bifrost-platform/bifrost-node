@@ -252,6 +252,10 @@ pub mod pallet {
 		PendingNominationRequestNotDueYet,
 		/// Cannot nominate if the given amount is less than the lowest bottom.
 		CannotNominateLessThanLowestBottomWhenBottomIsFull,
+		/// Cannot decrease nomination less than the highest bottom.
+		CannotDecreaseLessThanHighestBottom,
+		/// Cannot decrease nomination when involved in bottom nominations.
+		CannotDecreaseWhenInvolvedInBottom,
 	}
 
 	#[pallet::event]
