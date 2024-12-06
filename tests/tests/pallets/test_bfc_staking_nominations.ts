@@ -46,7 +46,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully nominate to alith - baltathar', async function () {
-    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 0, 0)
@@ -79,7 +79,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully nominate to alith - charleth', async function () {
-    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 10, 10)
@@ -140,7 +140,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully bond more', async function () {
-    const more = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const more = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
     const stakeBefore = more;
 
     await context.polkadotApi.tx.bfcStaking
@@ -176,7 +176,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully join bottom nominations', async function () {
-    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const defaultStake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const stake = new BigNumber(900).multipliedBy(10 ** 18); // 900 BFC
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 10, 10)
@@ -187,12 +188,12 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
     const candidateState = rawCandidateState.unwrap();
     expect(candidateState.nominationCount.toString()).equal('3');
-    expect(candidateState.lowestTopNominationAmount.toString()).equal(stake.toFixed());
+    expect(candidateState.lowestTopNominationAmount.toString()).equal(defaultStake.toFixed());
     expect(candidateState.highestBottomNominationAmount.toString()).equal(stake.toFixed());
     expect(candidateState.lowestBottomNominationAmount.toString()).equal(stake.toFixed());
 
     const selfBond = new BigNumber(candidateState.bond.toString());
-    const expectedStake = selfBond.plus(stake.multipliedBy(3)); // for baltathar (2) and charleth (1)
+    const expectedStake = selfBond.plus(defaultStake.multipliedBy(3)); // for baltathar (2) and charleth (1)
     expect(candidateState.votingPower.toString()).equal(expectedStake.toFixed()); // voting power includes top only
 
     const rawCandidatePool: any = await context.polkadotApi.query.bfcStaking.candidatePool();
@@ -211,8 +212,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully schedule nominator bond less', async function () {
-    const less = new BigNumber(DEFAULT_STAKING_AMOUNT);
-    const stakeAfter = less;
+    const less = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(2); // 500 BFC
+    const stakeAfter = new BigNumber(1500).multipliedBy(10 ** 18); // 1500 BFC
 
     const rawCandidateStateBefore: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
     const candidateStateBefore = rawCandidateStateBefore.unwrap();
@@ -253,9 +254,33 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     expect(nominatorRequests.requests[alith.address].action).equal('Decrease');
   });
 
-  it('should successfully schedule nominator bond less multiple times - same round', async function () {
-    const prevLess = new BigNumber(DEFAULT_STAKING_AMOUNT);
+  it('should fail to schedule decrease due to nomination in bottom', async function () {
     const less = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(2); // 500 BFC
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleNominatorBondLess(alith.address, less.toFixed())
+      .signAndSend(dorothy);
+
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
+    expect(extrinsicResult).equal('CannotDecreaseWhenInvolvedInBottom');
+  });
+
+  it('should fail to schedule decrease due to nomination below lowest top', async function () {
+    const less = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleNominatorBondLess(alith.address, less.toFixed())
+      .signAndSend(baltathar);
+
+    await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleNominatorBondLess');
+    expect(extrinsicResult).equal('CannotDecreaseLessThanHighestBottom');
+  });
+
+  it('should successfully schedule nominator bond less multiple times - same round', async function () {
+    const prevLess = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(2); // 500 BFC
+    const less = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(10); // 100 BFC -> 1400 BFC
 
     await context.polkadotApi.tx.bfcStaking
       .scheduleNominatorBondLess(alith.address, less.toFixed())
@@ -278,8 +303,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully schedule nominator bond less multiple times - different rounds', async function () {
-    const prevLess = new BigNumber(DEFAULT_STAKING_AMOUNT).plus(new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(2)); // 1500 BFC
-    const less = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(10); // 100 BFC
+    const prevLess = new BigNumber(600).multipliedBy(10 ** 18); // 600 BFC
+    const less = new BigNumber(450).multipliedBy(10 ** 18); // 450 BFC -> 950 BFC
 
     const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
     const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
@@ -302,12 +327,13 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     expect(Object.keys(nominatorRequests.requests[alith.address].whenExecutable).length).equal(2);
     expect(nominatorRequests.requests[alith.address].action).equal('Decrease');
 
-    // it should be moved to bottom nominations
-    const rawBottomNominations: any = await context.polkadotApi.query.bfcStaking.bottomNominations(alith.address);
-    const bottomNominations = rawBottomNominations.unwrap();
-    expect(bottomNominations.nominations.length).equal(1);
-    expect(bottomNominations.nominations[0].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
+    // it should be moved to the lowest top nomination
+    const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
+    const topNominations = rawTopNominations.unwrap();
+    expect(topNominations.nominations.length).equal(2);
+    expect(topNominations.nominations[1].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
 
+    // it should be moved to the unstaking nominations
     const rawUnstakingNominations: any = await context.polkadotApi.query.bfcStaking.unstakingNominations(alith.address);
     const unstakingNominations = rawUnstakingNominations.unwrap().toJSON();
     expect(unstakingNominations.nominations.length).equal(1);
@@ -347,7 +373,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
 
   it('should successfully execute nominator bond less', async function () {
     const reserved = new BigNumber(DEFAULT_STAKING_AMOUNT).multipliedBy(2);
-    const orderAmount = new BigNumber(DEFAULT_STAKING_AMOUNT).plus(new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(2)); // 1500 BFC
+    const orderAmount = new BigNumber(600).multipliedBy(10 ** 18);
 
     const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
     const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
@@ -369,19 +395,19 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     const nominatorState = rawNominatorState.unwrap();
     const nominatorRequests = nominatorState.requests.toJSON();
 
-    const lessTotal = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(10); // 100 BFC
+    const lessTotal = new BigNumber(450).multipliedBy(10 ** 18); // 450 BFC
     expect(new BigNumber(nominatorRequests.lessTotal.toString()).toFixed()).equal(lessTotal.toFixed());
     expect(new BigNumber(nominatorRequests.requests[alith.address].amount.toString()).toFixed()).equal(lessTotal.toFixed());
     expect(new BigNumber(nominatorRequests.requests[alith.address].whenExecutable[currentRound + 1].toString()).toFixed()).equal(lessTotal.toFixed());
     expect(Object.keys(nominatorRequests.requests[alith.address].whenExecutable).length).equal(1);
   });
 
-  it('should successfully kick out lowest bottom nomination - baltathar kicked out by ethan', async function () {
+  it('should successfully kick out lowest bottom nomination - dorothy kicked out by ethan', async function () {
     const defaultStake = new BigNumber(DEFAULT_STAKING_AMOUNT);
     const stake = defaultStake.multipliedBy(2); // make sure it goes to top
 
-    const accountBefore = await context.polkadotApi.query.system.account(baltathar.address);
-    expect(accountBefore['data'].reserved.toString()).equal(new BigNumber(500).multipliedBy(10 ** 18).toFixed());
+    const accountBefore = await context.polkadotApi.query.system.account(dorothy.address);
+    expect(accountBefore['data'].reserved.toString()).equal(new BigNumber(900).multipliedBy(10 ** 18).toFixed());
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 10, 10)
@@ -390,15 +416,15 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     await context.createBlock();
 
     // ethan joins top
-    // dorothy moves to bottom
-    // baltathar is kicked out
+    // baltathar moves to bottom
+    // dorothy is kicked out
 
     // the reserved stake will be immediately returned - including any other pending requests
-    const accountAfter = await context.polkadotApi.query.system.account(baltathar.address);
+    const accountAfter = await context.polkadotApi.query.system.account(dorothy.address);
     expect(accountAfter['data'].reserved.toString()).equal(new BigNumber(0).toFixed());
 
     // nominator state should be deleted
-    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(baltathar.address);
+    const rawNominatorState: any = await context.polkadotApi.query.bfcStaking.nominatorState(dorothy.address);
     const nominatorState = rawNominatorState.toJSON();
     expect(nominatorState).is.null;
 
@@ -410,12 +436,12 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     expect(topNominations.nominations.length).equal(2);
     expect(new BigNumber(topNominations.total.toString()).toFixed()).equal(stake.plus(defaultStake).toFixed());
 
-    // bottom nominations should be updated - dorothy moved to bottom, baltathar kicked out
+    // bottom nominations should be updated - baltathar moved to bottom, dorothy kicked out
     const rawBottomNominations: any = await context.polkadotApi.query.bfcStaking.bottomNominations(alith.address);
     const bottomNominations = rawBottomNominations.unwrap().toJSON();
-    expect(bottomNominations.nominations[0].owner.toLowerCase()).equal(dorothy.address.toLowerCase());
+    expect(bottomNominations.nominations[0].owner.toLowerCase()).equal(baltathar.address.toLowerCase());
     expect(bottomNominations.nominations.length).equal(1);
-    expect(new BigNumber(bottomNominations.total.toString()).toFixed()).equal(defaultStake.toFixed());
+    expect(new BigNumber(bottomNominations.total.toString()).toFixed()).equal(new BigNumber(950).multipliedBy(10 ** 18).toFixed());
   });
 
   it('should successfully receive round rewards while decreasing stake', async function () {
@@ -531,13 +557,13 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     expect(nominatorRequests.requests[alith.address].action).equal('Revoke');
 
     // ethan removed
-    // dorothy moved to top (with charleth)
+    // baltathar moved to top (with charleth)
     // empty bottom
     const rawTopNominations: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
     const topNominations = rawTopNominations.unwrap().toJSON();
     expect(topNominations.nominations.length).equal(2);
     expect(topNominations.nominations[0].owner.toString().toLowerCase()).equal(charleth.address.toLowerCase());
-    expect(topNominations.nominations[1].owner.toString().toLowerCase()).equal(dorothy.address.toLowerCase());
+    expect(topNominations.nominations[1].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
 
     const rawBottomNominations: any = await context.polkadotApi.query.bfcStaking.bottomNominations(alith.address);
     const bottomNominations = rawBottomNominations.unwrap().toJSON();
@@ -546,7 +572,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     // it should be moved to unstaking nominations
     const rawUnstakingNominations: any = await context.polkadotApi.query.bfcStaking.unstakingNominations(alith.address);
     const unstakingNominations = rawUnstakingNominations.unwrap().toJSON();
-    expect(unstakingNominations.nominations.length).equal(1);
+    expect(unstakingNominations.nominations.length).equal(2);
     expect(unstakingNominations.nominations[0].owner.toString().toLowerCase()).equal(ethan.address.toLowerCase());
     expect(new BigNumber(unstakingNominations.nominations[0].amount.toString()).toFixed()).equal(revoke.toFixed());
 
@@ -575,7 +601,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     await context.createBlock();
 
     // ethan added to top (with charleth)
-    // dorothy moved to bottom
+    // baltathar moved to bottom
 
     // top nominations should be rollbacked
     const rawTopNominationsAfter: any = await context.polkadotApi.query.bfcStaking.topNominations(alith.address);
@@ -590,7 +616,7 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
     const rawBottomNominationsAfter: any = await context.polkadotApi.query.bfcStaking.bottomNominations(alith.address);
     const bottomNominationsAfter = rawBottomNominationsAfter.unwrap().toJSON();
     expect(bottomNominationsAfter.nominations.length).equal(1);
-    expect(bottomNominationsAfter.nominations[0].owner.toString().toLowerCase()).equal(dorothy.address.toLowerCase());
+    expect(bottomNominationsAfter.nominations[0].owner.toString().toLowerCase()).equal(baltathar.address.toLowerCase());
     expect(new BigNumber(bottomNominationsAfter.total.toString()).toFixed()).equal(new BigNumber(bottomNominationsAfter.nominations[0].amount.toString()).toFixed());
     const highestBottomNomination = new BigNumber(bottomNominationsAfter.nominations[0].amount.toString());
 
