@@ -940,7 +940,7 @@ impl<
 		let mut top_nominations =
 			<TopNominations<T>>::get(candidate).ok_or(<Error<T>>::TopNominationDNE)?;
 		let max_top_nominations_per_candidate = T::MaxTopNominationsPerCandidate::get();
-		if top_nominations.count() as u32 == max_top_nominations_per_candidate {
+		if top_nominations.count() == max_top_nominations_per_candidate {
 			// pop lowest top nomination
 			let new_bottom_nomination =
 				top_nominations.nominations.pop().ok_or(<Error<T>>::TopNominationDNE)?;
