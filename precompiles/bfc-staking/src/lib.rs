@@ -920,39 +920,37 @@ where
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let zero = 0u32;
-		let mut revocations_count: u32 = zero.into();
 		let mut less_total: U256 = zero.into();
 		let mut candidates: Vec<Address> = vec![];
-		let mut amounts: Vec<U256> = vec![];
-		let mut when_executables: Vec<u32> = vec![];
+		let mut amounts: Vec<Vec<U256>> = vec![];
+		let mut when_executables: Vec<Vec<u32>> = vec![];
 		let mut actions: Vec<u32> = vec![];
 
 		if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
-			revocations_count = state.requests.revocations_count.into();
 			less_total = state.requests.less_total.into();
 
 			for (candidate, request) in state.requests.requests {
 				candidates.push(Address(candidate.into()));
-				amounts.push(request.amount.into());
-				when_executables.push(request.when_executable.into());
+
+				let mut inner_when = vec![];
+				let mut inner_amount = vec![];
+				for (when, amount) in request.when_executable {
+					inner_when.push(when.into());
+					inner_amount.push(amount.into());
+				}
+				when_executables.push(inner_when);
+				amounts.push(inner_amount);
 
 				let action: u32 = match request.action {
 					NominationChange::Revoke => 1u32.into(),
 					NominationChange::Decrease => 2u32.into(),
+					NominationChange::Leave => 3u32.into(),
 				};
 				actions.push(action.into());
 			}
 		}
 
-		Ok((
-			Address(nominator.into()),
-			revocations_count,
-			less_total,
-			candidates,
-			amounts.into(),
-			when_executables,
-			actions,
-		))
+		Ok((Address(nominator.into()), less_total, candidates, amounts, when_executables, actions))
 	}
 
 	/// Returns the count of nominations of the given `nominator`
@@ -970,8 +968,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let result =
 			if let Some(state) = pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator) {
-				let nominator_nomination_count: u32 = state.nominations.len() as u32;
-				nominator_nomination_count
+				state.nomination_count(false)
 			} else {
 				0u32
 			};
@@ -1282,11 +1279,12 @@ where
 	fn execute_nomination_request(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
+		when: u32,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::execute_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::execute_nomination_request { candidate, when };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
@@ -1309,11 +1307,12 @@ where
 	fn cancel_nomination_request(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
+		when: u32,
 	) -> EvmResult {
 		let candidate = Runtime::AddressMapping::into_account_id(candidate.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate };
+		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate, when };
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
 
