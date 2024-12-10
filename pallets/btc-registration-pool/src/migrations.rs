@@ -16,7 +16,7 @@ pub mod init_v1 {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
-			let current = Pallet::<T>::current_storage_version();
+			let current = Pallet::<T>::in_code_storage_version();
 			let onchain = Pallet::<T>::on_chain_storage_version();
 
 			if current == 1 && onchain == 0 {

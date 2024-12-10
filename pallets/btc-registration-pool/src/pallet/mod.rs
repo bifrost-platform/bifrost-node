@@ -144,25 +144,21 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	#[pallet::getter(fn current_round)]
 	/// The current round of the registration pool.
 	pub type CurrentRound<T: Config> = StorageValue<_, PoolRound, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn service_state)]
 	/// The migration sequence of the registration pool.
 	pub type ServiceState<T: Config> = StorageValue<_, MigrationSequence, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn system_vault)]
 	/// The system vault account that is used for fee refunds.
 	pub type SystemVault<T: Config> =
 		StorageMap<_, Twox64Concat, PoolRound, MultiSigAccount<T::AccountId>, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn registration_pool)]
 	/// Registered addresses that are permitted to relay Bitcoin.
 	pub type RegistrationPool<T: Config> = StorageDoubleMap<
 		_,
@@ -174,7 +170,6 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn bonded_vault)]
 	/// Mapped Bitcoin vault addresses. The key is the vault address and the value is the user's Bifrost address.
 	/// For system vault, the value will be set to the precompile address.
 	pub type BondedVault<T: Config> = StorageDoubleMap<
@@ -188,7 +183,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn bonded_refund)]
 	/// Mapped Bitcoin refund addresses. The key is the refund address and the value is the user's Bifrost address(s).
 	pub type BondedRefund<T: Config> = StorageDoubleMap<
 		_,
@@ -201,7 +195,6 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn bonded_pub_key)]
 	/// Mapped public keys used for vault account generation. The key is the public key and the value is user's Bifrost address.
 	/// For system vault, the value will be set to the precompile address.
 	pub type BondedPubKey<T: Config> =
@@ -209,7 +202,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn bonded_descriptor)]
 	/// Mapped descriptors. The key is the vault address and the value is the descriptor.
 	pub type BondedDescriptor<T: Config> = StorageDoubleMap<
 		_,
@@ -221,13 +213,11 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn m_n_ratio)]
 	/// The minimum required ratio of signatures to unlock the vault account's txo.
 	pub type MultiSigRatio<T: Config> = StorageValue<_, Percent, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	#[pallet::getter(fn presubmitted_pubkeys)]
 	/// The public keys that are pre-submitted by the relay executives.
 	pub type PreSubmittedPubKeys<T: Config> = StorageDoubleMap<
 		_,
@@ -240,8 +230,6 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn max_presubmission)]
-	/// The maximum number of pre-submitted public keys.
 	pub type MaxPreSubmission<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
@@ -300,13 +288,13 @@ pub mod pallet {
 			new: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
 			let who = ensure_signed(origin)?;
 			let new: BoundedBitcoinAddress = Self::get_checked_bitcoin_address(&new)?;
-			let current_round = Self::current_round();
+			let current_round = CurrentRound::<T>::get();
 
 			let relay_target =
 				<RegistrationPool<T>>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
@@ -340,14 +328,14 @@ pub mod pallet {
 			refund_address: UnboundedBytes,
 		) -> DispatchResultWithPostInfo {
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
 			let who = ensure_signed(origin)?;
 			let refund_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&refund_address)?;
-			let current_round = Self::current_round();
+			let current_round = CurrentRound::<T>::get();
 
 			ensure!(
 				!<BondedVault<T>>::contains_key(current_round, &refund_address),
@@ -417,14 +405,14 @@ pub mod pallet {
 
 			ensure!(
 				matches!(
-					Self::service_state(),
+					<ServiceState<T>>::get(),
 					MigrationSequence::Normal | MigrationSequence::PrepareNextSystemVault
 				),
 				Error::<T>::UnderMaintenance
 			);
 
-			let target_round =
-				if migration_prepare { Self::current_round() + 1 } else { Self::current_round() };
+			let current_round = CurrentRound::<T>::get();
+			let target_round = if migration_prepare { current_round + 1 } else { current_round };
 
 			ensure!(
 				<SystemVault<T>>::get(target_round).is_none(),
@@ -452,13 +440,13 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
 			let VaultKeySubmission { authority_id, who, pub_key, pool_round } = key_submission;
 
-			let current_round = Self::current_round();
+			let current_round = <CurrentRound<T>>::get();
 			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			let mut relay_target =
@@ -515,15 +503,16 @@ pub mod pallet {
 			// make sure this cannot be executed by a signed transaction.
 			ensure_none(origin)?;
 
-			let service_state = Self::service_state();
+			let service_state = ServiceState::<T>::get();
+			let current_round = CurrentRound::<T>::get();
 
 			let target_round;
-			match Self::service_state() {
+			match service_state {
 				MigrationSequence::Normal => {
-					target_round = Self::current_round();
+					target_round = current_round;
 				},
 				MigrationSequence::PrepareNextSystemVault => {
-					target_round = Self::current_round() + 1;
+					target_round = current_round + 1;
 				},
 				MigrationSequence::SetExecutiveMembers | MigrationSequence::UTXOTransfer => {
 					return Err(Error::<T>::UnderMaintenance)?;
@@ -597,13 +586,13 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
 			let VaultKeyPreSubmission { authority_id, pub_keys, pool_round } = key_submission;
 
-			let current_round = Self::current_round();
+			let current_round = <CurrentRound<T>>::get();
 			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			// validate public keys
@@ -614,9 +603,9 @@ pub mod pallet {
 				);
 			}
 
-			let mut presubmitted = Self::presubmitted_pubkeys(current_round, &authority_id);
+			let mut presubmitted = <PreSubmittedPubKeys<T>>::get(current_round, &authority_id);
 			ensure!(
-				presubmitted.len() + pub_keys.len() <= Self::max_presubmission() as usize,
+				presubmitted.len() + pub_keys.len() <= MaxPreSubmission::<T>::get() as usize,
 				Error::<T>::OutOfRange
 			);
 
@@ -650,11 +639,11 @@ pub mod pallet {
 			ensure_root(origin.clone())?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
-			let current_round = Self::current_round();
+			let current_round = CurrentRound::<T>::get();
 			let vault_address: BoundedBitcoinAddress =
 				Self::get_checked_bitcoin_address(&vault_address)?;
 
@@ -663,15 +652,15 @@ pub mod pallet {
 			if who == H160::from_low_u64_be(ADDRESS_U64).into() {
 				// system vault
 				let system_vault =
-					<SystemVault<T>>::get(Self::current_round()).ok_or(Error::<T>::VaultDNE)?;
+					<SystemVault<T>>::get(current_round).ok_or(Error::<T>::VaultDNE)?;
 				for pubkey in system_vault.pub_keys() {
 					<BondedPubKey<T>>::remove(current_round, &pubkey);
 				}
-				<SystemVault<T>>::remove(Self::current_round());
+				<SystemVault<T>>::remove(current_round);
 			} else {
 				// user
 				let target =
-					Self::registration_pool(current_round, &who).ok_or(Error::<T>::UserDNE)?;
+					RegistrationPool::<T>::get(current_round, &who).ok_or(Error::<T>::UserDNE)?;
 				for pubkey in target.vault.pub_keys() {
 					<BondedPubKey<T>>::remove(current_round, &pubkey);
 				}
@@ -699,7 +688,7 @@ pub mod pallet {
 		pub fn migration_control(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			ensure_root(origin.clone())?;
 
-			match Self::service_state() {
+			match ServiceState::<T>::get() {
 				MigrationSequence::Normal => {
 					ensure!(
 						T::SocketQueue::is_ready_for_migrate(),
@@ -750,10 +739,10 @@ pub mod pallet {
 			ensure_root(origin)?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
-			ensure!(round < Self::current_round(), Error::<T>::OutOfRange);
+			ensure!(round < CurrentRound::<T>::get(), Error::<T>::OutOfRange);
 
 			// remove all data related to the round
 			<SystemVault<T>>::remove(round);
@@ -796,7 +785,7 @@ pub mod pallet {
 			// we only permit ratio that is higher than 50%
 			ensure!(new >= Percent::from_percent(50), Error::<T>::OutOfRange);
 
-			let old = Self::m_n_ratio();
+			let old = MultiSigRatio::<T>::get();
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
 
 			<MultiSigRatio<T>>::set(new);
@@ -816,13 +805,13 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			ensure!(
-				Self::service_state() == MigrationSequence::Normal,
+				ServiceState::<T>::get() == MigrationSequence::Normal,
 				Error::<T>::UnderMaintenance
 			);
 
 			let SetRefundsApproval { refund_sets, pool_round, .. } = approval;
 
-			let current_round = Self::current_round();
+			let current_round = CurrentRound::<T>::get();
 			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
 
 			for refund_set in &refund_sets {

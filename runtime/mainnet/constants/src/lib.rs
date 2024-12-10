@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 pub use bifrost_common_constants::{currency, time};
 
 pub mod fee {

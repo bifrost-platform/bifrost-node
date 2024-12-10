@@ -11,13 +11,10 @@ repository = { workspace = true }
 [dependencies]
 # Bifrost
 bifrost-common-constants = { workspace = true }
-bp-core = { workspace = true }
 
 # Substrate
-sp-core = { workspace = true }
 frame-support = { workspace = true }
-pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
 [features]
 default = ["std"]
-std = ["pallet-evm/std", "sp-core/std", "frame-support/std"]
+std = ["bifrost-common-constants/std", "frame-support/std"]

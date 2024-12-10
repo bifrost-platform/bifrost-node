@@ -47,7 +47,7 @@ where
 	fn members(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<Address>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
-		let members = CollectiveOf::<Runtime, Instance>::members()
+		let members = pallet_collective::Members::<Runtime, Instance>::get()
 			.into_iter()
 			.map(|member| Address(member.into()))
 			.collect::<Vec<Address>>();

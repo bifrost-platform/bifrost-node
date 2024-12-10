@@ -20,6 +20,7 @@ use fp_rpc_txpool::TxPoolResponse;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, ConstBool, ConstU64, OpaqueMetadata, H160, H256, U256};
+use sp_genesis_builder::PresetId;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
@@ -33,7 +34,7 @@ use sp_runtime::{
 	},
 	ApplyExtrinsicResult,
 };
-pub use sp_runtime::{Perbill, Percent, Permill};
+pub use sp_runtime::{traits, ExtrinsicInclusionMode, Perbill, Percent, Permill};
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -47,29 +48,32 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
-use pallet_identity::simple::IdentityInfo;
+use pallet_identity::legacy::IdentityInfo;
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 pub use pallet_timestamp::Call as TimestampCall;
+#[allow(deprecated)]
 use pallet_transaction_payment::CurrencyAdapter;
 
 use parity_scale_codec::{Decode, Encode};
 
 pub use frame_support::{
-	construct_runtime,
+	derive_impl,
 	dispatch::{DispatchClass, GetDispatchInfo},
-	genesis_builder_helper::{build_config, create_default_config},
+	genesis_builder_helper::{build_state, get_preset},
 	pallet_prelude::Get,
 	parameter_types,
 	traits::{
 		fungible::HoldConsideration,
-		tokens::{PayFromAccount, UnityAssetBalanceConversion},
+		tokens::{
+			fungible::Credit, imbalance::ResolveTo, PayFromAccount, UnityAssetBalanceConversion,
+		},
 		ConstU128, ConstU32, ConstU8, Contains, Currency, EitherOfDiverse, EqualPrivilegeOnly,
-		FindAuthor, Imbalance, KeyOwnerProofSystem, LinearStoragePrice, LockIdentifier,
+		FindAuthor, Imbalance, InsideBoth, KeyOwnerProofSystem, LinearStoragePrice, LockIdentifier,
 		NeverEnsureOrigin, OnFinalize, OnUnbalanced, Randomness, StorageInfo,
 	},
 	weights::{
@@ -81,7 +85,7 @@ pub use frame_support::{
 	},
 	ConsensusEngineId, PalletId, StorageValue,
 };
-use frame_system::{EnsureRoot, EnsureSigned};
+use frame_system::{EnsureRoot, EnsureRootWithSuccess, EnsureSigned};
 
 mod precompiles;
 pub use precompiles::BifrostPrecompiles;
@@ -145,7 +149,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2026,
+	spec_version: 2027,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -181,9 +185,10 @@ parameter_types! {
 }
 
 /// The System pallet defines the core data types used in a Substrate runtime
+#[derive_impl(frame_system::config_preludes::SolochainDefaultConfig)]
 impl frame_system::Config for Runtime {
 	/// The basic call filter to use in dispatchable.
-	type BaseCallFilter = frame_support::traits::Everything;
+	type BaseCallFilter = InsideBoth<SafeMode, TxPause>;
 	/// The block type for the runtime.
 	type Block = Block;
 	/// Block & extrinsics weights: base values and limits.
@@ -192,8 +197,6 @@ impl frame_system::Config for Runtime {
 	type BlockLength = BlockLength;
 	/// The identifier used to distinguish between accounts.
 	type AccountId = AccountId;
-	/// The aggregated dispatch type that is available for extrinsics.
-	type RuntimeCall = RuntimeCall;
 	/// The lookup mechanism to get the account ID from whatever is passed in dispatchers.
 	type Lookup = IdentityLookup<AccountId>;
 	/// The index type for storing how many extrinsics an account has signed.
@@ -202,10 +205,6 @@ impl frame_system::Config for Runtime {
 	type Hash = Hash;
 	/// The hashing algorithm used.
 	type Hashing = BlakeTwo256;
-	/// The ubiquitous event type.
-	type RuntimeEvent = RuntimeEvent;
-	/// The ubiquitous origin type.
-	type RuntimeOrigin = RuntimeOrigin;
 	/// Maximum number of block number to block hash mappings to keep (oldest pruned first).
 	type BlockHashCount = BlockHashCount;
 	/// The weight of database operations that the runtime can invoke.
@@ -214,20 +213,65 @@ impl frame_system::Config for Runtime {
 	type Version = Version;
 	/// Provides information about the pallet setup in the runtime.
 	type PalletInfo = PalletInfo;
-	/// What to do if a new account is created.
-	type OnNewAccount = ();
-	/// What to do if an account is fully reaped from the system.
-	type OnKilledAccount = ();
 	/// The data to be stored in an account.
 	type AccountData = pallet_balances::AccountData<Balance>;
-	/// Weight information for the extrinsics of this pallet.
-	type SystemWeightInfo = ();
 	/// This is used as an identifier of the chain. 42 is the generic substrate prefix.
 	type SS58Prefix = SS58Prefix;
-	/// The set code logic, just the default since we're not a parachain.
-	type OnSetCode = ();
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+}
+
+/// Calls that can bypass the safe-mode pallet.
+pub struct SafeModeWhitelistedCalls;
+impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
+	fn contains(call: &RuntimeCall) -> bool {
+		match call {
+			RuntimeCall::System(_)
+			| RuntimeCall::Sudo(_)
+			| RuntimeCall::Timestamp(_)
+			| RuntimeCall::SafeMode(_)
+			| RuntimeCall::TxPause(_)
+			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
+			_ => false,
+		}
+	}
+}
+
+impl pallet_tx_pause::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type PauseOrigin = EnsureRoot<AccountId>;
+	type UnpauseOrigin = EnsureRoot<AccountId>;
+	type WhitelistedCalls = ();
+	type MaxNameLen = ConstU32<256>;
+	type WeightInfo = pallet_tx_pause::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const EnterDuration: BlockNumber = 12 * HOURS;
+	pub const EnterDepositAmount: Option<Balance> = None;
+	pub const ExtendDuration: BlockNumber = 1 * HOURS;
+	pub const ExtendDepositAmount: Option<Balance> = None;
+	pub const ReleaseDelay: u32 = 1 * HOURS;
+}
+
+impl pallet_safe_mode::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Currency = Balances;
+	type RuntimeHoldReason = RuntimeHoldReason;
+	type WhitelistedCalls = SafeModeWhitelistedCalls;
+	type EnterDuration = EnterDuration;
+	type EnterDepositAmount = EnterDepositAmount;
+	type ExtendDuration = ExtendDuration;
+	type ExtendDepositAmount = ExtendDepositAmount;
+	type ForceEnterOrigin = EnsureRootWithSuccess<AccountId, EnterDuration>;
+	type ForceExtendOrigin = EnsureRootWithSuccess<AccountId, ExtendDuration>;
+	type ForceExitOrigin = EnsureRoot<AccountId>;
+	type ForceDepositOrigin = EnsureRoot<AccountId>;
+	type ReleaseDelay = ReleaseDelay;
+	type Notify = ();
+	type WeightInfo = pallet_safe_mode::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -240,6 +284,7 @@ impl pallet_aura::Config for Runtime {
 	type DisabledValidators = ();
 	type MaxAuthorities = MaxAuthorities;
 	type AllowMultipleBlocksPerSlot = ConstBool<false>;
+	type SlotDuration = pallet_aura::MinimumPeriodTimesTwo<Runtime>;
 }
 
 /// Provides the GRANDPA block finality gadget.
@@ -268,7 +313,7 @@ impl pallet_timestamp::Config for Runtime {
 /// Provides functionality for handling accounts and balances.
 impl pallet_balances::Config for Runtime {
 	type MaxLocks = ConstU32<50>;
-	type MaxReserves = ();
+	type MaxReserves = ConstU32<50>;
 	type ReserveIdentifier = [u8; 8];
 	type Balance = Balance;
 	type RuntimeEvent = RuntimeEvent;
@@ -277,10 +322,9 @@ impl pallet_balances::Config for Runtime {
 	type AccountStore = System;
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
 	type FreezeIdentifier = ();
-	type MaxFreezes = ();
-	type MaxHolds = ConstU32<1>;
+	type MaxFreezes = ConstU32<0>;
 	type RuntimeHoldReason = RuntimeHoldReason;
-	type RuntimeFreezeReason = ();
+	type RuntimeFreezeReason = RuntimeFreezeReason;
 }
 
 pub struct DealWithFees<R>(sp_std::marker::PhantomData<R>);
@@ -316,6 +360,7 @@ parameter_types! {
 
 /// Provides the basic logic needed to pay the absolute minimum amount needed for a transaction to
 /// be included.
+#[allow(deprecated)]
 impl pallet_transaction_payment::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type OnChargeTransaction = CurrencyAdapter<Balances, DealWithFees<Runtime>>;
@@ -659,19 +704,11 @@ parameter_types! {
 impl pallet_treasury::Config for Runtime {
 	type PalletId = TreasuryPalletId;
 	type Currency = Balances;
-	type ApproveOrigin = EitherOfDiverse<
-		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>,
-	>;
 	type RejectOrigin = EitherOfDiverse<
 		EnsureRoot<AccountId>,
 		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>,
 	>;
 	type RuntimeEvent = RuntimeEvent;
-	type OnSlash = Treasury;
-	type ProposalBond = ProposalBond;
-	type ProposalBondMinimum = ProposalBondMinimum;
-	type ProposalBondMaximum = ();
 	type SpendPeriod = SpendPeriod;
 	type Burn = ();
 	type BurnDestination = ();
@@ -691,11 +728,14 @@ impl pallet_treasury::Config for Runtime {
 
 parameter_types! {
 	pub const BasicDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
-	pub const FieldDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
+	pub const ByteDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
 	pub const SubAccountDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
 	pub const MaxSubAccounts: u32 = 100;
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
+	pub const PendingUsernameExpiration: u32 = 7 * DAYS;
+	pub const MaxSuffixLength: u32 = 7;
+	pub const MaxUsernameLength: u32 = 32;
 }
 
 /// The module that manages account identities and registrar judgements.
@@ -703,15 +743,20 @@ impl pallet_identity::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type BasicDeposit = BasicDeposit;
-	type FieldDeposit = FieldDeposit;
+	type ByteDeposit = ByteDeposit;
 	type SubAccountDeposit = SubAccountDeposit;
 	type MaxSubAccounts = MaxSubAccounts;
-	type MaxAdditionalFields = MaxAdditionalFields;
 	type IdentityInformation = IdentityInfo<MaxAdditionalFields>;
 	type MaxRegistrars = MaxRegistrars;
 	type Slashed = Treasury;
 	type ForceOrigin = EnsureRoot<AccountId>;
 	type RegistrarOrigin = EnsureRoot<AccountId>;
+	type OffchainSignature = Signature;
+	type SigningPublicKey = <Signature as traits::Verify>::Signer;
+	type UsernameAuthorityOrigin = EnsureRoot<Self::AccountId>;
+	type PendingUsernameExpiration = PendingUsernameExpiration;
+	type MaxSuffixLength = MaxSuffixLength;
+	type MaxUsernameLength = MaxUsernameLength;
 	type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
 }
 
@@ -866,7 +911,8 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 		I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
 	{
 		if let Some(author_index) = F::find_author(digests) {
-			let authority_id = Aura::authorities()[author_index as usize].clone();
+			let authority_id =
+				pallet_aura::Authorities::<Runtime>::get()[author_index as usize].clone();
 			let queued_keys = <pallet_session::Pallet<Runtime>>::queued_keys();
 			for key in queued_keys {
 				if key.1.aura == authority_id {
@@ -1001,62 +1047,127 @@ impl pallet_btc_registration_pool::Config for Runtime {
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
-construct_runtime!(
-	pub struct Runtime {
-		// System
-		System: frame_system::{Pallet, Call, Storage, Config<T>, Event<T>} = 0,
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent} = 2,
+#[frame_support::runtime]
+mod runtime {
+	#[runtime::runtime]
+	#[runtime::derive(
+		RuntimeCall,
+		RuntimeEvent,
+		RuntimeError,
+		RuntimeOrigin,
+		RuntimeFreezeReason,
+		RuntimeHoldReason,
+		RuntimeSlashReason,
+		RuntimeLockId,
+		RuntimeTask
+	)]
+	pub struct Runtime;
 
-		// Block
-		Aura: pallet_aura::{Pallet, Storage, Config<T>} = 3,
+	#[runtime::pallet_index(0)]
+	pub type System = frame_system;
 
-		// Consensus
-		Authorship: pallet_authorship::{Pallet, Storage} = 4,
-		Session: pallet_session::{Pallet, Call, Storage, Config<T>, Event} = 5,
-		Historical: pallet_session::historical::{Pallet} = 6,
-		Offences: pallet_offences::{Pallet, Storage, Event} = 7,
-		ImOnline: pallet_im_online::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event<T>} = 8,
-		Grandpa: pallet_grandpa::{Pallet, Call, Storage, ValidateUnsigned, Config<T>, Event} = 9,
+	#[runtime::pallet_index(2)]
+	pub type Timestamp = pallet_timestamp;
 
-		// Monetary
-		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>} = 10,
-		TransactionPayment: pallet_transaction_payment::{Pallet, Storage, Config<T>, Event<T>} = 11,
+	#[runtime::pallet_index(3)]
+	pub type Aura = pallet_aura;
 
-		// Staking
-		RelayManager: pallet_relay_manager::{Pallet, Call, Storage, Config<T>, Event<T>} = 20,
-		BfcStaking: pallet_bfc_staking::{Pallet, Call, Storage, Config<T>, Event<T>} = 21,
-		BfcUtility: pallet_bfc_utility::{Pallet, Call, Storage, Config<T>, Event<T>} = 22,
-		BfcOffences: pallet_bfc_offences::{Pallet, Call, Storage, Config<T>, Event<T>} = 23,
+	#[runtime::pallet_index(4)]
+	pub type Authorship = pallet_authorship;
 
-		// Utility
-		Utility: pallet_utility::{Pallet, Call, Event} = 30,
-		Identity: pallet_identity::{Pallet, Call, Storage, Event<T>} = 31,
+	#[runtime::pallet_index(5)]
+	pub type Session = pallet_session;
 
-		// Ethereum
-		EVM: pallet_evm::{Pallet, Config<T>, Call, Storage, Event<T>} = 40,
-		Ethereum: pallet_ethereum::{Pallet, Call, Storage, Event, Origin, Config<T>} = 41,
-		BaseFee: pallet_base_fee::{Pallet, Call, Storage, Config<T>, Event} = 42,
+	#[runtime::pallet_index(6)]
+	pub type Historical = pallet_session::historical;
 
-		// Governance
-		Scheduler: pallet_scheduler::{Pallet, Storage, Event<T>, Call} = 50,
-		Democracy: pallet_democracy::{Pallet, Storage, Config<T>, Event<T>, Call} = 51,
-		Council: pallet_collective::<Instance1>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 52,
-		TechnicalCommittee: pallet_collective::<Instance2>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 53,
-		CouncilMembership: pallet_membership::<Instance1>::{Pallet, Call, Storage, Event<T>, Config<T>} = 54,
-		TechnicalMembership: pallet_membership::<Instance2>::{Pallet, Call, Storage, Event<T>, Config<T>} = 55,
-		Treasury: pallet_treasury::{Pallet, Call, Storage, Config<T>, Event<T>} = 56,
-		Preimage: pallet_preimage::{Pallet, Call, Storage, Event<T>, HoldReason} = 57,
-		RelayExecutive: pallet_collective::<Instance3>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>} = 58,
-		RelayExecutiveMembership: pallet_membership::<Instance3>::{Pallet, Call, Storage, Event<T>, Config<T>} = 59,
+	#[runtime::pallet_index(7)]
+	pub type Offences = pallet_offences;
 
-		// Bitcoin
-		BtcSocketQueue: pallet_btc_socket_queue::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 60,
-		BtcRegistrationPool: pallet_btc_registration_pool::{Pallet, Call, Storage, ValidateUnsigned, Event<T>, Config<T>} = 61,
+	#[runtime::pallet_index(8)]
+	pub type ImOnline = pallet_im_online;
 
-		// Temporary
-		Sudo: pallet_sudo::{Pallet, Call, Storage, Config<T>, Event<T>} = 99,
-	}
-);
+	#[runtime::pallet_index(9)]
+	pub type Grandpa = pallet_grandpa;
+
+	#[runtime::pallet_index(10)]
+	pub type Balances = pallet_balances;
+
+	#[runtime::pallet_index(11)]
+	pub type TransactionPayment = pallet_transaction_payment;
+
+	#[runtime::pallet_index(20)]
+	pub type RelayManager = pallet_relay_manager;
+
+	#[runtime::pallet_index(21)]
+	pub type BfcStaking = pallet_bfc_staking;
+
+	#[runtime::pallet_index(22)]
+	pub type BfcUtility = pallet_bfc_utility;
+
+	#[runtime::pallet_index(23)]
+	pub type BfcOffences = pallet_bfc_offences;
+
+	#[runtime::pallet_index(30)]
+	pub type Utility = pallet_utility;
+
+	#[runtime::pallet_index(31)]
+	pub type Identity = pallet_identity;
+
+	#[runtime::pallet_index(32)]
+	pub type SafeMode = pallet_safe_mode;
+
+	#[runtime::pallet_index(33)]
+	pub type TxPause = pallet_tx_pause;
+
+	#[runtime::pallet_index(40)]
+	pub type EVM = pallet_evm;
+
+	#[runtime::pallet_index(41)]
+	pub type Ethereum = pallet_ethereum;
+
+	#[runtime::pallet_index(42)]
+	pub type BaseFee = pallet_base_fee;
+
+	#[runtime::pallet_index(50)]
+	pub type Scheduler = pallet_scheduler;
+
+	#[runtime::pallet_index(51)]
+	pub type Democracy = pallet_democracy;
+
+	#[runtime::pallet_index(52)]
+	pub type Council = pallet_collective<Instance1>;
+
+	#[runtime::pallet_index(53)]
+	pub type TechnicalCommittee = pallet_collective<Instance2>;
+
+	#[runtime::pallet_index(54)]
+	pub type CouncilMembership = pallet_membership<Instance1>;
+
+	#[runtime::pallet_index(55)]
+	pub type TechnicalMembership = pallet_membership<Instance2>;
+
+	#[runtime::pallet_index(56)]
+	pub type Treasury = pallet_treasury;
+
+	#[runtime::pallet_index(57)]
+	pub type Preimage = pallet_preimage;
+
+	#[runtime::pallet_index(58)]
+	pub type RelayExecutive = pallet_collective<Instance3>;
+
+	#[runtime::pallet_index(59)]
+	pub type RelayExecutiveMembership = pallet_membership<Instance3>;
+
+	#[runtime::pallet_index(60)]
+	pub type BtcSocketQueue = pallet_btc_socket_queue;
+
+	#[runtime::pallet_index(61)]
+	pub type BtcRegistrationPool = pallet_btc_registration_pool;
+
+	#[runtime::pallet_index(99)]
+	pub type Sudo = pallet_sudo;
+}
 
 bifrost_common_runtime::impl_common_runtime_apis!();
 bifrost_common_runtime::impl_self_contained_call!();

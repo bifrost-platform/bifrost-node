@@ -24,7 +24,6 @@
     "target": "es2017",
     "outDir": "build",
     "moduleResolution": "node",
-    "suppressImplicitAnyIndexErrors": true,
     "strict": true,
     "skipLibCheck": true
   }

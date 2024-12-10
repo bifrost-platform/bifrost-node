@@ -2,17 +2,14 @@ use crate::cli_opt::EthApi as EthApiCmd;
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use fc_rpc::{
-	EthBlockDataCacheTask, OverrideHandle, RuntimeApiStorageOverride, SchemaV1Override,
-	SchemaV2Override, SchemaV3Override, StorageOverride,
-};
+use fc_rpc::{EthBlockDataCacheTask, StorageOverride};
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
 use sc_client_api::{backend::Backend, StorageProvider};
 use sc_consensus_grandpa::{
 	FinalityProofProvider, GrandpaJustificationStream, SharedAuthoritySet, SharedVoterState,
 };
 use sc_consensus_manual_seal::EngineCommand;
-use sc_network::NetworkService;
+use sc_network::service::traits::NetworkService;
 use sc_network_sync::SyncingService;
 use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;
@@ -20,10 +17,6 @@ use sc_service::TaskManager;
 use sc_transaction_pool::{ChainApi, Pool};
 
 use bp_core::{BlockNumber, Hash, Header};
-use fp_rpc::{self, EthereumRuntimeRPCApi};
-use fp_storage::EthereumStorageSchema;
-use sp_api::ProvideRuntimeApi;
-use sp_blockchain::HeaderBackend;
 use sp_core::H256;
 use sp_runtime::{generic, traits::Block as BlockT, OpaqueExtrinsic as UncheckedExtrinsic};
 
@@ -39,35 +32,6 @@ where
 	type EstimateGasAdapter = ();
 	type RuntimeStorageOverride =
 		fc_rpc::frontier_backend_client::SystemAccountId20StorageOverride<Block, C, BE>;
-}
-
-/// Override storage
-pub fn overrides_handle<B, C, BE>(client: Arc<C>) -> Arc<OverrideHandle<B>>
-where
-	B: BlockT,
-	C: ProvideRuntimeApi<B>,
-	C::Api: EthereumRuntimeRPCApi<B>,
-	C: HeaderBackend<B> + StorageProvider<B, BE> + 'static,
-	BE: Backend<B> + 'static,
-{
-	let mut overrides_map = BTreeMap::new();
-	overrides_map.insert(
-		EthereumStorageSchema::V1,
-		Box::new(SchemaV1Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
-	);
-	overrides_map.insert(
-		EthereumStorageSchema::V2,
-		Box::new(SchemaV2Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
-	);
-	overrides_map.insert(
-		EthereumStorageSchema::V3,
-		Box::new(SchemaV3Override::new(client.clone())) as Box<dyn StorageOverride<_>>,
-	);
-
-	Arc::new(OverrideHandle {
-		schemas: overrides_map,
-		fallback: Box::new(RuntimeApiStorageOverride::new(client.clone())),
-	})
 }
 
 /// Extra dependencies for GRANDPA
@@ -105,7 +69,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// The Node authority flag
 	pub is_authority: bool,
 	/// Network service
-	pub network: Arc<NetworkService<Block, Hash>>,
+	pub network: Arc<dyn NetworkService>,
 	/// EthFilterApi pool.
 	pub filter_pool: FilterPool,
 	/// List of optional RPC extensions.
@@ -119,7 +83,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// Fee history cache.
 	pub fee_history_cache: FeeHistoryCache,
 	/// Ethereum data access overrides.
-	pub overrides: Arc<OverrideHandle<Block>>,
+	pub overrides: Arc<dyn StorageOverride<Block>>,
 	/// Cache for Ethereum block data.
 	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Manual seal command sink
@@ -157,7 +121,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// The Node authority flag
 	pub is_authority: bool,
 	/// Network service
-	pub network: Arc<NetworkService<Block, Hash>>,
+	pub network: Arc<dyn NetworkService>,
 	/// EthFilterApi pool.
 	pub filter_pool: FilterPool,
 	/// List of optional RPC extensions.
@@ -171,7 +135,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// Fee history cache.
 	pub fee_history_cache: FeeHistoryCache,
 	/// Ethereum data access overrides.
-	pub overrides: Arc<OverrideHandle<Block>>,
+	pub overrides: Arc<dyn StorageOverride<Block>>,
 	/// Cache for Ethereum block data.
 	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Maximum number of logs in one query.
@@ -190,9 +154,9 @@ pub struct SpawnTasksParams<'a, B: BlockT, C, BE> {
 	pub task_manager: &'a TaskManager,
 	pub client: Arc<C>,
 	pub substrate_backend: Arc<BE>,
-	pub frontier_backend: fc_db::Backend<B>,
+	pub frontier_backend: Arc<fc_db::Backend<B, C>>,
 	pub filter_pool: Option<FilterPool>,
-	pub overrides: Arc<OverrideHandle<B>>,
+	pub overrides: Arc<dyn StorageOverride<B>>,
 	pub fee_history_limit: u64,
 	pub fee_history_cache: FeeHistoryCache,
 }
