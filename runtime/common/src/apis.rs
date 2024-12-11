@@ -323,7 +323,7 @@ macro_rules! impl_common_runtime_apis {
 						// max_priority_fee_per_gas: 32
 						// max_fee_per_gas: 32
 						// gas_limit: 32
-						// action: 21 (enum varianrt + call address)
+						// action: 21 (enum variant + call address)
 						// value: 32
 						// access_list: 1 (empty vec size)
 						// 65 bytes signature
