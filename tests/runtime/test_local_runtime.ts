@@ -60,18 +60,32 @@ const sendTransaction = async (signedTx: string): Promise<string> => {
   return txHash;
 };
 
-const createErc20Transfer = async (): Promise<string> => {
+const createErc20Transfer = async (): Promise<[number, string]> => {
   const erc20: any = new web3.eth.Contract(ERC20_ABI, erc20Address);
   const gas = await erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
   expect(gas).is.ok;
 
-  return (await web3.eth.accounts.signTransaction({
+  return [gas, (await web3.eth.accounts.signTransaction({
     from: alith,
     to: erc20Address,
     gas,
     gasPrice: web3.utils.toWei(1000, 'gwei'),
     data: erc20.methods.transfer(baltathar, web3.utils.toWei(1, 'ether')).encodeABI()
-  }, alithPk)).rawTransaction;
+  }, alithPk)).rawTransaction];
+};
+
+const createErc20Approve = async (): Promise<[number, string]> => {
+  const erc20: any = new web3.eth.Contract(ERC20_ABI, erc20Address);
+  const gas = await erc20.methods.approve(baltathar, web3.utils.toWei(1, 'ether')).estimateGas({ from: alith });
+  expect(gas).is.ok;
+
+  return [gas, (await web3.eth.accounts.signTransaction({
+    from: alith,
+    to: erc20Address,
+    gas,
+    gasPrice: web3.utils.toWei(1000, 'gwei'),
+    data: erc20.methods.approve(baltathar, web3.utils.toWei(1, 'ether')).encodeABI()
+  }, alithPk)).rawTransaction];
 };
 
 describe('test_runtime - evm interactions', function () {
@@ -217,7 +231,7 @@ describe('test_runtime - ethapi', function () {
     const receipt = await deployDemo(deployTx);
 
     erc20Address = receipt?.contractAddress;
-    const signedTx_2 = await createErc20Transfer();
+    const [_, signedTx_2] = await createErc20Transfer();
 
     const txHash = await sendTransaction(signedTx_2);
     const receipt_2 = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
@@ -234,6 +248,28 @@ describe('test_runtime - ethapi', function () {
       ]
     });
     expect(logs).is.ok;
+  });
+
+  it('should successfully calculate estimated gas - transfer', async function () {
+    const [gasLimit, signedTx] = await createErc20Transfer();
+    console.log(gasLimit);
+    const txHash = await sendTransaction(signedTx);
+    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
+    console.log(receipt);
+    expect(receipt).is.ok;
+    expect(receipt?.gasUsed).is.ok;
+    expect(Number(receipt?.gasUsed)).lte(Number(gasLimit));
+  });
+
+  it('should successfully calculate estimated gas - approve', async function () {
+    const [gasLimit, signedTx] = await createErc20Approve();
+    console.log(gasLimit);
+    const txHash = await sendTransaction(signedTx);
+    const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
+    console.log(receipt);
+    expect(receipt).is.ok;
+    expect(receipt?.gasUsed).is.ok;
+    expect(Number(receipt?.gasUsed)).lte(Number(gasLimit));
   });
 
   it('should successfully request txpool namespace methods', async function () {
@@ -257,7 +293,7 @@ describe('test_runtime - ethapi', function () {
   });
 
   it('should successfully request debug namespace methods', async function () {
-    const signedTx = await createErc20Transfer();
+    const [_, signedTx] = await createErc20Transfer();
 
     const txHash = await sendTransaction(signedTx);
 
