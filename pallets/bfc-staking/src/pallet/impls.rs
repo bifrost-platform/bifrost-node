@@ -25,7 +25,7 @@ use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, EstimateNextSessionRotation, Get, Imbalance, ReservableCurrency},
+	traits::{Currency, EstimateNextSessionRotation, Get, Imbalance},
 	weights::Weight,
 	BoundedBTreeSet,
 };
@@ -75,6 +75,62 @@ impl<T: Config> Pallet<T> {
 			return false;
 		}
 		return commission_sets.into_iter().any(|c| c.who == *who);
+	}
+
+	/// Adds a new nomination to the unstaking nominations for the given candidate.
+	/// If the nomination already exists, it will increase the amount
+	pub fn add_to_unstaking_nominations(
+		candidate: T::AccountId,
+		nomination: Bond<T::AccountId, BalanceOf<T>>,
+	) -> DispatchResult {
+		let mut unstaking_nominations =
+			<UnstakingNominations<T>>::get(&candidate).ok_or(Error::<T>::UnstakingNominationDNE)?;
+		let mut is_exist = false;
+		for n in &mut unstaking_nominations.nominations {
+			if n.owner == nomination.owner {
+				n.amount = n.amount.saturating_add(nomination.amount);
+				is_exist = true;
+				break;
+			}
+		}
+		if !is_exist {
+			unstaking_nominations.nominations.push(nomination.clone());
+		}
+		unstaking_nominations.total = unstaking_nominations.total.saturating_add(nomination.amount);
+		unstaking_nominations.sort_greatest_to_least();
+		<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
+		Ok(())
+	}
+
+	/// Removes a nomination from the unstaking nominations for the given candidate.
+	/// If the nomination amount is zero, it will remove the nomination
+	pub fn remove_unstaking_nomination(
+		candidate: T::AccountId,
+		nomination: Bond<T::AccountId, BalanceOf<T>>,
+	) -> DispatchResult {
+		let mut unstaking_nominations =
+			<UnstakingNominations<T>>::get(&candidate).ok_or(Error::<T>::UnstakingNominationDNE)?;
+		unstaking_nominations.nominations = unstaking_nominations
+			.nominations
+			.clone()
+			.into_iter()
+			.filter_map(|n| {
+				if n.owner == nomination.owner {
+					let amount = n.amount.saturating_sub(nomination.amount);
+					if amount.is_zero() {
+						None
+					} else {
+						Some(Bond { owner: n.owner, amount })
+					}
+				} else {
+					Some(n)
+				}
+			})
+			.collect();
+		unstaking_nominations.total = unstaking_nominations.total.saturating_sub(nomination.amount);
+		unstaking_nominations.sort_greatest_to_least();
+		<UnstakingNominations<T>>::insert(&candidate, unstaking_nominations);
+		Ok(())
 	}
 
 	/// Adds a new controller set request. The state reflection will be applied in the next round.
@@ -256,17 +312,10 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		let mut state = CandidateInfo::<T>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;
 		state.rm_nomination_if_exists::<T>(&candidate, nominator.clone(), amount)?;
-		T::Currency::unreserve(&nominator, amount);
-		let new_total_locked = Total::<T>::get().saturating_sub(amount);
-		<Total<T>>::put(new_total_locked);
-		let new_total = state.voting_power;
-		<CandidateInfo<T>>::insert(&candidate, state);
-		Self::deposit_event(Event::NominatorLeftCandidate {
-			nominator,
-			candidate,
-			unstaked_amount: amount,
-			total_candidate_staked: new_total,
+		<Total<T>>::mutate(|total| {
+			*total = total.saturating_sub(amount);
 		});
+		<CandidateInfo<T>>::insert(&candidate, state);
 		Ok(())
 	}
 
@@ -331,12 +380,8 @@ impl<T: Config> Pallet<T> {
 		reward: BalanceOf<T>,
 	) -> Result<(), DispatchError> {
 		if let Some(mut nominator_state) = NominatorState::<T>::get(&nominator) {
-			// the nominator must be active (not leaving)
-			// and not revoking/decreasing the current validator
-			if nominator_state.is_active()
-				&& !nominator_state.is_revoking(&controller)
-				&& !nominator_state.is_decreasing(&controller)
-			{
+			// the nominator must not be leaving and not revoking the current validator
+			if nominator_state.is_active() && !nominator_state.is_revoking(&controller) {
 				// mint rewards to the nominator account
 				Self::mint_reward(reward, nominator.clone());
 
@@ -347,7 +392,7 @@ impl<T: Config> Pallet<T> {
 						nominator_state.increment_awarded_tokens(&controller, reward);
 						// auto-compound nomination
 						if nominator_state
-							.increase_nomination::<T>(controller.clone(), reward)
+							.increase_nomination::<T>(controller.clone(), reward, true)
 							.is_ok()
 						{
 							<NominatorState<T>>::insert(&nominator, nominator_state);
@@ -458,6 +503,15 @@ impl<T: Config> Pallet<T> {
 						&c.new,
 					);
 					<BottomNominations<T>>::insert(&c.new, bottom_nominations);
+				}
+				// replace `UnstakingNominations`
+				if let Some(unstaking_nominations) = <UnstakingNominations<T>>::take(&c.old) {
+					Self::replace_nominator_nominations(
+						&unstaking_nominations.nominators(),
+						&c.old,
+						&c.new,
+					);
+					<UnstakingNominations<T>>::insert(&c.new, unstaking_nominations);
 				}
 				// replace `AwardedPts`
 				let points = <AwardedPts<T>>::take(now, &c.old);
