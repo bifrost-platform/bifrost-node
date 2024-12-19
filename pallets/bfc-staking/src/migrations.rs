@@ -165,7 +165,7 @@ pub mod v6 {
 												amount,
 												request.amount,
 											)
-											.unwrap();
+											.expect("decrease_nomination failed");
 									},
 									NominationChange::Revoke | NominationChange::Leave => {
 										candidate_info
@@ -174,7 +174,7 @@ pub mod v6 {
 												old.id.clone(),
 												request.amount,
 											)
-											.unwrap();
+											.expect("rm_nomination_if_exists failed");
 									},
 								}
 								<CandidateInfo<T>>::insert(&validator, candidate_info);
