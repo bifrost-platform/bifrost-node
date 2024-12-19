@@ -1,5 +1,212 @@
 use super::*;
 
+pub mod v6 {
+	use frame_support::traits::OnRuntimeUpgrade;
+
+	use super::*;
+
+	pub struct MigrateToV6<T>(PhantomData<T>);
+
+	#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+	/// The change request for a specific nomination.
+	pub struct OldNominationRequest<AccountId, Balance> {
+		/// The validator who owns this nomination
+		pub validator: AccountId,
+		/// The total unbonding amount of this request
+		pub amount: Balance,
+		/// The unbonding amount for each round.
+		/// `Decrease` requests are allowed to be pending for multiple rounds.
+		pub when_executable: RoundIndex,
+		/// The requested unbonding action
+		pub action: NominationChange,
+	}
+
+	#[derive(Clone, Encode, PartialEq, Decode, RuntimeDebug, TypeInfo)]
+	/// Pending requests to mutate nominations for each nominator
+	pub struct OldPendingNominationRequests<AccountId, Balance> {
+		/// Number of pending revocations (necessary for determining whether revoke is exit)
+		pub revocations_count: u32,
+		/// Map from validator -> Request (enforces at most 1 pending request per nomination)
+		pub requests: BTreeMap<AccountId, OldNominationRequest<AccountId, Balance>>,
+		/// Total amount of pending requests.
+		pub less_total: Balance,
+	}
+
+	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+	/// Nominator state
+	pub struct OldNominator<AccountId, Balance> {
+		/// Nominator account
+		pub id: AccountId,
+		/// Current state of all nominations
+		pub nominations: BTreeMap<AccountId, Balance>,
+		/// Initial state of all nominations
+		pub initial_nominations: BTreeMap<AccountId, Balance>,
+		/// Total balance locked for this nominator
+		pub total: Balance,
+		/// Requests to change nominations (decrease, revoke, and leave)
+		pub requests: OldPendingNominationRequests<AccountId, Balance>,
+		/// Status for this nominator
+		pub status: NominatorStatus,
+		/// The destination for round rewards
+		pub reward_dst: RewardDestination,
+		/// The total amount of awarded tokens to this nominator
+		pub awarded_tokens: Balance,
+		/// The amount of awarded tokens to this nominator per candidate
+		pub awarded_tokens_per_candidate: BTreeMap<AccountId, Balance>,
+	}
+
+	impl<T: Config> OnRuntimeUpgrade for MigrateToV6<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 6 && onchain == 5 {
+				// 1. create `UnstakingNominations` for each validator
+				for (who, _) in CandidateInfo::<T>::iter() {
+					<UnstakingNominations<T>>::insert(&who, Nominations::default());
+				}
+
+				// 2. translate `NominatorState` & add requests to `UnstakingNominations`
+				NominatorState::<T>::translate(
+					|_, old: OldNominator<T::AccountId, BalanceOf<T>>| {
+						// 2.1. remove `requests.revocations_count` field
+						// 2.2. update `requests.requests.when_executable` from `RoundIndex` to `BTreeMap<RoundIndex, Balance>`
+						let mut new_requests: BTreeMap<
+							T::AccountId,
+							NominationRequest<T::AccountId, BalanceOf<T>>,
+						> = old.requests
+							.requests
+							.into_iter()
+							.map(|(validator, request)| {
+								(
+									validator.clone(),
+									NominationRequest {
+										validator,
+										amount: request.amount,
+										when_executable: BTreeMap::from([(
+											request.when_executable,
+											request.amount,
+										)]),
+										action: request.action,
+									},
+								)
+							})
+							.collect();
+
+						// 2.3. add leave requests to `requests.requests`
+						match old.status {
+							NominatorStatus::Leaving(round_index) => {
+								for (validator, amount) in old.nominations.clone() {
+									new_requests.insert(
+										validator.clone(),
+										NominationRequest {
+											validator,
+											amount,
+											when_executable: BTreeMap::from([(
+												round_index,
+												amount,
+											)]),
+											action: NominationChange::Leave,
+										},
+									);
+								}
+							},
+							_ => (),
+						}
+
+						// 2.4. decrease `nominations`, `total`, `requests.less_total`
+						let mut new_nominations = old.nominations.clone();
+						let mut new_total = old.total.clone();
+						let mut new_less_total = BalanceOf::<T>::zero();
+						for (validator, request) in new_requests.iter() {
+							if let Some(amount) = new_nominations.remove(validator) {
+								new_nominations.insert(
+									validator.clone(),
+									amount.saturating_sub(request.amount),
+								);
+								new_total = new_total.saturating_sub(request.amount);
+								new_less_total = new_less_total.saturating_add(request.amount);
+
+								// 2.5. add to `UnstakingNominations`
+								let _ = Pallet::<T>::add_to_unstaking_nominations(
+									validator.clone(),
+									Bond { owner: old.id.clone(), amount: request.amount },
+								);
+
+								// 2.6. decrease `Total`
+								<Total<T>>::mutate(|total| {
+									*total = total.saturating_sub(request.amount);
+								});
+
+								// 2.7. decrease `CandidateInfo.voting_power`
+								let mut candidate_info =
+									CandidateInfo::<T>::get(&validator).expect("CandidateInfo DNE");
+								candidate_info.voting_power = candidate_info
+									.clone()
+									.voting_power
+									.saturating_sub(request.amount);
+
+								// 2.8. decrease or remove from `TopNominations` | `BottomNominations`
+								// this will reorganize the following fields
+								// - `lowest_top_nomination_amount`
+								// - `highest_bottom_nomination_amount`
+								// - `lowest_bottom_nomination_amount`
+								// - `top_capacity`
+								// - `bottom_capacity`
+								// - `CandidatePool`
+								match request.action {
+									NominationChange::Decrease => {
+										candidate_info
+											.decrease_nomination::<T>(
+												&validator,
+												old.id.clone(),
+												amount,
+												request.amount,
+											)
+											.unwrap();
+									},
+									NominationChange::Revoke | NominationChange::Leave => {
+										candidate_info
+											.rm_nomination_if_exists::<T>(
+												&validator,
+												old.id.clone(),
+												request.amount,
+											)
+											.unwrap();
+									},
+								}
+								<CandidateInfo<T>>::insert(&validator, candidate_info);
+							}
+						}
+
+						Some(Nominator {
+							id: old.id,
+							nominations: new_nominations,
+							initial_nominations: old.initial_nominations.clone(),
+							total: new_total,
+							requests: PendingNominationRequests {
+								requests: new_requests,
+								less_total: new_less_total,
+							},
+							status: old.status,
+							reward_dst: old.reward_dst,
+							awarded_tokens: old.awarded_tokens,
+							awarded_tokens_per_candidate: old.awarded_tokens_per_candidate,
+						})
+					},
+				);
+				log!(info, "bfc-staking storage migration v6 completed successfully ✅");
+			} else {
+				log!(warn, "Skipping bfc-staking storage migration v6 💤");
+				weight = weight.saturating_add(T::DbWeight::get().reads(1));
+			}
+			weight
+		}
+	}
+}
+
 pub mod v5 {
 	use frame_support::traits::OnRuntimeUpgrade;
 
