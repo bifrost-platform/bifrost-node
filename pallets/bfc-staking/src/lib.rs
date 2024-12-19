@@ -1966,13 +1966,13 @@ impl<
 #[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
 /// Nomination changes requested by the nominator. Limits to 1 ongoing change per nomination.
 pub enum NominationChange {
-	/// Requests to leave the set of nominators.
-	Leave,
 	/// Requests to unbond the entire nomination.
 	Revoke,
 	/// Requests to unbond a certain amount of nomination.
 	/// Multiple decrease requests are allowed to be pending for a single nomination.
 	Decrease,
+	/// Requests to leave the set of nominators.
+	Leave,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
