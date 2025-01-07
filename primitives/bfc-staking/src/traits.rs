@@ -16,8 +16,22 @@ pub trait Authorities<AccountId> {
 	fn majority() -> u32;
 }
 
+pub trait StakingManager<AccountId> {
+	/// Verifies if the given account is a stash
+	fn is_stash(acc: &AccountId) -> bool;
+
+	/// Verifies if the given account is a candidate
+	fn is_candidate(acc: &AccountId, tier: TierType) -> bool;
+
+	/// Verifies if the given account is a nominator
+	fn is_nominator(acc: &AccountId) -> bool;
+}
+
 /// The trait used for `pallet_relay_manager`
 pub trait RelayManager<AccountId> {
+	/// Verifies if the given account is a relayer
+	fn is_relayer(acc: &AccountId) -> bool;
+
 	/// Add the given `relayer` to the `RelayerPool` and bond to the given `controller` account
 	fn join_relayers(relayer: AccountId, controller: AccountId) -> Result<(), DispatchError>;
 

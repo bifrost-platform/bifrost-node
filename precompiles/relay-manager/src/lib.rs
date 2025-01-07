@@ -3,6 +3,7 @@
 use frame_support::{
 	dispatch::{GetDispatchInfo, PostDispatchInfo},
 	pallet_prelude::ConstU32,
+	traits::ValidatorSet,
 	BoundedBTreeSet,
 };
 
@@ -11,7 +12,7 @@ use pallet_relay_manager::Call as RelayManagerCall;
 
 use precompile_utils::prelude::*;
 
-use bp_staking::{RoundIndex, MAX_AUTHORITIES};
+use bp_staking::{traits::RelayManager, RoundIndex, MAX_AUTHORITIES};
 use sp_core::{H160, H256, U256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::{collections::btree_set::BTreeSet, marker::PhantomData, vec, vec::Vec};
@@ -25,12 +26,20 @@ pub struct RelayManagerPrecompile<Runtime>(PhantomData<Runtime>);
 #[precompile_utils::precompile]
 impl<Runtime> RelayManagerPrecompile<Runtime>
 where
-	Runtime: pallet_relay_manager::Config + pallet_evm::Config + frame_system::Config,
+	Runtime: pallet_relay_manager::Config
+		+ pallet_evm::Config
+		+ frame_system::Config
+		+ pallet_membership::pallet::Config<frame_support::instances::Instance3>,
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<RelayManagerCall<Runtime>>,
+	<Runtime as frame_system::Config>::AccountId: From<
+		<<Runtime as pallet_relay_manager::Config>::ValidatorSet as ValidatorSet<
+			<Runtime as frame_system::Config>::AccountId,
+		>>::ValidatorId,
+	>,
 {
 	// Role verifiers
 

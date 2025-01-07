@@ -7,13 +7,17 @@ use crate::{
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, StorageVersion, ValidatorSetWithIdentification},
+	traits::{OnRuntimeUpgrade, StorageVersion, ValidatorSet, ValidatorSetWithIdentification},
 	BoundedBTreeSet, Twox64Concat,
 };
 use frame_system::pallet_prelude::*;
+use pallet_membership::Instance3;
 
 use bp_btc_relay::traits::{PoolManager, SocketQueueManager};
-use bp_staking::{RoundIndex, MAX_AUTHORITIES};
+use bp_staking::{
+	traits::{RelayManager, StakingManager},
+	RoundIndex, TierType, MAX_AUTHORITIES,
+};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
 use sp_std::{collections::btree_map::BTreeMap, prelude::*};
@@ -35,6 +39,8 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		/// Interface of BFC Staking pallet.
+		type Staking: StakingManager<Self::AccountId>;
 		/// Interface of Bitcoin Socket Queue pallet.
 		type SocketQueue: SocketQueueManager<Self::AccountId>;
 		/// Interface of Bitcoin Registration Pool pallet.
@@ -66,6 +72,8 @@ pub mod pallet {
 		RelayerAlreadyJoined,
 		/// The relayer is already bonded
 		RelayerAlreadyBonded,
+		/// The given account is already paired.
+		AlreadyPaired,
 		/// The relayer is inactive
 		RelayerInactive,
 		/// The relayer does not exist
@@ -259,7 +267,16 @@ pub mod pallet {
 	}
 
 	#[pallet::call]
-	impl<T: Config> Pallet<T> {
+	impl<T: Config> Pallet<T>
+	where
+		T: pallet_membership::Config<Instance3>,
+		<T as frame_system::Config>::AccountId:
+			From<
+				<<T as Config>::ValidatorSet as ValidatorSet<
+					<T as frame_system::Config>::AccountId,
+				>>::ValidatorId,
+			>,
+	{
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_storage_cache_lifetime())]
 		/// Set the `StorageCacheLifetime` round length
@@ -317,8 +334,10 @@ pub mod pallet {
 			let controller = ensure_signed(origin)?;
 			let old = BondedController::<T>::get(&controller).ok_or(Error::<T>::ControllerDNE)?;
 			ensure!(old != new, Error::<T>::NoWritingSameValue);
-			ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
 			ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
+			ensure!(!T::Staking::is_candidate(&new, TierType::All), Error::<T>::AlreadyPaired);
+			ensure!(!T::Staking::is_stash(&new), Error::<T>::AlreadyPaired);
+			ensure!(!T::Staking::is_nominator(&new), Error::<T>::AlreadyPaired);
 			ensure!(
 				!Self::is_relayer_set_requested(old.clone()),
 				Error::<T>::AlreadyRelayerSetRequested

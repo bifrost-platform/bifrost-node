@@ -14,7 +14,7 @@ use pallet_evm::AddressMapping;
 
 use precompile_utils::prelude::*;
 
-use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
+use bp_staking::{traits::StakingManager, RoundIndex, TierType, MAX_AUTHORITIES};
 use sp_core::{H160, U256};
 use sp_runtime::{traits::Dispatchable, Perbill};
 use sp_std::{

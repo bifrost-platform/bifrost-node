@@ -39,6 +39,13 @@ where
 		>>::ValidatorId,
 	>,
 {
+	fn is_relayer(relayer: &T::AccountId) -> bool {
+		if RelayerState::<T>::get(relayer).is_some() {
+			return true;
+		}
+		false
+	}
+
 	fn join_relayers(relayer: T::AccountId, controller: T::AccountId) -> DispatchResult {
 		Self::verify_relayer_existence(&relayer, &controller)?;
 		Self::add_to_relayer_pool(relayer.clone(), controller.clone())?;
@@ -235,15 +242,15 @@ where
 	}
 }
 
-impl<T: Config> Pallet<T> {
-	/// Verifies if the given account is a (candidate) relayer
-	pub fn is_relayer(relayer: &T::AccountId) -> bool {
-		if RelayerState::<T>::get(relayer).is_some() {
-			return true;
-		}
-		false
-	}
-
+impl<T: Config> Pallet<T>
+where
+	T: pallet_membership::Config<Instance3>,
+	<T as frame_system::Config>::AccountId: From<
+		<<T as Config>::ValidatorSet as ValidatorSet<
+			<T as frame_system::Config>::AccountId,
+		>>::ValidatorId,
+	>
+{
 	/// Verifies if the given account is a selected relayer for the current round or was selected at
 	/// the beginning of the current round
 	pub fn is_selected_relayer(relayer: &T::AccountId, is_initial: bool) -> bool {

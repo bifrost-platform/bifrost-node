@@ -8,7 +8,7 @@ use crate::{
 };
 
 use bp_staking::{
-	traits::{OffenceHandler, RelayManager},
+	traits::{OffenceHandler, RelayManager, StakingManager},
 	MAX_AUTHORITIES,
 };
 use frame_support::{
@@ -167,7 +167,7 @@ pub mod pallet {
 		AlreadyActive,
 		/// The given stash account is already bonded.
 		AlreadyBonded,
-		/// The given controller account is already paired.
+		/// The given controller/relayer account is already paired.
 		AlreadyPaired,
 		/// The given nominator is already leaving.
 		NominatorAlreadyLeaving,
@@ -1161,10 +1161,23 @@ pub mod pallet {
 			let stash = ensure_signed(origin)?;
 
 			// account duplicate check
-			ensure!(!<BondedStash<T>>::contains_key(&stash), Error::<T>::AlreadyBonded);
-			ensure!(!<CandidateInfo<T>>::contains_key(&controller), Error::<T>::AlreadyPaired);
+			ensure!(
+				([&stash, &controller]).iter().all(|x| !Self::is_stash(x)),
+				Error::<T>::AlreadyBonded
+			);
+			ensure!(
+				([&stash, &controller]).iter().all(|x| !Self::is_candidate(x, TierType::All)),
+				Error::<T>::AlreadyPaired
+			);
+			ensure!(
+				([&stash, &controller]).iter().all(|x| !T::RelayManager::is_relayer(x)),
+				Error::<T>::AlreadyPaired
+			);
+			ensure!(
+				([&stash, &controller]).iter().all(|x| !Self::is_nominator(x)),
+				Error::<T>::NominatorExists
+			);
 
-			ensure!(!Self::is_nominator(&controller), Error::<T>::NominatorExists);
 			let mut candidates = <CandidatePool<T>>::get();
 			let old_count = candidates.len() as u32;
 			ensure!(
@@ -1176,7 +1189,13 @@ pub mod pallet {
 
 			let mut tier = TierType::Basic;
 			if let Some(relayer) = relayer {
+				// relayer existence is checked in `join_relayers` so we don't need to check here
+				ensure!(!Self::is_stash(&relayer), Error::<T>::AlreadyBonded);
+				ensure!(!Self::is_candidate(&relayer, TierType::All), Error::<T>::AlreadyPaired);
+				ensure!(!Self::is_nominator(&relayer), Error::<T>::NominatorExists);
+
 				ensure!(bond >= T::MinFullCandidateStk::get(), Error::<T>::CandidateBondBelowMin);
+
 				// join the set of relayers
 				T::Currency::reserve(&stash, bond)
 					.and_then(|_| T::RelayManager::join_relayers(relayer, controller.clone()))?;
@@ -1361,7 +1380,13 @@ pub mod pallet {
 			let old = BondedStash::<T>::get(&stash).ok_or(Error::<T>::StashDNE)?;
 			let state = <CandidateInfo<T>>::get(&old).ok_or(Error::<T>::CandidateDNE)?;
 			ensure!(new != old, Error::<T>::NoWritingSameValue);
+
+			// account duplicate check
+			ensure!(!Self::is_stash(&new), Error::<T>::AlreadyBonded);
 			ensure!(!Self::is_candidate(&new, TierType::All), Error::<T>::AlreadyPaired);
+			ensure!(!T::RelayManager::is_relayer(&new), Error::<T>::AlreadyPaired);
+			ensure!(!Self::is_nominator(&new), Error::<T>::NominatorExists);
+
 			ensure!(!state.is_leaving(), Error::<T>::CandidateAlreadyLeaving);
 			ensure!(
 				!Self::is_controller_set_requested(&old),
@@ -1600,11 +1625,14 @@ pub mod pallet {
 				state
 			} else {
 				// first nomination
-				ensure!(amount >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
+				// account duplicate check
 				ensure!(
 					!Self::is_candidate(&nominator, TierType::All),
 					Error::<T>::CandidateExists
 				);
+				ensure!(!Self::is_stash(&nominator), Error::<T>::AlreadyBonded);
+				ensure!(!T::RelayManager::is_relayer(&nominator), Error::<T>::AlreadyPaired);
+				ensure!(amount >= T::MinNominatorStk::get(), Error::<T>::NominatorBondBelowMin);
 				Nominator::new(nominator.clone(), candidate.clone(), amount)
 			};
 			let mut state = <CandidateInfo<T>>::get(&candidate).ok_or(Error::<T>::CandidateDNE)?;

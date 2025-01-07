@@ -10,7 +10,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_session::ShouldEndSession;
 
 use bp_staking::{
-	traits::{OffenceHandler, RelayManager},
+	traits::{OffenceHandler, RelayManager, StakingManager},
 	Offence, MAX_AUTHORITIES,
 };
 use sp_runtime::{
@@ -30,14 +30,12 @@ use frame_support::{
 	BoundedBTreeSet,
 };
 
-impl<T: Config> Pallet<T> {
-	/// Verifies if the given account is a nominator
-	pub fn is_nominator(acc: &T::AccountId) -> bool {
+impl<T: Config> StakingManager<T::AccountId> for Pallet<T> {
+	fn is_nominator(acc: &T::AccountId) -> bool {
 		NominatorState::<T>::get(acc).is_some()
 	}
 
-	/// Verifies if the given account is a candidate
-	pub fn is_candidate(acc: &T::AccountId, tier: TierType) -> bool {
+	fn is_candidate(acc: &T::AccountId, tier: TierType) -> bool {
 		let mut is_candidate = false;
 		if let Some(state) = CandidateInfo::<T>::get(acc) {
 			is_candidate = match tier {
@@ -48,6 +46,12 @@ impl<T: Config> Pallet<T> {
 		is_candidate
 	}
 
+	fn is_stash(acc: &T::AccountId) -> bool {
+		<BondedStash<T>>::contains_key(acc)
+	}
+}
+
+impl<T: Config> Pallet<T> {
 	/// Verifies if the given account is a selected candidate for the current round
 	pub fn is_selected_candidate(acc: &T::AccountId, tier: TierType) -> bool {
 		let mut is_selected_candidate = false;
