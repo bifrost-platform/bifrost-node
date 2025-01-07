@@ -197,6 +197,9 @@ pub mod v6 {
 						})
 					},
 				);
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
 				log!(info, "bfc-staking storage migration v6 completed successfully ✅");
 			} else {
 				log!(warn, "Skipping bfc-staking storage migration v6 💤");
