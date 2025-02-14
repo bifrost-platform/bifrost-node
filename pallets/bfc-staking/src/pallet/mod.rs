@@ -692,7 +692,7 @@ pub mod pallet {
 		}
 
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v6::MigrateToV6::<T>::on_runtime_upgrade()
+			migrations::v6_update::MigrateToV6Update::<T>::on_runtime_upgrade()
 		}
 	}
 
