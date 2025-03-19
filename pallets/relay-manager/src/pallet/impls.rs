@@ -8,7 +8,7 @@ use bp_staking::{
 };
 use frame_support::{
 	pallet_prelude::*,
-	traits::{ValidatorSet, ValidatorSetWithIdentification},
+	traits::{ChangeMembers, ValidatorSet, ValidatorSetWithIdentification},
 	BoundedBTreeSet,
 };
 use pallet_membership::{Instance3, Members, Prime};
@@ -225,10 +225,12 @@ where
 					members[location] = r.new.clone();
 					members.sort();
 
-					Members::<T, Instance3>::put(members);
-					if Prime::<T, Instance3>::get() == Some(r.old) {
+					Members::<T, Instance3>::put(members.clone());
+					if Prime::<T, Instance3>::get() == Some(r.old.clone()) {
 						Prime::<T, Instance3>::put(&r.new);
+						T::MembershipChanged::set_prime(Some(r.new.clone()));
 					}
+					T::MembershipChanged::change_members_sorted(&[r.new], &[r.old], &members[..]);
 				}
 			}
 		});
