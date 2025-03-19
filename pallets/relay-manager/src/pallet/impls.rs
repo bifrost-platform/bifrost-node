@@ -226,11 +226,12 @@ where
 					members.sort();
 
 					Members::<T, Instance3>::put(members.clone());
-					if Prime::<T, Instance3>::get() == Some(r.old.clone()) {
+					T::MembershipChanged::change_members_sorted(&[r.new.clone()], &[r.old.clone()], &members[..]);
+
+					if Prime::<T, Instance3>::get() == Some(r.old) {
 						Prime::<T, Instance3>::put(&r.new);
-						T::MembershipChanged::set_prime(Some(r.new.clone()));
+						T::MembershipChanged::set_prime(Some(r.new));
 					}
-					T::MembershipChanged::change_members_sorted(&[r.new], &[r.old], &members[..]);
 				}
 			}
 		});
