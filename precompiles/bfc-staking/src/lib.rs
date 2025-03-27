@@ -16,7 +16,7 @@ use precompile_utils::prelude::*;
 
 use bp_staking::{RoundIndex, TierType, MAX_AUTHORITIES};
 use sp_core::{H160, U256};
-use sp_runtime::{traits::Dispatchable, Perbill};
+use sp_runtime::{traits::Dispatchable, Perbill, Saturating};
 use sp_std::{
 	collections::btree_set::BTreeSet, convert::TryInto, marker::PhantomData, vec, vec::Vec,
 };
@@ -477,7 +477,11 @@ where
 				let commission = validator_contribution_pct * validator_issuance;
 				let amount_due = total_reward_amount - commission;
 
-				let nominator_stake_pct = Perbill::from_rational(amounts[idx], state.voting_power);
+				let nominator_stake = amounts[idx];
+				let nominator_stake_pct = Perbill::from_rational(
+					nominator_stake,
+					state.voting_power.saturating_add(nominator_stake),
+				);
 				estimated_yearly_return.push(
 					((nominator_stake_pct * amount_due) * rounds_per_year.into())
 						.try_into()
