@@ -800,8 +800,10 @@ impl pallet_relay_manager::Config for Runtime {
 }
 
 parameter_types! {
-	/// Minimum round length is 30 seconds (10 * 3 second block times).
+	/// Minimum round length that can be set by the system.
 	pub const MinBlocksPerRound: u32 = 10;
+	/// Maximum round length that can be set by the system.
+	pub const MaxBlocksPerRound: u32 = 28 * DAYS;
 	/// Blocks per round.
 	pub const DefaultBlocksPerRound: u32 = 12 * HOURS;
 	/// Rounds before the validator leaving the candidates request can be executed.
@@ -854,6 +856,7 @@ impl pallet_bfc_staking::Config for Runtime {
 	type RelayManager = RelayManager;
 	type OffenceHandler = BfcOffences;
 	type MinBlocksPerRound = MinBlocksPerRound;
+	type MaxBlocksPerRound = MaxBlocksPerRound;
 	type DefaultBlocksPerSession = SessionPeriod;
 	type DefaultBlocksPerRound = DefaultBlocksPerRound;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
