@@ -1,5 +1,4 @@
 use super::*;
-use crate::set::OrderedSet;
 
 pub mod v5 {
 	use frame_support::traits::OnRuntimeUpgrade;
@@ -87,19 +86,19 @@ pub mod v4 {
 	#[storage_alias]
 	pub type MinTotalSelected<T: Config> = StorageValue<Pallet<T>, u32, ValueQuery>;
 
-	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-	/// Nominator state
-	pub struct OrderedSetNominator<AccountId, Balance> {
-		pub id: AccountId,
-		pub nominations: OrderedSet<Bond<AccountId, Balance>>,
-		pub initial_nominations: OrderedSet<Bond<AccountId, Balance>>,
-		pub total: Balance,
-		pub requests: PendingNominationRequests<AccountId, Balance>,
-		pub status: NominatorStatus,
-		pub reward_dst: RewardDestination,
-		pub awarded_tokens: Balance,
-		pub awarded_tokens_per_candidate: OrderedSet<Bond<AccountId, Balance>>,
-	}
+	// #[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+	// /// Nominator state
+	// pub struct OrderedSetNominator<AccountId, Balance> {
+	// 	pub id: AccountId,
+	// 	pub nominations: OrderedSet<Bond<AccountId, Balance>>,
+	// 	pub initial_nominations: OrderedSet<Bond<AccountId, Balance>>,
+	// 	pub total: Balance,
+	// 	pub requests: PendingNominationRequests<AccountId, Balance>,
+	// 	pub status: NominatorStatus,
+	// 	pub reward_dst: RewardDestination,
+	// 	pub awarded_tokens: Balance,
+	// 	pub awarded_tokens_per_candidate: OrderedSet<Bond<AccountId, Balance>>,
+	// }
 
 	pub struct MigrateToV4<T>(PhantomData<T>);
 
@@ -182,46 +181,46 @@ pub mod v4 {
 					.expect("");
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
-				// translate old `Nominator` which using ordered set to new Nominator
-				<NominatorState<T>>::translate(
-					|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
-						weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+				// // translate old `Nominator` which using ordered set to new Nominator
+				// <NominatorState<T>>::translate(
+				// 	|_, old: OrderedSetNominator<T::AccountId, BalanceOf<T>>| {
+				// 		weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
 
-						let nominations: BTreeMap<_, _> = old
-							.nominations
-							.0
-							.into_iter()
-							.map(|bond| (bond.owner, bond.amount))
-							.collect();
+				// 		let nominations: BTreeMap<_, _> = old
+				// 			.nominations
+				// 			.0
+				// 			.into_iter()
+				// 			.map(|bond| (bond.owner, bond.amount))
+				// 			.collect();
 
-						let initial_nominations: BTreeMap<_, _> = old
-							.initial_nominations
-							.0
-							.into_iter()
-							.map(|bond| (bond.owner, bond.amount))
-							.collect();
+				// 		let initial_nominations: BTreeMap<_, _> = old
+				// 			.initial_nominations
+				// 			.0
+				// 			.into_iter()
+				// 			.map(|bond| (bond.owner, bond.amount))
+				// 			.collect();
 
-						let awarded_tokens_per_candidate: BTreeMap<_, _> = old
-							.awarded_tokens_per_candidate
-							.0
-							.clone()
-							.iter()
-							.map(|bond| (bond.owner.clone(), bond.amount))
-							.collect();
+				// 		let awarded_tokens_per_candidate: BTreeMap<_, _> = old
+				// 			.awarded_tokens_per_candidate
+				// 			.0
+				// 			.clone()
+				// 			.iter()
+				// 			.map(|bond| (bond.owner.clone(), bond.amount))
+				// 			.collect();
 
-						Some(Nominator {
-							id: old.id,
-							nominations,
-							initial_nominations,
-							total: old.total,
-							requests: old.requests,
-							status: old.status,
-							reward_dst: old.reward_dst,
-							awarded_tokens: old.awarded_tokens,
-							awarded_tokens_per_candidate,
-						})
-					},
-				);
+				// 		Some(Nominator {
+				// 			id: old.id,
+				// 			nominations,
+				// 			initial_nominations,
+				// 			total: old.total,
+				// 			requests: old.requests,
+				// 			status: old.status,
+				// 			reward_dst: old.reward_dst,
+				// 			awarded_tokens: old.awarded_tokens,
+				// 			awarded_tokens_per_candidate,
+				// 		})
+				// 	},
+				// );
 
 				// translate `Vec<(RoundIndex, u32)>` to `BTreeMap<RoundIndex, u32>`
 				<CachedMajority<T>>::translate::<Vec<(RoundIndex, u32)>, _>(|old| {
@@ -300,17 +299,17 @@ pub mod v2 {
 	use super::*;
 	use frame_support::traits::Get;
 
-	#[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-	pub struct OldNominator<AccountId, Balance> {
-		pub id: AccountId,
-		pub nominations: OrderedSet<Bond<AccountId, Balance>>,
-		pub initial_nominations: OrderedSet<Bond<AccountId, Balance>>,
-		pub total: Balance,
-		pub requests: PendingNominationRequests<AccountId, Balance>,
-		pub status: NominatorStatus,
-		pub reward_dst: RewardDestination,
-		pub awarded_tokens: Balance,
-	}
+	// #[derive(Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+	// pub struct OldNominator<AccountId, Balance> {
+	// 	pub id: AccountId,
+	// 	pub nominations: OrderedSet<Bond<AccountId, Balance>>,
+	// 	pub initial_nominations: OrderedSet<Bond<AccountId, Balance>>,
+	// 	pub total: Balance,
+	// 	pub requests: PendingNominationRequests<AccountId, Balance>,
+	// 	pub status: NominatorStatus,
+	// 	pub reward_dst: RewardDestination,
+	// 	pub awarded_tokens: Balance,
+	// }
 
 	pub fn pre_migrate<T: Config>() -> Result<(), &'static str> {
 		// frame_support::ensure!(
