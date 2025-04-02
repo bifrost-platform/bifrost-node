@@ -11,10 +11,7 @@ use frame_support::traits::Currency;
 
 use sp_runtime::{PerThing, Perbill, RuntimeDebug};
 
-use substrate_fixed::{
-	transcendental::pow as floatpow,
-	types::{I32F32, I64F64},
-};
+use substrate_fixed::{transcendental::pow as floatpow, types::I64F64};
 
 const SECONDS_PER_YEAR: u32 = 31557600;
 const SECONDS_PER_BLOCK: u32 = 3;
@@ -67,10 +64,10 @@ pub fn perbill_annual_to_perbill_round(
 	annual: Range<Perbill>,
 	rounds_per_year: u32,
 ) -> Range<Perbill> {
-	let exponent = I32F32::from_num(1) / I32F32::from_num(rounds_per_year);
+	let exponent = I64F64::from_num(1) / I64F64::from_num(rounds_per_year);
 	let annual_to_round = |annual: Perbill| -> Perbill {
-		let x = I32F32::from_num(annual.deconstruct()) / I32F32::from_num(Perbill::ACCURACY);
-		let y: I64F64 = floatpow(I32F32::from_num(1) + x, exponent)
+		let x = I64F64::from_num(annual.deconstruct()) / I64F64::from_num(Perbill::ACCURACY);
+		let y: I64F64 = floatpow(I64F64::from_num(1) + x, exponent)
 			.expect("Cannot overflow since rounds_per_year is u32 so worst case 0; QED");
 		Perbill::from_parts(
 			((y - I64F64::from_num(1)) * I64F64::from_num(Perbill::ACCURACY))
