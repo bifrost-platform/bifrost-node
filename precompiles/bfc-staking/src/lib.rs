@@ -465,7 +465,7 @@ where
 		let total_stake = pallet_bfc_staking::Total::<Runtime>::get();
 		let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
 		let validator_contribution_pct =
-			Perbill::from_rational(100, selected_candidates.len() as u32);
+			Perbill::from_rational(1, selected_candidates.len() as u32);
 		let total_reward_amount = validator_contribution_pct * round_issuance;
 
 		let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
