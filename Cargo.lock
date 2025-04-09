@@ -6450,6 +6450,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-blaze"
+version = "1.0.0"
+dependencies = [
+ "array-bytes",
+ "bp-btc-relay",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-btc-registration-pool"
 version = "1.0.0"
 dependencies = [

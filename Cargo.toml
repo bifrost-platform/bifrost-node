@@ -16,6 +16,7 @@ members = [
 	"pallets/relay-manager",
 	"pallets/btc-registration-pool",
 	"pallets/btc-socket-queue",
+	"pallets/blaze",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -94,6 +95,7 @@ pallet-bfc-offences = { default-features = false, path = "pallets/bfc-offences" 
 pallet-relay-manager = { default-features = false, path = "pallets/relay-manager" }
 pallet-btc-registration-pool = { default-features = false, path = "pallets/btc-registration-pool" }
 pallet-btc-socket-queue = { default-features = false, path = "pallets/btc-socket-queue" }
+pallet-blaze = { default-features = false, path = "pallets/blaze" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
