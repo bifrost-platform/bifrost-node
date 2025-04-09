@@ -757,6 +757,7 @@ dependencies = [
  "pallet-bfc-offences",
  "pallet-bfc-staking",
  "pallet-bfc-utility",
+ "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
  "pallet-collective",

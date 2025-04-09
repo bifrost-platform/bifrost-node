@@ -1053,6 +1053,12 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_blaze::Config for Runtime {
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -1171,6 +1177,9 @@ mod runtime {
 
 	#[runtime::pallet_index(61)]
 	pub type BtcRegistrationPool = pallet_btc_registration_pool;
+
+	#[runtime::pallet_index(62)]
+	pub type Blaze = pallet_blaze;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
