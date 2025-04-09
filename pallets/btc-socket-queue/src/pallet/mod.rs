@@ -315,7 +315,7 @@ pub mod pallet {
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
-			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let txid = Self::convert_txid(psbt_obj.unsigned_tx.compute_txid());
 
 			// verify if the fee rate is set properly
 			Self::try_psbt_fee_verification(&psbt_obj)?;
@@ -359,7 +359,7 @@ pub mod pallet {
 			let unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let signed_psbt_obj = Self::try_get_checked_psbt(&signed_psbt)?;
 
-			let txid = Self::convert_txid(unsigned_psbt_obj.unsigned_tx.txid());
+			let txid = Self::convert_txid(unsigned_psbt_obj.unsigned_tx.compute_txid());
 
 			let mut pending_request =
 				<PendingRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
@@ -449,7 +449,7 @@ pub mod pallet {
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
-			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.compute_txid());
 
 			// verify if the fee rate is set properly
 			Self::try_psbt_fee_verification(&psbt_obj)?;
@@ -591,7 +591,7 @@ pub mod pallet {
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
-			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let txid = Self::convert_txid(psbt_obj.unsigned_tx.compute_txid());
 
 			// verify if the fee rate is set properly
 			Self::try_psbt_fee_verification(&psbt_obj)?;
@@ -684,7 +684,7 @@ pub mod pallet {
 			// verify if psbt bytes are valid
 			let old_psbt_obj = Self::try_get_checked_psbt(&old_request.unsigned_psbt)?;
 			let new_psbt_obj = Self::try_get_checked_psbt(&new_unsigned_psbt)?;
-			let new_txid = Self::convert_txid(new_psbt_obj.unsigned_tx.txid());
+			let new_txid = Self::convert_txid(new_psbt_obj.unsigned_tx.compute_txid());
 			ensure!(new_txid != old_txid, Error::<T>::NoWritingSameValue);
 
 			// verify if the fee rate is set properly

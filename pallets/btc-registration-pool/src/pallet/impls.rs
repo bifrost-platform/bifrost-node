@@ -1,7 +1,7 @@
 use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager},
-	Address, AddressState, Descriptor, Error as KeyError, MigrationSequence, MultiSigAccount,
-	Network, PublicKey, UnboundedBytes,
+	Address, AddressState, Descriptor, FromSliceError as KeyError, MigrationSequence,
+	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
 use frame_system::pallet_prelude::BlockNumberFor;
