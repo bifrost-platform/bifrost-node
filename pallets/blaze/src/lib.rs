@@ -3,16 +3,16 @@
 mod pallet;
 pub mod weights;
 
-use bp_btc_relay::UnboundedBytes;
 pub use pallet::pallet::*;
-use sp_runtime::BoundedBTreeMap;
 pub use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H256, U256};
+use sp_runtime::BoundedBTreeMap;
 use sp_std::vec::Vec;
 
+use bp_btc_relay::UnboundedBytes;
 use bp_staking::MAX_AUTHORITIES;
 
 /// The round of the registration pool.
@@ -24,7 +24,9 @@ pub struct Utxo<AccountId> {
 	pub vout: U256,
 	pub amount: U256,
 	pub is_approved: bool,
-	// TODO: need lock time
+	/// If the locktime is less than 500 million, it's interpreted as a block height.
+	/// Otherwise, it's interpreted as a timestamp.
+	pub lock_time: U256,
 	pub votes: BoundedBTreeMap<AccountId, bool, ConstU32<MAX_AUTHORITIES>>,
 }
 
