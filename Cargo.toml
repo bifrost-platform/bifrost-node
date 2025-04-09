@@ -59,7 +59,7 @@ impl-serde = { version = "0.4.0", default-features = false }
 serde = { version = "1.0", default-features = false }
 jsonrpsee = { version = "0.23.2", default-features = false }
 log = { version = "0.4.21", default-features = false }
-miniscript = { version = "11.0.0", default-features = false, features = [
+miniscript = { version = "12.3.1", default-features = false, features = [
 	"no-std",
 ] }
 ethabi-decode = { version = "1.0.0", default-features = false }
