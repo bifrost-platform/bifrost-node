@@ -11,6 +11,7 @@ pub use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H256, U256};
+use sp_std::vec::Vec;
 
 use bp_staking::MAX_AUTHORITIES;
 
