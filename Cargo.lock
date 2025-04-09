@@ -6500,7 +6500,6 @@ dependencies = [
  "frame-system",
  "hex",
  "log",
- "miniscript",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
