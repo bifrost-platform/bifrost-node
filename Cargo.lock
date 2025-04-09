@@ -6494,10 +6494,12 @@ version = "1.0.0"
 dependencies = [
  "array-bytes",
  "bp-btc-relay",
+ "bp-staking",
  "frame-support",
  "frame-system",
  "hex",
  "log",
+ "miniscript",
  "parity-scale-codec",
  "scale-info",
  "sp-core",

@@ -13,6 +13,7 @@ repository = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
 array-bytes = { workspace = true }
+miniscript = { workspace = true }
 
 # Substrate
 scale-info = { workspace = true }
@@ -26,6 +27,7 @@ sp-io = { workspace = true }
 
 # Bifrost
 bp-btc-relay = { workspace = true }
+bp-staking = { workspace = true }
 
 [features]
 default = ["std"]
@@ -39,5 +41,6 @@ std = [
 	"sp-core/std",
 	"sp-io/std",
 	"bp-btc-relay/std",
+	"bp-staking/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
