@@ -3,6 +3,7 @@
 mod pallet;
 pub mod weights;
 
+use bp_btc_relay::UnboundedBytes;
 pub use pallet::pallet::*;
 use sp_runtime::BoundedBTreeMap;
 pub use weights::WeightInfo;
@@ -36,4 +37,38 @@ impl<AccountId: Ord> Default for PendingFeeRate<AccountId> {
 	fn default() -> Self {
 		Self { is_approved: false, votes: Default::default() }
 	}
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct UtxoSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub utxos: Vec<Utxo<AccountId>>,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct FeeRateSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub fee_rate: U256,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct OutboundRequestSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub messages: Vec<UnboundedBytes>,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SpendTxosSubmission<AccountId> {
+	pub authority_id: AccountId,
+	/// key: txid
+	/// value: vout
+	pub locked_txos: Vec<(H256, U256)>,
+	/// The pool round.
+	pub pool_round: PoolRound,
 }
