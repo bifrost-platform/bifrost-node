@@ -4,6 +4,7 @@ pub mod migrations;
 mod pallet;
 pub mod weights;
 
+use bp_btc_relay::UnboundedBytes;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
@@ -102,4 +103,38 @@ pub struct SocketMessagesSubmission<AccountId> {
 	pub authority_id: AccountId,
 	/// The Socket messages.
 	pub messages: Vec<UnboundedBytes>,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct UtxoSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub utxos: Vec<Utxo<AccountId>>,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct FeeRateSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub fee_rate: U256,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct OutboundRequestSubmission<AccountId> {
+	pub authority_id: AccountId,
+	pub messages: Vec<UnboundedBytes>,
+	/// The pool round.
+	pub pool_round: PoolRound,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SpendTxosSubmission<AccountId> {
+	pub authority_id: AccountId,
+	/// key: txid
+	/// value: vout
+	pub locked_txos: Vec<(H256, U256)>,
+	/// The pool round.
+	pub pool_round: PoolRound,
 }
