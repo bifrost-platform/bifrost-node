@@ -13,7 +13,6 @@ repository = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
 array-bytes = { workspace = true }
-miniscript = { workspace = true }
 
 # Substrate
 scale-info = { workspace = true }
