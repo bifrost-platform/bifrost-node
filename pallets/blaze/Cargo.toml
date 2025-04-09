@@ -13,6 +13,7 @@ repository = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
 array-bytes = { workspace = true }
+miniscript = { workspace = true }
 
 # Substrate
 scale-info = { workspace = true }
@@ -31,15 +32,15 @@ bp-staking = { workspace = true }
 [features]
 default = ["std"]
 std = [
-    "scale-info/std",
-    "parity-scale-codec/std",
-    "frame-support/std",
-    "frame-system/std",
-    "sp-runtime/std",
-    "sp-std/std",
-    "sp-core/std",
-    "sp-io/std",
-    "bp-btc-relay/std",
-    "bp-staking/std",
+	"scale-info/std",
+	"parity-scale-codec/std",
+	"frame-support/std",
+	"frame-system/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-core/std",
+	"sp-io/std",
+	"bp-btc-relay/std",
+	"bp-staking/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
