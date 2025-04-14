@@ -2,7 +2,9 @@ use bp_staking::traits::Authorities;
 use frame_support::pallet_prelude::{
 	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 };
+use scale_info::prelude::{format, string::String};
 use sp_runtime::traits::Verify;
+use sp_std::vec::Vec;
 
 use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, UtxoSubmission};
 
@@ -13,7 +15,7 @@ impl<T: Config> Pallet<T> {
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let UtxoSubmission { authority_id, utxos, pool_round } = utxo_submission;
+		let UtxoSubmission { authority_id, utxos } = utxo_submission;
 
 		// verify if the authority is a selected relayer.
 		if !T::Relayers::is_authority(&authority_id) {
@@ -22,8 +24,7 @@ impl<T: Config> Pallet<T> {
 
 		// verify if the signature was originated from the authority.
 		let message = format!(
-			"{}:{}",
-			pool_round,
+			"{}",
 			utxos
 				.iter()
 				.map(|x| format!("{}:{}:{}", x.txid, x.vout, x.amount))
@@ -45,7 +46,7 @@ impl<T: Config> Pallet<T> {
 		fee_rate_submission: &FeeRateSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let FeeRateSubmission { authority_id, fee_rate, pool_round } = fee_rate_submission;
+		let FeeRateSubmission { authority_id, fee_rate } = fee_rate_submission;
 
 		// TODO: verify authority
 		// TODO: verify signature
@@ -61,8 +62,7 @@ impl<T: Config> Pallet<T> {
 		outbound_request_submission: &OutboundRequestSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let OutboundRequestSubmission { authority_id, messages, pool_round } =
-			outbound_request_submission;
+		let OutboundRequestSubmission { authority_id, messages } = outbound_request_submission;
 
 		// TODO: verify authority
 		// TODO: verify signature
@@ -78,7 +78,7 @@ impl<T: Config> Pallet<T> {
 		spend_txos_submission: &SpendTxosSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let SpendTxosSubmission { authority_id, locked_txos, pool_round } = spend_txos_submission;
+		let SpendTxosSubmission { authority_id, locked_txos } = spend_txos_submission;
 
 		// TODO: verify authority
 		// TODO: verify signature

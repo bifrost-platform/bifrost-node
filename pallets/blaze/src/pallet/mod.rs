@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, PendingFeeRate, PoolRound,
+	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, PendingFeeRate,
 	SpendTxosSubmission, Utxo, UtxoSubmission,
 };
 
@@ -57,52 +57,34 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: pool round
-	/// value: utxo(s)
+	/// key: txid, vout
+	/// value: utxo
 	pub type Utxos<T: Config> =
-		StorageMap<_, Twox64Concat, PoolRound, Vec<Utxo<T::AccountId>>, ValueQuery>;
+		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: txid
-	/// value: utxo(s)
-	pub type LockedTxos<T: Config> = StorageDoubleMap<
-		_,
-		Twox64Concat,
-		PoolRound,
-		Twox64Concat,
-		H256,
-		Vec<Utxo<T::AccountId>>,
-		ValueQuery,
-	>;
+	/// key: txid, vout
+	/// value: utxo
+	pub type LockedTxos<T: Config> =
+		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: txid
-	/// value: utxo(s)
-	pub type SpentTxos<T: Config> = StorageDoubleMap<
-		_,
-		Twox64Concat,
-		PoolRound,
-		Twox64Concat,
-		H256,
-		Vec<Utxo<T::AccountId>>,
-		ValueQuery,
-	>;
+	/// key: txid, vout
+	/// value: utxo
+	pub type SpentTxos<T: Config> =
+		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: pool round
-	/// value: pending outbound requests socket messages (in bytes)
-	pub type OutboundPool<T: Config> =
-		StorageMap<_, Twox64Concat, PoolRound, Vec<UnboundedBytes>, ValueQuery>;
+	/// pending outbound requests socket messages (in bytes)
+	pub type OutboundPool<T: Config> = StorageValue<_, Vec<UnboundedBytes>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: pool round
-	/// value: pending fee rate
-	pub type FeeRate<T: Config> =
-		StorageMap<_, Twox64Concat, PoolRound, PendingFeeRate<T::AccountId>, ValueQuery>;
+	/// pending fee rate
+	pub type FeeRate<T: Config> = StorageValue<_, PendingFeeRate<T::AccountId>, ValueQuery>;
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -122,6 +104,12 @@ pub mod pallet {
 			utxo_submission: UtxoSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let UtxoSubmission { authority_id, utxos } = utxo_submission;
+
+			// TODO: pool round verification?
+
 			Ok(().into())
 		}
 

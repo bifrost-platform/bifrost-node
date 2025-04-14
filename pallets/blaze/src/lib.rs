@@ -15,9 +15,6 @@ use sp_std::vec::Vec;
 use bp_btc_relay::UnboundedBytes;
 use bp_staking::MAX_AUTHORITIES;
 
-/// The round of the registration pool.
-pub type PoolRound = u32;
-
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct Utxo<AccountId> {
 	pub txid: H256,
@@ -46,24 +43,18 @@ impl<AccountId: Ord> Default for PendingFeeRate<AccountId> {
 pub struct UtxoSubmission<AccountId> {
 	pub authority_id: AccountId,
 	pub utxos: Vec<Utxo<AccountId>>,
-	/// The pool round.
-	pub pool_round: PoolRound,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct FeeRateSubmission<AccountId> {
 	pub authority_id: AccountId,
 	pub fee_rate: U256,
-	/// The pool round.
-	pub pool_round: PoolRound,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct OutboundRequestSubmission<AccountId> {
 	pub authority_id: AccountId,
 	pub messages: Vec<UnboundedBytes>,
-	/// The pool round.
-	pub pool_round: PoolRound,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -72,6 +63,4 @@ pub struct SpendTxosSubmission<AccountId> {
 	/// key: txid
 	/// value: vout
 	pub locked_txos: Vec<(H256, U256)>,
-	/// The pool round.
-	pub pool_round: PoolRound,
 }
