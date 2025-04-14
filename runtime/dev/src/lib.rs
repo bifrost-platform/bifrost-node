@@ -1052,6 +1052,7 @@ impl pallet_btc_registration_pool::Config for Runtime {
 impl pallet_blaze::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
 }
 

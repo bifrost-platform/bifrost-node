@@ -1,4 +1,8 @@
-use frame_support::pallet_prelude::{TransactionPriority, TransactionValidity, ValidTransaction};
+use bp_staking::traits::Authorities;
+use frame_support::pallet_prelude::{
+	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
+};
+use sp_runtime::traits::Verify;
 
 use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, UtxoSubmission};
 
@@ -11,8 +15,24 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let UtxoSubmission { authority_id, utxos, pool_round } = utxo_submission;
 
-		// TODO: verify authority
-		// TODO: verify signature
+		// verify if the authority is a selected relayer.
+		if !T::Relayers::is_authority(&authority_id) {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = format!(
+			"{}:{}",
+			pool_round,
+			utxos
+				.iter()
+				.map(|x| format!("{}:{}:{}", x.txid, x.vout, x.amount))
+				.collect::<Vec<String>>()
+				.concat()
+		);
+		if !signature.verify(message.as_bytes(), &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
 
 		ValidTransaction::with_tag_prefix("UtxoSubmission")
 			.priority(TransactionPriority::MAX)

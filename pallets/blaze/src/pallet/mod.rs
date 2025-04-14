@@ -9,6 +9,7 @@ use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::UnboundedBytes;
+use bp_staking::traits::Authorities;
 use sp_core::{H256, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::vec::Vec;
@@ -33,6 +34,8 @@ pub mod pallet {
 			+ Decode
 			+ Parameter
 			+ MaxEncodedLen;
+		/// The Bifrost relayers.
+		type Relayers: Authorities<Self::AccountId>;
 		type WeightInfo: WeightInfo;
 	}
 
