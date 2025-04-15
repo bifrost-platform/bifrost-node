@@ -56,9 +56,12 @@ pub mod pallet {
 		/// The default number of blocks per round at genesis
 		#[pallet::constant]
 		type DefaultBlocksPerRound: Get<u32>;
-		/// The default minimum number of blocks per round at genesis
+		/// Minimum round length that can be set by the system.
 		#[pallet::constant]
 		type MinBlocksPerRound: Get<u32>;
+		/// Maximum round length that can be set by the system.
+		#[pallet::constant]
+		type MaxBlocksPerRound: Get<u32>;
 		/// The max lifetime in rounds for certain storage data to be cached
 		#[pallet::constant]
 		type StorageCacheLifetimeInRounds: Get<u32>;
@@ -849,6 +852,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			T::MonetaryGovernanceOrigin::ensure_origin(origin)?;
 			ensure!(schedule.is_valid(), Error::<T>::InvalidSchedule);
+			ensure!(schedule.min >= Perbill::from_percent(1), Error::<T>::InvalidSchedule);
 			let mut config = <InflationConfig<T>>::get();
 			ensure!(config.annual != schedule, Error::<T>::NoWritingSameValue);
 			config.annual = schedule;
@@ -1097,6 +1101,7 @@ pub mod pallet {
 		pub fn set_blocks_per_round(origin: OriginFor<T>, new: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			ensure!(new >= T::MinBlocksPerRound::get(), Error::<T>::CannotSetBelowMin);
+			ensure!(new <= T::MaxBlocksPerRound::get(), Error::<T>::CannotSetAboveMax);
 			let mut round = <Round<T>>::get();
 			let (current_round, now, first, old) = (
 				round.current_round_index,

@@ -152,7 +152,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 483,
+	spec_version: 484,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -810,8 +810,10 @@ impl pallet_relay_manager::Config for Runtime {
 }
 
 parameter_types! {
-	/// Minimum round length is 30 seconds (10 * 3 second block times).
+	/// Minimum round length that can be set by the system.
 	pub const MinBlocksPerRound: u32 = 10;
+	/// Maximum round length that can be set by the system.
+	pub const MaxBlocksPerRound: u32 = 28 * DAYS;
 	/// Blocks per round.
 	pub const DefaultBlocksPerRound: u32 = 8 * HOURS;
 	/// Rounds before the validator leaving the candidates request can be executed.
@@ -864,6 +866,7 @@ impl pallet_bfc_staking::Config for Runtime {
 	type RelayManager = RelayManager;
 	type OffenceHandler = BfcOffences;
 	type MinBlocksPerRound = MinBlocksPerRound;
+	type MaxBlocksPerRound = MaxBlocksPerRound;
 	type DefaultBlocksPerSession = SessionPeriod;
 	type DefaultBlocksPerRound = DefaultBlocksPerRound;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
