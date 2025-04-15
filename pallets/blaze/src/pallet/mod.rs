@@ -71,19 +71,19 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: txid, vout
+	/// key: utxo hash (keccak256(txid, vout, amount, lock_time))
 	/// value: utxo
 	pub type Utxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: txid, vout
+	/// key: utxo hash (keccak256(txid, vout, amount, lock_time))
 	/// value: utxo
 	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, U256>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: txid, vout
+	/// key: utxo hash (keccak256(txid, vout, amount, lock_time))
 	/// value: utxo
 	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, U256>;
 
