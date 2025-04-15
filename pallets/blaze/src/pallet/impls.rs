@@ -2,8 +2,9 @@ use bp_staking::traits::Authorities;
 use frame_support::pallet_prelude::{
 	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 };
-use parity_scale_codec::alloc::string::ToString;
+use parity_scale_codec::Encode;
 use scale_info::prelude::{format, string::String};
+use sp_core::H256;
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::Verify;
 use sp_std::vec::Vec;
@@ -18,7 +19,7 @@ impl<T: Config> Pallet<T> {
 		signature: &T::Signature,
 		tag_prefix: &'static str,
 	) -> TransactionValidity {
-		let UtxoSubmission { authority_id, votes } = utxo_submission;
+		let UtxoSubmission { authority_id, utxos: votes } = utxo_submission;
 
 		// verify if the authority is a selected relayer.
 		if !T::Relayers::is_authority(&authority_id) {
@@ -30,7 +31,16 @@ impl<T: Config> Pallet<T> {
 			keccak_256(tag_prefix.as_bytes()).as_slice(),
 			format!(
 				"{}",
-				votes.iter().map(|x| x.utxo_hash.to_string()).collect::<Vec<String>>().concat()
+				votes
+					.iter()
+					.map(|x| {
+						let utxo_hash = H256::from_slice(
+							keccak_256(&Encode::encode(&(x.txid, x.vout, x.amount))).as_ref(),
+						);
+						hex::encode(utxo_hash)
+					})
+					.collect::<Vec<String>>()
+					.concat()
 			)
 			.as_bytes(),
 		]

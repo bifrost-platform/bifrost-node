@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, PendingFeeRate, Utxo,
-	UtxoSubmission, UtxoVote,
+	UtxoInfo, UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -14,7 +14,7 @@ use parity_scale_codec::Encode;
 use sp_core::H256;
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::vec::Vec;
+use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -51,12 +51,10 @@ pub mod pallet {
 		UtxoNotLocked,
 		/// The utxo is unknown.
 		UnknownUtxo,
-		/// The votes are empty.
-		EmptyVotes,
+		/// The submission is empty.
+		EmptySubmission,
 		/// The value is out of range.
 		OutOfRange,
-		/// The hash is invalid.
-		InvalidHash,
 	}
 
 	#[pallet::genesis_config]
@@ -123,20 +121,17 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UtxoSubmission { authority_id, votes } = utxo_submission;
-			if votes.is_empty() {
-				return Err(Error::<T>::EmptyVotes.into());
+			let UtxoSubmission { authority_id, utxos } = utxo_submission;
+			if utxos.is_empty() {
+				return Err(Error::<T>::EmptySubmission.into());
 			}
 
-			for vote in votes {
-				let UtxoVote { txid, vout, amount, vote, utxo_hash } = vote;
+			for utxo in utxos {
+				let UtxoInfo { txid, vout, amount } = utxo;
 
 				// try to hash (keccak256) the utxo data (txid, vout, amount)
-				let check_hash =
+				let utxo_hash =
 					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
-				if check_hash != utxo_hash {
-					return Err(Error::<T>::InvalidHash.into());
-				}
 
 				// check if the utxo is already locked
 				if <LockedTxos<T>>::contains_key(&utxo_hash) {
@@ -148,30 +143,31 @@ pub mod pallet {
 				}
 
 				// try to insert the utxo
-				if let Some(mut utxo) = <Utxos<T>>::get(&utxo_hash) {
+				if let Some(mut u) = <Utxos<T>>::get(&utxo_hash) {
 					// check if the utxo is already approved
-					if utxo.is_approved {
+					if u.is_approved {
 						continue;
 					}
-					utxo.votes
-						.try_insert(authority_id.clone(), vote)
-						.map_err(|_| Error::<T>::OutOfRange)?;
+					if u.voters.contains(&authority_id) {
+						continue;
+					}
+					u.voters.try_push(authority_id.clone()).map_err(|_| Error::<T>::OutOfRange)?;
 
 					// check if the utxo majority is reached
-					if utxo.votes.iter().filter(|v| *v.1).count() as u32 >= T::Relayers::majority()
-					{
-						utxo.is_approved = true;
+					if u.voters.len() as u32 >= T::Relayers::majority() {
+						u.is_approved = true;
 					}
-					<Utxos<T>>::insert(&utxo_hash, utxo);
+					<Utxos<T>>::insert(&utxo_hash, u);
 				} else {
-					let mut votes = BoundedBTreeMap::default();
-					votes
-						.try_insert(authority_id.clone(), vote)
-						.map_err(|_| Error::<T>::OutOfRange)?;
-
+					let voters = vec![authority_id.clone()];
 					<Utxos<T>>::insert(
 						&utxo_hash,
-						Utxo { txid, vout, amount, is_approved: false, votes },
+						Utxo {
+							inner: UtxoInfo { txid, vout, amount },
+							is_approved: false,
+							voters: BoundedVec::try_from(voters)
+								.map_err(|_| Error::<T>::OutOfRange)?,
+						},
 					);
 				}
 			}
@@ -188,20 +184,17 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UtxoSubmission { authority_id, votes } = utxo_submission;
-			if votes.is_empty() {
-				return Err(Error::<T>::EmptyVotes.into());
+			let UtxoSubmission { authority_id, utxos } = utxo_submission;
+			if utxos.is_empty() {
+				return Err(Error::<T>::EmptySubmission.into());
 			}
 
-			for vote in votes {
-				let UtxoVote { txid, vout, amount, vote, utxo_hash } = vote;
+			for utxo in utxos {
+				let UtxoInfo { txid, vout, amount } = utxo;
 
 				// try to hash (keccak256) the utxo data (txid, vout, amount)
-				let check_hash =
+				let utxo_hash =
 					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
-				if check_hash != utxo_hash {
-					return Err(Error::<T>::InvalidHash.into());
-				}
 
 				// check if the utxo is available
 				if <Utxos<T>>::contains_key(&utxo_hash) {
@@ -212,17 +205,17 @@ pub mod pallet {
 					return Err(Error::<T>::UtxoAlreadySpent.into());
 				}
 
-				if let Some(mut utxo) = <LockedTxos<T>>::get(&utxo_hash) {
-					utxo.votes
-						.try_insert(authority_id.clone(), vote)
-						.map_err(|_| Error::<T>::OutOfRange)?;
+				if let Some(mut u) = <LockedTxos<T>>::get(&utxo_hash) {
+					if u.voters.contains(&authority_id) {
+						continue;
+					}
+					u.voters.try_push(authority_id.clone()).map_err(|_| Error::<T>::OutOfRange)?;
 
-					if utxo.votes.iter().filter(|v| *v.1).count() as u32 >= T::Relayers::majority()
-					{
+					if u.voters.len() as u32 >= T::Relayers::majority() {
 						<LockedTxos<T>>::remove(&utxo_hash);
-						<SpentTxos<T>>::insert(&utxo_hash, utxo);
+						<SpentTxos<T>>::insert(&utxo_hash, u);
 					} else {
-						<LockedTxos<T>>::insert(&utxo_hash, utxo);
+						<LockedTxos<T>>::insert(&utxo_hash, u);
 					}
 				} else {
 					return Err(Error::<T>::UnknownUtxo.into());
