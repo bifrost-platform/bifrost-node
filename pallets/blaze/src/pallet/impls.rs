@@ -2,6 +2,7 @@ use bp_staking::traits::Authorities;
 use frame_support::pallet_prelude::{
 	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 };
+use parity_scale_codec::alloc::string::ToString;
 use scale_info::prelude::{format, string::String};
 use sp_runtime::traits::Verify;
 use sp_std::vec::Vec;
@@ -15,7 +16,7 @@ impl<T: Config> Pallet<T> {
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let UtxoSubmission { authority_id, votes: utxos } = utxo_submission;
+		let UtxoSubmission { authority_id, votes } = utxo_submission;
 
 		// verify if the authority is a selected relayer.
 		if !T::Relayers::is_authority(&authority_id) {
@@ -25,11 +26,7 @@ impl<T: Config> Pallet<T> {
 		// verify if the signature was originated from the authority.
 		let message = format!(
 			"{}",
-			utxos
-				.iter()
-				.map(|x| format!("{}:{}:{}", x.txid, x.vout, x.amount))
-				.collect::<Vec<String>>()
-				.concat()
+			votes.iter().map(|x| x.utxo_hash.to_string()).collect::<Vec<String>>().concat()
 		);
 		if !signature.verify(message.as_bytes(), &authority_id) {
 			return Err(InvalidTransaction::BadProof.into());
