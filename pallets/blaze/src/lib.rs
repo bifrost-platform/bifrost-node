@@ -21,9 +21,6 @@ pub struct Utxo<AccountId> {
 	pub vout: U256,
 	pub amount: U256,
 	pub is_approved: bool,
-	/// If the locktime is less than 500 million, it's interpreted as a block height.
-	/// Otherwise, it's interpreted as a timestamp.
-	pub lock_time: U256,
 	pub votes: BoundedBTreeMap<AccountId, bool, ConstU32<MAX_AUTHORITIES>>,
 }
 
@@ -32,9 +29,8 @@ pub struct UtxoVote {
 	pub txid: H256,
 	pub vout: U256,
 	pub amount: U256,
-	pub lock_time: U256,
 	pub vote: bool,
-	/// The keccak256 hash of the utxo data (txid, vout, amount, lock_time)
+	/// The keccak256 hash of the utxo data (txid, vout, amount)
 	pub utxo_hash: H256,
 }
 

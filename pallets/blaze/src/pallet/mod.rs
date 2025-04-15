@@ -77,19 +77,19 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: utxo hash (keccak256(txid, vout, amount, lock_time))
+	/// key: utxo hash (keccak256(txid, vout, amount))
 	/// value: utxo
 	pub type Utxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: utxo hash (keccak256(txid, vout, amount, lock_time))
+	/// key: utxo hash (keccak256(txid, vout, amount))
 	/// value: utxo
 	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: utxo hash (keccak256(txid, vout, amount, lock_time))
+	/// key: utxo hash (keccak256(txid, vout, amount))
 	/// value: utxo
 	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
@@ -129,12 +129,11 @@ pub mod pallet {
 			}
 
 			for vote in votes {
-				let UtxoVote { txid, vout, amount, vote, lock_time, utxo_hash } = vote;
+				let UtxoVote { txid, vout, amount, vote, utxo_hash } = vote;
 
-				// try to hash (keccak256) the utxo data (txid, vout, amount, lock_time)
-				let check_hash = H256::from_slice(
-					keccak_256(&Encode::encode(&(txid, vout, amount, lock_time))).as_ref(),
-				);
+				// try to hash (keccak256) the utxo data (txid, vout, amount)
+				let check_hash =
+					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
 				if check_hash != utxo_hash {
 					return Err(Error::<T>::InvalidHash.into());
 				}
@@ -172,7 +171,7 @@ pub mod pallet {
 
 					<Utxos<T>>::insert(
 						&utxo_hash,
-						Utxo { txid, vout, amount, is_approved: false, lock_time, votes },
+						Utxo { txid, vout, amount, is_approved: false, votes },
 					);
 				}
 			}
@@ -195,12 +194,11 @@ pub mod pallet {
 			}
 
 			for vote in votes {
-				let UtxoVote { txid, vout, amount, vote, lock_time, utxo_hash } = vote;
+				let UtxoVote { txid, vout, amount, vote, utxo_hash } = vote;
 
-				// try to hash (keccak256) the utxo data (txid, vout, amount, lock_time)
-				let check_hash = H256::from_slice(
-					keccak_256(&Encode::encode(&(txid, vout, amount, lock_time))).as_ref(),
-				);
+				// try to hash (keccak256) the utxo data (txid, vout, amount)
+				let check_hash =
+					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
 				if check_hash != utxo_hash {
 					return Err(Error::<T>::InvalidHash.into());
 				}
