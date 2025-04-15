@@ -47,8 +47,6 @@ pub mod pallet {
 		UtxoAlreadyLocked,
 		/// The utxo is already spent.
 		UtxoAlreadySpent,
-		/// The utxo is already approved.
-		UtxoAlreadyApproved,
 		/// The value is out of range.
 		OutOfRange,
 		/// The hash is invalid.
@@ -145,7 +143,7 @@ pub mod pallet {
 				if let Some(mut utxo) = <Utxos<T>>::get(&utxo_hash) {
 					// check if the utxo is already approved
 					if utxo.is_approved {
-						return Err(Error::<T>::UtxoAlreadyApproved.into());
+						continue;
 					}
 					utxo.votes
 						.try_insert(authority_id.clone(), vote)
