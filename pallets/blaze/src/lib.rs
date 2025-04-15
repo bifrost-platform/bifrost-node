@@ -67,11 +67,3 @@ pub struct OutboundRequestSubmission<AccountId> {
 	pub authority_id: AccountId,
 	pub messages: Vec<UnboundedBytes>,
 }
-
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct SpendTxosSubmission<AccountId> {
-	pub authority_id: AccountId,
-	/// key: txid
-	/// value: vout
-	pub locked_txos: Vec<(H256, U256)>,
-}

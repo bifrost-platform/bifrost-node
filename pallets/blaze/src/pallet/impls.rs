@@ -4,17 +4,19 @@ use frame_support::pallet_prelude::{
 };
 use parity_scale_codec::alloc::string::ToString;
 use scale_info::prelude::{format, string::String};
+use sp_io::hashing::keccak_256;
 use sp_runtime::traits::Verify;
 use sp_std::vec::Vec;
 
-use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, UtxoSubmission};
+use crate::{FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
 
 use super::pallet::*;
 
 impl<T: Config> Pallet<T> {
-	pub fn verify_submit_utxos(
+	pub fn verify_utxo_submission(
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
+		tag_prefix: &'static str,
 	) -> TransactionValidity {
 		let UtxoSubmission { authority_id, votes } = utxo_submission;
 
@@ -24,15 +26,20 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// verify if the signature was originated from the authority.
-		let message = format!(
-			"{}",
-			votes.iter().map(|x| x.utxo_hash.to_string()).collect::<Vec<String>>().concat()
-		);
-		if !signature.verify(message.as_bytes(), &authority_id) {
+		let message = [
+			keccak_256(tag_prefix.as_bytes()).as_slice(),
+			format!(
+				"{}",
+				votes.iter().map(|x| x.utxo_hash.to_string()).collect::<Vec<String>>().concat()
+			)
+			.as_bytes(),
+		]
+		.concat();
+		if !signature.verify(&*message, &authority_id) {
 			return Err(InvalidTransaction::BadProof.into());
 		}
 
-		ValidTransaction::with_tag_prefix("UtxoSubmission")
+		ValidTransaction::with_tag_prefix(tag_prefix)
 			.priority(TransactionPriority::MAX)
 			.and_provides(authority_id)
 			.propagate(true)
@@ -65,22 +72,6 @@ impl<T: Config> Pallet<T> {
 		// TODO: verify signature
 
 		ValidTransaction::with_tag_prefix("OutboundRequestSubmission")
-			.priority(TransactionPriority::MAX)
-			.and_provides(authority_id)
-			.propagate(true)
-			.build()
-	}
-
-	pub fn verify_spend_txos(
-		spend_txos_submission: &SpendTxosSubmission<T::AccountId>,
-		signature: &T::Signature,
-	) -> TransactionValidity {
-		let SpendTxosSubmission { authority_id, locked_txos } = spend_txos_submission;
-
-		// TODO: verify authority
-		// TODO: verify signature
-
-		ValidTransaction::with_tag_prefix("SpendTxosSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides(authority_id)
 			.propagate(true)
