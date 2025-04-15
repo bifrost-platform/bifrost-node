@@ -28,6 +28,17 @@ pub struct Utxo<AccountId> {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct UtxoVote {
+	pub txid: H256,
+	pub vout: U256,
+	pub amount: U256,
+	pub lock_time: U256,
+	pub vote: bool,
+	/// The keccak256 hash of the utxo data (txid, vout, amount, lock_time)
+	pub utxo_hash: H256,
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct PendingFeeRate<AccountId> {
 	pub is_approved: bool,
 	pub votes: BoundedBTreeMap<AccountId, U256, ConstU32<MAX_AUTHORITIES>>,
@@ -42,7 +53,7 @@ impl<AccountId: Ord> Default for PendingFeeRate<AccountId> {
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct UtxoSubmission<AccountId> {
 	pub authority_id: AccountId,
-	pub utxos: Vec<Utxo<AccountId>>,
+	pub votes: Vec<UtxoVote>,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]

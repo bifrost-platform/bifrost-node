@@ -15,7 +15,7 @@ impl<T: Config> Pallet<T> {
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let UtxoSubmission { authority_id, utxos } = utxo_submission;
+		let UtxoSubmission { authority_id, votes: utxos } = utxo_submission;
 
 		// verify if the authority is a selected relayer.
 		if !T::Relayers::is_authority(&authority_id) {

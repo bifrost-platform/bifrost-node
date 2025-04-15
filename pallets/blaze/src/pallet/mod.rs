@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, PendingFeeRate,
-	SpendTxosSubmission, Utxo, UtxoSubmission,
+	SpendTxosSubmission, Utxo, UtxoSubmission, UtxoVote,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -10,7 +10,9 @@ use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::UnboundedBytes;
 use bp_staking::traits::Authorities;
+use parity_scale_codec::Encode;
 use sp_core::{H256, U256};
+use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 use sp_std::vec::Vec;
 
@@ -39,6 +41,20 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 	}
 
+	#[pallet::error]
+	pub enum Error<T> {
+		/// The utxo is already locked.
+		UtxoAlreadyLocked,
+		/// The utxo is already spent.
+		UtxoAlreadySpent,
+		/// The utxo is already approved.
+		UtxoAlreadyApproved,
+		/// The value is out of range.
+		OutOfRange,
+		/// The hash is invalid.
+		InvalidHash,
+	}
+
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T> {
@@ -59,22 +75,19 @@ pub mod pallet {
 	#[pallet::unbounded]
 	/// key: txid, vout
 	/// value: utxo
-	pub type Utxos<T: Config> =
-		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, Utxo<T::AccountId>>;
+	pub type Utxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// key: txid, vout
 	/// value: utxo
-	pub type LockedTxos<T: Config> =
-		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, Utxo<T::AccountId>>;
+	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, U256>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// key: txid, vout
 	/// value: utxo
-	pub type SpentTxos<T: Config> =
-		StorageDoubleMap<_, Twox64Concat, H256, Twox64Concat, U256, Utxo<T::AccountId>>;
+	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, U256>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -106,9 +119,56 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UtxoSubmission { authority_id, utxos } = utxo_submission;
+			let UtxoSubmission { authority_id, votes } = utxo_submission;
 
-			// TODO: pool round verification?
+			for vote in votes {
+				let UtxoVote { txid, vout, amount, vote, lock_time, utxo_hash } = vote;
+
+				// try to hash (keccak256) the utxo data (txid, vout, amount, lock_time)
+				let check_hash = H256::from_slice(
+					keccak_256(&Encode::encode(&(txid, vout, amount, lock_time))).as_ref(),
+				);
+				if check_hash != utxo_hash {
+					return Err(Error::<T>::InvalidHash.into());
+				}
+
+				// check if the utxo is already locked
+				if <LockedTxos<T>>::contains_key(&utxo_hash) {
+					return Err(Error::<T>::UtxoAlreadyLocked.into());
+				}
+				// check if the utxo is already spent
+				if <SpentTxos<T>>::contains_key(&utxo_hash) {
+					return Err(Error::<T>::UtxoAlreadySpent.into());
+				}
+
+				// try to insert the utxo
+				if let Some(mut utxo) = <Utxos<T>>::get(&utxo_hash) {
+					// check if the utxo is already approved
+					if utxo.is_approved {
+						return Err(Error::<T>::UtxoAlreadyApproved.into());
+					}
+					utxo.votes
+						.try_insert(authority_id.clone(), vote)
+						.map_err(|_| Error::<T>::OutOfRange)?;
+
+					// check if the utxo majority is reached
+					if utxo.votes.iter().filter(|v| *v.1).count() as u32 >= T::Relayers::majority()
+					{
+						utxo.is_approved = true;
+					}
+					<Utxos<T>>::insert(&utxo_hash, utxo);
+				} else {
+					let mut votes = BoundedBTreeMap::default();
+					votes
+						.try_insert(authority_id.clone(), vote)
+						.map_err(|_| Error::<T>::OutOfRange)?;
+
+					<Utxos<T>>::insert(
+						&utxo_hash,
+						Utxo { txid, vout, amount, is_approved: false, lock_time, votes },
+					);
+				}
+			}
 
 			Ok(().into())
 		}
