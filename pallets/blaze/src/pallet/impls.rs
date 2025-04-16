@@ -78,8 +78,23 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let OutboundRequestSubmission { authority_id, messages } = outbound_request_submission;
 
-		// TODO: verify authority
-		// TODO: verify signature
+		// verify if the authority is a selected relayer.
+		if !T::Relayers::is_authority(&authority_id) {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = format!(
+			"{}",
+			messages
+				.iter()
+				.map(|x| array_bytes::bytes2hex("0x", x))
+				.collect::<Vec<String>>()
+				.concat()
+		);
+		if !signature.verify(message.as_bytes(), &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
 
 		ValidTransaction::with_tag_prefix("OutboundRequestSubmission")
 			.priority(TransactionPriority::MAX)

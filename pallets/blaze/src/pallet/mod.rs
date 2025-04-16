@@ -8,7 +8,7 @@ use crate::{
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
-use bp_btc_relay::UnboundedBytes;
+use bp_btc_relay::{traits::SocketVerifier, UnboundedBytes};
 use bp_staking::traits::Authorities;
 use parity_scale_codec::Encode;
 use sp_core::H256;
@@ -38,6 +38,9 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The Bifrost relayers.
 		type Relayers: Authorities<Self::AccountId>;
+		/// Socket message verifier.
+		type Verifier: SocketVerifier<Self::AccountId>;
+		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
 
@@ -55,6 +58,8 @@ pub mod pallet {
 		EmptySubmission,
 		/// The value is out of range.
 		OutOfRange,
+		/// Cannot set the value as identical to the previous value
+		NoWritingSameValue,
 	}
 
 	#[pallet::genesis_config]
@@ -109,6 +114,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			is_activated: bool,
 		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			let current = <IsActivated<T>>::get();
+			ensure!(current != is_activated, Error::<T>::NoWritingSameValue);
+			<IsActivated<T>>::put(is_activated);
 			Ok(().into())
 		}
 
@@ -241,6 +250,24 @@ pub mod pallet {
 			outbound_request_submission: OutboundRequestSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let OutboundRequestSubmission { messages, .. } = outbound_request_submission;
+			if messages.is_empty() {
+				return Err(Error::<T>::EmptySubmission.into());
+			}
+
+			for message in messages {
+				// check if the message is already submitted
+				let mut pool = <OutboundPool<T>>::get();
+				if pool.contains(&message) {
+					continue;
+				}
+				// verify the message
+				T::Verifier::verify_socket_message(&message)?;
+				pool.push(message);
+				<OutboundPool<T>>::put(pool);
+			}
 			Ok(().into())
 		}
 	}
