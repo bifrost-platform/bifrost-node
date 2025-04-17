@@ -9,7 +9,7 @@ pub use weights::WeightInfo;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H256, U256};
-use sp_runtime::{BoundedBTreeMap, BoundedVec};
+use sp_runtime::BoundedVec;
 use sp_std::vec::Vec;
 
 use bp_btc_relay::UnboundedBytes;
@@ -29,18 +29,6 @@ pub struct UtxoInfo {
 	pub amount: U256,
 }
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-pub struct PendingFeeRate<AccountId> {
-	pub is_approved: bool,
-	pub votes: BoundedBTreeMap<AccountId, U256, ConstU32<MAX_AUTHORITIES>>,
-}
-
-impl<AccountId: Ord> Default for PendingFeeRate<AccountId> {
-	fn default() -> Self {
-		Self { is_approved: false, votes: Default::default() }
-	}
-}
-
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct UtxoSubmission<AccountId> {
 	pub authority_id: AccountId,
@@ -48,9 +36,11 @@ pub struct UtxoSubmission<AccountId> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-pub struct FeeRateSubmission<AccountId> {
+pub struct FeeRateSubmission<AccountId, BlockNumber> {
 	pub authority_id: AccountId,
 	pub fee_rate: U256,
+	/// The deadline of the submission. Used to filter out expired signatures.
+	pub deadline: BlockNumber,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
