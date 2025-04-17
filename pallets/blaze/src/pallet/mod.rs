@@ -112,6 +112,18 @@ pub mod pallet {
 		ValueQuery,
 	>;
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+			// remove expired fee rates
+			let mut fee_rates = <FeeRates<T>>::get();
+			fee_rates.retain(|_, (_, expires_at)| n <= *expires_at);
+			<FeeRates<T>>::put(fee_rates);
+
+			Weight::from_parts(0, 0)
+		}
+	}
+
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
@@ -251,16 +263,12 @@ pub mod pallet {
 			let FeeRateSubmission { authority_id, fee_rate, .. } = fee_rate_submission;
 
 			let mut fee_rates = <FeeRates<T>>::get();
-			let current_block = <frame_system::Pallet<T>>::block_number();
-
-			// remove expired fee rates
-			fee_rates.retain(|_, (_, expires_at)| current_block <= *expires_at);
+			// fee rate finalization has to be done until expiration
+			let expires_at =
+				<frame_system::Pallet<T>>::block_number() + T::FeeRateExpiration::get().into();
 
 			fee_rates
-				.try_insert(
-					authority_id,
-					(fee_rate, current_block + T::FeeRateExpiration::get().into()),
-				)
+				.try_insert(authority_id, (fee_rate, expires_at))
 				.map_err(|_| Error::<T>::OutOfRange)?;
 			<FeeRates<T>>::put(fee_rates);
 
