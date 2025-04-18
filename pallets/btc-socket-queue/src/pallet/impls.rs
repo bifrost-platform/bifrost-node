@@ -3,7 +3,7 @@ use crate::{
 	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
+	traits::{PoolManager, SocketQueueManager, SocketVerifier},
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
 use ethabi_decode::{ParamKind, Token};
@@ -20,6 +20,43 @@ use sp_runtime::{
 use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
 
 use super::pallet::*;
+
+impl<T: Config> SocketVerifier<T::AccountId> for Pallet<T>
+where
+	T: Config,
+	T::AccountId: Into<H160>,
+	H160: Into<T::AccountId>,
+{
+	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError> {
+		// the bytes should be a valid socket message
+		let msg =
+			Self::try_decode_socket_message(msg).map_err(|_| Error::<T>::InvalidSocketMessage)?;
+		// the socket message should be valid onchain
+		let msg_hash =
+			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
+		let request_info = Self::try_get_request(&msg.encode_req_id())?;
+		// the socket message should be valid
+		if !request_info.is_msg_hash(msg_hash) {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		// the socket message should be accepted
+		if !request_info.is_accepted() || !msg.is_accepted() {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		// the socket message should be outbound
+		if !msg.is_outbound(
+			<T as pallet_evm::Config>::ChainId::get() as u32,
+			T::RegistrationPool::get_bitcoin_chain_id(),
+		) {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		// the socket message should not be submitted yet
+		if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
+			return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
+		}
+		Ok(())
+	}
+}
 
 impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 	fn is_ready_for_migrate() -> bool {
@@ -336,29 +373,11 @@ where
 					for serialized_msg in socket_messages {
 						let msg = Self::try_decode_socket_message(serialized_msg)
 							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-						let msg_hash = Self::hash_bytes(
-							&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
-						);
+
 						if msg_sequences.contains(&msg.req_id.sequence) {
 							return Err(Error::<T>::InvalidSocketMessage.into());
 						}
-						let request_info = Self::try_get_request(&msg.encode_req_id())?;
-						// the socket message should be valid
-						if !request_info.is_msg_hash(msg_hash) {
-							return Err(Error::<T>::InvalidSocketMessage.into());
-						}
-						if !request_info.is_accepted() || !msg.is_accepted() {
-							return Err(Error::<T>::InvalidSocketMessage.into());
-						}
-						if !msg.is_outbound(
-							<T as pallet_evm::Config>::ChainId::get() as u32,
-							T::RegistrationPool::get_bitcoin_chain_id(),
-						) {
-							return Err(Error::<T>::InvalidSocketMessage.into());
-						}
-						if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
-							return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
-						}
+						Self::verify_socket_message(&serialized_msg)?;
 
 						// user must be registered
 						if let Some(refund) =
