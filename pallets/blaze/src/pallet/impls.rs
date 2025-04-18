@@ -10,7 +10,7 @@ use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, Verify};
 use sp_std::{fmt::Display, vec::Vec};
 
-use crate::{FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
+use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, UtxoSubmission};
 
 use super::pallet::*;
 
@@ -18,9 +18,8 @@ impl<T: Config> Pallet<T> {
 	pub fn verify_utxo_submission(
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
-		tag_prefix: &'static str,
 	) -> TransactionValidity {
-		let UtxoSubmission { authority_id, utxos: votes } = utxo_submission;
+		let UtxoSubmission { authority_id, utxos } = utxo_submission;
 
 		// verify if the authority is a selected relayer.
 		if !T::Relayers::is_authority(&authority_id) {
@@ -29,10 +28,10 @@ impl<T: Config> Pallet<T> {
 
 		// verify if the signature was originated from the authority.
 		let message = [
-			keccak_256(tag_prefix.as_bytes()).as_slice(),
+			keccak_256("UtxosSubmission".as_bytes()).as_slice(),
 			format!(
 				"{}",
-				votes
+				utxos
 					.iter()
 					.map(|x| {
 						let utxo_hash = H256::from_slice(
@@ -50,9 +49,41 @@ impl<T: Config> Pallet<T> {
 			return Err(InvalidTransaction::BadProof.into());
 		}
 
-		ValidTransaction::with_tag_prefix(tag_prefix)
+		ValidTransaction::with_tag_prefix("UtxosSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides(authority_id)
+			.propagate(true)
+			.build()
+	}
+
+	pub fn verify_spend_txos_submission(
+		spend_txos_submission: &SpendTxosSubmission<T::AccountId>,
+		signature: &T::Signature,
+	) -> TransactionValidity {
+		let SpendTxosSubmission { authority_id, txid, utxo_hashes } = spend_txos_submission;
+
+		// verify if the authority is a selected relayer.
+		if !T::Relayers::is_authority(&authority_id) {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = [
+			keccak_256("SpendTxosSubmission".as_bytes()).as_slice(),
+			format!(
+				"{}",
+				utxo_hashes.iter().map(|x| { hex::encode(x) }).collect::<Vec<String>>().concat()
+			)
+			.as_bytes(),
+		]
+		.concat();
+		if !signature.verify(&*message, &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
+		ValidTransaction::with_tag_prefix("SpendTxosSubmission")
+			.priority(TransactionPriority::MAX)
+			.and_provides((authority_id, txid))
 			.propagate(true)
 			.build()
 	}
