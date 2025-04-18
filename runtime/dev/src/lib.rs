@@ -1053,9 +1053,16 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const FeeRateExpiration: u32 = 1 * MINUTES;
+}
+
 impl pallet_blaze::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type Verifier = BtcSocketQueue;
+	type FeeRateExpiration = FeeRateExpiration;
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
 }
 
