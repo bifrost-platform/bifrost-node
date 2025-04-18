@@ -15,10 +15,18 @@ use sp_std::vec::Vec;
 use bp_btc_relay::UnboundedBytes;
 use bp_staking::MAX_AUTHORITIES;
 
+#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum UtxoStatus {
+	Unconfirmed,
+	Available,
+	Locked,
+	Spent,
+}
+
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct Utxo<AccountId> {
 	pub inner: UtxoInfo,
-	pub is_approved: bool,
+	pub status: UtxoStatus,
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
 
@@ -29,10 +37,25 @@ pub struct UtxoInfo {
 	pub amount: U256,
 }
 
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct Txos<AccountId> {
+	pub utxo_hashes: Vec<H256>,
+	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
+}
+
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct UtxoSubmission<AccountId> {
 	pub authority_id: AccountId,
 	pub utxos: Vec<UtxoInfo>,
+}
+
+#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SpendTxosSubmission<AccountId> {
+	pub authority_id: AccountId,
+	/// The txid of the PSBT
+	pub txid: H256,
+	/// The utxo hashes to spend.
+	pub utxo_hashes: Vec<H256>,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
