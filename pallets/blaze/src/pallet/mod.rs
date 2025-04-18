@@ -1,20 +1,20 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, PendingFeeRate, Utxo,
-	UtxoInfo, UtxoSubmission,
+	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, Utxo, UtxoInfo,
+	UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{traits::SocketVerifier, UnboundedBytes};
-use bp_staking::traits::Authorities;
+use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use parity_scale_codec::Encode;
-use sp_core::H256;
+use sp_core::{H256, U256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::traits::{IdentifyAccount, Verify};
-use sp_std::{vec, vec::Vec};
+use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
+use sp_std::{fmt::Display, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -40,6 +40,9 @@ pub mod pallet {
 		type Relayers: Authorities<Self::AccountId>;
 		/// Socket message verifier.
 		type Verifier: SocketVerifier<Self::AccountId>;
+		/// The fee rate expiration in blocks.
+		#[pallet::constant]
+		type FeeRateExpiration: Get<u32>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -103,8 +106,23 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// pending fee rate
-	pub type FeeRate<T: Config> = StorageValue<_, PendingFeeRate<T::AccountId>, ValueQuery>;
+	pub type FeeRates<T: Config> = StorageValue<
+		_,
+		BoundedBTreeMap<T::AccountId, (U256, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
+		ValueQuery,
+	>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+			// remove expired fee rates
+			let mut fee_rates = <FeeRates<T>>::get();
+			fee_rates.retain(|_, (_, expires_at)| n <= *expires_at);
+			<FeeRates<T>>::put(fee_rates);
+
+			Weight::from_parts(0, 0)
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -237,9 +255,25 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn submit_fee_rate(
 			origin: OriginFor<T>,
-			fee_rate_submission: FeeRateSubmission<T::AccountId>,
+			fee_rate_submission: FeeRateSubmission<T::AccountId, BlockNumberFor<T>>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let FeeRateSubmission { authority_id, fee_rate, .. } = fee_rate_submission;
+
+			let mut fee_rates = <FeeRates<T>>::get();
+			// fee rate finalization has to be done until expiration
+			let expires_at =
+				<frame_system::Pallet<T>>::block_number() + T::FeeRateExpiration::get().into();
+
+			fee_rates
+				.try_insert(authority_id, (fee_rate, expires_at))
+				.map_err(|_| Error::<T>::OutOfRange)?;
+			<FeeRates<T>>::put(fee_rates);
+
+			// TODO: finalize the fee rate here or in SocketQueue
+
 			Ok(().into())
 		}
 
@@ -273,7 +307,10 @@ pub mod pallet {
 	}
 
 	#[pallet::validate_unsigned]
-	impl<T: Config> ValidateUnsigned for Pallet<T> {
+	impl<T: Config> ValidateUnsigned for Pallet<T>
+	where
+		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
+	{
 		type Call = Call<T>;
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
