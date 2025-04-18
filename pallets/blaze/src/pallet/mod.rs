@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, Utxo, UtxoInfo,
-	UtxoSubmission,
+	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, Txos, Utxo, UtxoInfo,
+	UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -18,6 +18,8 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
+	use crate::SpendTxosSubmission;
+
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -49,16 +51,20 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		/// The utxo is already locked.
-		UtxoAlreadyLocked,
-		/// The utxo is already spent.
-		UtxoAlreadySpent,
 		/// The utxo is not locked.
 		UtxoNotLocked,
 		/// The utxo is unknown.
 		UnknownUtxo,
+		/// The txid is unknown.
+		UnknownTransaction,
+		/// The utxo(s) are already spent.
+		AlreadySpent,
+		/// The authority has already voted.
+		AlreadyVoted,
 		/// The submission is empty.
 		EmptySubmission,
+		/// The submission is invalid.
+		InvalidSubmission,
 		/// The value is out of range.
 		OutOfRange,
 		/// Cannot set the value as identical to the previous value
@@ -89,15 +95,15 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: utxo hash (keccak256(txid, vout, amount))
-	/// value: utxo
-	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
+	/// key: PSBT txid
+	/// value: UTXO hashes that are locked to the PSBT
+	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Txos<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: utxo hash (keccak256(txid, vout, amount))
-	/// value: utxo
-	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
+	/// key: PSBT txid
+	/// value: UTXO hashes that are spent by the PSBT
+	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Txos<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -149,9 +155,7 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			let UtxoSubmission { authority_id, utxos } = utxo_submission;
-			if utxos.is_empty() {
-				return Err(Error::<T>::EmptySubmission.into());
-			}
+			ensure!(!utxos.is_empty(), Error::<T>::EmptySubmission);
 
 			for utxo in utxos {
 				let UtxoInfo { txid, vout, amount } = utxo;
@@ -160,19 +164,10 @@ pub mod pallet {
 				let utxo_hash =
 					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
 
-				// check if the utxo is already locked
-				if <LockedTxos<T>>::contains_key(&utxo_hash) {
-					return Err(Error::<T>::UtxoAlreadyLocked.into());
-				}
-				// check if the utxo is already spent
-				if <SpentTxos<T>>::contains_key(&utxo_hash) {
-					return Err(Error::<T>::UtxoAlreadySpent.into());
-				}
-
 				// try to insert the utxo
 				if let Some(mut u) = <Utxos<T>>::get(&utxo_hash) {
 					// check if the utxo is already approved
-					if u.is_approved {
+					if u.status != UtxoStatus::Unconfirmed {
 						continue;
 					}
 					if u.voters.contains(&authority_id) {
@@ -182,7 +177,7 @@ pub mod pallet {
 
 					// check if the utxo majority is reached
 					if u.voters.len() as u32 >= T::Relayers::majority() {
-						u.is_approved = true;
+						u.status = UtxoStatus::Available;
 					}
 					<Utxos<T>>::insert(&utxo_hash, u);
 				} else {
@@ -191,7 +186,7 @@ pub mod pallet {
 						&utxo_hash,
 						Utxo {
 							inner: UtxoInfo { txid, vout, amount },
-							is_approved: false,
+							status: UtxoStatus::Unconfirmed,
 							voters: BoundedVec::try_from(voters)
 								.map_err(|_| Error::<T>::OutOfRange)?,
 						},
@@ -206,47 +201,40 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn spend_txos(
 			origin: OriginFor<T>,
-			utxo_submission: UtxoSubmission<T::AccountId>,
+			spend_submission: SpendTxosSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let UtxoSubmission { authority_id, utxos } = utxo_submission;
-			if utxos.is_empty() {
-				return Err(Error::<T>::EmptySubmission.into());
-			}
+			let SpendTxosSubmission { authority_id, txid, mut utxo_hashes } = spend_submission;
+			ensure!(!utxo_hashes.is_empty(), Error::<T>::EmptySubmission);
+			ensure!(!<SpentTxos<T>>::contains_key(&txid), Error::<T>::AlreadySpent);
 
-			for utxo in utxos {
-				let UtxoInfo { txid, vout, amount } = utxo;
+			let mut locked_txos =
+				<LockedTxos<T>>::get(&txid).ok_or(Error::<T>::UnknownTransaction)?;
 
-				// try to hash (keccak256) the utxo data (txid, vout, amount)
-				let utxo_hash =
-					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
+			// check if the utxo hashes are identical to the locked txos
+			utxo_hashes.sort();
+			ensure!(utxo_hashes == locked_txos.utxo_hashes, Error::<T>::InvalidSubmission);
 
-				// check if the utxo is available
-				if <Utxos<T>>::contains_key(&utxo_hash) {
-					return Err(Error::<T>::UtxoNotLocked.into());
+			ensure!(!locked_txos.voters.contains(&authority_id), Error::<T>::AlreadyVoted);
+			locked_txos
+				.voters
+				.try_push(authority_id.clone())
+				.map_err(|_| Error::<T>::OutOfRange)?;
+
+			if locked_txos.voters.len() as u32 >= T::Relayers::majority() {
+				<LockedTxos<T>>::remove(&txid);
+				<SpentTxos<T>>::insert(&txid, locked_txos.clone());
+
+				for utxo_hash in utxo_hashes {
+					let mut utxo = <Utxos<T>>::get(&utxo_hash).ok_or(Error::<T>::UnknownUtxo)?;
+					utxo.status = UtxoStatus::Spent;
+					<Utxos<T>>::insert(&utxo_hash, utxo);
 				}
-				// check if the utxo is already spent
-				if <SpentTxos<T>>::contains_key(&utxo_hash) {
-					return Err(Error::<T>::UtxoAlreadySpent.into());
-				}
-
-				if let Some(mut u) = <LockedTxos<T>>::get(&utxo_hash) {
-					if u.voters.contains(&authority_id) {
-						continue;
-					}
-					u.voters.try_push(authority_id.clone()).map_err(|_| Error::<T>::OutOfRange)?;
-
-					if u.voters.len() as u32 >= T::Relayers::majority() {
-						<LockedTxos<T>>::remove(&utxo_hash);
-						<SpentTxos<T>>::insert(&utxo_hash, u);
-					} else {
-						<LockedTxos<T>>::insert(&utxo_hash, u);
-					}
-				} else {
-					return Err(Error::<T>::UnknownUtxo.into());
-				}
+				// TODO: move FinalizedRequests to ExecutedRequests
+			} else {
+				<LockedTxos<T>>::insert(&txid, locked_txos.clone());
 			}
 			Ok(().into())
 		}
@@ -287,9 +275,7 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			let OutboundRequestSubmission { messages, .. } = outbound_request_submission;
-			if messages.is_empty() {
-				return Err(Error::<T>::EmptySubmission.into());
-			}
+			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
 
 			for message in messages {
 				// check if the message is already submitted
@@ -316,10 +302,10 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::submit_utxos { utxo_submission, signature } => {
-					Self::verify_utxo_submission(utxo_submission, signature, "UtxosSubmission")
+					Self::verify_utxo_submission(utxo_submission, signature)
 				},
-				Call::spend_txos { utxo_submission, signature } => {
-					Self::verify_utxo_submission(utxo_submission, signature, "SpendTxosSubmission")
+				Call::spend_txos { spend_submission, signature } => {
+					Self::verify_spend_txos_submission(spend_submission, signature)
 				},
 				Call::submit_fee_rate { fee_rate_submission, signature } => {
 					Self::verify_submit_fee_rate(fee_rate_submission, signature)
