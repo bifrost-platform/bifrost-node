@@ -1,8 +1,8 @@
 use miniscript::bitcoin::Network;
 use sp_core::H256;
-use sp_runtime::transaction_validity::TransactionValidityError;
+use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
 
-use crate::{BoundedBitcoinAddress, MigrationSequence};
+use crate::{BoundedBitcoinAddress, MigrationSequence, UnboundedBytes};
 
 pub trait PoolManager<AccountId> {
 	/// Get the refund address of the given user.
@@ -48,4 +48,8 @@ pub trait SocketQueueManager<AccountId> {
 
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
+}
+
+pub trait SocketVerifier<AccountId> {
+	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
 }
