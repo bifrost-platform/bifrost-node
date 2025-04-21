@@ -15,7 +15,7 @@ use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, U
 
 use super::pallet::*;
 
-impl<T: Config> BlazeManager for Pallet<T> {
+impl<T: Config> BlazeManager<T> for Pallet<T> {
 	fn is_activated() -> bool {
 		<IsActivated<T>>::get()
 	}
@@ -24,8 +24,10 @@ impl<T: Config> BlazeManager for Pallet<T> {
 		<ExecutedRequests<T>>::take()
 	}
 
-	fn try_fee_rate_finalization() -> Option<u64> {
-		let submitted_fee_rates = <FeeRates<T>>::get();
+	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<u64> {
+		let mut submitted_fee_rates = <FeeRates<T>>::get();
+		// remove expired fee rates
+		submitted_fee_rates.retain(|_, (_, expires_at)| n <= *expires_at);
 
 		// check majority
 		if submitted_fee_rates.len() as u32 >= T::Relayers::majority() {

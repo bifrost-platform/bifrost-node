@@ -125,18 +125,6 @@ pub mod pallet {
 		ValueQuery,
 	>;
 
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-			// remove expired fee rates
-			let mut fee_rates = <FeeRates<T>>::get();
-			fee_rates.retain(|_, (_, expires_at)| n <= *expires_at);
-			<FeeRates<T>>::put(fee_rates);
-
-			Weight::from_parts(0, 0) // TODO: add weight
-		}
-	}
-
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]

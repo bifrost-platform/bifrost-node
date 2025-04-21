@@ -53,7 +53,7 @@ pub mod pallet {
 		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// The Blaze pallet.
-		type Blaze: BlazeManager;
+		type Blaze: BlazeManager<Self>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 		/// The maximum fee rate that can be set for PSBT.
@@ -227,6 +227,10 @@ pub mod pallet {
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			if T::Blaze::is_activated() {
 				// TODO: impl function for BLAZE actions
+				if let Some(fee_rate) = T::Blaze::try_fee_rate_finalization(n) {
+					// TODO: build psbt
+				}
+
 				let executed_requests = T::Blaze::take_executed_requests();
 				for txid in executed_requests {
 					if let Some(request) = <FinalizedRequests<T>>::take(&txid) {
