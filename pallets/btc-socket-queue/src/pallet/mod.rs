@@ -13,7 +13,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
@@ -52,6 +52,8 @@ pub mod pallet {
 		type Relayers: Authorities<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
+		/// The Blaze pallet.
+		type Blaze: BlazeManager;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 		/// The maximum fee rate that can be set for PSBT.
@@ -220,6 +222,21 @@ pub mod pallet {
 	{
 		fn on_runtime_upgrade() -> Weight {
 			migrations::init_v2::InitV2::<T>::on_runtime_upgrade()
+		}
+
+		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+			if T::Blaze::is_activated() {
+				// TODO: impl function for BLAZE actions
+				let executed_requests = T::Blaze::take_executed_requests();
+				for txid in executed_requests {
+					if let Some(request) = <FinalizedRequests<T>>::take(&txid) {
+						<ExecutedRequests<T>>::insert(&txid, request);
+						Self::deposit_event(Event::RequestExecuted { txid });
+					}
+				}
+			}
+
+			Weight::from_parts(0, 0) // TODO: add weight
 		}
 	}
 

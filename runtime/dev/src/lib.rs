@@ -1030,6 +1030,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Executives = RelayExecutiveMembership;
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
+	type Blaze = Blaze;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
 }

@@ -38,8 +38,11 @@ pub struct UtxoInfo {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// A bundle of UTXOs with their voters.
 pub struct Txos<AccountId> {
+	/// Bundled and sorted UTXO hashes.
 	pub utxo_hashes: Vec<H256>,
+	/// Voters of the UTXOs.
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
 

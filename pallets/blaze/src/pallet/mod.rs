@@ -112,6 +112,10 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
+	pub type ExecutedRequests<T: Config> = StorageValue<_, Vec<H256>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
 	pub type FeeRates<T: Config> = StorageValue<
 		_,
 		BoundedBTreeMap<T::AccountId, (U256, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
@@ -126,7 +130,7 @@ pub mod pallet {
 			fee_rates.retain(|_, (_, expires_at)| n <= *expires_at);
 			<FeeRates<T>>::put(fee_rates);
 
-			Weight::from_parts(0, 0)
+			Weight::from_parts(0, 0) // TODO: add weight
 		}
 	}
 
@@ -232,7 +236,9 @@ pub mod pallet {
 					utxo.status = UtxoStatus::Spent;
 					<Utxos<T>>::insert(&utxo_hash, utxo);
 				}
-				// TODO: move FinalizedRequests to ExecutedRequests
+				<ExecutedRequests<T>>::mutate(|requests| {
+					requests.push(txid);
+				});
 			} else {
 				<LockedTxos<T>>::insert(&txid, locked_txos.clone());
 			}
@@ -277,17 +283,20 @@ pub mod pallet {
 			let OutboundRequestSubmission { messages, .. } = outbound_request_submission;
 			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
 
+			let mut pool = <OutboundPool<T>>::get();
 			for message in messages {
 				// check if the message is already submitted
-				let mut pool = <OutboundPool<T>>::get();
 				if pool.contains(&message) {
 					continue;
 				}
 				// verify the message
 				T::Verifier::verify_socket_message(&message)?;
 				pool.push(message);
-				<OutboundPool<T>>::put(pool);
 			}
+
+			// Update the outbound pool
+			<OutboundPool<T>>::put(pool);
+
 			Ok(().into())
 		}
 	}
