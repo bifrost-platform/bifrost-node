@@ -1,3 +1,4 @@
+use bp_btc_relay::traits::BlazeManager;
 use bp_staking::traits::Authorities;
 use frame_support::pallet_prelude::{
 	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
@@ -14,7 +15,37 @@ use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, U
 
 use super::pallet::*;
 
+impl<T: Config> BlazeManager for Pallet<T> {
+	fn is_activated() -> bool {
+		<IsActivated<T>>::get()
+	}
+
+	fn take_executed_requests() -> Vec<H256> {
+		<ExecutedRequests<T>>::take()
+	}
+}
+
 impl<T: Config> Pallet<T> {
+	/// Helper function to verify if an authority is a valid relayer
+	fn verify_authority(authority_id: &T::AccountId) -> Result<(), InvalidTransaction> {
+		if !T::Relayers::is_authority(authority_id) {
+			return Err(InvalidTransaction::BadSigner.into());
+		}
+		Ok(())
+	}
+
+	/// Helper function to verify a signature
+	fn verify_signature(
+		message: &[u8],
+		signature: &T::Signature,
+		authority_id: &T::AccountId,
+	) -> Result<(), InvalidTransaction> {
+		if !signature.verify(message, authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+		Ok(())
+	}
+
 	pub fn verify_utxo_submission(
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
@@ -22,9 +53,7 @@ impl<T: Config> Pallet<T> {
 		let UtxoSubmission { authority_id, utxos } = utxo_submission;
 
 		// verify if the authority is a selected relayer.
-		if !T::Relayers::is_authority(&authority_id) {
-			return Err(InvalidTransaction::BadSigner.into());
-		}
+		Self::verify_authority(authority_id)?;
 
 		// verify if the signature was originated from the authority.
 		let message = [
@@ -45,9 +74,7 @@ impl<T: Config> Pallet<T> {
 			.as_bytes(),
 		]
 		.concat();
-		if !signature.verify(&*message, &authority_id) {
-			return Err(InvalidTransaction::BadProof.into());
-		}
+		Self::verify_signature(&message, signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("UtxosSubmission")
 			.priority(TransactionPriority::MAX)
@@ -63,9 +90,7 @@ impl<T: Config> Pallet<T> {
 		let SpendTxosSubmission { authority_id, txid, utxo_hashes } = spend_txos_submission;
 
 		// verify if the authority is a selected relayer.
-		if !T::Relayers::is_authority(&authority_id) {
-			return Err(InvalidTransaction::BadSigner.into());
-		}
+		Self::verify_authority(authority_id)?;
 
 		// verify if the signature was originated from the authority.
 		let message = [
@@ -77,9 +102,7 @@ impl<T: Config> Pallet<T> {
 			.as_bytes(),
 		]
 		.concat();
-		if !signature.verify(&*message, &authority_id) {
-			return Err(InvalidTransaction::BadProof.into());
-		}
+		Self::verify_signature(&message, signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("SpendTxosSubmission")
 			.priority(TransactionPriority::MAX)
@@ -98,9 +121,7 @@ impl<T: Config> Pallet<T> {
 		let FeeRateSubmission { authority_id, fee_rate, deadline } = fee_rate_submission;
 
 		// verify if the authority is a selected relayer.
-		if !T::Relayers::is_authority(&authority_id) {
-			return Err(InvalidTransaction::BadSigner.into());
-		}
+		Self::verify_authority(authority_id)?;
 
 		// verify if the deadline is not expired.
 		let now = <frame_system::Pallet<T>>::block_number();
@@ -110,9 +131,7 @@ impl<T: Config> Pallet<T> {
 
 		// verify if the signature was originated from the authority.
 		let message = format!("{}:{}", deadline, fee_rate);
-		if !signature.verify(message.as_bytes(), &authority_id) {
-			return Err(InvalidTransaction::BadProof.into());
-		}
+		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("FeeRateSubmission")
 			.priority(TransactionPriority::MAX)
@@ -128,9 +147,7 @@ impl<T: Config> Pallet<T> {
 		let OutboundRequestSubmission { authority_id, messages } = outbound_request_submission;
 
 		// verify if the authority is a selected relayer.
-		if !T::Relayers::is_authority(&authority_id) {
-			return Err(InvalidTransaction::BadSigner.into());
-		}
+		Self::verify_authority(authority_id)?;
 
 		// verify if the signature was originated from the authority.
 		let message = format!(
@@ -141,9 +158,7 @@ impl<T: Config> Pallet<T> {
 				.collect::<Vec<String>>()
 				.concat()
 		);
-		if !signature.verify(message.as_bytes(), &authority_id) {
-			return Err(InvalidTransaction::BadProof.into());
-		}
+		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("OutboundRequestSubmission")
 			.priority(TransactionPriority::MAX)

@@ -1,6 +1,7 @@
 use miniscript::bitcoin::Network;
 use sp_core::H256;
 use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
+use sp_std::vec::Vec;
 
 use crate::{BoundedBitcoinAddress, MigrationSequence, UnboundedBytes};
 
@@ -52,4 +53,10 @@ pub trait SocketQueueManager<AccountId> {
 
 pub trait SocketVerifier<AccountId> {
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
+}
+
+pub trait BlazeManager {
+	fn is_activated() -> bool;
+
+	fn take_executed_requests() -> Vec<H256>;
 }
