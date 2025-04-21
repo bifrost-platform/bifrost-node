@@ -49,6 +49,8 @@ pub trait SocketQueueManager<AccountId> {
 
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
+
+	fn get_max_fee_rate() -> u64;
 }
 
 pub trait SocketVerifier<AccountId> {
@@ -59,4 +61,6 @@ pub trait BlazeManager {
 	fn is_activated() -> bool;
 
 	fn take_executed_requests() -> Vec<H256>;
+
+	fn try_fee_rate_finalization() -> Option<u64>;
 }

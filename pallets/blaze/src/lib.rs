@@ -64,7 +64,7 @@ pub struct SpendTxosSubmission<AccountId> {
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 pub struct FeeRateSubmission<AccountId, BlockNumber> {
 	pub authority_id: AccountId,
-	pub fee_rate: U256,
+	pub fee_rate: u64,
 	/// The deadline of the submission. Used to filter out expired signatures.
 	pub deadline: BlockNumber,
 }

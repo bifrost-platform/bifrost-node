@@ -8,10 +8,13 @@ use crate::{
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
-use bp_btc_relay::{traits::SocketVerifier, UnboundedBytes};
+use bp_btc_relay::{
+	traits::{SocketQueueManager, SocketVerifier},
+	UnboundedBytes,
+};
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use parity_scale_codec::Encode;
-use sp_core::{H256, U256};
+use sp_core::H256;
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
 use sp_std::{fmt::Display, vec, vec::Vec};
@@ -40,8 +43,8 @@ pub mod pallet {
 			+ MaxEncodedLen;
 		/// The Bifrost relayers.
 		type Relayers: Authorities<Self::AccountId>;
-		/// Socket message verifier.
-		type Verifier: SocketVerifier<Self::AccountId>;
+		/// Socket queue manager.
+		type SocketQueue: SocketVerifier<Self::AccountId> + SocketQueueManager<Self::AccountId>;
 		/// The fee rate expiration in blocks.
 		#[pallet::constant]
 		type FeeRateExpiration: Get<u32>;
@@ -118,7 +121,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	pub type FeeRates<T: Config> = StorageValue<
 		_,
-		BoundedBTreeMap<T::AccountId, (U256, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
+		BoundedBTreeMap<T::AccountId, (u64, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
@@ -256,6 +259,10 @@ pub mod pallet {
 
 			let FeeRateSubmission { authority_id, fee_rate, .. } = fee_rate_submission;
 
+			let min_fee_rate = 1;
+			let max_fee_rate = T::SocketQueue::get_max_fee_rate();
+			ensure!(fee_rate >= min_fee_rate && fee_rate <= max_fee_rate, Error::<T>::OutOfRange);
+
 			let mut fee_rates = <FeeRates<T>>::get();
 			// fee rate finalization has to be done until expiration
 			let expires_at =
@@ -265,8 +272,6 @@ pub mod pallet {
 				.try_insert(authority_id, (fee_rate, expires_at))
 				.map_err(|_| Error::<T>::OutOfRange)?;
 			<FeeRates<T>>::put(fee_rates);
-
-			// TODO: finalize the fee rate here or in SocketQueue
 
 			Ok(().into())
 		}
@@ -290,7 +295,7 @@ pub mod pallet {
 					continue;
 				}
 				// verify the message
-				T::Verifier::verify_socket_message(&message)?;
+				T::SocketQueue::verify_socket_message(&message)?;
 				pool.push(message);
 			}
 

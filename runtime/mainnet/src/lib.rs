@@ -1058,7 +1058,7 @@ impl pallet_blaze::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = RelayManager;
-	type Verifier = BtcSocketQueue;
+	type SocketQueue = BtcSocketQueue;
 	type FeeRateExpiration = FeeRateExpiration;
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
 }

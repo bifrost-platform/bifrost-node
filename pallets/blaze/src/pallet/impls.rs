@@ -23,6 +23,22 @@ impl<T: Config> BlazeManager for Pallet<T> {
 	fn take_executed_requests() -> Vec<H256> {
 		<ExecutedRequests<T>>::take()
 	}
+
+	fn try_fee_rate_finalization() -> Option<u64> {
+		let submitted_fee_rates = <FeeRates<T>>::get();
+
+		// check majority
+		if submitted_fee_rates.len() as u32 >= T::Relayers::majority() {
+			// choose the median fee rate
+			let mut fee_rates = submitted_fee_rates.values().cloned().collect::<Vec<_>>();
+			fee_rates.sort();
+			let median_index = fee_rates.len() / 2;
+			let median_fee_rate = fee_rates[median_index];
+			Some(median_fee_rate.0)
+		} else {
+			None
+		}
+	}
 }
 
 impl<T: Config> Pallet<T> {
