@@ -94,6 +94,10 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 			}
 		});
 	}
+
+	fn get_max_fee_rate() -> u64 {
+		<MaxFeeRate<T>>::get()
+	}
 }
 
 impl<T> Pallet<T>
