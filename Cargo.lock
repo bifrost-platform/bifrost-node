@@ -1346,6 +1346,7 @@ dependencies = [
 name = "bp-btc-relay"
 version = "0.0.1"
 dependencies = [
+ "frame-system",
  "miniscript",
  "parity-scale-codec",
  "scale-info",

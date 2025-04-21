@@ -1,3 +1,4 @@
+use frame_system::pallet_prelude::BlockNumberFor;
 use miniscript::bitcoin::Network;
 use sp_core::H256;
 use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
@@ -57,10 +58,10 @@ pub trait SocketVerifier<AccountId> {
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
 }
 
-pub trait BlazeManager {
+pub trait BlazeManager<T: frame_system::Config> {
 	fn is_activated() -> bool;
 
 	fn take_executed_requests() -> Vec<H256>;
 
-	fn try_fee_rate_finalization() -> Option<u64>;
+	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<u64>;
 }
