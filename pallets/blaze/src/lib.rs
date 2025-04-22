@@ -15,25 +15,38 @@ use sp_std::vec::Vec;
 use bp_btc_relay::UnboundedBytes;
 use bp_staking::MAX_AUTHORITIES;
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+/// The status of a UTXO.
 pub enum UtxoStatus {
+	/// The UTXO is not confirmed.
 	Unconfirmed,
+	/// The UTXO is available.
 	Available,
+	/// The UTXO is locked to a specific PSBT.
 	Locked,
+	/// The UTXO is spent.
 	Spent,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// A UTXO with its status and voters.
 pub struct Utxo<AccountId> {
+	/// The UTXO information.
 	pub inner: UtxoInfo,
+	/// The status of the UTXO.
 	pub status: UtxoStatus,
+	/// The voters of the UTXO.
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+/// The information of a UTXO.
 pub struct UtxoInfo {
+	/// The txid of the UTXO.
 	pub txid: H256,
+	/// The vout (output index) of the UTXO.
 	pub vout: U256,
+	/// The amount of the UTXO.
 	pub amount: U256,
 }
 
@@ -47,30 +60,41 @@ pub struct Txos<AccountId> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// A submission of UTXOs.
 pub struct UtxoSubmission<AccountId> {
+	/// The authority id.
 	pub authority_id: AccountId,
+	/// The UTXOs to submit.
 	pub utxos: Vec<UtxoInfo>,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// A submission of UTXOs to spend.
 pub struct SpendTxosSubmission<AccountId> {
+	/// The authority id.
 	pub authority_id: AccountId,
-	/// The txid of the PSBT
+	/// The txid of the PSBT.
 	pub txid: H256,
 	/// The utxo hashes to spend.
 	pub utxo_hashes: Vec<H256>,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// A submission of a fee rate.
 pub struct FeeRateSubmission<AccountId, BlockNumber> {
+	/// The authority id.
 	pub authority_id: AccountId,
+	/// The fee rate.
 	pub fee_rate: u64,
 	/// The deadline of the submission. Used to filter out expired signatures.
 	pub deadline: BlockNumber,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// A submission of Socket messages originated from a Bitcoin outbound request.
 pub struct OutboundRequestSubmission<AccountId> {
+	/// The authority id.
 	pub authority_id: AccountId,
+	/// The Socket messages.
 	pub messages: Vec<UnboundedBytes>,
 }

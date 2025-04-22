@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, Txos, Utxo, UtxoInfo,
-	UtxoStatus, UtxoSubmission,
+	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, Txos,
+	Utxo, UtxoInfo, UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -21,8 +21,6 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
-	use crate::SpendTxosSubmission;
-
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -54,8 +52,6 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		/// The utxo is not locked.
-		UtxoNotLocked,
 		/// The utxo is unknown.
 		UnknownUtxo,
 		/// The txid is unknown.
@@ -92,33 +88,46 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: utxo hash (keccak256(txid, vout, amount))
-	/// value: utxo
+	/// The submitted UTXOs by relayers.
+	///
+	/// Key: UTXO hash (keccak256(txid, vout, amount))
+	/// Value: UTXO information
 	pub type Utxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: PSBT txid
-	/// value: UTXO hashes that are locked to the PSBT
+	/// The UTXOs that are locked to a specific PSBT.
+	///
+	/// Key: The PSBT txid
+	/// Value: The UTXOs that are locked to the PSBT
 	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Txos<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// key: PSBT txid
-	/// value: UTXO hashes that are spent by the PSBT
+	/// The UTXOs that are spent by a specific PSBT.
+	///
+	/// Key: The PSBT txid
+	/// Value: The UTXOs that are spent by the PSBT
 	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Txos<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// pending outbound requests socket messages (in bytes)
+	/// The pending outbound Socket messages
+	/// Value: SocketMessage's in bytes (The vector will be cleared once SocketQueue builds the PSBT)
 	pub type OutboundPool<T: Config> = StorageValue<_, Vec<UnboundedBytes>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
+	/// The outbound requests that have been executed.
+	/// Value: The PSBT txids (The vector will be cleared once SocketQueue handles the requests)
 	pub type ExecutedRequests<T: Config> = StorageValue<_, Vec<H256>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
+	/// The fee rates submitted by the relayers.
+	///
+	/// Key: The relayer address
+	/// Value: The fee rate and the deadline (The fee rate will be removed once the deadline is reached)
 	pub type FeeRates<T: Config> = StorageValue<
 		_,
 		BoundedBTreeMap<T::AccountId, (u64, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
@@ -129,6 +138,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Set BLAZE's activation status.
 		pub fn set_activation(
 			origin: OriginFor<T>,
 			is_activated: bool,
@@ -142,6 +152,7 @@ pub mod pallet {
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Submit UTXOs. The submitted UTXO will be available once the majority of the relayers approve it.
 		pub fn submit_utxos(
 			origin: OriginFor<T>,
 			utxo_submission: UtxoSubmission<T::AccountId>,
@@ -194,6 +205,7 @@ pub mod pallet {
 
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Spend UTXOs. The UTXO will be spent once the majority of the relayers approve it.
 		pub fn spend_txos(
 			origin: OriginFor<T>,
 			spend_submission: SpendTxosSubmission<T::AccountId>,
@@ -238,6 +250,7 @@ pub mod pallet {
 
 		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Submit a fee rate. The fee rate is only available until the deadline.
 		pub fn submit_fee_rate(
 			origin: OriginFor<T>,
 			fee_rate_submission: FeeRateSubmission<T::AccountId, BlockNumberFor<T>>,
@@ -266,6 +279,7 @@ pub mod pallet {
 
 		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Submit Socket messages originated from a Bitcoin outbound request.
 		pub fn submit_outbound_requests(
 			origin: OriginFor<T>,
 			outbound_request_submission: OutboundRequestSubmission<T::AccountId>,

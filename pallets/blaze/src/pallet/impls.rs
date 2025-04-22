@@ -64,6 +64,7 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	/// Verify a UTXO submission.
 	pub fn verify_utxo_submission(
 		utxo_submission: &UtxoSubmission<T::AccountId>,
 		signature: &T::Signature,
@@ -101,6 +102,7 @@ impl<T: Config> Pallet<T> {
 			.build()
 	}
 
+	/// Verify a spend UTXO submission.
 	pub fn verify_spend_txos_submission(
 		spend_txos_submission: &SpendTxosSubmission<T::AccountId>,
 		signature: &T::Signature,
@@ -129,6 +131,7 @@ impl<T: Config> Pallet<T> {
 			.build()
 	}
 
+	/// Verify a fee rate submission.
 	pub fn verify_submit_fee_rate(
 		fee_rate_submission: &FeeRateSubmission<T::AccountId, BlockNumberFor<T>>,
 		signature: &T::Signature,
@@ -158,6 +161,7 @@ impl<T: Config> Pallet<T> {
 			.build()
 	}
 
+	/// Verify an outbound requests submission.
 	pub fn verify_submit_outbound_requests(
 		outbound_request_submission: &OutboundRequestSubmission<T::AccountId>,
 		signature: &T::Signature,
