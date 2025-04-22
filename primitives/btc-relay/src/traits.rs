@@ -51,17 +51,22 @@ pub trait SocketQueueManager<AccountId> {
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
 
+	/// Get the maximum fee rate that can be used for a transaction.
 	fn get_max_fee_rate() -> u64;
 }
 
 pub trait SocketVerifier<AccountId> {
+	/// Verify a Socket message whether it is valid.
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
 }
 
 pub trait BlazeManager<T: frame_system::Config> {
+	/// Check if BLAZE is activated.
 	fn is_activated() -> bool;
 
+	/// Take the executed requests.
 	fn take_executed_requests() -> Vec<H256>;
 
+	/// Try to finalize the fee rate.
 	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<u64>;
 }
