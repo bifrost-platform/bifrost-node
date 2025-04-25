@@ -493,6 +493,60 @@ where
 		Ok(estimated_yearly_return)
 	}
 
+	/// Returns the estimated yearly return for the given `nominator`
+	/// @param: `nominator` the address for which to estimate as the target nominator
+	/// @return: The estimated yearly return according to the requested data
+	#[precompile::public("nominatorEstimatedYearlyReturn(address)")]
+	#[precompile::public("nominator_estimated_yearly_return(address)")]
+	#[precompile::view]
+	fn nominator_estimated_yearly_return(
+		handle: &mut impl PrecompileHandle,
+		nominator: Address,
+	) -> EvmResult<(Vec<Address>, Vec<u128>)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let selected_candidates = pallet_bfc_staking::SelectedCandidates::<Runtime>::get();
+		if selected_candidates.len() < 1 {
+			return Err(RevertReason::custom("Empty selected candidates").into());
+		}
+
+		let mut candidates: Vec<Address> = vec![];
+		let mut estimated_yearly_return: Vec<u128> = vec![];
+		let nominator = Runtime::AddressMapping::into_account_id(nominator.0);
+		if let Some(nominator_state) =
+			pallet_bfc_staking::NominatorState::<Runtime>::get(&nominator)
+		{
+			let total_stake = pallet_bfc_staking::Total::<Runtime>::get();
+			let round_issuance = <StakingOf<Runtime>>::compute_issuance(total_stake);
+			let validator_contribution_pct =
+				Perbill::from_rational(1, selected_candidates.len() as u32);
+			let total_reward_amount = validator_contribution_pct * round_issuance;
+
+			let rounds_per_year = pallet_bfc_staking::inflation::rounds_per_year::<Runtime>();
+
+			for nomination in nominator_state.nominations {
+				if let Some(candidate_info) =
+					pallet_bfc_staking::CandidateInfo::<Runtime>::get(&nomination.0)
+				{
+					let validator_issuance = candidate_info.commission * round_issuance;
+					let commission = validator_contribution_pct * validator_issuance;
+					let amount_due = total_reward_amount - commission;
+
+					let nominator_stake_pct =
+						Perbill::from_rational(nomination.1, candidate_info.voting_power);
+
+					candidates.push(Address(nomination.0.into()));
+					estimated_yearly_return.push(
+						((nominator_stake_pct * amount_due) * rounds_per_year.into())
+							.try_into()
+							.map_err(|_| revert("Amount is too large for provided balance type"))?,
+					);
+				}
+			}
+		}
+		Ok((candidates, estimated_yearly_return))
+	}
+
 	/// Returns the minimum stake required for a nominator
 	/// @return: The minimum stake required for a nominator
 	#[precompile::public("minNomination()")]

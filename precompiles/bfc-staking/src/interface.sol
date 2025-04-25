@@ -234,6 +234,13 @@ interface BfcStaking {
         uint256[] memory amounts
     ) external view returns (uint256[] memory);
 
+    /// @dev The estimated yearly return for the given nominator
+    /// Selector: 8e2beb9a
+    /// @return The estimated yearly return according to the requested data
+    function nominator_estimated_yearly_return(
+        address nominator
+    ) external view returns (address[] memory, uint256[] memory);
+
     /// @dev Get the minimum nomination amount
     /// Selector: c9f593b2
     /// @return The minimum nomination amount
