@@ -11,7 +11,7 @@ use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, Verify};
 use sp_std::{fmt::Display, vec::Vec};
 
-use crate::{FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, UtxoSubmission};
+use crate::{BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
 
 use super::pallet::*;
 
@@ -103,28 +103,20 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Verify a spend UTXO submission.
-	pub fn verify_spend_txos_submission(
-		spend_txos_submission: &SpendTxosSubmission<T::AccountId>,
+	pub fn verify_broadcast_submission(
+		broadcast_submission: &BroadcastSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let SpendTxosSubmission { authority_id, txid, utxo_hashes } = spend_txos_submission;
+		let BroadcastSubmission { authority_id, txid } = broadcast_submission;
 
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;
 
 		// verify if the signature was originated from the authority.
-		let message = [
-			keccak_256("SpendTxosSubmission".as_bytes()).as_slice(),
-			format!(
-				"{}",
-				utxo_hashes.iter().map(|x| { hex::encode(x) }).collect::<Vec<String>>().concat()
-			)
-			.as_bytes(),
-		]
-		.concat();
+		let message = [keccak_256("BroadcastPoll".as_bytes()).as_slice(), txid.as_bytes()].concat();
 		Self::verify_signature(&message, signature, authority_id)?;
 
-		ValidTransaction::with_tag_prefix("SpendTxosSubmission")
+		ValidTransaction::with_tag_prefix("BroadcastPoll")
 			.priority(TransactionPriority::MAX)
 			.and_provides((authority_id, txid))
 			.propagate(true)
