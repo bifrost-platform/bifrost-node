@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, FeeRateSubmission, OutboundRequestSubmission, SpendTxosSubmission, Txos,
-	Utxo, UtxoInfo, UtxoStatus, UtxoSubmission,
+	weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
+	OutboundRequestSubmission, Utxo, UtxoInfo, UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -100,7 +100,8 @@ pub mod pallet {
 	///
 	/// Key: The PSBT txid
 	/// Value: The UTXOs that are locked to the PSBT
-	pub type LockedTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Txos<T::AccountId>>;
+	pub type PendingTxs<T: Config> =
+		StorageMap<_, Twox64Concat, H256, BTCTransaction<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -108,7 +109,8 @@ pub mod pallet {
 	///
 	/// Key: The PSBT txid
 	/// Value: The UTXOs that are spent by the PSBT
-	pub type SpentTxos<T: Config> = StorageMap<_, Twox64Concat, H256, Txos<T::AccountId>>;
+	pub type ConfirmedTxs<T: Config> =
+		StorageMap<_, Twox64Concat, H256, BTCTransaction<T::AccountId>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -206,44 +208,34 @@ pub mod pallet {
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		/// Spend UTXOs. The UTXO will be spent once the majority of the relayers approve it.
-		pub fn spend_txos(
+		pub fn broadcast_poll(
 			origin: OriginFor<T>,
-			spend_submission: SpendTxosSubmission<T::AccountId>,
+			broadcast_submission: BroadcastSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SpendTxosSubmission { authority_id, txid, mut utxo_hashes } = spend_submission;
-			ensure!(!utxo_hashes.is_empty(), Error::<T>::EmptySubmission);
-			ensure!(!<SpentTxos<T>>::contains_key(&txid), Error::<T>::AlreadySpent);
+			let BroadcastSubmission { authority_id, txid } = broadcast_submission;
+			ensure!(!<ConfirmedTxs<T>>::contains_key(&txid), Error::<T>::AlreadySpent);
 
-			let mut locked_txos =
-				<LockedTxos<T>>::get(&txid).ok_or(Error::<T>::UnknownTransaction)?;
+			let mut pending_txs =
+				<PendingTxs<T>>::get(&txid).ok_or(Error::<T>::UnknownTransaction)?;
 
-			// check if the utxo hashes are identical to the locked txos
-			utxo_hashes.sort();
-			ensure!(utxo_hashes == locked_txos.utxo_hashes, Error::<T>::InvalidSubmission);
-
-			ensure!(!locked_txos.voters.contains(&authority_id), Error::<T>::AlreadyVoted);
-			locked_txos
+			ensure!(!pending_txs.voters.contains(&authority_id), Error::<T>::AlreadyVoted);
+			pending_txs
 				.voters
 				.try_push(authority_id.clone())
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
-			if locked_txos.voters.len() as u32 >= T::Relayers::majority() {
-				<LockedTxos<T>>::remove(&txid);
-				<SpentTxos<T>>::insert(&txid, locked_txos.clone());
+			if pending_txs.voters.len() as u32 >= T::Relayers::majority() {
+				<PendingTxs<T>>::remove(&txid);
+				<ConfirmedTxs<T>>::insert(&txid, pending_txs.clone());
 
-				for utxo_hash in utxo_hashes {
-					let mut utxo = <Utxos<T>>::get(&utxo_hash).ok_or(Error::<T>::UnknownUtxo)?;
-					utxo.status = UtxoStatus::Spent;
-					<Utxos<T>>::insert(&utxo_hash, utxo);
-				}
 				<ExecutedRequests<T>>::mutate(|requests| {
 					requests.push(txid);
 				});
 			} else {
-				<LockedTxos<T>>::insert(&txid, locked_txos.clone());
+				<PendingTxs<T>>::insert(&txid, pending_txs.clone());
 			}
 			Ok(().into())
 		}
@@ -320,8 +312,8 @@ pub mod pallet {
 				Call::submit_utxos { utxo_submission, signature } => {
 					Self::verify_utxo_submission(utxo_submission, signature)
 				},
-				Call::spend_txos { spend_submission, signature } => {
-					Self::verify_spend_txos_submission(spend_submission, signature)
+				Call::broadcast_poll { broadcast_submission, signature } => {
+					Self::verify_broadcast_submission(broadcast_submission, signature)
 				},
 				Call::submit_fee_rate { fee_rate_submission, signature } => {
 					Self::verify_submit_fee_rate(fee_rate_submission, signature)

@@ -22,10 +22,6 @@ pub enum UtxoStatus {
 	Unconfirmed,
 	/// The UTXO is available.
 	Available,
-	/// The UTXO is locked to a specific PSBT.
-	Locked,
-	/// The UTXO is spent.
-	Spent,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
@@ -51,10 +47,10 @@ pub struct UtxoInfo {
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-/// A bundle of UTXOs with their voters.
-pub struct Txos<AccountId> {
+/// A bundle of TXOs with their voters.
+pub struct BTCTransaction<AccountId> {
 	/// Bundled and sorted UTXO hashes.
-	pub utxo_hashes: Vec<H256>,
+	pub inputs: Vec<UtxoInfo>,
 	/// Voters of the UTXOs.
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
@@ -69,14 +65,12 @@ pub struct UtxoSubmission<AccountId> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-/// A submission of UTXOs to spend.
-pub struct SpendTxosSubmission<AccountId> {
+/// A submission of txid which is broadcasted.
+pub struct BroadcastSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
 	/// The txid of the PSBT.
 	pub txid: H256,
-	/// The utxo hashes to spend.
-	pub utxo_hashes: Vec<H256>,
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -84,7 +78,7 @@ pub struct SpendTxosSubmission<AccountId> {
 pub struct FeeRateSubmission<AccountId, BlockNumber> {
 	/// The authority id.
 	pub authority_id: AccountId,
-	/// The fee rate.
+	/// The fee rate (sat/vb).
 	pub fee_rate: u64,
 	/// The deadline of the submission. Used to filter out expired signatures.
 	pub deadline: BlockNumber,
