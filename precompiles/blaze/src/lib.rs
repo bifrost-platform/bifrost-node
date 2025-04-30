@@ -6,7 +6,7 @@ use pallet_blaze::{Call as BlazeCall, UtxoStatus};
 use pallet_evm::AddressMapping;
 use precompile_utils::prelude::*;
 
-use sp_core::{H160, H256, U256};
+use sp_core::{H160, H256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::Dispatchable;
 use sp_std::marker::PhantomData;
@@ -40,8 +40,8 @@ where
 	fn is_submittable_utxo(
 		handle: &mut impl PrecompileHandle,
 		txid: H256,
-		vout: U256,
-		amount: U256,
+		vout: u32,
+		amount: u64,
 		authority_id: Address,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
