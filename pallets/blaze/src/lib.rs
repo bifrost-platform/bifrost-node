@@ -8,7 +8,7 @@ pub use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, RuntimeDebug, H256, U256};
+use sp_core::{ConstU32, RuntimeDebug, H256};
 use sp_runtime::BoundedVec;
 use sp_std::vec::Vec;
 
@@ -41,9 +41,9 @@ pub struct UtxoInfo {
 	/// The txid of the UTXO.
 	pub txid: H256,
 	/// The vout (output index) of the UTXO.
-	pub vout: U256,
+	pub vout: u32,
 	/// The amount of the UTXO.
-	pub amount: U256,
+	pub amount: u64,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
