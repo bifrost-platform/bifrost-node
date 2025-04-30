@@ -23,4 +23,12 @@ interface Blaze {
         uint256 amount,
         address authority_id
     ) external view returns (bool);
+
+    /// @dev Returns whether the given txid is broadcastable
+    /// @custom:selector f9b3b5ee
+    /// @return The boolean result
+    function is_tx_broadcastable(
+        bytes32 txid,
+        address authority_id
+    ) external view returns (bool);
 }

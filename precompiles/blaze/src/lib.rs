@@ -57,4 +57,22 @@ where
 			None => true,
 		})
 	}
+
+	#[precompile::public("isTxBroadcastable(bytes32,address)")]
+	#[precompile::public("is_tx_broadcastable(bytes32,address)")]
+	#[precompile::view]
+	fn is_tx_broadcastable(
+		handle: &mut impl PrecompileHandle,
+		txid: H256,
+		authority_id: Address,
+	) -> EvmResult<bool> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let authority_id = Runtime::AddressMapping::into_account_id(authority_id.0);
+
+		Ok(match pallet_blaze::PendingTxs::<Runtime>::get(&txid) {
+			Some(tx) => !tx.voters.contains(&authority_id),
+			None => false,
+		})
+	}
 }
