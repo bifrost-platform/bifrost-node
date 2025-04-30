@@ -799,6 +799,7 @@ dependencies = [
  "precompile-balance",
  "precompile-bfc-offences",
  "precompile-bfc-staking",
+ "precompile-blaze",
  "precompile-btc-registration-pool",
  "precompile-btc-socket-queue",
  "precompile-collective",
@@ -7447,6 +7448,23 @@ dependencies = [
  "pallet-evm",
  "precompile-utils",
  "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-blaze"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-blaze",
+ "pallet-evm",
+ "parity-scale-codec",
+ "precompile-utils",
+ "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
