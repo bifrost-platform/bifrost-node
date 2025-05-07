@@ -2,14 +2,16 @@ mod impls;
 
 use crate::{
 	weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
-	OutboundRequestSubmission, Utxo, UtxoInfo, UtxoStatus, UtxoSubmission,
+	OutboundRequestSubmission, Utxo, UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	traits::{SocketQueueManager, SocketVerifier},
+	blaze::{UtxoInfo, UtxoInfoWithSize},
+	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	utils::estimate_finalized_input_size,
 	UnboundedBytes,
 };
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
@@ -43,6 +45,8 @@ pub mod pallet {
 		type Relayers: Authorities<Self::AccountId>;
 		/// Socket queue manager.
 		type SocketQueue: SocketVerifier<Self::AccountId> + SocketQueueManager<Self::AccountId>;
+		/// The Bitcoin registration pool pallet.
+		type RegistrationPool: PoolManager<Self::AccountId>;
 		/// The fee rate expiration in blocks.
 		#[pallet::constant]
 		type FeeRateExpiration: Get<u32>;
@@ -166,7 +170,12 @@ pub mod pallet {
 			ensure!(!utxos.is_empty(), Error::<T>::EmptySubmission);
 
 			for utxo in utxos {
-				let UtxoInfo { txid, vout, amount } = utxo;
+				let UtxoInfo { txid, vout, amount, address } = utxo;
+
+				let descriptor = match T::RegistrationPool::get_bonded_descriptor(&address) {
+					Some(descriptor) => descriptor,
+					None => continue,
+				};
 
 				// try to hash (keccak256) the utxo data (txid, vout, amount)
 				let utxo_hash =
@@ -190,10 +199,23 @@ pub mod pallet {
 					<Utxos<T>>::insert(&utxo_hash, u);
 				} else {
 					let voters = vec![authority_id.clone()];
+					let input_vbytes = if let Some(input_vbytes) =
+						estimate_finalized_input_size(&descriptor.script_pubkey(), None)
+					{
+						input_vbytes
+					} else {
+						continue;
+					};
 					<Utxos<T>>::insert(
 						&utxo_hash,
 						Utxo {
-							inner: UtxoInfo { txid, vout, amount },
+							inner: UtxoInfoWithSize {
+								txid,
+								vout,
+								amount,
+								script_pubkey: descriptor.script_pubkey().as_bytes().to_vec(),
+								input_vbytes,
+							},
 							status: UtxoStatus::Unconfirmed,
 							voters: BoundedVec::try_from(voters)
 								.map_err(|_| Error::<T>::OutOfRange)?,

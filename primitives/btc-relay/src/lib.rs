@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod blaze;
 pub mod traits;
+pub mod utils;
 
 pub use miniscript::{
 	bitcoin::{

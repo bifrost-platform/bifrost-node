@@ -46,6 +46,21 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		}
 	}
 
+	fn get_bonded_descriptor(who: &BoundedBitcoinAddress) -> Option<Descriptor<PublicKey>> {
+		if let Some(descriptor) = <BondedDescriptor<T>>::get(CurrentRound::<T>::get(), who) {
+			let descriptor_str = match str::from_utf8(&descriptor) {
+				Ok(str) => str,
+				Err(_) => return None,
+			};
+			match Descriptor::<PublicKey>::from_str(descriptor_str) {
+				Ok(descriptor) => Some(descriptor),
+				Err(_) => None,
+			}
+		} else {
+			None
+		}
+	}
+
 	fn get_system_vault(round: u32) -> Option<BoundedBitcoinAddress> {
 		if let Some(vault) = SystemVault::<T>::get(round) {
 			match vault.address {

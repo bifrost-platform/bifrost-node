@@ -6,14 +6,16 @@ pub mod weights;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
+use bp_btc_relay::{
+	blaze::{UtxoInfo, UtxoInfoWithSize},
+	UnboundedBytes,
+};
+use bp_staking::MAX_AUTHORITIES;
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H256};
 use sp_runtime::BoundedVec;
 use sp_std::vec::Vec;
-
-use bp_btc_relay::UnboundedBytes;
-use bp_staking::MAX_AUTHORITIES;
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 /// The status of a UTXO.
@@ -28,22 +30,11 @@ pub enum UtxoStatus {
 /// A UTXO with its status and voters.
 pub struct Utxo<AccountId> {
 	/// The UTXO information.
-	pub inner: UtxoInfo,
+	pub inner: UtxoInfoWithSize,
 	/// The status of the UTXO.
 	pub status: UtxoStatus,
 	/// The voters of the UTXO.
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
-}
-
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-/// The information of a UTXO.
-pub struct UtxoInfo {
-	/// The txid of the UTXO.
-	pub txid: H256,
-	/// The vout (output index) of the UTXO.
-	pub vout: u32,
-	/// The amount of the UTXO.
-	pub amount: u64,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]

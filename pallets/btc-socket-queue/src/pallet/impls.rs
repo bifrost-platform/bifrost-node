@@ -4,11 +4,11 @@ use crate::{
 };
 use bp_btc_relay::{
 	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	utils::estimate_finalized_input_size,
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
 use ethabi_decode::{ParamKind, Token};
 use frame_support::ensure;
-use miniscript::bitcoin::{opcodes, psbt, script::Instruction, TxIn, Weight as BitcoinWeight};
 use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
@@ -140,67 +140,17 @@ where
 			.assume_checked())
 	}
 
-	/// Parse the witness script for extract m and n for m-of-n multisig.
-	/// return None if the script is not a valid multisig script.
-	fn parse_multisig_script(script: &Script) -> Option<(usize, usize)> {
-		let instructions = script.instructions().collect::<Vec<_>>();
-
-		if instructions.len() < 3 {
-			return None; // Not enough instructions for multisig
-		}
-
-		// First instruction should be the number of required signatures (m)
-		let m = match instructions[0] {
-			Ok(Instruction::Op(op)) if op.to_u8() >= 0x51 && op.to_u8() <= 0x60 => {
-				(op.to_u8() - 0x51 + 1) as usize
-			},
-			_ => return None, // Not a valid multisig script
-		};
-
-		// Last instruction should be OP_CHECKMULTISIG opcode
-		if let Ok(Instruction::Op(opcodes::all::OP_CHECKMULTISIG)) = instructions.last().unwrap() {
-			// Second-to-last instruction should be the number of public keys (n)
-			let n = match instructions[instructions.len() - 2] {
-				Ok(Instruction::Op(op)) if op.to_u8() >= 0x51 && op.to_u8() <= 0x60 => {
-					(op.to_u8() - 0x51 + 1) as usize
-				},
-				_ => return None, // Not a valid multisig script
-			};
-
-			Some((m, n))
-		} else {
-			None
-		}
-	}
-
-	/// Estimate the finalized input vsize from unsigned.
-	fn estimate_finalized_input_size(
-		input: &psbt::Input,
-		txin: &TxIn,
-	) -> Result<u64, DispatchError> {
-		let witness_script = input.witness_script.as_ref().ok_or(Error::<T>::InvalidPsbt)?;
-		let (m, _) = Self::parse_multisig_script(witness_script).ok_or(Error::<T>::InvalidPsbt)?;
-
-		let script_len = witness_script.len() + 1;
-
-		// empty(1byte) + signatures(73 * m) + script_len
-		let estimated_witness_size = 1 + 73 * m + script_len;
-
-		let estimated_final_vsize =
-			(BitcoinWeight::from_witness_data_size(estimated_witness_size as u64)
-				+ BitcoinWeight::from_non_witness_data_size(txin.base_size() as u64))
-			.to_vbytes_ceil();
-
-		Ok(estimated_final_vsize)
-	}
-
 	/// Estimate the finalized vsize from the given PSBT.
 	fn estimate_finalized_vb(psbt: &Psbt) -> Result<u64, DispatchError> {
 		let mut total_vb = 10; // version(4) + locktime(4) + input_count(1) + output_count(1)
 
 		for (i, input) in psbt.inputs.iter().enumerate() {
 			let txin = psbt.unsigned_tx.input.get(i).ok_or(Error::<T>::InvalidPsbt)?;
-			let input_vb = Self::estimate_finalized_input_size(input, txin)?;
+			let input_vb = estimate_finalized_input_size(
+				input.witness_script.as_ref().ok_or(Error::<T>::InvalidPsbt)?,
+				Some(txin),
+			)
+			.ok_or(Error::<T>::InvalidPsbt)?;
 			total_vb += input_vb;
 		}
 		total_vb +=

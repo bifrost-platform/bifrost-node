@@ -1,10 +1,13 @@
 use frame_system::pallet_prelude::BlockNumberFor;
-use miniscript::bitcoin::Network;
+use miniscript::{
+	bitcoin::{Network, PublicKey},
+	Descriptor,
+};
 use sp_core::H256;
 use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
 use sp_std::vec::Vec;
 
-use crate::{BoundedBitcoinAddress, MigrationSequence, UnboundedBytes};
+use crate::{blaze::UtxoInfoWithSize, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes};
 
 pub trait PoolManager<AccountId> {
 	/// Get the refund address of the given user.
@@ -12,6 +15,9 @@ pub trait PoolManager<AccountId> {
 
 	/// Get the vault address of the given user.
 	fn get_vault_address(who: &AccountId) -> Option<BoundedBitcoinAddress>;
+
+	/// Get the descriptor of the given vault address.
+	fn get_bonded_descriptor(who: &BoundedBitcoinAddress) -> Option<Descriptor<PublicKey>>;
 
 	/// Get the system vault address.
 	fn get_system_vault(round: u32) -> Option<BoundedBitcoinAddress>;
@@ -63,6 +69,15 @@ pub trait SocketVerifier<AccountId> {
 pub trait BlazeManager<T: frame_system::Config> {
 	/// Check if BLAZE is activated.
 	fn is_activated() -> bool;
+
+	/// Get Utxos
+	fn get_utxos() -> Vec<(u64, UtxoInfoWithSize)>;
+
+	/// Read the outbound pool.
+	fn get_outbound_pool() -> Vec<UnboundedBytes>;
+
+	/// Clear the outbound pool.
+	fn clear_outbound_pool();
 
 	/// Take the executed requests.
 	fn take_executed_requests() -> Vec<H256>;
