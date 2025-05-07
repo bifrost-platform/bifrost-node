@@ -1,4 +1,7 @@
-use bp_btc_relay::traits::BlazeManager;
+use super::pallet::*;
+use crate::{BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
+use bp_btc_relay::blaze::UtxoInfoWithSize;
+use bp_btc_relay::{traits::BlazeManager, UnboundedBytes};
 use bp_staking::traits::Authorities;
 use frame_support::pallet_prelude::{
 	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
@@ -11,13 +14,23 @@ use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, Verify};
 use sp_std::{fmt::Display, vec::Vec};
 
-use crate::{BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
-
-use super::pallet::*;
-
 impl<T: Config> BlazeManager<T> for Pallet<T> {
 	fn is_activated() -> bool {
 		<IsActivated<T>>::get()
+	}
+
+	fn get_utxos() -> Vec<(u64, UtxoInfoWithSize)> {
+		<Utxos<T>>::iter().map(|(_, utxo)| (utxo.inner.amount, utxo.inner)).collect()
+	}
+
+	fn get_outbound_pool() -> Vec<UnboundedBytes> {
+		<OutboundPool<T>>::get()
+	}
+
+	fn clear_outbound_pool() {
+		<OutboundPool<T>>::mutate(|x| {
+			x.clear();
+		});
 	}
 
 	fn take_executed_requests() -> Vec<H256> {

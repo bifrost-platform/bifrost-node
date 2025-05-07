@@ -22,10 +22,10 @@ sp-runtime = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"scale-info/std",
-	"parity-scale-codec/std",
-	"sp-std/std",
-	"sp-core/std",
-	"sp-runtime/std",
-	"frame-system/std",
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "sp-std/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "frame-system/std",
 ]
