@@ -7,7 +7,10 @@ use sp_core::H256;
 use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
 use sp_std::vec::Vec;
 
-use crate::{blaze::UtxoInfoWithSize, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes};
+use crate::{
+	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
+};
 
 pub trait PoolManager<AccountId> {
 	/// Get the refund address of the given user.
@@ -84,4 +87,14 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Try to finalize the fee rate.
 	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<u64>;
+
+	/// Select utxos for given target.
+	fn select_coins(
+		pool: Vec<ScoredUtxo>,
+		target: u64,
+		cost_of_change: u64,
+		max_selection_weight: u64,
+		max_tries: usize,
+		change_target: u64,
+	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)>;
 }

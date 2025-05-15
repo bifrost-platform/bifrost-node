@@ -13,6 +13,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
+	blaze::ScoredUtxo,
 	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
@@ -232,8 +233,12 @@ pub mod pallet {
 
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			if T::Blaze::is_activated() {
-				// TODO: impl function for BLAZE actions
 				if let Some(fee_rate) = T::Blaze::try_fee_rate_finalization(n) {
+					let long_term_fee_rate = <LongTermFeeRate<T>>::get();
+					if fee_rate < long_term_fee_rate {
+						todo!("Handle super low feerate situation");
+					}
+
 					let outbound_pool = T::Blaze::get_outbound_pool();
 					if !outbound_pool.is_empty() {
 						let outbound_requests = outbound_pool
@@ -247,11 +252,65 @@ pub mod pallet {
 
 						let outbound_amount_sum =
 							outbound_requests.iter().map(|x| x.params.amount.as_u64()).sum::<u64>();
-						let blaze_sum = utxos.iter().map(|x| x.0).sum::<u64>();
+						let blaze_vault_sum = utxos.iter().map(|x| x.0).sum::<u64>();
 
-						if outbound_amount_sum >= blaze_sum {
+						if outbound_amount_sum >= blaze_vault_sum {
 							todo!("Handle insufficient funds situation -disaster-");
 						}
+
+						let scored_utxos = utxos
+							.iter()
+							.filter_map(|(_, x)| {
+								let fee = x.input_vbytes * fee_rate;
+								if x.amount < fee {
+									return None;
+								}
+								Some(ScoredUtxo {
+									utxo: x.clone(),
+									fee,
+									long_term_fee: x.input_vbytes * long_term_fee_rate,
+									effective_value: x.amount - fee,
+								})
+							})
+							.collect::<Vec<_>>();
+
+						let (selected_utxos, strategy) = match T::Blaze::select_coins(
+							scored_utxos,
+							outbound_amount_sum,
+							43 * fee_rate,
+							200_000,
+							100_000,
+							546,
+						) {
+							Some(utxos) => utxos,
+							None => {
+								todo!("Handle selection fail");
+							},
+						};
+						match Self::composite_psbt(
+							&selected_utxos,
+							&outbound_requests,
+							outbound_amount_sum,
+							fee_rate,
+							strategy,
+						) {
+							Some(psbt) => {
+								let txid = Self::convert_txid(psbt.unsigned_tx.compute_txid());
+								<PendingRequests<T>>::insert(
+									&txid,
+									PsbtRequest::new(
+										psbt.serialize(),
+										outbound_pool,
+										RequestType::Normal,
+									),
+								);
+								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
+								T::Blaze::clear_outbound_pool();
+							},
+							_ => {
+								todo!();
+							},
+						};
 					}
 				}
 
@@ -845,6 +904,7 @@ pub mod pallet {
 			FeeRate::from_sat_per_vb(new).ok_or(Error::<T>::OutOfRange)?;
 
 			<LongTermFeeRate<T>>::put(new);
+
 			Self::deposit_event(Event::LongTermFeeRateSet { new });
 
 			Ok(().into())

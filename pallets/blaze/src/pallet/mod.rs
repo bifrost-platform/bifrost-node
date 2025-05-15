@@ -15,7 +15,7 @@ use bp_btc_relay::{
 	UnboundedBytes,
 };
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
-use parity_scale_codec::Encode;
+use parity_scale_codec::{alloc::string::ToString, Encode};
 use sp_core::H256;
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
@@ -213,7 +213,7 @@ pub mod pallet {
 								txid,
 								vout,
 								amount,
-								script_pubkey: descriptor.script_pubkey().as_bytes().to_vec(),
+								descriptor: descriptor.to_string(),
 								input_vbytes,
 							},
 							status: UtxoStatus::Unconfirmed,

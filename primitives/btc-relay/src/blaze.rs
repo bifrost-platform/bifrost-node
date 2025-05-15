@@ -1,5 +1,6 @@
-use crate::{BoundedBitcoinAddress, UnboundedBytes};
+use crate::BoundedBitcoinAddress;
 use parity_scale_codec::{Decode, Encode};
+use scale_info::prelude::string::String;
 use scale_info::TypeInfo;
 use sp_core::{RuntimeDebug, H256};
 
@@ -26,7 +27,21 @@ pub struct UtxoInfoWithSize {
 	/// The amount of the UTXO.
 	pub amount: u64,
 	/// owner of the UTXO.
-	pub script_pubkey: UnboundedBytes,
+	pub descriptor: String,
 	/// The size of the UTXO.
 	pub input_vbytes: u64,
+}
+
+#[derive(Clone)]
+pub struct ScoredUtxo {
+	pub utxo: UtxoInfoWithSize,
+	pub fee: u64,
+	pub long_term_fee: u64,
+	pub effective_value: u64,
+}
+
+#[derive(PartialEq, Eq)]
+pub enum SelectionStrategy {
+	Bnb,
+	Knapsack,
 }
