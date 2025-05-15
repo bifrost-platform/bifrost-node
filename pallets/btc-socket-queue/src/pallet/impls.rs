@@ -1,14 +1,26 @@
+use super::pallet::*;
 use crate::{
 	HashKeyRequest, RequestInfo, RequestType, SocketMessage, TxInfo, UserRequest,
 	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 use bp_btc_relay::{
+	blaze::{SelectionStrategy, UtxoInfoWithSize},
 	traits::{PoolManager, SocketQueueManager, SocketVerifier},
 	utils::estimate_finalized_input_size,
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
 use ethabi_decode::{ParamKind, Token};
 use frame_support::ensure;
+use miniscript::{
+	bitcoin::{
+		absolute::LockTime,
+		bip32::{DerivationPath, Fingerprint},
+		psbt::{Input, Output},
+		transaction::Version,
+		Amount, OutPoint, PublicKey, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+	},
+	Descriptor, ForEachKey,
+};
 use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
@@ -18,8 +30,6 @@ use sp_runtime::{
 	BoundedVec, DispatchError,
 };
 use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
-
-use super::pallet::*;
 
 impl<T: Config> SocketVerifier<T::AccountId> for Pallet<T>
 where
@@ -362,6 +372,92 @@ where
 			}
 		}
 		Ok((deserialized_msgs, serialized_msgs))
+	}
+
+	/// Composite PSBT.
+	pub fn composite_psbt(
+		selected_utxos: &[UtxoInfoWithSize],
+		outbound_requests: &[SocketMessage],
+		target: u64,
+		fee_rate: u64,
+		selection_strategy: SelectionStrategy,
+	) -> Option<Psbt> {
+		let input = selected_utxos
+			.iter()
+			.map(|x| TxIn {
+				previous_output: OutPoint::new(
+					Txid::from_slice(x.txid.as_bytes()).unwrap(),
+					x.vout,
+				),
+				script_sig: ScriptBuf::new(),
+				sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+				witness: Witness::new(),
+			})
+			.collect::<Vec<_>>();
+
+		let mut output = outbound_requests
+			.iter()
+			.map(|x| {
+				let to = T::RegistrationPool::get_refund_address(&x.params.to.into()).unwrap();
+				let script_pubkey =
+					Self::try_convert_to_address_from_vec(to).unwrap().script_pubkey();
+				let value = Amount::from_sat(x.params.amount.as_u64());
+				TxOut { value, script_pubkey }
+			})
+			.collect::<Vec<_>>();
+		if selection_strategy == SelectionStrategy::Knapsack {
+			let input_sum = selected_utxos.iter().map(|x| x.amount).sum::<u64>();
+			if input_sum - 546 > target {
+				let change_amount = input_sum - target - fee_rate * 43;
+				let system_vault =
+					T::RegistrationPool::get_system_vault(T::RegistrationPool::get_current_round())
+						.unwrap();
+				let system_vault = Self::try_convert_to_address_from_vec(system_vault).unwrap();
+				output.push(TxOut {
+					value: Amount::from_sat(change_amount),
+					script_pubkey: system_vault.script_pubkey(),
+				})
+			}
+		}
+
+		let tx = Transaction {
+			version: Version::TWO,
+			lock_time: LockTime::ZERO,
+			input,
+			output: output.clone(),
+		};
+
+		match Psbt::from_unsigned_tx(tx) {
+			Ok(mut psbt) => {
+				let psbt_inputs = selected_utxos
+					.iter()
+					.map(|x| {
+						let descriptor = Descriptor::<PublicKey>::from_str(&x.descriptor).unwrap();
+						let mut psbt_input = Input::default();
+						psbt_input.witness_utxo = Some(TxOut {
+							value: Amount::from_sat(x.amount),
+							script_pubkey: descriptor.script_pubkey(),
+						});
+						psbt_input.witness_script = Some(descriptor.script_code().unwrap());
+
+						let mut derivation = BTreeMap::new();
+						descriptor.for_each_key(|x| {
+							derivation.insert(
+								x.inner,
+								(Fingerprint::default(), DerivationPath::default()),
+							);
+							true
+						});
+						psbt_input.bip32_derivation = derivation;
+						psbt_input
+					})
+					.collect::<Vec<_>>();
+				psbt.inputs = psbt_inputs;
+				psbt.outputs = vec![Output::default(); output.len()];
+				Some(psbt)
+			},
+			Err(_) => None,
+		}
 	}
 
 	/// Hash the given bytes.
