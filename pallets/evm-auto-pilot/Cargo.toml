@@ -1,0 +1,38 @@
+[package]
+name = "pallet-evm-auto-pilot"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bifrost"]
+description = "A pallet for scheduling and executing EVM contract calls at regular intervals"
+
+[dependencies]
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
+log = { workspace = true }
+hex = { workspace = true }
+
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+pallet-evm = { workspace = true }
+pallet-ethereum = { workspace = true }
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+sp-runtime = { workspace = true }
+fp-account = { workspace = true }
+ethereum = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+	"scale-info/std",
+	"parity-scale-codec/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-evm/std",
+	"pallet-ethereum/std",
+	"sp-core/std",
+	"sp-std/std",
+	"sp-runtime/std",
+	"fp-account/std",
+	"ethereum/std",
+]

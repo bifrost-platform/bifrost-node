@@ -981,6 +981,11 @@ impl pallet_evm::Config for Runtime {
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_evm_auto_pilot::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_evm_auto_pilot::weights::SubstrateWeight<Runtime>;
+}
+
 parameter_types! {
 	pub const PostBlockAndTxnHashes: PostLogContent = PostLogContent::BlockAndTxnHashes;
 }
@@ -1131,6 +1136,9 @@ mod runtime {
 
 	#[runtime::pallet_index(42)]
 	pub type BaseFee = pallet_base_fee;
+
+	#[runtime::pallet_index(43)]
+	pub type EVMAutoPilot = pallet_evm_auto_pilot;
 
 	#[runtime::pallet_index(50)]
 	pub type Scheduler = pallet_scheduler;
