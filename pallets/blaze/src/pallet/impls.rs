@@ -40,22 +40,33 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		<ExecutedRequests<T>>::take()
 	}
 
-	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<u64> {
+	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<(u64, u64)> {
 		let mut submitted_fee_rates = <FeeRates<T>>::get();
 		// remove expired fee rates
-		submitted_fee_rates.retain(|_, (_, expires_at)| n <= *expires_at);
+		submitted_fee_rates.retain(|_, (_, _, expires_at)| n <= *expires_at);
 
 		// check majority
 		if submitted_fee_rates.len() as u32 >= T::Relayers::majority() {
 			// choose the median fee rate
-			let mut fee_rates = submitted_fee_rates.values().cloned().collect::<Vec<_>>();
+			let mut fee_rates = Vec::with_capacity(submitted_fee_rates.len());
+			let mut lt_fee_rates = Vec::with_capacity(submitted_fee_rates.len());
+			for (_, (lt_fee_rate, fee_rate, _)) in &submitted_fee_rates {
+				lt_fee_rates.push(*lt_fee_rate);
+				fee_rates.push(*fee_rate);
+			}
+
 			fee_rates.sort();
+			lt_fee_rates.sort();
+
 			let median_index = fee_rates.len() / 2;
 			let median_fee_rate = fee_rates[median_index];
-			Some(median_fee_rate.0)
-		} else {
-			None
+			let median_lt_fee_rate = lt_fee_rates[median_index];
+
+			if median_fee_rate >= median_lt_fee_rate {
+				return Some((median_lt_fee_rate, median_fee_rate));
+			}
 		}
+		None
 	}
 
 	fn select_coins(
@@ -350,7 +361,8 @@ impl<T: Config> Pallet<T> {
 	where
 		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
 	{
-		let FeeRateSubmission { authority_id, fee_rate, deadline } = fee_rate_submission;
+		let FeeRateSubmission { authority_id, lt_fee_rate, fee_rate, deadline } =
+			fee_rate_submission;
 
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;
@@ -362,12 +374,12 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// verify if the signature was originated from the authority.
-		let message = format!("{}:{}", deadline, fee_rate);
+		let message = format!("{}:{}:{}", deadline, lt_fee_rate, fee_rate);
 		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("FeeRateSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, fee_rate))
+			.and_provides((authority_id, lt_fee_rate, fee_rate))
 			.propagate(true)
 			.build()
 	}

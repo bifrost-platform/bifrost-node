@@ -86,7 +86,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 	fn take_executed_requests() -> Vec<H256>;
 
 	/// Try to finalize the fee rate.
-	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<u64>;
+	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<(u64, u64)>;
 
 	/// Select utxos for given target.
 	fn select_coins(

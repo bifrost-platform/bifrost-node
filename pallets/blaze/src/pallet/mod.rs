@@ -136,7 +136,7 @@ pub mod pallet {
 	/// Value: The fee rate and the deadline (The fee rate will be removed once the deadline is reached)
 	pub type FeeRates<T: Config> = StorageValue<
 		_,
-		BoundedBTreeMap<T::AccountId, (u64, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
+		BoundedBTreeMap<T::AccountId, (u64, u64, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
 
@@ -272,10 +272,14 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let FeeRateSubmission { authority_id, fee_rate, .. } = fee_rate_submission;
+			let FeeRateSubmission { authority_id, lt_fee_rate, fee_rate, .. } = fee_rate_submission;
 
 			let min_fee_rate = 1;
 			let max_fee_rate = T::SocketQueue::get_max_fee_rate();
+			ensure!(
+				lt_fee_rate >= min_fee_rate && lt_fee_rate <= max_fee_rate,
+				Error::<T>::OutOfRange
+			);
 			ensure!(fee_rate >= min_fee_rate && fee_rate <= max_fee_rate, Error::<T>::OutOfRange);
 
 			let mut fee_rates = <FeeRates<T>>::get();
@@ -284,7 +288,7 @@ pub mod pallet {
 				<frame_system::Pallet<T>>::block_number() + T::FeeRateExpiration::get().into();
 
 			fee_rates
-				.try_insert(authority_id, (fee_rate, expires_at))
+				.try_insert(authority_id, (lt_fee_rate, fee_rate, expires_at))
 				.map_err(|_| Error::<T>::OutOfRange)?;
 			<FeeRates<T>>::put(fee_rates);
 
