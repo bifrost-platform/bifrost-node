@@ -233,12 +233,7 @@ pub mod pallet {
 
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			if T::Blaze::is_activated() {
-				if let Some(fee_rate) = T::Blaze::try_fee_rate_finalization(n) {
-					let long_term_fee_rate = <LongTermFeeRate<T>>::get();
-					if fee_rate < long_term_fee_rate {
-						todo!("Handle super low feerate situation");
-					}
-
+				if let Some((long_term_fee_rate, fee_rate)) = T::Blaze::try_fee_rate_finalization(n) {
 					let outbound_pool = T::Blaze::get_outbound_pool();
 					if !outbound_pool.is_empty() {
 						let (filtered_outbound_pool, outbound_requests) =

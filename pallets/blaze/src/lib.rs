@@ -69,6 +69,8 @@ pub struct BroadcastSubmission<AccountId> {
 pub struct FeeRateSubmission<AccountId, BlockNumber> {
 	/// The authority id.
 	pub authority_id: AccountId,
+	/// The long term fee rate (sat/vb).
+	pub lt_fee_rate: u64,
 	/// The fee rate (sat/vb).
 	pub fee_rate: u64,
 	/// The deadline of the submission. Used to filter out expired signatures.
