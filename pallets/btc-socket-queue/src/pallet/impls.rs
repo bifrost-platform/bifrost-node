@@ -374,10 +374,43 @@ where
 		Ok((deserialized_msgs, serialized_msgs))
 	}
 
+	/// Filter unregistered outbounds & deserialize registered.
+	pub fn filter_unregistered_outbounds(
+		mut outbound_pool: Vec<UnboundedBytes>,
+	) -> (Vec<UnboundedBytes>, Vec<(SocketMessage, ScriptBuf)>) {
+		let mut unregistered = vec![];
+
+		let outbound_requests = outbound_pool
+			.iter()
+			.filter_map(|x| match Self::try_decode_socket_message(x) {
+				Ok(msg) => match T::RegistrationPool::get_refund_address(&msg.params.to.into()) {
+					Some(refund) => {
+						let script_pubkey =
+							Self::try_convert_to_address_from_vec(refund).unwrap().script_pubkey();
+						Some((msg, script_pubkey))
+					},
+					None => {
+						unregistered.push(x.clone());
+						None
+					},
+				},
+				Err(_) => {
+					unregistered.push(x.clone());
+					None
+				},
+			})
+			.collect::<Vec<_>>();
+
+		// remove unregistered from outbound_pool
+		outbound_pool.retain(|x| !unregistered.contains(x));
+
+		(outbound_pool, outbound_requests)
+	}
+
 	/// Composite PSBT.
 	pub fn composite_psbt(
 		selected_utxos: &[UtxoInfoWithSize],
-		outbound_requests: &[SocketMessage],
+		outbound_requests: &[(SocketMessage, ScriptBuf)],
 		target: u64,
 		fee_rate: u64,
 		selection_strategy: SelectionStrategy,
@@ -398,11 +431,8 @@ where
 		let mut output = outbound_requests
 			.iter()
 			.map(|x| {
-				let to = T::RegistrationPool::get_refund_address(&x.params.to.into()).unwrap();
-				let script_pubkey =
-					Self::try_convert_to_address_from_vec(to).unwrap().script_pubkey();
-				let value = Amount::from_sat(x.params.amount.as_u64());
-				TxOut { value, script_pubkey }
+				let value = Amount::from_sat(x.0.params.amount.as_u64());
+				TxOut { value, script_pubkey: x.1.clone() }
 			})
 			.collect::<Vec<_>>();
 		if selection_strategy == SelectionStrategy::Knapsack {

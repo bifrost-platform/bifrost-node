@@ -74,13 +74,13 @@ pub trait BlazeManager<T: frame_system::Config> {
 	fn is_activated() -> bool;
 
 	/// Get Utxos
-	fn get_utxos() -> Vec<(u64, UtxoInfoWithSize)>;
+	fn get_utxos() -> Vec<UtxoInfoWithSize>;
 
 	/// Read the outbound pool.
 	fn get_outbound_pool() -> Vec<UnboundedBytes>;
 
 	/// Clear the outbound pool.
-	fn clear_outbound_pool();
+	fn clear_outbound_pool(targets: Vec<UnboundedBytes>);
 
 	/// Take the executed requests.
 	fn take_executed_requests() -> Vec<H256>;

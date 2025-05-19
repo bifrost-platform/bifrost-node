@@ -22,17 +22,17 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		<IsActivated<T>>::get()
 	}
 
-	fn get_utxos() -> Vec<(u64, UtxoInfoWithSize)> {
-		<Utxos<T>>::iter().map(|(_, utxo)| (utxo.inner.amount, utxo.inner)).collect()
+	fn get_utxos() -> Vec<UtxoInfoWithSize> {
+		<Utxos<T>>::iter().map(|(_, utxo)| utxo.inner).collect()
 	}
 
 	fn get_outbound_pool() -> Vec<UnboundedBytes> {
 		<OutboundPool<T>>::get()
 	}
 
-	fn clear_outbound_pool() {
+	fn clear_outbound_pool(targets: Vec<UnboundedBytes>) {
 		<OutboundPool<T>>::mutate(|x| {
-			x.clear();
+			x.retain(|x| !targets.contains(x));
 		});
 	}
 
