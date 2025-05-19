@@ -241,18 +241,16 @@ pub mod pallet {
 
 					let outbound_pool = T::Blaze::get_outbound_pool();
 					if !outbound_pool.is_empty() {
-						let outbound_requests = outbound_pool
-							.iter()
-							.filter_map(|x| match Self::try_decode_socket_message(x) {
-								Ok(msg) => Some(msg),
-								Err(_) => None,
-							})
-							.collect::<Vec<_>>();
+						let (filtered_outbound_pool, outbound_requests) =
+							Self::filter_unregistered_outbounds(outbound_pool);
+
 						let utxos = T::Blaze::get_utxos();
 
-						let outbound_amount_sum =
-							outbound_requests.iter().map(|x| x.params.amount.as_u64()).sum::<u64>();
-						let blaze_vault_sum = utxos.iter().map(|x| x.0).sum::<u64>();
+						let outbound_amount_sum = outbound_requests
+							.iter()
+							.map(|x| x.0.params.amount.as_u64())
+							.sum::<u64>();
+						let blaze_vault_sum = utxos.iter().map(|x| x.amount).sum::<u64>();
 
 						if outbound_amount_sum >= blaze_vault_sum {
 							todo!("Handle insufficient funds situation -disaster-");
@@ -260,7 +258,7 @@ pub mod pallet {
 
 						let scored_utxos = utxos
 							.iter()
-							.filter_map(|(_, x)| {
+							.filter_map(|x| {
 								let fee = x.input_vbytes * fee_rate;
 								if x.amount < fee {
 									return None;
@@ -300,12 +298,12 @@ pub mod pallet {
 									&txid,
 									PsbtRequest::new(
 										psbt.serialize(),
-										outbound_pool,
+										filtered_outbound_pool.clone(),
 										RequestType::Normal,
 									),
 								);
 								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
-								T::Blaze::clear_outbound_pool();
+								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
 							},
 							_ => {
 								todo!();
