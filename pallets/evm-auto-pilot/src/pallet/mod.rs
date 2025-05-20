@@ -1,6 +1,6 @@
 mod impls;
 
-use crate::{CallInfo, WeightInfo};
+use crate::{ScheduledCallInfo, WeightInfo};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
@@ -11,6 +11,8 @@ use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
+	use pallet_evm::ExitReason;
+
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -38,12 +40,19 @@ pub mod pallet {
 		AlreadyBonded,
 		CallCapacityExceeded,
 		NotWhitelisted,
+		AlreadyWhitelisted,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		CallSucceeded(CallInfo<T::AccountId>),
+		Executed {
+			from: T::AccountId,
+			to: T::AccountId,
+			value: u64,
+			input: Vec<u8>,
+			exit_reason: ExitReason,
+		},
 	}
 
 	#[pallet::storage]
@@ -62,7 +71,8 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	pub type ScheduledCalls<T: Config> = StorageValue<_, Vec<CallInfo<T::AccountId>>, ValueQuery>;
+	pub type ScheduledCalls<T: Config> =
+		StorageValue<_, Vec<ScheduledCallInfo<T::AccountId>>, ValueQuery>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
@@ -102,7 +112,7 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn schedule_call(
 			origin: OriginFor<T>,
-			call: CallInfo<T::AccountId>,
+			call: ScheduledCallInfo<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
 			let _owner = Self::ensure_whitelisted(origin)?;
 			let gas_payer = call.from.clone();
@@ -122,6 +132,40 @@ pub mod pallet {
 			let mut scheduled_calls = ScheduledCalls::<T>::get();
 			scheduled_calls.push(call);
 			ScheduledCalls::<T>::put(scheduled_calls);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn add_whitelist(
+			origin: OriginFor<T>,
+			who: T::AccountId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			let mut whitelist = WhitelistedOwners::<T>::get();
+			ensure!(!whitelist.contains(&who), Error::<T>::AlreadyWhitelisted);
+
+			whitelist.push(who);
+			WhitelistedOwners::<T>::put(whitelist);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(2)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn remove_whitelist(
+			origin: OriginFor<T>,
+			who: T::AccountId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			let mut whitelist = WhitelistedOwners::<T>::get();
+			ensure!(whitelist.contains(&who), Error::<T>::NotWhitelisted);
+
+			whitelist.retain(|w| w != &who);
+			WhitelistedOwners::<T>::put(whitelist);
 
 			Ok(().into())
 		}

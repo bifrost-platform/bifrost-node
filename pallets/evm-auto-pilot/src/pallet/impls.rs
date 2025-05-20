@@ -3,7 +3,7 @@ use crate::pallet::BlockNumberFor;
 use frame_support::pallet_prelude::Weight;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
 use pallet_ethereum::RawOrigin as EthereumRawOrigin;
-use pallet_evm::{ExitReason, Runner};
+use pallet_evm::{ExitError, ExitReason, Runner};
 use sp_core::{H160, H256, U256};
 use sp_runtime::{
 	traits::{BadOrigin, UniqueSaturatedInto},
@@ -49,75 +49,98 @@ where
 				let nonce = frame_system::Pallet::<T>::account_nonce(&call.from);
 				let nonce_u256 = U256::from(nonce.saturated_into::<u64>());
 
-				match <T as pallet_evm::Config>::Runner::call(
-					call.from.clone().into(),
-					call.to.clone().into(),
-					call.data.clone(),
-					call.value,
-					max_gas_limit_per_call,
-					Some(gas_price),
-					None,
-					Some(nonce_u256),
-					vec![],
-					false,
-					true,
-					None,
-					None,
-					&config,
-				) {
-					Ok(estimate_result) => {
-						match estimate_result.exit_reason {
-							ExitReason::Succeed(_) => {
-								log::info!(
-									"Estimation succeeded, proceeding with transaction: {:?}",
-									estimate_result
-								);
+				let estimate_result: pallet_evm::CallInfo =
+					match <T as pallet_evm::Config>::Runner::call(
+						call.from.clone().into(),
+						call.to.clone().into(),
+						call.data.clone(),
+						call.value,
+						max_gas_limit_per_call,
+						Some(gas_price),
+						None,
+						Some(nonce_u256),
+						vec![],
+						false,
+						true,
+						None,
+						None,
+						&config,
+					)
+					.map_err(|e| e.error.into())
+					{
+						Ok(result) => result,
+						Err(_) => {
+							Self::deposit_event(Event::Executed {
+								from: call.from.clone(),
+								to: call.to.clone(),
+								value: call.value.low_u64(),
+								input: call.data.clone(),
+								exit_reason: ExitReason::Error(ExitError::Other(
+									"Estimation::InvalidCall".into(),
+								)),
+							});
+							continue;
+						},
+					};
 
-								// Reset the nonce to the original value
-								// The previous call will have incremented it (Since the context is the same)
-								frame_system::Pallet::<T>::set_account_nonce(&call.from, nonce);
+				Self::deposit_event(Event::Executed {
+					from: call.from.clone(),
+					to: call.to.clone(),
+					value: call.value.low_u64(),
+					input: call.data.clone(),
+					exit_reason: estimate_result.exit_reason.clone(),
+				});
 
-								// Create a transaction that will be recorded in history
-								let transaction = pallet_ethereum::Transaction::Legacy(
-									ethereum::LegacyTransaction {
-										nonce: U256::from(nonce_u256),
-										gas_price,
-										gas_limit: U256::from(max_gas_limit_per_call),
-										action: pallet_ethereum::TransactionAction::Call(
-											call.to.clone().into(),
-										),
-										value: call.value,
-										input: call.data.clone(),
-										signature: ethereum::TransactionSignature::new(
-											27,                         // v: 27 for valid signature
-											H256::from_slice(&[1; 32]), // r: non-zero value
-											H256::from_slice(&[2; 32]), // s: non-zero value
-										)
-										.unwrap(),
-									},
-								);
+				match estimate_result.exit_reason {
+					ExitReason::Succeed(_) => {
+						// Reset the nonce to the original value
+						// The previous call will have incremented it (Since the context is the same)
+						frame_system::Pallet::<T>::set_account_nonce(&call.from, nonce);
 
-								// Execute the transaction with the source account as the sender
-								let result = pallet_ethereum::Pallet::<T>::transact_unsigned(
-									RawOrigin::None.into(),
-									call.from.clone().into(),
-									transaction,
+						// Create a transaction that will be recorded in history
+						let transaction =
+							pallet_ethereum::Transaction::Legacy(ethereum::LegacyTransaction {
+								nonce: U256::from(nonce_u256),
+								gas_price,
+								gas_limit: U256::from(max_gas_limit_per_call),
+								action: pallet_ethereum::TransactionAction::Call(
+									call.to.clone().into(),
+								),
+								value: call.value,
+								input: call.data.clone(),
+								signature: ethereum::TransactionSignature::new(
+									27,                         // v: 27 for valid signature
+									H256::from_slice(&[1; 32]), // r: non-zero value
+									H256::from_slice(&[2; 32]), // s: non-zero value
 								)
-								.unwrap();
+								.unwrap(),
+							});
 
+						// Execute the transaction with the source account as the sender
+						match pallet_ethereum::Pallet::<T>::transact_unsigned(
+							RawOrigin::None.into(),
+							call.from.clone().into(),
+							transaction,
+						) {
+							Ok(result) => {
 								weight +=
 									weight.saturating_add(result.actual_weight.unwrap_or_default());
-
-								Self::deposit_event(Event::CallSucceeded(call.clone()));
 							},
-							_ => {
-								log::error!("EVM estimation failed: {:?}", estimate_result);
-								todo!()
+							Err(_) => {
+								Self::deposit_event(Event::Executed {
+									from: call.from.clone(),
+									to: call.to.clone(),
+									value: call.value.low_u64(),
+									input: call.data.clone(),
+									exit_reason: ExitReason::Error(ExitError::Other(
+										"Execution::InvalidCall".into(),
+									)),
+								});
+								continue;
 							},
 						}
 					},
-					Err(_) => {
-						log::error!("EVM estimation failed");
+					_ => {
 						continue;
 					},
 				}

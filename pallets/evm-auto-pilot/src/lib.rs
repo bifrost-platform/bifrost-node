@@ -12,7 +12,7 @@ use sp_core::{RuntimeDebug, U256};
 use sp_std::vec::Vec;
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-pub struct CallInfo<AccountId> {
+pub struct ScheduledCallInfo<AccountId> {
 	pub from: AccountId,
 	pub to: AccountId,
 	pub data: Vec<u8>,
