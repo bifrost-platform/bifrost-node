@@ -981,8 +981,15 @@ impl pallet_evm::Config for Runtime {
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const DefaultMaxGasLimitPerCall: u64 = 1_000_000;
+	pub const DefaultMaxScheduledCalls: u32 = 100;
+}
+
 impl pallet_evm_auto_pilot::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type DefaultMaxGasLimitPerCall = DefaultMaxGasLimitPerCall;
+	type DefaultMaxScheduledCalls = DefaultMaxScheduledCalls;
 	type WeightInfo = pallet_evm_auto_pilot::weights::SubstrateWeight<Runtime>;
 }
 
