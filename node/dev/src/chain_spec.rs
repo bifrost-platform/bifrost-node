@@ -229,6 +229,9 @@ fn development_genesis(
 		},
 		"btcSocketQueue": {
 			"authority": Some(authority)
+		},
+		"evmAutoPilot": {
+			"whitelist": [root_key]
 		}
 	})
 }

@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![warn(unused_crate_dependencies)]
 
 mod pallet;
 pub use pallet::pallet::*;
@@ -13,9 +14,16 @@ use sp_std::vec::Vec;
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct ScheduledCallInfo<AccountId> {
+	/// The gas payer. (Unique in the system)
 	pub from: AccountId,
+	/// The contract to call.
 	pub to: AccountId,
+	/// The data to send to the contract.
 	pub data: Vec<u8>,
+	/// The value to send to the contract.
 	pub value: U256,
+	/// The gas limit for the call.
+	pub gas: U256,
+	/// The interval at which to call the contract. (In blocks)
 	pub interval: u32,
 }

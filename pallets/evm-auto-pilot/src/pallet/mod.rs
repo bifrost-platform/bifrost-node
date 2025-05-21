@@ -5,14 +5,14 @@ use crate::{ScheduledCallInfo, WeightInfo};
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use pallet_ethereum::RawOrigin as EthereumRawOrigin;
+use pallet_evm::ExitReason;
 
-use sp_core::H160;
+use sp_core::{H160, H256, U256};
+use sp_runtime::traits::Hash;
 use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
-	use pallet_evm::ExitReason;
-
 	use super::*;
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -25,6 +25,8 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + pallet_evm::Config + pallet_ethereum::Config {
 		/// The overarching event type.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		/// The hashing algorithm.
+		type Hashing: Hash<Output = H256>;
 		#[pallet::constant]
 		/// The default maximum number of scheduled calls
 		type DefaultMaxScheduledCalls: Get<u32>;
@@ -37,20 +39,39 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		AlreadyBonded,
+		/// The call capacity has been exceeded.
 		CallCapacityExceeded,
+		/// The call is already scheduled.
+		CallAlreadyScheduled,
+		/// The caller is not whitelisted.
 		NotWhitelisted,
+		/// The caller is already whitelisted.
 		AlreadyWhitelisted,
+		/// The interval is invalid.
+		InvalidInterval,
+		/// The gas limit is too high.
+		InvalidGasLimit,
 	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// The call has been estimated.
+		Estimated {
+			from: T::AccountId,
+			to: T::AccountId,
+			value: U256,
+			input: Vec<u8>,
+			gas_used: U256,
+			exit_reason: ExitReason,
+		},
+		/// The call has been executed.
 		Executed {
 			from: T::AccountId,
 			to: T::AccountId,
-			value: u64,
+			value: U256,
 			input: Vec<u8>,
+			gas_used: U256,
 			exit_reason: ExitReason,
 		},
 	}
@@ -63,16 +84,12 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	pub type BondedGasPayers<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
 	pub type WhitelistedOwners<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
 	pub type ScheduledCalls<T: Config> =
-		StorageValue<_, Vec<ScheduledCallInfo<T::AccountId>>, ValueQuery>;
+		StorageMap<_, Twox64Concat, H256, ScheduledCallInfo<T::AccountId>>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
@@ -82,13 +99,14 @@ pub mod pallet {
 		OriginFor<T>: Into<Result<EthereumRawOrigin, OriginFor<T>>>,
 	{
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-			Self::execute_contract_call(n)
+			Self::execute_contract_calls(n)
 		}
 	}
 
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
-	pub struct GenesisConfig<T> {
+	pub struct GenesisConfig<T: Config> {
+		pub whitelist: Vec<T::AccountId>,
 		#[serde(skip)]
 		pub _config: PhantomData<T>,
 	}
@@ -98,6 +116,7 @@ pub mod pallet {
 		fn build(&self) {
 			MaxScheduledCalls::<T>::put(T::DefaultMaxScheduledCalls::get());
 			MaxGasLimitPerCall::<T>::put(T::DefaultMaxGasLimitPerCall::get());
+			WhitelistedOwners::<T>::put(self.whitelist.clone());
 		}
 	}
 
@@ -112,26 +131,34 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn schedule_call(
 			origin: OriginFor<T>,
-			call: ScheduledCallInfo<T::AccountId>,
+			mut call: ScheduledCallInfo<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
-			let _owner = Self::ensure_whitelisted(origin)?;
-			let gas_payer = call.from.clone();
-			ensure!(!BondedGasPayers::<T>::get().contains(&gas_payer), Error::<T>::AlreadyBonded);
+			Self::ensure_whitelisted(origin)?;
 
+			// The call capacity must not be exceeded
 			let max_scheduled_calls = MaxScheduledCalls::<T>::get();
-			let scheduled_calls = ScheduledCalls::<T>::get();
+			let current_capacity = ScheduledCalls::<T>::iter().count() as u32;
+			ensure!(current_capacity < max_scheduled_calls, Error::<T>::CallCapacityExceeded);
+
+			// The interval must be greater than 0
+			ensure!(call.interval > 0, Error::<T>::InvalidInterval);
+
+			// The gas limit must not be too high
+			let max_gas_limit_per_call = U256::from(MaxGasLimitPerCall::<T>::get());
+			ensure!(call.gas <= max_gas_limit_per_call, Error::<T>::InvalidGasLimit);
+
+			// If the gas limit is not set, set it to the maximum allowed value
+			if call.gas == U256::zero() {
+				call.gas = max_gas_limit_per_call;
+			}
+
+			// Hash the scheduled call info
+			let call_hash = <T as Config>::Hashing::hash(&call.encode());
 			ensure!(
-				scheduled_calls.len() as u32 == max_scheduled_calls,
-				Error::<T>::CallCapacityExceeded
+				!ScheduledCalls::<T>::contains_key(&call_hash),
+				Error::<T>::CallAlreadyScheduled
 			);
-
-			let mut bonded_gas_payers = BondedGasPayers::<T>::get();
-			bonded_gas_payers.push(gas_payer);
-			BondedGasPayers::<T>::put(bonded_gas_payers);
-
-			let mut scheduled_calls = ScheduledCalls::<T>::get();
-			scheduled_calls.push(call);
-			ScheduledCalls::<T>::put(scheduled_calls);
+			ScheduledCalls::<T>::insert(call_hash, call);
 
 			Ok(().into())
 		}

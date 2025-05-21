@@ -27,7 +27,7 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		Keccak256, NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
@@ -988,6 +988,7 @@ parameter_types! {
 
 impl pallet_evm_auto_pilot::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type Hashing = Keccak256;
 	type DefaultMaxGasLimitPerCall = DefaultMaxGasLimitPerCall;
 	type DefaultMaxScheduledCalls = DefaultMaxScheduledCalls;
 	type WeightInfo = pallet_evm_auto_pilot::weights::SubstrateWeight<Runtime>;
