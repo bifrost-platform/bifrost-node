@@ -13,7 +13,25 @@ use sp_core::{RuntimeDebug, U256};
 use sp_std::vec::Vec;
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
-pub struct ScheduledCallInfo<AccountId> {
+pub struct ScheduledCall<AccountId, BlockNumber> {
+	pub info: CallInfo<AccountId>,
+
+	// TODO: handle the following fields
+	pub banned: bool,
+	pub failed_count: u32,
+	pub last_executed: Option<BlockNumber>,
+}
+
+impl<AccountId: PartialEq + Clone, BlockNumber: PartialEq + Clone>
+	ScheduledCall<AccountId, BlockNumber>
+{
+	pub fn new(info: CallInfo<AccountId>) -> Self {
+		Self { info, banned: false, failed_count: 0, last_executed: None }
+	}
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct CallInfo<AccountId> {
 	/// The gas payer. (Unique in the system)
 	pub from: AccountId,
 	/// The contract to call.

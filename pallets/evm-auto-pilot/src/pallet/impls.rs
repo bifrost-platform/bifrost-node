@@ -1,4 +1,4 @@
-use crate::pallet::BlockNumberFor;
+use crate::pallet::{BlockNumberFor, CallInfo};
 
 use frame_support::pallet_prelude::Weight;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
@@ -50,14 +50,17 @@ where
 		start_transaction();
 		for (_, call) in scheduled_calls {
 			let block_number: u32 = n.unique_saturated_into();
-			if block_number % call.interval == 0 {
+			let CallInfo::<T::AccountId> { interval, ref from, ref to, ref data, value, gas } =
+				call.info;
+
+			if block_number % interval == 0 {
 				let estimate_result: pallet_evm::CallInfo =
 					match <T as pallet_evm::Config>::Runner::call(
-						call.from.clone().into(),
-						call.to.clone().into(),
-						call.data.clone(),
-						call.value,
-						call.gas.saturated_into::<u64>(),
+						from.clone().into(),
+						to.clone().into(),
+						data.clone(),
+						value,
+						gas.saturated_into::<u64>(),
 						Some(gas_price),
 						None,
 						None,
@@ -73,10 +76,10 @@ where
 						Ok(result) => result,
 						Err(_) => {
 							events.push(Event::Estimated {
-								from: call.from.clone(),
-								to: call.to.clone(),
-								value: call.value.clone(),
-								input: call.data.clone(),
+								from: from.clone(),
+								to: to.clone(),
+								value: value.clone(),
+								input: data.clone(),
 								gas_used: U256::zero(),
 								exit_reason: ExitReason::Error(ExitError::Other(
 									"Estimation::UnknownError".into(),
@@ -88,10 +91,10 @@ where
 
 				let estimated_gas = estimate_result.used_gas.standard;
 				events.push(Event::Estimated {
-					from: call.from.clone(),
-					to: call.to.clone(),
-					value: call.value.clone(),
-					input: call.data.clone(),
+					from: from.clone(),
+					to: to.clone(),
+					value: value.clone(),
+					input: data.clone(),
 					gas_used: estimated_gas,
 					exit_reason: estimate_result.exit_reason.clone(),
 				});
@@ -111,13 +114,14 @@ where
 		}
 
 		for (call, estimated_gas) in executable_calls {
+			let CallInfo::<T::AccountId> { from, to, data, value, .. } = call.info;
 			let transaction = pallet_ethereum::Transaction::Legacy(ethereum::LegacyTransaction {
 				nonce: U256::zero(), // use dynamic nonce
 				gas_price,
 				gas_limit: estimated_gas,
-				action: pallet_ethereum::TransactionAction::Call(call.to.clone().into()),
-				value: call.value,
-				input: call.data.clone(),
+				action: pallet_ethereum::TransactionAction::Call(to.clone().into()),
+				value,
+				input: data.clone(),
 				signature: ethereum::TransactionSignature::new(
 					27,
 					H256::from_slice(&[1; 32]),
@@ -128,7 +132,7 @@ where
 
 			match pallet_ethereum::Pallet::<T>::transact_unsigned(
 				RawOrigin::None.into(),
-				call.from.clone().into(),
+				from.clone().into(),
 				transaction,
 			) {
 				Ok(result) => {
@@ -136,10 +140,10 @@ where
 				},
 				Err(_) => {
 					Self::deposit_event(Event::Executed {
-						from: call.from.clone(),
-						to: call.to.clone(),
-						value: call.value.clone(),
-						input: call.data.clone(),
+						from: from.clone(),
+						to: to.clone(),
+						value: value.clone(),
+						input: data.clone(),
 						gas_used: estimated_gas,
 						exit_reason: ExitReason::Error(ExitError::Other(
 							"Execution::UnknownError".into(),

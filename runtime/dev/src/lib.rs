@@ -982,6 +982,7 @@ impl pallet_evm::Config for Runtime {
 }
 
 parameter_types! {
+	pub const DefaultMaxBannedCount: u32 = 10;
 	pub const DefaultMaxGasLimitPerCall: u64 = 1_000_000;
 	pub const DefaultMaxScheduledCalls: u32 = 100;
 }
@@ -989,6 +990,7 @@ parameter_types! {
 impl pallet_evm_auto_pilot::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Hashing = Keccak256;
+	type DefaultMaxBannedCount = DefaultMaxBannedCount;
 	type DefaultMaxGasLimitPerCall = DefaultMaxGasLimitPerCall;
 	type DefaultMaxScheduledCalls = DefaultMaxScheduledCalls;
 	type WeightInfo = pallet_evm_auto_pilot::weights::SubstrateWeight<Runtime>;

@@ -1,6 +1,6 @@
 mod impls;
 
-use crate::{ScheduledCallInfo, WeightInfo};
+use crate::{CallInfo, ScheduledCall, WeightInfo};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
@@ -27,13 +27,16 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The hashing algorithm.
 		type Hashing: Hash<Output = H256>;
+		/// The default maximum number of failed calls to be banned.
 		#[pallet::constant]
-		/// The default maximum number of scheduled calls
+		type DefaultMaxBannedCount: Get<u32>;
+		/// The default maximum number of scheduled calls.
+		#[pallet::constant]
 		type DefaultMaxScheduledCalls: Get<u32>;
+		/// The default maximum gas limit per call.
 		#[pallet::constant]
-		/// The default maximum gas limit per call
 		type DefaultMaxGasLimitPerCall: Get<u64>;
-		/// Weight information for extrinsics
+		/// Weight information for extrinsics.
 		type WeightInfo: WeightInfo;
 	}
 
@@ -77,6 +80,9 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
+	pub type MaxBannedCount<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
 	pub type MaxScheduledCalls<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
@@ -89,7 +95,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	pub type ScheduledCalls<T: Config> =
-		StorageMap<_, Twox64Concat, H256, ScheduledCallInfo<T::AccountId>>;
+		StorageMap<_, Twox64Concat, H256, ScheduledCall<T::AccountId, BlockNumberFor<T>>>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
@@ -114,6 +120,7 @@ pub mod pallet {
 	#[pallet::genesis_build]
 	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
+			MaxBannedCount::<T>::put(T::DefaultMaxBannedCount::get());
 			MaxScheduledCalls::<T>::put(T::DefaultMaxScheduledCalls::get());
 			MaxGasLimitPerCall::<T>::put(T::DefaultMaxGasLimitPerCall::get());
 			WhitelistedOwners::<T>::put(self.whitelist.clone());
@@ -131,7 +138,7 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn schedule_call(
 			origin: OriginFor<T>,
-			mut call: ScheduledCallInfo<T::AccountId>,
+			mut call: CallInfo<T::AccountId>,
 		) -> DispatchResultWithPostInfo {
 			Self::ensure_whitelisted(origin)?;
 
@@ -158,7 +165,7 @@ pub mod pallet {
 				!ScheduledCalls::<T>::contains_key(&call_hash),
 				Error::<T>::CallAlreadyScheduled
 			);
-			ScheduledCalls::<T>::insert(call_hash, call);
+			ScheduledCalls::<T>::insert(call_hash, ScheduledCall::new(call));
 
 			Ok(().into())
 		}
