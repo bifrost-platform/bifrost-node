@@ -37,11 +37,13 @@ pub struct CallInfo<AccountId> {
 	/// The contract to call.
 	pub to: AccountId,
 	/// The data to send to the contract.
+	/// TODO: dynamic input data
 	pub data: Vec<u8>,
 	/// The value to send to the contract.
 	pub value: U256,
 	/// The gas limit for the call.
 	pub gas: U256,
 	/// The interval at which to call the contract. (In blocks)
+	/// TODO: interval can be a contract state change / or offchain state change
 	pub interval: u32,
 }
