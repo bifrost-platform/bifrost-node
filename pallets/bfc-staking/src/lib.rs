@@ -31,6 +31,7 @@
 //! To leave the set of nominators and revoke all nominations, call `leave_nominators`.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![warn(unused_crate_dependencies)]
 
 pub mod inflation;
 pub mod migrations;

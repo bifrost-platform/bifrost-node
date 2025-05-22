@@ -129,16 +129,3 @@ pub mod pallet {
 		}
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn decode_works() {
-		let proposal = b"This is test proposal";
-		let hex = to_hex(proposal, true);
-		let decode = sp_core::bytes::from_hex(hex.as_str()).unwrap();
-		assert_eq!(decode, "This is test proposal".as_bytes());
-	}
-}

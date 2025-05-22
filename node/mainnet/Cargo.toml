@@ -14,7 +14,6 @@ serde_json = { workspace = true }
 jsonrpsee = { workspace = true, features = ["server"] }
 futures = { workspace = true }
 hex-literal = { workspace = true }
-tokio = { workspace = true, features = ["macros", "sync"] }
 
 # substrate client dependencies
 sc-client-api = { workspace = true }
@@ -39,7 +38,6 @@ sc-offchain = { workspace = true }
 sp-core = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
 sp-api = { workspace = true, features = ["std"] }
-sp-keystore = { workspace = true, features = ["std"] }
 sp-consensus-aura = { workspace = true, features = ["std"] }
 sp-consensus-grandpa = { workspace = true, features = ["std"] }
 sp-block-builder = { workspace = true, features = ["std"] }
@@ -64,7 +62,6 @@ fc-rpc-trace = { workspace = true }
 fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate"] }
 
 fp-evm = { workspace = true }
-fp-storage = { workspace = true }
 fp-ext = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-rpc-txpool = { workspace = true, features = ["std"] }
@@ -72,10 +69,6 @@ pallet-ethereum = { workspace = true, features = [
 	"std",
 	"forbid-evm-reentrancy",
 ] }
-
-# benchmarking dependencies
-frame-benchmarking-cli = { workspace = true }
-frame-benchmarking = { workspace = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }
@@ -88,4 +81,3 @@ bifrost-common-node = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = ["bifrost-mainnet-runtime/runtime-benchmarks"]

@@ -16,7 +16,6 @@ substrate-fixed = { workspace = true }
 # Substrate
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
-frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
@@ -24,11 +23,8 @@ sp-std = { workspace = true }
 sp-staking = { workspace = true }
 pallet-session = { workspace = true, features = ["historical"] }
 pallet-authorship = { workspace = true }
-pallet-im-online = { workspace = true }
 
 # Bifrost
-pallet-relay-manager = { workspace = true }
-pallet-bfc-offences = { workspace = true }
 bp-staking = { workspace = true }
 
 [features]
@@ -36,18 +32,13 @@ default = ["std"]
 std = [
 	"scale-info/std",
 	"parity-scale-codec/std",
-	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-session/std",
 	"pallet-authorship/std",
-	"pallet-im-online/std",
-	"pallet-relay-manager/std",
-	"pallet-bfc-offences/std",
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-staking/std",
 	"bp-staking/std",
 ]
-runtime-benchmarks = ["frame-benchmarking"]
 try-runtime = ["frame-support/try-runtime"]

@@ -1,5 +1,6 @@
 // Build both the Native Rust binary and the WASM binary.
 #![cfg_attr(not(feature = "std"), no_std)]
+#![warn(unused_crate_dependencies)]
 #![recursion_limit = "256"]
 
 // Make the WASM binary available.
