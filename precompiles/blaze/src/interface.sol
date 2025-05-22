@@ -31,4 +31,9 @@ interface Blaze {
         bytes32 txid,
         address authority_id
     ) external view returns (bool);
+
+    /// @dev Returns the entire outbound pool
+    /// @custom:selector 5267d815
+    /// @return The outbound pool
+    function outbound_pool() external view returns (bytes[] memory);
 }
