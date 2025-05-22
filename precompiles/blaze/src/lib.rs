@@ -9,7 +9,7 @@ use precompile_utils::prelude::*;
 use sp_core::{H160, H256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::Dispatchable;
-use sp_std::marker::PhantomData;
+use sp_std::{marker::PhantomData, vec::Vec};
 
 use parity_scale_codec::Encode;
 
@@ -74,5 +74,17 @@ where
 			Some(tx) => !tx.voters.contains(&authority_id),
 			None => false,
 		})
+	}
+
+	#[precompile::public("outboundPool()")]
+	#[precompile::public("outbound_pool()")]
+	#[precompile::view]
+	fn outbound_pool(handle: &mut impl PrecompileHandle) -> EvmResult<Vec<UnboundedBytes>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		Ok(pallet_blaze::OutboundPool::<Runtime>::get()
+			.into_iter()
+			.map(|msg| UnboundedBytes::from(msg))
+			.collect())
 	}
 }
