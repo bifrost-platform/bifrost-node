@@ -130,6 +130,45 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 			}
 		});
 	}
+
+	fn get_pending_set_refunds() -> Vec<(T::AccountId, BoundedBitcoinAddress)> {
+		<PendingSetRefunds<T>>::iter_prefix(CurrentRound::<T>::get())
+			.map(|(who, state)| (who, state.new))
+			.collect::<Vec<_>>()
+	}
+
+	fn try_approve_set_refund(
+		who: &T::AccountId,
+		new: &BoundedBitcoinAddress,
+	) -> Result<(), DispatchError> {
+		let round = CurrentRound::<T>::get();
+		// check if the new refund address is already bonded as a vault
+		// if it is, then we just remove the pending refund set and do nothing
+		if !<BondedVault<T>>::contains_key(round, new) {
+			let mut relay_target =
+				<RegistrationPool<T>>::get(round, who).ok_or(Error::<T>::UserDNE)?;
+			// remove from previous bond
+			let old = relay_target.refund_address.clone();
+			<BondedRefund<T>>::mutate(round, &old, |users| {
+				users.retain(|u| *u != *who);
+			});
+			// add to new bond
+			<BondedRefund<T>>::mutate(round, new, |users| {
+				users.push(who.clone());
+			});
+
+			relay_target.set_refund_address(new.clone());
+			<RegistrationPool<T>>::insert(round, who, relay_target);
+
+			Self::deposit_event(Event::RefundSetApproved {
+				who: who.clone(),
+				old,
+				new: new.clone(),
+			});
+		}
+		<PendingSetRefunds<T>>::remove(round, who);
+		Ok(())
+	}
 }
 
 impl<T: Config> Pallet<T> {
