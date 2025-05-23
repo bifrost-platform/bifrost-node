@@ -9,7 +9,7 @@ use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	blaze::{UtxoInfo, UtxoInfoWithSize},
+	blaze::{FailureReason, UtxoInfo, UtxoInfoWithSize},
 	traits::{PoolManager, SocketQueueManager, SocketVerifier},
 	utils::estimate_finalized_input_size,
 	UnboundedBytes,
@@ -33,6 +33,8 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
+		/// Overarching event type
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
@@ -50,6 +52,9 @@ pub mod pallet {
 		/// The fee rate expiration in blocks.
 		#[pallet::constant]
 		type FeeRateExpiration: Get<u32>;
+		/// The threshold for fault tolerance in blocks.
+		#[pallet::constant]
+		type ToleranceThreshold: Get<u32>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -74,6 +79,15 @@ pub mod pallet {
 		NoWritingSameValue,
 	}
 
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
+	pub enum Event<T: Config> {
+		/// The activation status has been set.
+		ActivationSet { is_activated: bool },
+		/// The deactivation counter has been increased.
+		CounterIncreased { counter: u32, failure_reason: FailureReason },
+	}
+
 	#[pallet::genesis_config]
 	#[derive(frame_support::DefaultNoBound)]
 	pub struct GenesisConfig<T> {
@@ -89,6 +103,10 @@ pub mod pallet {
 	#[pallet::storage]
 	/// The flag that represents whether BLAZE is activated.
 	pub type IsActivated<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+	#[pallet::storage]
+	/// The counter for fault tolerance. If the counter exceeds the threshold, BLAZE will be deactivated.
+	pub type ToleranceCounter<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -153,6 +171,7 @@ pub mod pallet {
 			let current = <IsActivated<T>>::get();
 			ensure!(current != is_activated, Error::<T>::NoWritingSameValue);
 			<IsActivated<T>>::put(is_activated);
+			Self::deposit_event(Event::ActivationSet { is_activated });
 			Ok(().into())
 		}
 

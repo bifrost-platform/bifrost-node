@@ -1056,15 +1056,18 @@ impl pallet_btc_registration_pool::Config for Runtime {
 
 parameter_types! {
 	pub const FeeRateExpiration: u32 = 1 * MINUTES;
+	pub const ToleranceThreshold: u32 = 1 * MINUTES;
 }
 
 impl pallet_blaze::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = RelayManager;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
 	type FeeRateExpiration = FeeRateExpiration;
+	type ToleranceThreshold = ToleranceThreshold;
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
 }
 

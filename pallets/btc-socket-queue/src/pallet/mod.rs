@@ -13,7 +13,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	blaze::ScoredUtxo,
+	blaze::{FailureReason, ScoredUtxo},
 	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
@@ -232,7 +232,10 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-			if T::Blaze::is_activated() {
+			let weight = Weight::from_parts(0, 0); // TODO: add weight
+			if T::Blaze::is_activated()
+				&& matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
+			{
 				// approve pending refund address updates
 				let pending_set_refunds = T::RegistrationPool::get_pending_set_refunds();
 				if !pending_set_refunds.is_empty() {
@@ -258,7 +261,8 @@ pub mod pallet {
 						let blaze_vault_sum = utxos.iter().map(|x| x.amount).sum::<u64>();
 
 						if outbound_amount_sum >= blaze_vault_sum {
-							todo!("Handle insufficient funds situation -disaster-");
+							T::Blaze::try_deactivation(FailureReason::InsufficientFunds);
+							return weight;
 						}
 
 						let scored_utxos = utxos
@@ -287,7 +291,8 @@ pub mod pallet {
 						) {
 							Some(utxos) => utxos,
 							None => {
-								todo!("Handle selection fail");
+								T::Blaze::try_deactivation(FailureReason::CoinSelection);
+								return weight;
 							},
 						};
 						match Self::composite_psbt(
@@ -311,7 +316,8 @@ pub mod pallet {
 								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
 							},
 							_ => {
-								todo!();
+								T::Blaze::try_deactivation(FailureReason::PsbtComposition);
+								return weight;
 							},
 						};
 					}
@@ -325,8 +331,7 @@ pub mod pallet {
 					}
 				}
 			}
-
-			Weight::from_parts(0, 0) // TODO: add weight
+			weight
 		}
 	}
 
@@ -735,6 +740,7 @@ pub mod pallet {
 				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
 			);
 			T::RegistrationPool::add_migration_tx(txid.clone());
+			T::Blaze::clear_utxos();
 			Self::deposit_event(Event::MigrationPsbtSubmitted { txid });
 			Ok(().into())
 		}
