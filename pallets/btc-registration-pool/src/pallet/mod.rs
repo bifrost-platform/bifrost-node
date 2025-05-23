@@ -2,8 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
-	SetRefundState, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo,
-	ADDRESS_U64,
+	SetRefundState, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -13,8 +12,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
-	MigrationSequence, Network, Public, PublicKey, UnboundedBytes,
+	traits::SocketQueueManager, MigrationSequence, Network, Public, PublicKey, UnboundedBytes,
 };
 use sp_core::{H160, H256};
 use sp_runtime::{
@@ -126,6 +124,11 @@ pub mod pallet {
 		},
 		/// A user's refund address (re-)set has been approved.
 		RefundSetApproved {
+			who: T::AccountId,
+			old: BoundedBitcoinAddress,
+			new: BoundedBitcoinAddress,
+		},
+		RefundSetDenied {
 			who: T::AccountId,
 			old: BoundedBitcoinAddress,
 			new: BoundedBitcoinAddress,
@@ -794,38 +797,6 @@ pub mod pallet {
 
 			Ok(().into())
 		}
-
-		#[pallet::call_index(11)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Approve the given pending set refund requests.
-		pub fn approve_set_refunds(
-			origin: OriginFor<T>,
-			approval: SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
-			_signature: T::Signature,
-		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
-
-			ensure!(
-				ServiceState::<T>::get() == MigrationSequence::Normal,
-				Error::<T>::UnderMaintenance
-			);
-
-			let SetRefundsApproval { refund_sets, pool_round, .. } = approval;
-
-			let current_round = CurrentRound::<T>::get();
-			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
-
-			for refund_set in &refund_sets {
-				let who = refund_set.0.clone();
-				let pending = <PendingSetRefunds<T>>::get(current_round, &who)
-					.ok_or(Error::<T>::RefundSetDNE)?;
-				ensure!(pending.new == refund_set.1, Error::<T>::RefundSetDNE);
-
-				Self::try_approve_set_refund(&who, &pending.new)?;
-			}
-
-			Ok(().into())
-		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -847,9 +818,6 @@ pub mod pallet {
 				},
 				Call::vault_key_presubmission { key_submission, signature } => {
 					Self::verify_key_presubmission(key_submission, signature)
-				},
-				Call::approve_set_refunds { approval, signature } => {
-					Self::verify_set_refunds_approval(approval, signature)
 				},
 				_ => InvalidTransaction::Call.into(),
 			}
