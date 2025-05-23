@@ -9,7 +9,7 @@ use sp_std::vec::Vec;
 
 use crate::{
 	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
-	BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
+	BoundedBitcoinAddress, MigrationSequence, Psbt, UnboundedBytes,
 };
 
 pub trait PoolManager<AccountId> {
@@ -87,6 +87,9 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Clear the utxos.
 	fn clear_utxos();
+
+	/// Prune the utxos used in the given PSBT.
+	fn prune_utxos_used_in_psbt(psbt: &Psbt);
 
 	/// Read the outbound pool.
 	fn get_outbound_pool() -> Vec<UnboundedBytes>;

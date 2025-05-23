@@ -3,7 +3,7 @@ use crate::{BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, U
 use bp_btc_relay::{
 	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
 	traits::BlazeManager,
-	UnboundedBytes,
+	Hash, Psbt, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
 use frame_support::pallet_prelude::{
@@ -28,6 +28,32 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 
 	fn clear_utxos() {
 		let _ = <Utxos<T>>::clear(u32::MAX, None);
+	}
+
+	fn prune_utxos_used_in_psbt(psbt: &Psbt) {
+		let mut hashes = vec![];
+		for (i, input) in psbt.inputs.iter().enumerate() {
+			let txin = &psbt.unsigned_tx.input[i];
+			let mut txid = txin.previous_output.txid.as_byte_array().clone();
+			txid.reverse();
+			let vout = txin.previous_output.vout;
+
+			let amount = if let Some(ref utxo) = input.witness_utxo {
+				utxo.value
+			} else if let Some(ref tx) = input.non_witness_utxo {
+				tx.output[vout as usize].value
+			} else {
+				unreachable!()
+			};
+
+			hashes.push(H256::from_slice(
+				keccak_256(&Encode::encode(&(H256::from(txid), vout as u32, amount.to_sat())))
+					.as_ref(),
+			));
+		}
+		hashes.iter().for_each(|hash| {
+			<Utxos<T>>::remove(hash);
+		});
 	}
 
 	fn get_outbound_pool() -> Vec<UnboundedBytes> {
