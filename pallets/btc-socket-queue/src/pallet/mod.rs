@@ -236,22 +236,6 @@ pub mod pallet {
 				// approve pending refund address updates
 				let pending_set_refunds = T::RegistrationPool::get_pending_set_refunds();
 				if !pending_set_refunds.is_empty() {
-					// let outbound_pool = T::Blaze::get_outbound_pool();
-					// let pending_request_addresses = outbound_pool
-					// 	.iter()
-					// 	.filter_map(|x| match Self::try_decode_socket_message(x) {
-					// 		Ok(msg) => Some(msg.params.to.into()),
-					// 		Err(_) => None,
-					// 	})
-					// 	.collect::<Vec<T::AccountId>>();
-
-					// let approvable = pending_set_refunds
-					// 	.iter()
-					// 	.filter(|(who, _)| !pending_request_addresses.contains(who))
-					// 	.collect::<Vec<_>>();
-
-					// for (who, new) in approvable {
-
 					for (who, new) in pending_set_refunds {
 						// never panics - relay target always exists (checked in the registration pool)
 						T::RegistrationPool::try_approve_set_refund(&who, &new).unwrap();
