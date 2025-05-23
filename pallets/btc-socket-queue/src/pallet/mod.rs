@@ -631,6 +631,11 @@ pub mod pallet {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
 
+			// remove submitted utxos from BLAZE
+			if T::Blaze::is_activated() {
+				T::Blaze::prune_utxos_used_in_psbt(&psbt_obj);
+			}
+
 			<RollbackRequests<T>>::insert(
 				&psbt_txid,
 				RollbackRequest::new(unsigned_psbt, who, rollback_txid, vout, vault, amount),
@@ -859,6 +864,11 @@ pub mod pallet {
 				},
 			}
 			<ExecutedRequests<T>>::remove(old_txid);
+
+			// remove submitted utxos from BLAZE
+			if T::Blaze::is_activated() {
+				T::Blaze::prune_utxos_used_in_psbt(&new_psbt_obj);
+			}
 
 			// insert to PendingRequests
 			<PendingRequests<T>>::insert(
