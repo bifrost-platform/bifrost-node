@@ -1,28 +1,23 @@
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
-	Address, AddressState, Descriptor, FromSliceError as KeyError, MigrationSequence,
-	MultiSigAccount, Network, PublicKey, UnboundedBytes,
+	traits::PoolManager, Address, AddressState, Descriptor, FromSliceError as KeyError,
+	MigrationSequence, MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
-use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
 use sp_core::{Get, H256};
-use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::{Block, Header, Verify},
+	traits::Verify,
 	transaction_validity::{
 		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 	},
 	BoundedVec, DispatchError,
 };
-use sp_std::{fmt::Display, str, str::FromStr, vec::Vec};
+use sp_std::{str, str::FromStr, vec::Vec};
 
-use crate::{
-	BoundedBitcoinAddress, Public, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission,
-};
+use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
 
 use super::pallet::*;
 
@@ -131,43 +126,49 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		});
 	}
 
-	fn get_pending_set_refunds() -> Vec<(T::AccountId, BoundedBitcoinAddress)> {
-		<PendingSetRefunds<T>>::iter_prefix(CurrentRound::<T>::get())
-			.map(|(who, state)| (who, state.new))
-			.collect::<Vec<_>>()
-	}
+	fn process_set_refunds() {
+		let round = <CurrentRound<T>>::get();
+		<PendingSetRefunds<T>>::iter_prefix(round).for_each(|(who, state)| {
+			let new = state.new;
+			if !<BondedVault<T>>::contains_key(round, &new) {
+				match <RegistrationPool<T>>::get(round, &who) {
+					Some(mut relay_target) => {
+						// remove from previous bond
+						<BondedRefund<T>>::mutate(round, &relay_target.refund_address, |users| {
+							users.retain(|u| *u != who);
+						});
+						// add to new bond
+						<BondedRefund<T>>::mutate(round, &new, |users| {
+							users.push(who.clone());
+						});
 
-	fn try_approve_set_refund(
-		who: &T::AccountId,
-		new: &BoundedBitcoinAddress,
-	) -> Result<(), DispatchError> {
-		let round = CurrentRound::<T>::get();
-		// check if the new refund address is already bonded as a vault
-		// if it is, then we just remove the pending refund set and do nothing
-		if !<BondedVault<T>>::contains_key(round, new) {
-			let mut relay_target =
-				<RegistrationPool<T>>::get(round, who).ok_or(Error::<T>::UserDNE)?;
-			// remove from previous bond
-			let old = relay_target.refund_address.clone();
-			<BondedRefund<T>>::mutate(round, &old, |users| {
-				users.retain(|u| *u != *who);
-			});
-			// add to new bond
-			<BondedRefund<T>>::mutate(round, new, |users| {
-				users.push(who.clone());
-			});
+						relay_target.set_refund_address(new.clone());
+						<RegistrationPool<T>>::insert(round, &who, relay_target);
 
-			relay_target.set_refund_address(new.clone());
-			<RegistrationPool<T>>::insert(round, who, relay_target);
+						Self::deposit_event(Event::RefundSetApproved {
+							who: who.clone(),
+							old: state.old,
+							new: new.clone(),
+						});
+					},
+					None => {
+						Self::deposit_event(Event::RefundSetDenied {
+							who: who.clone(),
+							old: state.old,
+							new: new.clone(),
+						});
+					},
+				}
+			} else {
+				Self::deposit_event(Event::RefundSetDenied {
+					who: who.clone(),
+					old: state.old,
+					new: new.clone(),
+				});
+			}
+		});
 
-			Self::deposit_event(Event::RefundSetApproved {
-				who: who.clone(),
-				old,
-				new: new.clone(),
-			});
-		}
-		<PendingSetRefunds<T>>::remove(round, who);
-		Ok(())
+		let _ = <PendingSetRefunds<T>>::clear_prefix(round, u32::MAX, None);
 	}
 }
 
@@ -327,53 +328,6 @@ impl<T: Config> Pallet<T> {
 		ValidTransaction::with_tag_prefix("KeyPreSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides((authority_id, pub_keys))
-			.propagate(true)
-			.build()
-	}
-
-	/// Verifies the refund set approval signature.
-	pub fn verify_set_refunds_approval(
-		approval: &SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
-		signature: &T::Signature,
-	) -> TransactionValidity
-	where
-		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
-		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
-	{
-		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
-
-		// verify if the authority matches with the `SocketQueue::Authority`.
-		T::SocketQueue::verify_authority(authority_id)?;
-
-		// verify if the deadline is not expired.
-		let now = <frame_system::Pallet<T>>::block_number();
-		if now > *deadline {
-			return Err(InvalidTransaction::Stale.into());
-		}
-
-		// verify if the signature was originated from the authority.
-		let message = [
-			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
-			format!(
-				"{}:{}:{}",
-				pool_round,
-				deadline,
-				refund_sets
-					.into_iter()
-					.map(|x| hex::encode(x.0.clone()))
-					.collect::<Vec<String>>()
-					.concat()
-			)
-			.as_bytes(),
-		]
-		.concat();
-		if !signature.verify(&*message, &authority_id) {
-			return Err(InvalidTransaction::BadProof.into());
-		}
-
-		ValidTransaction::with_tag_prefix("SetRefundsApproval")
-			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, refund_sets))
 			.propagate(true)
 			.build()
 	}

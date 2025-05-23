@@ -49,14 +49,8 @@ pub trait PoolManager<AccountId> {
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
 
-	/// Get the pending set refunds.
-	fn get_pending_set_refunds() -> Vec<(AccountId, BoundedBitcoinAddress)>;
-
-	/// Try to approve a pending set refund.
-	fn try_approve_set_refund(
-		who: &AccountId,
-		new: &BoundedBitcoinAddress,
-	) -> Result<(), DispatchError>;
+	/// Process the pending set refunds.
+	fn process_set_refunds();
 }
 
 pub trait SocketQueueManager<AccountId> {

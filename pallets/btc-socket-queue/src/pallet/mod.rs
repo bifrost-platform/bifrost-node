@@ -233,18 +233,12 @@ pub mod pallet {
 
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			let weight = Weight::from_parts(0, 0); // TODO: add weight
+
+			T::RegistrationPool::process_set_refunds();
+
 			if T::Blaze::is_activated()
 				&& matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
 			{
-				// approve pending refund address updates
-				let pending_set_refunds = T::RegistrationPool::get_pending_set_refunds();
-				if !pending_set_refunds.is_empty() {
-					for (who, new) in pending_set_refunds {
-						// never panics - relay target always exists (checked in the registration pool)
-						T::RegistrationPool::try_approve_set_refund(&who, &new).unwrap();
-					}
-				}
-
 				if let Some((long_term_fee_rate, fee_rate)) = T::Blaze::try_fee_rate_finalization(n)
 				{
 					let outbound_pool = T::Blaze::get_outbound_pool();
