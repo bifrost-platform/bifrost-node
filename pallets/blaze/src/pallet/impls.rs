@@ -1,7 +1,7 @@
 use super::pallet::*;
 use crate::{BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
 use bp_btc_relay::{
-	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
 	traits::BlazeManager,
 	UnboundedBytes,
 };
@@ -12,7 +12,7 @@ use frame_support::pallet_prelude::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use parity_scale_codec::Encode;
 use scale_info::prelude::{format, string::String};
-use sp_core::H256;
+use sp_core::{Get, H256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, Verify};
 use sp_std::{fmt::Display, vec, vec::Vec};
@@ -24,6 +24,10 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 
 	fn get_utxos() -> Vec<UtxoInfoWithSize> {
 		<Utxos<T>>::iter().map(|(_, utxo)| utxo.inner).collect()
+	}
+
+	fn clear_utxos() {
+		let _ = <Utxos<T>>::clear(u32::MAX, None);
 	}
 
 	fn get_outbound_pool() -> Vec<UnboundedBytes> {
@@ -86,6 +90,21 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		) {
 			Some(selected) => Some(selected),
 			None => Self::select_coins_knapsack(pool, target, change_target, max_selection_weight),
+		}
+	}
+
+	fn try_deactivation(reason: FailureReason) {
+		let next_counter = <ToleranceCounter<T>>::get() + 1;
+		Self::deposit_event(Event::CounterIncreased {
+			counter: next_counter,
+			failure_reason: reason,
+		});
+		if next_counter >= T::ToleranceThreshold::get() {
+			<IsActivated<T>>::put(false);
+			<ToleranceCounter<T>>::put(0);
+			Self::deposit_event(Event::ActivationSet { is_activated: false });
+		} else {
+			<ToleranceCounter<T>>::put(next_counter);
 		}
 	}
 }

@@ -8,7 +8,7 @@ use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
 use sp_std::vec::Vec;
 
 use crate::{
-	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
 	BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
 
@@ -85,6 +85,9 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Get Utxos
 	fn get_utxos() -> Vec<UtxoInfoWithSize>;
 
+	/// Clear the utxos.
+	fn clear_utxos();
+
 	/// Read the outbound pool.
 	fn get_outbound_pool() -> Vec<UnboundedBytes>;
 
@@ -106,4 +109,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 		max_tries: usize,
 		change_target: u64,
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)>;
+
+	/// Check the tolerance counter. If it exceeds the threshold, BLAZE will be deactivated.
+	fn try_deactivation(reason: FailureReason);
 }
