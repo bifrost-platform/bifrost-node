@@ -308,6 +308,8 @@ pub mod pallet {
 								);
 								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
+								// unwrap is safe here because the selected utxos always exist
+								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
 							},
 							_ => {
 								T::Blaze::try_deactivation(FailureReason::PsbtComposition);
@@ -627,7 +629,9 @@ pub mod pallet {
 
 			// remove submitted utxos from BLAZE
 			if T::Blaze::is_activated() {
-				T::Blaze::prune_utxos_used_in_psbt(&psbt_obj);
+				// lock the utxos used in the new PSBT
+				let inputs = T::Blaze::extract_utxos_from_psbt(&psbt_obj)?;
+				T::Blaze::lock_utxos(&psbt_txid, &inputs)?;
 			}
 
 			<RollbackRequests<T>>::insert(
@@ -859,11 +863,13 @@ pub mod pallet {
 			}
 			<ExecutedRequests<T>>::remove(old_txid);
 
-			// remove submitted utxos from BLAZE
 			if T::Blaze::is_activated() {
-				T::Blaze::prune_utxos_used_in_psbt(&new_psbt_obj);
+				// lock the utxos used in the new PSBT
+				let inputs = T::Blaze::extract_utxos_from_psbt(&new_psbt_obj)?;
+				T::Blaze::lock_utxos(&new_txid, &inputs)?;
 			}
 
+			// TODO: check if previous PendingRequest/PendingTxs should be removed (bc txid changed)
 			// insert to PendingRequests
 			<PendingRequests<T>>::insert(
 				&new_txid,
@@ -897,6 +903,10 @@ pub mod pallet {
 			ensure!(!pending_request.is_approved, Error::<T>::RequestDNE);
 
 			<RollbackRequests<T>>::remove(&txid);
+
+			if T::Blaze::is_activated() {
+				T::Blaze::unlock_utxos(&txid)?;
+			}
 
 			Ok(().into())
 		}

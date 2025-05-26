@@ -24,6 +24,8 @@ pub enum UtxoStatus {
 	Unconfirmed,
 	/// The UTXO is available.
 	Available,
+	/// The UTXO is locked to a PSBT.
+	Locked,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
@@ -41,7 +43,7 @@ pub struct Utxo<AccountId> {
 /// A bundle of TXOs with their voters.
 pub struct BTCTransaction<AccountId> {
 	/// Bundled and sorted UTXO hashes.
-	pub inputs: Vec<UtxoInfo>,
+	pub inputs: Vec<UtxoInfoWithSize>,
 	/// Voters of the UTXOs.
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
