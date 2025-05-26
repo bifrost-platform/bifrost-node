@@ -866,12 +866,14 @@ pub mod pallet {
 			<ExecutedRequests<T>>::remove(old_txid);
 
 			if T::Blaze::is_activated() {
+				// unlock the utxos used in the old PSBT
+				T::Blaze::unlock_utxos(&old_txid)?;
+
 				// lock the utxos used in the new PSBT
 				let inputs = T::Blaze::extract_utxos_from_psbt(&new_psbt_obj)?;
 				T::Blaze::lock_utxos(&new_txid, &inputs)?;
 			}
 
-			// TODO: check if previous PendingRequest/PendingTxs should be removed (bc txid changed)
 			// insert to PendingRequests
 			<PendingRequests<T>>::insert(
 				&new_txid,
