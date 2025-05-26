@@ -629,9 +629,8 @@ pub mod pallet {
 				return Err(Error::<T>::InvalidPsbt.into());
 			}
 
-			// remove submitted utxos from BLAZE
 			if T::Blaze::is_activated() {
-				// lock the utxos used in the new PSBT
+				// lock the utxos used in the rollback PSBT
 				let inputs = T::Blaze::extract_utxos_from_psbt(&psbt_obj)?;
 				T::Blaze::lock_utxos(&psbt_txid, &inputs)?;
 			}

@@ -76,16 +76,16 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Check if BLAZE is activated.
 	fn is_activated() -> bool;
 
-	/// Get Utxos
+	/// Get all available utxos.
 	fn get_utxos() -> Vec<UtxoInfoWithSize>;
 
-	/// Clear the utxos.
+	/// Clear all utxos.
 	fn clear_utxos();
 
-	/// Lock the utxos.
+	/// Lock the given utxos (=inputs of a PSBT).
 	fn lock_utxos(txid: &H256, inputs: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError>;
 
-	/// Unlock the utxos.
+	/// Unlock the included utxos of the given transaction.
 	fn unlock_utxos(txid: &H256) -> Result<(), DispatchError>;
 
 	/// Extract the utxos from the given PSBT.
