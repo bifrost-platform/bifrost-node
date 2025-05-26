@@ -19,6 +19,8 @@ pub struct UtxoInfo {
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The information of a UTXO. (with size & script)
 pub struct UtxoInfoWithSize {
+	/// The UTXO hash.
+	pub hash: H256,
 	/// The txid of the UTXO.
 	pub txid: H256,
 	/// The vout (output index) of the UTXO.

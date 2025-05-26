@@ -1,5 +1,8 @@
 use super::pallet::*;
-use crate::{BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoSubmission};
+use crate::{
+	BTCTransaction, BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoStatus,
+	UtxoSubmission,
+};
 use bp_btc_relay::{
 	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
 	traits::BlazeManager,
@@ -14,7 +17,10 @@ use parity_scale_codec::Encode;
 use scale_info::prelude::{format, string::String};
 use sp_core::{Get, H256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::traits::{Block, Header, Verify};
+use sp_runtime::{
+	traits::{Block, Header, Verify},
+	BoundedVec, DispatchError,
+};
 use sp_std::{fmt::Display, vec, vec::Vec};
 
 impl<T: Config> BlazeManager<T> for Pallet<T> {
@@ -23,15 +29,60 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 	}
 
 	fn get_utxos() -> Vec<UtxoInfoWithSize> {
-		<Utxos<T>>::iter().map(|(_, utxo)| utxo.inner).collect()
+		<Utxos<T>>::iter()
+			.filter_map(
+				|(_, utxo)| {
+					if utxo.status == UtxoStatus::Available {
+						Some(utxo.inner)
+					} else {
+						None
+					}
+				},
+			)
+			.collect()
 	}
 
 	fn clear_utxos() {
 		let _ = <Utxos<T>>::clear(u32::MAX, None);
 	}
 
-	fn prune_utxos_used_in_psbt(psbt: &Psbt) {
-		let mut hashes = vec![];
+	fn lock_utxos(txid: &H256, inputs: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError> {
+		for input in inputs {
+			match <Utxos<T>>::get(&input.hash) {
+				Some(mut utxo) => {
+					utxo.status = UtxoStatus::Locked;
+					<Utxos<T>>::insert(input.hash, utxo);
+				},
+				None => return Err(Error::<T>::UtxoDNE.into()),
+			}
+		}
+		<PendingTxs<T>>::insert(
+			txid,
+			BTCTransaction { inputs: inputs.clone(), voters: BoundedVec::default() },
+		);
+		Ok(())
+	}
+
+	fn unlock_utxos(txid: &H256) -> Result<(), DispatchError> {
+		match <PendingTxs<T>>::take(txid) {
+			Some(tx) => {
+				for input in &tx.inputs {
+					match <Utxos<T>>::get(&input.hash) {
+						Some(mut utxo) => {
+							utxo.status = UtxoStatus::Available;
+							<Utxos<T>>::insert(input.hash, utxo);
+						},
+						None => return Err(Error::<T>::UtxoDNE.into()),
+					}
+				}
+			},
+			None => return Err(Error::<T>::UnknownTransaction.into()),
+		};
+		Ok(())
+	}
+
+	fn extract_utxos_from_psbt(psbt: &Psbt) -> Result<Vec<UtxoInfoWithSize>, DispatchError> {
+		let mut inputs = vec![];
 		for (i, input) in psbt.inputs.iter().enumerate() {
 			let txin = &psbt.unsigned_tx.input[i];
 			let mut txid = txin.previous_output.txid.as_byte_array().clone();
@@ -46,14 +97,18 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 				unreachable!()
 			};
 
-			hashes.push(H256::from_slice(
+			let hash = H256::from_slice(
 				keccak_256(&Encode::encode(&(H256::from(txid), vout as u32, amount.to_sat())))
 					.as_ref(),
-			));
+			);
+			match <Utxos<T>>::get(&hash) {
+				Some(utxo) => inputs.push(utxo.inner.clone()),
+				None => {
+					return Err(Error::<T>::UtxoDNE.into());
+				},
+			}
 		}
-		hashes.iter().for_each(|hash| {
-			<Utxos<T>>::remove(hash);
-		});
+		Ok(inputs)
 	}
 
 	fn get_outbound_pool() -> Vec<UnboundedBytes> {

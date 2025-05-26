@@ -65,6 +65,8 @@ pub mod pallet {
 		UnknownUtxo,
 		/// The txid is unknown.
 		UnknownTransaction,
+		/// The utxo does not exist.
+		UtxoDNE,
 		/// The utxo(s) are already spent.
 		AlreadySpent,
 		/// The authority has already voted.
@@ -229,6 +231,7 @@ pub mod pallet {
 						&utxo_hash,
 						Utxo {
 							inner: UtxoInfoWithSize {
+								hash: utxo_hash,
 								txid,
 								vout,
 								amount,
@@ -274,6 +277,11 @@ pub mod pallet {
 
 				<ExecutedRequests<T>>::mutate(|requests| {
 					requests.push(txid);
+				});
+
+				// remove spent utxos
+				pending_txs.inputs.iter().for_each(|input| {
+					<Utxos<T>>::remove(&input.hash);
 				});
 			} else {
 				<PendingTxs<T>>::insert(&txid, pending_txs.clone());

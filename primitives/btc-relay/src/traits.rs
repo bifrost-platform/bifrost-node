@@ -82,8 +82,14 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Clear the utxos.
 	fn clear_utxos();
 
-	/// Prune the utxos used in the given PSBT.
-	fn prune_utxos_used_in_psbt(psbt: &Psbt);
+	/// Lock the utxos.
+	fn lock_utxos(txid: &H256, inputs: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError>;
+
+	/// Unlock the utxos.
+	fn unlock_utxos(txid: &H256) -> Result<(), DispatchError>;
+
+	/// Extract the utxos from the given PSBT.
+	fn extract_utxos_from_psbt(psbt: &Psbt) -> Result<Vec<UtxoInfoWithSize>, DispatchError>;
 
 	/// Read the outbound pool.
 	fn get_outbound_pool() -> Vec<UnboundedBytes>;
