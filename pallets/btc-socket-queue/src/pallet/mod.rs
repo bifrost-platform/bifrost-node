@@ -516,6 +516,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			T::Blaze::ensure_activation(false)?;
 
 			let ExecutedPsbtMessage { txid, .. } = msg;
 
