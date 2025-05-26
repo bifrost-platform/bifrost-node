@@ -10,7 +10,7 @@ use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
 	blaze::{FailureReason, UtxoInfo, UtxoInfoWithSize},
-	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
 	utils::estimate_finalized_input_size,
 	UnboundedBytes,
 };
@@ -79,6 +79,8 @@ pub mod pallet {
 		OutOfRange,
 		/// Cannot set the value as identical to the previous value
 		NoWritingSameValue,
+		/// The activation status is invalid.
+		InvalidActivationState,
 	}
 
 	#[pallet::event]
@@ -186,6 +188,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			Self::ensure_activation(true)?;
 
 			let UtxoSubmission { authority_id, utxos } = utxo_submission;
 			ensure!(!utxos.is_empty(), Error::<T>::EmptySubmission);
@@ -258,6 +261,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			Self::ensure_activation(true)?;
 
 			let BroadcastSubmission { authority_id, txid } = broadcast_submission;
 			ensure!(!<ConfirmedTxs<T>>::contains_key(&txid), Error::<T>::AlreadySpent);
@@ -298,6 +302,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			Self::ensure_activation(true)?;
 
 			let FeeRateSubmission { authority_id, lt_fee_rate, fee_rate, .. } = fee_rate_submission;
 
@@ -331,6 +336,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			// we allow submission even if BLAZE is deactivated
 
 			let OutboundRequestSubmission { messages, .. } = outbound_request_submission;
 			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
