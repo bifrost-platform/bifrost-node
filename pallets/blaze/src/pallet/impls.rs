@@ -9,6 +9,7 @@ use bp_btc_relay::{
 	Hash, Psbt, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
+use frame_support::ensure;
 use frame_support::pallet_prelude::{
 	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 };
@@ -187,6 +188,11 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		} else {
 			<ToleranceCounter<T>>::put(next_counter);
 		}
+	}
+
+	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError> {
+		ensure!(Self::is_activated() == is_activated, Error::<T>::InvalidActivationState);
+		Ok(())
 	}
 }
 

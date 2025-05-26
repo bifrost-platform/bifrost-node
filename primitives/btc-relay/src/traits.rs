@@ -115,4 +115,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Check the tolerance counter. If it exceeds the threshold, BLAZE will be deactivated.
 	fn try_deactivation(reason: FailureReason);
+
+	/// Ensure the activation status.
+	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
 }
