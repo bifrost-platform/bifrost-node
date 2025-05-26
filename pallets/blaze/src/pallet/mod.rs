@@ -357,6 +357,63 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Force push UTXOs. The submitted UTXOs will be available immediately.
+		pub fn force_push_utxos(
+			origin: OriginFor<T>,
+			utxos: Vec<UtxoInfo>,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			// This function is only available when BLAZE is deactivated.
+			// After successfully pushing the utxos, call `set_activation` manually to activate BLAZE.
+			Self::ensure_activation(false)?;
+
+			ensure!(!utxos.is_empty(), Error::<T>::EmptySubmission);
+			for utxo in utxos {
+				let UtxoInfo { txid, vout, amount, address } = utxo;
+
+				let descriptor = match T::RegistrationPool::get_bonded_descriptor(&address) {
+					Some(descriptor) => descriptor,
+					None => continue,
+				};
+
+				// try to hash (keccak256) the utxo data (txid, vout, amount)
+				let utxo_hash =
+					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
+
+				if <Utxos<T>>::contains_key(&utxo_hash) {
+					// if duplicate utxo is found, skip
+					continue;
+				}
+				let input_vbytes = if let Some(input_vbytes) =
+					estimate_finalized_input_size(&descriptor.script_pubkey(), None)
+				{
+					input_vbytes
+				} else {
+					continue;
+				};
+				<Utxos<T>>::insert(
+					&utxo_hash,
+					Utxo {
+						inner: UtxoInfoWithSize {
+							hash: utxo_hash,
+							txid,
+							vout,
+							amount,
+							descriptor: descriptor.to_string(),
+							input_vbytes,
+						},
+						status: UtxoStatus::Available,
+						voters: BoundedVec::default(),
+					},
+				);
+			}
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
