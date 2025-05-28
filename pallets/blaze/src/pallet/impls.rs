@@ -4,7 +4,7 @@ use crate::{
 	UtxoSubmission,
 };
 use bp_btc_relay::{
-	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
 	traits::BlazeManager,
 	Hash, Psbt, UnboundedBytes,
 };
@@ -130,6 +130,7 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		let mut submitted_fee_rates = <FeeRates<T>>::get();
 		// remove expired fee rates
 		submitted_fee_rates.retain(|_, (_, _, expires_at)| n <= *expires_at);
+		<FeeRates<T>>::put(submitted_fee_rates.clone());
 
 		// check majority
 		if submitted_fee_rates.len() as u32 >= T::Relayers::majority() {
@@ -175,18 +176,20 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		}
 	}
 
-	fn try_deactivation(reason: FailureReason) {
-		let next_counter = <ToleranceCounter<T>>::get() + 1;
-		Self::deposit_event(Event::CounterIncreased {
-			counter: next_counter,
-			failure_reason: reason,
-		});
-		if next_counter >= T::ToleranceThreshold::get() {
+	fn handle_tolerance_counter(is_increase: bool) {
+		let current_counter = <ToleranceCounter<T>>::get();
+		let next_counter = if is_increase {
+			current_counter.saturating_add(1)
+		} else {
+			current_counter.saturating_sub(1)
+		};
+		if next_counter > T::ToleranceThreshold::get() {
 			<IsActivated<T>>::put(false);
 			<ToleranceCounter<T>>::put(0);
 			Self::deposit_event(Event::ActivationSet { is_activated: false });
-		} else {
+		} else if current_counter != next_counter {
 			<ToleranceCounter<T>>::put(next_counter);
+			Self::deposit_event(Event::ToleranceCounterUpdated { new: next_counter });
 		}
 	}
 

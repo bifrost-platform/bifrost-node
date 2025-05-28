@@ -8,7 +8,7 @@ use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
 use sp_std::vec::Vec;
 
 use crate::{
-	blaze::{FailureReason, ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
 	BoundedBitcoinAddress, MigrationSequence, Psbt, UnboundedBytes,
 };
 
@@ -114,7 +114,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)>;
 
 	/// Check the tolerance counter. If it exceeds the threshold, BLAZE will be deactivated.
-	fn try_deactivation(reason: FailureReason);
+	fn handle_tolerance_counter(is_increase: bool);
 
 	/// Ensure the activation status.
 	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
