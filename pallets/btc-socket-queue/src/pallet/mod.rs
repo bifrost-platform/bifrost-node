@@ -13,7 +13,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	blaze::{FailureReason, ScoredUtxo},
+	blaze::ScoredUtxo,
 	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
@@ -255,7 +255,7 @@ pub mod pallet {
 						let blaze_vault_sum = utxos.iter().map(|x| x.amount).sum::<u64>();
 
 						if outbound_amount_sum >= blaze_vault_sum {
-							T::Blaze::try_deactivation(FailureReason::InsufficientFunds);
+							T::Blaze::handle_tolerance_counter(true);
 							return weight;
 						}
 
@@ -285,7 +285,7 @@ pub mod pallet {
 						) {
 							Some(utxos) => utxos,
 							None => {
-								T::Blaze::try_deactivation(FailureReason::CoinSelection);
+								T::Blaze::handle_tolerance_counter(true);
 								return weight;
 							},
 						};
@@ -312,9 +312,10 @@ pub mod pallet {
 								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
 
 								weight += <T as pallet::pallet::Config>::WeightInfo::psbt_composition_on_initialize();
+								T::Blaze::handle_tolerance_counter(false);
 							},
 							_ => {
-								T::Blaze::try_deactivation(FailureReason::PsbtComposition);
+								T::Blaze::handle_tolerance_counter(true);
 								return weight;
 							},
 						};

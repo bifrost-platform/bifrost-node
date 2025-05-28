@@ -9,7 +9,7 @@ use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	blaze::{FailureReason, UtxoInfo, UtxoInfoWithSize},
+	blaze::{UtxoInfo, UtxoInfoWithSize},
 	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
 	utils::estimate_finalized_input_size,
 	UnboundedBytes,
@@ -88,8 +88,8 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// The activation status has been set.
 		ActivationSet { is_activated: bool },
-		/// The deactivation counter has been increased.
-		CounterIncreased { counter: u32, failure_reason: FailureReason },
+		/// The tolerance counter has been updated.
+		ToleranceCounterUpdated { new: u32 },
 	}
 
 	#[pallet::genesis_config]

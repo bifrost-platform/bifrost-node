@@ -46,10 +46,3 @@ pub enum SelectionStrategy {
 	Bnb,
 	Knapsack,
 }
-
-#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum FailureReason {
-	InsufficientFunds,
-	CoinSelection,
-	PsbtComposition,
-}
