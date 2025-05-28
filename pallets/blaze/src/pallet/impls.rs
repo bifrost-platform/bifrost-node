@@ -566,4 +566,29 @@ impl<T: Config> Pallet<T> {
 			.propagate(true)
 			.build()
 	}
+
+	pub fn verify_remove_outbound_messages(
+		remove_submission: &SocketMessagesSubmission<T::AccountId>,
+		signature: &T::Signature,
+	) -> TransactionValidity {
+		let SocketMessagesSubmission { authority_id, messages } = remove_submission;
+
+		// verify if the authority is psbt manager.
+		T::SocketQueue::verify_authority(authority_id)?;
+
+		// verify if the signature was originated from psbt manager.
+		let message = messages
+			.iter()
+			.map(|x| array_bytes::bytes2hex("0x", x))
+			.collect::<Vec<String>>()
+			.concat();
+
+		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
+
+		ValidTransaction::with_tag_prefix("RemoveOutboundMessagesSubmission")
+			.priority(TransactionPriority::MAX)
+			.and_provides(authority_id)
+			.propagate(true)
+			.build()
+	}
 }
