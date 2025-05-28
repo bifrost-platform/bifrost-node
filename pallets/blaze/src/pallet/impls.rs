@@ -1,17 +1,19 @@
 use super::pallet::*;
 use crate::{
-	BTCTransaction, BroadcastSubmission, FeeRateSubmission, OutboundRequestSubmission, UtxoStatus,
+	BTCTransaction, BroadcastSubmission, FeeRateSubmission, SocketMessagesSubmission, UtxoStatus,
 	UtxoSubmission,
 };
 use bp_btc_relay::{
 	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
-	traits::BlazeManager,
+	traits::{BlazeManager, SocketQueueManager},
 	Hash, Psbt, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
-use frame_support::ensure;
-use frame_support::pallet_prelude::{
-	InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
+use frame_support::{
+	ensure,
+	pallet_prelude::{
+		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
+	},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use parity_scale_codec::Encode;
@@ -495,26 +497,48 @@ impl<T: Config> Pallet<T> {
 
 	/// Verify an outbound requests submission.
 	pub fn verify_submit_outbound_requests(
-		outbound_request_submission: &OutboundRequestSubmission<T::AccountId>,
+		outbound_request_submission: &SocketMessagesSubmission<T::AccountId>,
 		signature: &T::Signature,
 	) -> TransactionValidity {
-		let OutboundRequestSubmission { authority_id, messages } = outbound_request_submission;
+		let SocketMessagesSubmission { authority_id, messages } = outbound_request_submission;
 
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;
 
 		// verify if the signature was originated from the authority.
-		let message = format!(
-			"{}",
-			messages
-				.iter()
-				.map(|x| array_bytes::bytes2hex("0x", x))
-				.collect::<Vec<String>>()
-				.concat()
-		);
+		let message = messages
+			.iter()
+			.map(|x| array_bytes::bytes2hex("0x", x))
+			.collect::<Vec<String>>()
+			.concat();
 		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("OutboundRequestSubmission")
+			.priority(TransactionPriority::MAX)
+			.and_provides(authority_id)
+			.propagate(true)
+			.build()
+	}
+
+	pub fn verify_remove_outbound_messages(
+		remove_submission: &SocketMessagesSubmission<T::AccountId>,
+		signature: &T::Signature,
+	) -> TransactionValidity {
+		let SocketMessagesSubmission { authority_id, messages } = remove_submission;
+
+		// verify if the authority is psbt manager.
+		T::SocketQueue::verify_authority(authority_id)?;
+
+		// verify if the signature was originated from psbt manager.
+		let message = messages
+			.iter()
+			.map(|x| array_bytes::bytes2hex("0x", x))
+			.collect::<Vec<String>>()
+			.concat();
+
+		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
+
+		ValidTransaction::with_tag_prefix("RemoveOutboundMessagesSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides(authority_id)
 			.propagate(true)

@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
-	OutboundRequestSubmission, Utxo, UtxoStatus, UtxoSubmission,
+	SocketMessagesSubmission, Utxo, UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -332,13 +332,13 @@ pub mod pallet {
 		/// Submit Socket messages originated from a Bitcoin outbound request.
 		pub fn submit_outbound_requests(
 			origin: OriginFor<T>,
-			outbound_request_submission: OutboundRequestSubmission<T::AccountId>,
+			outbound_request_submission: SocketMessagesSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 			// we allow submission even if BLAZE is deactivated
 
-			let OutboundRequestSubmission { messages, .. } = outbound_request_submission;
+			let SocketMessagesSubmission { messages, .. } = outbound_request_submission;
 			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
 
 			let mut pool = <OutboundPool<T>>::get();
@@ -414,6 +414,26 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Remove outbound messages from the OutboundPool.
+		/// Note: This call is only available when BLAZE is deactivated.
+		pub fn remove_outbound_messages(
+			origin: OriginFor<T>,
+			remove_submission: SocketMessagesSubmission<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+			Self::ensure_activation(false)?;
+
+			ensure!(!remove_submission.messages.is_empty(), Error::<T>::EmptySubmission);
+
+			// remove messages from OutboundPool
+			Self::clear_outbound_pool(remove_submission.messages);
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -436,6 +456,9 @@ pub mod pallet {
 				},
 				Call::submit_outbound_requests { outbound_request_submission, signature } => {
 					Self::verify_submit_outbound_requests(outbound_request_submission, signature)
+				},
+				Call::remove_outbound_messages { remove_submission, signature } => {
+					Self::verify_remove_outbound_messages(remove_submission, signature)
 				},
 				_ => InvalidTransaction::Call.into(),
 			}

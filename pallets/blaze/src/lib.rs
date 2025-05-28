@@ -80,8 +80,8 @@ pub struct FeeRateSubmission<AccountId, BlockNumber> {
 }
 
 #[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-/// A submission of Socket messages originated from a Bitcoin outbound request.
-pub struct OutboundRequestSubmission<AccountId> {
+/// A submission of Socket messages.
+pub struct SocketMessagesSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
 	/// The Socket messages.

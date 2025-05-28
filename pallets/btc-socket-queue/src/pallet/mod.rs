@@ -232,7 +232,7 @@ pub mod pallet {
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-			let mut weight = <T as pallet::pallet::Config>::WeightInfo::base_on_initialize();
+			let mut weight = <T as Config>::WeightInfo::base_on_initialize();
 
 			T::RegistrationPool::process_set_refunds();
 
@@ -311,7 +311,7 @@ pub mod pallet {
 								// unwrap is safe here because the selected utxos always exist
 								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
 
-								weight += <T as pallet::pallet::Config>::WeightInfo::psbt_composition_on_initialize();
+								weight += <T as Config>::WeightInfo::psbt_composition_on_initialize();
 								T::Blaze::handle_tolerance_counter(false);
 							},
 							_ => {
