@@ -428,12 +428,15 @@ where
 			})
 			.collect::<Vec<_>>();
 
-		let mut output = outbound_requests
-			.iter()
-			.map(|x| {
-				let value = Amount::from_sat(x.0.params.amount.as_u64());
-				TxOut { value, script_pubkey: x.1.clone() }
-			})
+		let mut merged_output = BTreeMap::default();
+		for x in outbound_requests.iter() {
+			let value = Amount::from_sat(x.0.params.amount.as_u64());
+			let script_pubkey = x.1.clone();
+			*merged_output.entry(script_pubkey).or_insert(Amount::ZERO) += value;
+		}
+		let mut output = merged_output
+			.into_iter()
+			.map(|(script_pubkey, value)| TxOut { value, script_pubkey })
 			.collect::<Vec<_>>();
 		if selection_strategy == SelectionStrategy::Knapsack {
 			let input_sum = selected_utxos.iter().map(|x| x.amount).sum::<u64>();
