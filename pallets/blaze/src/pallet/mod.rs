@@ -174,6 +174,12 @@ pub mod pallet {
 			ensure_root(origin)?;
 			let current = <IsActivated<T>>::get();
 			ensure!(current != is_activated, Error::<T>::NoWritingSameValue);
+
+			if is_activated {
+				// clear all pending transactions
+				let _ = <PendingTxs<T>>::clear(u32::MAX, None);
+			}
+
 			<IsActivated<T>>::put(is_activated);
 			Self::deposit_event(Event::ActivationSet { is_activated });
 			Ok(().into())
@@ -372,6 +378,8 @@ pub mod pallet {
 			Self::ensure_activation(false)?;
 
 			ensure!(!utxos.is_empty(), Error::<T>::EmptySubmission);
+
+			Self::clear_utxos();
 			for utxo in utxos {
 				let UtxoInfo { txid, vout, amount, address } = utxo;
 
