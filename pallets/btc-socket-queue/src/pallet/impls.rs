@@ -1,14 +1,26 @@
+use super::pallet::*;
 use crate::{
 	HashKeyRequest, RequestInfo, RequestType, SocketMessage, TxInfo, UserRequest,
 	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
+	blaze::{SelectionStrategy, UtxoInfoWithSize},
+	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	utils::estimate_finalized_input_size,
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
 use ethabi_decode::{ParamKind, Token};
 use frame_support::ensure;
-use miniscript::bitcoin::{opcodes, psbt, script::Instruction, TxIn, Weight as BitcoinWeight};
+use miniscript::{
+	bitcoin::{
+		absolute::LockTime,
+		bip32::{DerivationPath, Fingerprint},
+		psbt::{Input, Output},
+		transaction::Version,
+		Amount, OutPoint, PublicKey, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+	},
+	Descriptor, ForEachKey,
+};
 use pallet_evm::Runner;
 use scale_info::prelude::{format, string::ToString};
 use sp_core::{Get, H160, H256, U256};
@@ -19,7 +31,42 @@ use sp_runtime::{
 };
 use sp_std::{boxed::Box, collections::btree_map::BTreeMap, str, str::FromStr, vec, vec::Vec};
 
-use super::pallet::*;
+impl<T: Config> SocketVerifier<T::AccountId> for Pallet<T>
+where
+	T: Config,
+	T::AccountId: Into<H160>,
+	H160: Into<T::AccountId>,
+{
+	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError> {
+		// the bytes should be a valid socket message
+		let msg =
+			Self::try_decode_socket_message(msg).map_err(|_| Error::<T>::InvalidSocketMessage)?;
+		// the socket message should be valid onchain
+		let msg_hash =
+			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
+		let request_info = Self::try_get_request(&msg.encode_req_id())?;
+		// the socket message should be valid
+		if !request_info.is_msg_hash(msg_hash) {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		// the socket message should be accepted
+		if !request_info.is_accepted() || !msg.is_accepted() {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		// the socket message should be outbound
+		if !msg.is_outbound(
+			<T as pallet_evm::Config>::ChainId::get() as u32,
+			T::RegistrationPool::get_bitcoin_chain_id(),
+		) {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
+		// the socket message should not be submitted yet
+		if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
+			return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
+		}
+		Ok(())
+	}
+}
 
 impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 	fn is_ready_for_migrate() -> bool {
@@ -56,6 +103,10 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 				request.replace_authority(old, new);
 			}
 		});
+	}
+
+	fn get_max_fee_rate() -> u64 {
+		<MaxFeeRate<T>>::get()
 	}
 }
 
@@ -99,67 +150,17 @@ where
 			.assume_checked())
 	}
 
-	/// Parse the witness script for extract m and n for m-of-n multisig.
-	/// return None if the script is not a valid multisig script.
-	fn parse_multisig_script(script: &Script) -> Option<(usize, usize)> {
-		let instructions = script.instructions().collect::<Vec<_>>();
-
-		if instructions.len() < 3 {
-			return None; // Not enough instructions for multisig
-		}
-
-		// First instruction should be the number of required signatures (m)
-		let m = match instructions[0] {
-			Ok(Instruction::Op(op)) if op.to_u8() >= 0x51 && op.to_u8() <= 0x60 => {
-				(op.to_u8() - 0x51 + 1) as usize
-			},
-			_ => return None, // Not a valid multisig script
-		};
-
-		// Last instruction should be OP_CHECKMULTISIG opcode
-		if let Ok(Instruction::Op(opcodes::all::OP_CHECKMULTISIG)) = instructions.last().unwrap() {
-			// Second-to-last instruction should be the number of public keys (n)
-			let n = match instructions[instructions.len() - 2] {
-				Ok(Instruction::Op(op)) if op.to_u8() >= 0x51 && op.to_u8() <= 0x60 => {
-					(op.to_u8() - 0x51 + 1) as usize
-				},
-				_ => return None, // Not a valid multisig script
-			};
-
-			Some((m, n))
-		} else {
-			None
-		}
-	}
-
-	/// Estimate the finalized input vsize from unsigned.
-	fn estimate_finalized_input_size(
-		input: &psbt::Input,
-		txin: &TxIn,
-	) -> Result<u64, DispatchError> {
-		let witness_script = input.witness_script.as_ref().ok_or(Error::<T>::InvalidPsbt)?;
-		let (m, _) = Self::parse_multisig_script(witness_script).ok_or(Error::<T>::InvalidPsbt)?;
-
-		let script_len = witness_script.len() + 1;
-
-		// empty(1byte) + signatures(73 * m) + script_len
-		let estimated_witness_size = 1 + 73 * m + script_len;
-
-		let estimated_final_vsize =
-			(BitcoinWeight::from_witness_data_size(estimated_witness_size as u64)
-				+ BitcoinWeight::from_non_witness_data_size(txin.base_size() as u64))
-			.to_vbytes_ceil();
-
-		Ok(estimated_final_vsize)
-	}
-
 	/// Estimate the finalized vsize from the given PSBT.
 	fn estimate_finalized_vb(psbt: &Psbt) -> Result<u64, DispatchError> {
 		let mut total_vb = 10; // version(4) + locktime(4) + input_count(1) + output_count(1)
 
 		for (i, input) in psbt.inputs.iter().enumerate() {
 			let txin = psbt.unsigned_tx.input.get(i).ok_or(Error::<T>::InvalidPsbt)?;
-			let input_vb = Self::estimate_finalized_input_size(input, txin)?;
+			let input_vb = estimate_finalized_input_size(
+				input.witness_script.as_ref().ok_or(Error::<T>::InvalidPsbt)?,
+				Some(txin),
+			)
+			.ok_or(Error::<T>::InvalidPsbt)?;
 			total_vb += input_vb;
 		}
 		total_vb +=
@@ -336,29 +337,11 @@ where
 					for serialized_msg in socket_messages {
 						let msg = Self::try_decode_socket_message(serialized_msg)
 							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-						let msg_hash = Self::hash_bytes(
-							&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
-						);
+
 						if msg_sequences.contains(&msg.req_id.sequence) {
 							return Err(Error::<T>::InvalidSocketMessage.into());
 						}
-						let request_info = Self::try_get_request(&msg.encode_req_id())?;
-						// the socket message should be valid
-						if !request_info.is_msg_hash(msg_hash) {
-							return Err(Error::<T>::InvalidSocketMessage.into());
-						}
-						if !request_info.is_accepted() || !msg.is_accepted() {
-							return Err(Error::<T>::InvalidSocketMessage.into());
-						}
-						if !msg.is_outbound(
-							<T as pallet_evm::Config>::ChainId::get() as u32,
-							T::RegistrationPool::get_bitcoin_chain_id(),
-						) {
-							return Err(Error::<T>::InvalidSocketMessage.into());
-						}
-						if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
-							return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
-						}
+						Self::verify_socket_message(&serialized_msg)?;
 
 						// user must be registered
 						if let Some(refund) =
@@ -389,6 +372,125 @@ where
 			}
 		}
 		Ok((deserialized_msgs, serialized_msgs))
+	}
+
+	/// Filter unregistered outbounds & deserialize registered.
+	pub fn filter_unregistered_outbounds(
+		mut outbound_pool: Vec<UnboundedBytes>,
+	) -> (Vec<UnboundedBytes>, Vec<(SocketMessage, ScriptBuf)>) {
+		let mut unregistered = vec![];
+
+		let outbound_requests = outbound_pool
+			.iter()
+			.filter_map(|x| match Self::try_decode_socket_message(x) {
+				Ok(msg) => match T::RegistrationPool::get_refund_address(&msg.params.to.into()) {
+					Some(refund) => {
+						let script_pubkey =
+							Self::try_convert_to_address_from_vec(refund).unwrap().script_pubkey();
+						Some((msg, script_pubkey))
+					},
+					None => {
+						unregistered.push(x.clone());
+						None
+					},
+				},
+				Err(_) => {
+					unregistered.push(x.clone());
+					None
+				},
+			})
+			.collect::<Vec<_>>();
+
+		// remove unregistered from outbound_pool
+		outbound_pool.retain(|x| !unregistered.contains(x));
+
+		(outbound_pool, outbound_requests)
+	}
+
+	/// Composite PSBT.
+	pub fn composite_psbt(
+		selected_utxos: &[UtxoInfoWithSize],
+		outbound_requests: &[(SocketMessage, ScriptBuf)],
+		target: u64,
+		fee_rate: u64,
+		selection_strategy: SelectionStrategy,
+	) -> Option<Psbt> {
+		let input = selected_utxos
+			.iter()
+			.map(|x| TxIn {
+				previous_output: OutPoint::new(
+					Txid::from_slice(x.txid.as_bytes()).unwrap(),
+					x.vout,
+				),
+				script_sig: ScriptBuf::new(),
+				sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+				witness: Witness::new(),
+			})
+			.collect::<Vec<_>>();
+
+		let mut merged_output = BTreeMap::default();
+		for x in outbound_requests.iter() {
+			let value = Amount::from_sat(x.0.params.amount.as_u64());
+			let script_pubkey = x.1.clone();
+			*merged_output.entry(script_pubkey).or_insert(Amount::ZERO) += value;
+		}
+		let mut output = merged_output
+			.into_iter()
+			.map(|(script_pubkey, value)| TxOut { value, script_pubkey })
+			.collect::<Vec<_>>();
+		if selection_strategy == SelectionStrategy::Knapsack {
+			let input_sum = selected_utxos.iter().map(|x| x.amount).sum::<u64>();
+			if input_sum - 546 > target {
+				let change_amount = input_sum - target - fee_rate * 43;
+				let system_vault =
+					T::RegistrationPool::get_system_vault(T::RegistrationPool::get_current_round())
+						.unwrap();
+				let system_vault = Self::try_convert_to_address_from_vec(system_vault).unwrap();
+				output.push(TxOut {
+					value: Amount::from_sat(change_amount),
+					script_pubkey: system_vault.script_pubkey(),
+				})
+			}
+		}
+
+		let tx = Transaction {
+			version: Version::TWO,
+			lock_time: LockTime::ZERO,
+			input,
+			output: output.clone(),
+		};
+
+		match Psbt::from_unsigned_tx(tx) {
+			Ok(mut psbt) => {
+				let psbt_inputs = selected_utxos
+					.iter()
+					.map(|x| {
+						let descriptor = Descriptor::<PublicKey>::from_str(&x.descriptor).unwrap();
+						let mut psbt_input = Input::default();
+						psbt_input.witness_utxo = Some(TxOut {
+							value: Amount::from_sat(x.amount),
+							script_pubkey: descriptor.script_pubkey(),
+						});
+						psbt_input.witness_script = Some(descriptor.script_code().unwrap());
+
+						let mut derivation = BTreeMap::new();
+						descriptor.for_each_key(|x| {
+							derivation.insert(
+								x.inner,
+								(Fingerprint::default(), DerivationPath::default()),
+							);
+							true
+						});
+						psbt_input.bip32_derivation = derivation;
+						psbt_input
+					})
+					.collect::<Vec<_>>();
+				psbt.inputs = psbt_inputs;
+				psbt.outputs = vec![Output::default(); output.len()];
+				Some(psbt)
+			},
+			Err(_) => None,
+		}
 	}
 
 	/// Hash the given bytes.
