@@ -52,7 +52,7 @@ pub mod pallet {
 		/// The fee rate expiration in blocks.
 		#[pallet::constant]
 		type FeeRateExpiration: Get<u32>;
-		/// The threshold for fault tolerance in blocks.
+		/// The threshold for fault tolerance.
 		#[pallet::constant]
 		type ToleranceThreshold: Get<u32>;
 		/// Weight information for extrinsics in this pallet.
