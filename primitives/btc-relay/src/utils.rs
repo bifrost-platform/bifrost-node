@@ -1,6 +1,6 @@
 use crate::Script;
-use miniscript::bitcoin::script::Instruction;
-use miniscript::bitcoin::{opcodes, ScriptBuf, TxIn, Weight};
+
+use miniscript::bitcoin::{opcodes, script::Instruction, ScriptBuf, TxIn, Weight};
 use sp_std::vec::Vec;
 
 /// Parse the witness script for extract m and n for m-of-n multisig.
