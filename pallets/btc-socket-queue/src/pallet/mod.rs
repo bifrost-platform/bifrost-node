@@ -140,8 +140,6 @@ pub mod pallet {
 		SocketSet { new: T::AccountId, is_bitcoin: bool },
 		/// The maximum PSBT fee rate has been set.
 		MaxFeeRateSet { new: u64 },
-		/// The long term PSBT fee rate has been set.
-		LongTermFeeRateSet { new: u64 },
 	}
 
 	#[pallet::storage]
@@ -216,10 +214,6 @@ pub mod pallet {
 	#[pallet::storage]
 	/// The maximum fee rate(sat/vb) that can be set for PSBT.
 	pub type MaxFeeRate<T: Config> = StorageValue<_, u64, ValueQuery>;
-
-	#[pallet::storage]
-	/// Long term fee rate(sat/vb) for PSBT. (no need to be super accurate)
-	pub type LongTermFeeRate<T: Config> = StorageValue<_, u64, ValueQuery>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
@@ -311,7 +305,8 @@ pub mod pallet {
 								// unwrap is safe here because the selected utxos always exist
 								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
 
-								weight += <T as Config>::WeightInfo::psbt_composition_on_initialize();
+								weight +=
+									<T as Config>::WeightInfo::psbt_composition_on_initialize();
 								T::Blaze::handle_tolerance_counter(false);
 							},
 							_ => {
@@ -913,28 +908,6 @@ pub mod pallet {
 			if T::Blaze::is_activated() {
 				T::Blaze::unlock_utxos(&txid)?;
 			}
-
-			Ok(().into())
-		}
-
-		#[pallet::call_index(11)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Set the long term fee rate for PSBT.
-		pub fn set_long_term_fee_rate(
-			origin: OriginFor<T>,
-			new: u64,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-
-			let old = <LongTermFeeRate<T>>::get();
-			ensure!(old != new, Error::<T>::NoWritingSameValue);
-
-			// overflow check
-			FeeRate::from_sat_per_vb(new).ok_or(Error::<T>::OutOfRange)?;
-
-			<LongTermFeeRate<T>>::put(new);
-
-			Self::deposit_event(Event::LongTermFeeRateSet { new });
 
 			Ok(().into())
 		}
