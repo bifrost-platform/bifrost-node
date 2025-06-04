@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod migrations;
 mod pallet;
 pub mod weights;
 
@@ -16,6 +17,19 @@ use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H256};
 use sp_runtime::BoundedVec;
 use sp_std::vec::Vec;
+
+pub(crate) const LOG_TARGET: &'static str = "runtime::blaze";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
 
 #[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 /// The status of a UTXO.

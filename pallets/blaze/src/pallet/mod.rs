@@ -1,11 +1,14 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
+	migrations, weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
 	SocketMessagesSubmission, Utxo, UtxoStatus, UtxoSubmission,
 };
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
@@ -161,6 +164,13 @@ pub mod pallet {
 		BoundedBTreeMap<T::AccountId, (u64, u64, BlockNumberFor<T>), ConstU32<MAX_AUTHORITIES>>,
 		ValueQuery,
 	>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
