@@ -95,18 +95,6 @@ pub mod pallet {
 		ToleranceCounterUpdated { new: u32 },
 	}
 
-	#[pallet::genesis_config]
-	#[derive(frame_support::DefaultNoBound)]
-	pub struct GenesisConfig<T> {
-		#[serde(skip)]
-		pub _config: PhantomData<T>,
-	}
-
-	#[pallet::genesis_build]
-	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-		fn build(&self) {}
-	}
-
 	#[pallet::storage]
 	/// The flag that represents whether BLAZE is activated.
 	pub type IsActivated<T: Config> = StorageValue<_, bool, ValueQuery>;
