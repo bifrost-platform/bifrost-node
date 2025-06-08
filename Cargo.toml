@@ -69,6 +69,7 @@ serde_json = "1.0"
 futures = "0.3.30"
 tokio = "1.40.0"
 array-bytes = "6.1"
+lite-json = { version = "0.2.0", default-features = false }
 
 # Bifrost Primitive
 bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }

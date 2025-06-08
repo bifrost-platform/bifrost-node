@@ -1,12 +1,16 @@
+extern crate alloc;
+
 use crate::pallet::{BlockNumberFor, CallInfo};
 
 use frame_support::pallet_prelude::Weight;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
+use lite_json::json::JsonValue;
 use pallet_ethereum::RawOrigin as EthereumRawOrigin;
 use pallet_evm::{ExitError, ExitReason, GasWeightMapping, Runner};
 use sp_core::{H160, H256, U256};
 use sp_io::storage::{rollback_transaction, start_transaction};
 use sp_runtime::{
+	offchain::{http, Duration},
 	traits::{BadOrigin, UniqueSaturatedInto},
 	SaturatedConversion,
 };
@@ -155,5 +159,85 @@ where
 		}
 
 		weight
+	}
+
+	/// Fetch current price and return the result in cents.
+	pub fn fetch_price() -> Result<(), http::Error> {
+		// We want to keep the offchain worker execution time reasonable, so we set a hard-coded
+		// deadline to 2s to complete the external call.
+		// You can also wait indefinitely for the response, however you may still get a timeout
+		// coming from the host machine.
+		let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(2_000));
+		// Initiate an external HTTP GET request.
+		// This is using high-level wrappers from `sp_runtime`, for the low-level calls that
+		// you can find in `sp_io`. The API is trying to be similar to `request`, but
+		// since we are running in a custom WASM execution environment we can't simply
+		// import the library here.
+		let request = http::Request::get(
+			"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+		);
+		// We set the deadline for sending of the request, note that awaiting response can
+		// have a separate deadline. Next we send the request, before that it's also possible
+		// to alter request headers or stream body content in case of non-GET requests.
+		let pending = request.deadline(deadline).send().map_err(|_| http::Error::IoError)?;
+
+		// The request is already being processed by the host, we are free to do anything
+		// else in the worker (we can send multiple concurrent requests too).
+		// At some point however we probably want to check the response though,
+		// so we can block current thread and wait for it to finish.
+		// Note that since the request is being driven by the host, we don't have to wait
+		// for the request to have it complete, we will just not read the response.
+		let response = pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+		// Let's check the status code before we proceed to reading the response.
+		if response.code != 200 {
+			log::warn!("Unexpected status code: {}", response.code);
+			return Err(http::Error::Unknown);
+		}
+		log::info!("response: {:?}", response);
+
+		// Next we want to fully read the response body and collect it to a vector of bytes.
+		// Note that the return object allows you to read the body in chunks as well
+		// with a way to control the deadline.
+		let body = response.body().collect::<Vec<u8>>();
+		log::info!("body: {:?}", body);
+
+		// Create a str slice from the body.
+		let body_str = alloc::str::from_utf8(&body).map_err(|_| {
+			log::warn!("No UTF8 body");
+			http::Error::Unknown
+		})?;
+		log::info!("body_str: {:?}", body_str);
+
+		let price = Self::parse_price(body_str).ok_or(http::Error::Unknown)?;
+		log::info!("price: {:?}", price);
+
+		Ok(())
+	}
+
+	fn parse_price(price_str: &str) -> Option<u64> {
+		let val = lite_json::parse_json(price_str);
+		let price = match val.ok()? {
+			JsonValue::Object(obj) => {
+				// First get the bitcoin object
+				let (_, bitcoin_obj) =
+					obj.into_iter().find(|(k, _)| k.iter().copied().eq("bitcoin".chars()))?;
+				// Then get the usd value from the bitcoin object
+				match bitcoin_obj {
+					JsonValue::Object(bitcoin) => {
+						let (_, usd_value) = bitcoin
+							.into_iter()
+							.find(|(k, _)| k.iter().copied().eq("usd".chars()))?;
+						match usd_value {
+							JsonValue::Number(number) => number,
+							_ => return None,
+						}
+					},
+					_ => return None,
+				}
+			},
+			_ => return None,
+		};
+
+		Some(price.integer)
 	}
 }

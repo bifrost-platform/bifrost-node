@@ -8,7 +8,7 @@ use pallet_ethereum::RawOrigin as EthereumRawOrigin;
 use pallet_evm::ExitReason;
 
 use sp_core::{H160, H256, U256};
-use sp_runtime::traits::Hash;
+use sp_runtime::traits::{Hash, UniqueSaturatedInto};
 use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
@@ -105,7 +105,26 @@ pub mod pallet {
 		OriginFor<T>: Into<Result<EthereumRawOrigin, OriginFor<T>>>,
 	{
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+			log::info!("on_initialize: {:?}", n);
 			Self::execute_contract_calls(n)
+		}
+
+		/// This function will be called when the node is fully synced and a new best block is
+		/// successfully imported.
+		/// Which means this function is called after on_initialize.
+		///
+		/// Note that it's not guaranteed for offchain workers to run on EVERY block, there might
+		/// be cases where some blocks are skipped, or for some the worker runs twice (re-orgs),
+		/// so the code should be able to handle that.
+		fn offchain_worker(n: BlockNumberFor<T>) {
+			log::info!("offchain_worker: {:?}", n);
+			let block_number: u32 = n.unique_saturated_into();
+			if block_number % 5 == 0 {
+				match Self::fetch_price() {
+					Ok(()) => log::info!("fetch_price success"),
+					Err(e) => log::error!("fetch_price error: {:?}", e),
+				}
+			}
 		}
 	}
 
