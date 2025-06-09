@@ -228,7 +228,7 @@ pub mod pallet {
 				} else {
 					let voters = vec![authority_id.clone()];
 					let input_vbytes = if let Some(input_vbytes) =
-						estimate_finalized_input_size(&descriptor.script_pubkey(), None)
+						estimate_finalized_input_size(&descriptor.script_code().unwrap(), None)
 					{
 						input_vbytes
 					} else {
@@ -395,7 +395,7 @@ pub mod pallet {
 					continue;
 				}
 				let input_vbytes = if let Some(input_vbytes) =
-					estimate_finalized_input_size(&descriptor.script_pubkey(), None)
+					estimate_finalized_input_size(&descriptor.script_code().unwrap(), None)
 				{
 					input_vbytes
 				} else {
