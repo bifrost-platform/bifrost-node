@@ -60,6 +60,10 @@ async function runNode() {
   shell.exec('scripts/build_spec.sh');
   console.log('[*] build chain spec');
 
+  // generate node key
+  shell.exec(`scripts/generate_node_key.sh ${basePath}`);
+  console.log('[*] generate node key');
+
   // main boot node
   if (argv.index === 0) {
     // set_main_node.sh
@@ -67,8 +71,14 @@ async function runNode() {
     console.log('[*] set boot node');
   }
 
+  const port = argv.port + argv.index;
+  const rpcPort = argv.rpcPort + argv.index;
+
+  console.log(`[*] port = ${port}`);
+  console.log(`[*] rpcPort = ${rpcPort}`);
+
   // run_boot_node.sh
-  shell.exec(`scripts/run_boot_node.sh ${argv.index} ${argv.port} ${argv.rpcPort} ${basePath}`);
+  shell.exec(`scripts/run_boot_node.sh ${argv.index} ${port} ${rpcPort} ${basePath}`);
   console.log('[*] boot node initialized');
 }
 

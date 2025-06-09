@@ -3,7 +3,6 @@
 pub mod inflation;
 pub mod migrations;
 mod pallet;
-mod set;
 pub mod weights;
 
 pub use frame_system::pallet_prelude::BlockNumberFor;

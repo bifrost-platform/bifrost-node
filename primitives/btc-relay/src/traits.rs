@@ -1,8 +1,16 @@
-use miniscript::bitcoin::Network;
+use frame_system::pallet_prelude::BlockNumberFor;
+use miniscript::{
+	bitcoin::{Network, PublicKey},
+	Descriptor,
+};
 use sp_core::H256;
-use sp_runtime::transaction_validity::TransactionValidityError;
+use sp_runtime::{transaction_validity::TransactionValidityError, DispatchError};
+use sp_std::vec::Vec;
 
-use crate::{BoundedBitcoinAddress, MigrationSequence};
+use crate::{
+	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	BoundedBitcoinAddress, MigrationSequence, Psbt, UnboundedBytes,
+};
 
 pub trait PoolManager<AccountId> {
 	/// Get the refund address of the given user.
@@ -10,6 +18,9 @@ pub trait PoolManager<AccountId> {
 
 	/// Get the vault address of the given user.
 	fn get_vault_address(who: &AccountId) -> Option<BoundedBitcoinAddress>;
+
+	/// Get the descriptor of the given vault address.
+	fn get_bonded_descriptor(who: &BoundedBitcoinAddress) -> Option<Descriptor<PublicKey>>;
 
 	/// Get the system vault address.
 	fn get_system_vault(round: u32) -> Option<BoundedBitcoinAddress>;
@@ -37,6 +48,9 @@ pub trait PoolManager<AccountId> {
 
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
+
+	/// Process the pending set refunds.
+	fn process_set_refunds();
 }
 
 pub trait SocketQueueManager<AccountId> {
@@ -48,4 +62,60 @@ pub trait SocketQueueManager<AccountId> {
 
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
+
+	/// Get the maximum fee rate that can be used for a transaction.
+	fn get_max_fee_rate() -> u64;
+}
+
+pub trait SocketVerifier<AccountId> {
+	/// Verify a Socket message whether it is valid.
+	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
+}
+
+pub trait BlazeManager<T: frame_system::Config> {
+	/// Check if BLAZE is activated.
+	fn is_activated() -> bool;
+
+	/// Get all available utxos.
+	fn get_utxos() -> Vec<UtxoInfoWithSize>;
+
+	/// Clear all utxos.
+	fn clear_utxos();
+
+	/// Lock the given utxos (=inputs of a PSBT).
+	fn lock_utxos(txid: &H256, inputs: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError>;
+
+	/// Unlock the included utxos of the given transaction.
+	fn unlock_utxos(txid: &H256) -> Result<(), DispatchError>;
+
+	/// Extract the utxos from the given PSBT.
+	fn extract_utxos_from_psbt(psbt: &Psbt) -> Result<Vec<UtxoInfoWithSize>, DispatchError>;
+
+	/// Read the outbound pool.
+	fn get_outbound_pool() -> Vec<UnboundedBytes>;
+
+	/// Clear the outbound pool.
+	fn clear_outbound_pool(targets: Vec<UnboundedBytes>);
+
+	/// Take the executed requests.
+	fn take_executed_requests() -> Vec<H256>;
+
+	/// Try to finalize the fee rate.
+	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<(u64, u64)>;
+
+	/// Select utxos for given target.
+	fn select_coins(
+		pool: Vec<ScoredUtxo>,
+		target: u64,
+		cost_of_change: u64,
+		max_selection_weight: u64,
+		max_tries: usize,
+		change_target: u64,
+	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)>;
+
+	/// Check the tolerance counter. If it exceeds the threshold, BLAZE will be deactivated.
+	fn handle_tolerance_counter(is_increase: bool);
+
+	/// Ensure the activation status.
+	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
 }

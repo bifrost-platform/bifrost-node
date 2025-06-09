@@ -14,6 +14,7 @@ miniscript = { workspace = true }
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
 
+frame-system = { workspace = true }
 sp-std = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
@@ -21,9 +22,10 @@ sp-runtime = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"scale-info/std",
-	"parity-scale-codec/std",
-	"sp-std/std",
-	"sp-core/std",
-	"sp-runtime/std",
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "sp-std/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "frame-system/std",
 ]
