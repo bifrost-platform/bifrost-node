@@ -1334,8 +1334,8 @@ where
 		Ok(())
 	}
 
-	#[precompile::public("executeNominationRequest(address)")]
-	#[precompile::public("execute_nomination_request(address)")]
+	#[precompile::public("executeNominationRequest(address,uint256)")]
+	#[precompile::public("execute_nomination_request(address,uint256)")]
 	fn execute_nomination_request(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
@@ -1362,8 +1362,8 @@ where
 		Ok(())
 	}
 
-	#[precompile::public("cancelNominationRequest(address)")]
-	#[precompile::public("cancel_nomination_request(address)")]
+	#[precompile::public("cancelNominationRequest(address,uint256)")]
+	#[precompile::public("cancel_nomination_request(address,uint256)")]
 	fn cancel_nomination_request(
 		handle: &mut impl PrecompileHandle,
 		candidate: Address,
