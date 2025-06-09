@@ -81,30 +81,30 @@ interface BfcStaking {
     /// @param candidate the address that we want to confirm is a validator andidate
     /// @param tier the type of the validator candidate (0: All, 1: Basic, 2: Full)
     /// @return A boolean confirming whether the address is a validator candidate
-    function is_candidate(address candidate, uint256 tier)
-        external
-        view
-        returns (bool);
+    function is_candidate(
+        address candidate,
+        uint256 tier
+    ) external view returns (bool);
 
     /// @dev Check whether the specified address is currently a part of the active set (full or basic)
     /// Selector: 4a079cfd
     /// @param candidate the address that we want to confirm is a part of the active set
     /// @param tier the type of the validator candidate (0: All, 1: Basic, 2: Full)
     /// @return A boolean confirming whether the address is a part of the active set
-    function is_selected_candidate(address candidate, uint256 tier)
-        external
-        view
-        returns (bool);
+    function is_selected_candidate(
+        address candidate,
+        uint256 tier
+    ) external view returns (bool);
 
     /// @dev Check whether the specified address elements is currently a part of the active set
     /// Selector: 044527bd
     /// @param candidates the address array that we want to confirm is a part of the active set
     /// @param tier the type of the validator candidate (0: All, 1: Basic, 2: Full)
     /// @return A boolean confirming whether the address array is a part of the active set
-    function is_selected_candidates(address[] calldata candidates, uint256 tier)
-        external
-        view
-        returns (bool);
+    function is_selected_candidates(
+        address[] calldata candidates,
+        uint256 tier
+    ) external view returns (bool);
 
     /// @dev Check whether every specified address element is currently the active set (full or basic)
     /// Selector: 2e8c2a6a
@@ -176,10 +176,9 @@ interface BfcStaking {
     /// @dev Get the given rounds active validator sets majority
     /// Selector: e0f9ab40
     /// @return The given rounds majority
-    function previous_majority(uint256 round_index)
-        external
-        view
-        returns (uint256);
+    function previous_majority(
+        uint256 round_index
+    ) external view returns (uint256);
 
     /// @dev Total points awarded to all validators in a particular round
     /// Selector: 9799b4e7
@@ -191,10 +190,10 @@ interface BfcStaking {
     /// Selector: 59a595fb
     /// @param round_index the round for which we are querying the points
     /// @return The awarded points to the validator in the given round
-    function validator_points(uint256 round_index, address validator)
-        external
-        view
-        returns (uint256);
+    function validator_points(
+        uint256 round_index,
+        address validator
+    ) external view returns (uint256);
 
     /// @dev The amount of awarded tokens to validators and nominators since genesis
     /// Selector: 9ec5a894
@@ -204,10 +203,9 @@ interface BfcStaking {
     /// @dev Total capital locked information of self-bonds and nominations of the given round
     /// Selector: b119ebfe
     /// @return The total locked information
-    function total(uint256 round_index)
-        external
-        view
-        returns (total_stake memory);
+    function total(
+        uint256 round_index
+    ) external view returns (total_stake memory);
 
     /// @dev Stake annual inflation parameters
     /// Selector: 10db2de9
@@ -215,11 +213,7 @@ interface BfcStaking {
     function inflation_config()
         external
         view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
+        returns (uint256, uint256, uint256);
 
     /// @dev Stake annual inflation rate
     /// Selector: 180692d0
@@ -273,11 +267,7 @@ interface BfcStaking {
     function nominator_bond_less_delay()
         external
         view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
+        returns (uint256, uint256, uint256);
 
     /// @dev Get the CandidateCount weight hint
     /// Selector: 4b1c4c29
@@ -288,18 +278,16 @@ interface BfcStaking {
     /// Selector: a5542eea
     /// @param tier the type of the validator candidate (0: All, 1: Basic, 2: Full)
     /// @return The list of the selected candidates
-    function selected_candidates(uint256 tier)
-        external
-        view
-        returns (address[] memory);
+    function selected_candidates(
+        uint256 tier
+    ) external view returns (address[] memory);
 
     /// @dev Get the previous selected candidates of the given round index
     /// Selector: d9c62dc8
     /// @return The list of the previous selected candidates
-    function previous_selected_candidates(uint256 round_index)
-        external
-        view
-        returns (address[] memory);
+    function previous_selected_candidates(
+        uint256 round_index
+    ) external view returns (address[] memory);
 
     /// @dev Get the current state of joined validator candidates
     /// Selector: 96b41b5b
@@ -313,16 +301,17 @@ interface BfcStaking {
     /// Selector: 36f3b497
     /// @param candidate the address for which we are querying the state
     /// @return The current state of the queried candidate
-    function candidate_state(address candidate)
-        external
-        view
-        returns (candidate_meta_data memory);
+    function candidate_state(
+        address candidate
+    ) external view returns (candidate_meta_data memory);
 
     /// @dev Get every candidate states
     /// Selector: 3b368c8c
     /// @param tier the type of the validator candidate (0: All, 1: Basic, 2: Full)
     /// @return An array of every candidate states
-    function candidate_states(uint256 tier)
+    function candidate_states(
+        uint256 tier
+    )
         external
         view
         returns (
@@ -353,7 +342,10 @@ interface BfcStaking {
     /// @param tier the type of the validator candidate (0: All, 1: Basic, 2: Full)
     /// @param is_selected the boolean for which it is selected for the current round
     /// @return An array of every candidate states that matches the selector
-    function candidate_states_by_selection(uint256 tier, bool is_selected)
+    function candidate_states_by_selection(
+        uint256 tier,
+        bool is_selected
+    )
         external
         view
         returns (
@@ -383,58 +375,51 @@ interface BfcStaking {
     /// Selector: 2e388768
     /// @param candidate the address for which we are querying the state
     /// @return The current status of the queried candidate
-    function candidate_request(address candidate)
-        external
-        view
-        returns (candidate_request_data memory);
+    function candidate_request(
+        address candidate
+    ) external view returns (candidate_request_data memory);
 
     /// @dev Get the top nominations of the given candidate
     /// Selector: 2a9cdf2b
     /// @param candidate the address for which we are querying the state
     /// @return The current status of the queried candidate
-    function candidate_top_nominations(address candidate)
+    function candidate_top_nominations(
+        address candidate
+    )
         external
         view
-        returns (
-            address,
-            uint256,
-            address[] memory,
-            uint256[] memory
-        );
+        returns (address, uint256, address[] memory, uint256[] memory);
 
     /// @dev Get the bottom nominations of the given candidate
     /// Selector: 9be794c0
     /// @param candidate the address for which we are querying the state
     /// @return The current status of the queried candidate
-    function candidate_bottom_nominations(address candidate)
+    function candidate_bottom_nominations(
+        address candidate
+    )
         external
         view
-        returns (
-            address,
-            uint256,
-            address[] memory,
-            uint256[] memory
-        );
+        returns (address, uint256, address[] memory, uint256[] memory);
 
     /// @dev Get the CandidateNominationCount weight hint
     /// Selector: 1c8ad6fe
     /// @param candidate The address for which we are querying the nomination count
     /// @return The number of nominations backing the validator
-    function candidate_nomination_count(address candidate)
-        external
-        view
-        returns (uint256);
+    function candidate_nomination_count(
+        address candidate
+    ) external view returns (uint256);
 
     /// @dev Get the current state of the given nominator
     /// Selector: 3f97be51
     /// @param nominator the address for which we are querying the state
     /// @return The current state of the queried nominator
-    function nominator_state(address nominator)
+    function nominator_state(
+        address nominator
+    )
         external
         view
         returns (
             address,
-            uint256,
             uint256,
             uint256,
             uint256,
@@ -450,16 +435,17 @@ interface BfcStaking {
     /// Selector: 24f81326
     /// @param nominator the address for which we are querying the state
     /// @return The pending requests of the queried nominator
-    function nominator_requests(address nominator)
+    function nominator_requests(
+        address nominator
+    )
         external
         view
         returns (
             address,
             uint256,
-            uint256,
             address[] memory,
-            uint256[] memory,
-            uint256[] memory,
+            uint256[][] memory,
+            uint256[][] memory,
             uint256[] memory
         );
 
@@ -467,10 +453,9 @@ interface BfcStaking {
     /// Selector: dae5659b
     /// @param nominator The address for which we are querying the nomination count
     /// @return The number of nominations made by the nominator
-    function nominator_nomination_count(address nominator)
-        external
-        view
-        returns (uint256);
+    function nominator_nomination_count(
+        address nominator
+    ) external view returns (uint256);
 
     /// @dev Temporarily leave the set of validator candidates without unbonding
     /// Selector: 767e0450
@@ -511,8 +496,9 @@ interface BfcStaking {
     /// @dev Execute due request to leave the set of validator candidates
     /// Selector: e33a8f25
     /// @param candidateNominationCount The number of nominations for the candidate to be revoked
-    function execute_leave_candidates(uint256 candidateNominationCount)
-        external;
+    function execute_leave_candidates(
+        uint256 candidateNominationCount
+    ) external;
 
     /// @dev Execute pending candidate bond request
     /// Selector: 6c76b502
@@ -573,28 +559,37 @@ interface BfcStaking {
     /// Selector: 774bef4d
     /// @param candidate The address of the validator candidate for which nomination shall decrease
     /// @param less The amount by which the nomination is decreased (upon execution)
-    function schedule_nominator_bond_less(address candidate, uint256 less)
-        external;
+    function schedule_nominator_bond_less(
+        address candidate,
+        uint256 less
+    ) external;
 
     /// @dev Execute request to leave the set of nominators and revoke all nominations
     /// Selector: 4480de22
     /// @param nominatorNominationCount The number of active nominations to be revoked by nominator
-    function execute_leave_nominators(uint256 nominatorNominationCount)
-        external;
+    function execute_leave_nominators(
+        uint256 nominatorNominationCount
+    ) external;
 
     /// @dev Execute pending nomination request (if exists && is due)
-    /// Selector: bfb13332
+    /// Selector: 29c0e286
     /// @param candidate The address of the candidate
-    function execute_nomination_request(address candidate) external;
+    function execute_nomination_request(
+        address candidate,
+        uint256 when
+    ) external;
 
     /// @dev Cancel request to leave the set of nominators
     /// Selector: e48105f0
     function cancel_leave_nominators() external;
 
     /// @dev Cancel pending nomination request (already made in support of input by caller)
-    /// Selector: bdb20cae
+    /// Selector: 74d430a5
     /// @param candidate The address of the candidate
-    function cancel_nomination_request(address candidate) external;
+    function cancel_nomination_request(
+        address candidate,
+        uint256 when
+    ) external;
 
     /// @dev Set the nominator reward destination
     /// Selector: 5706390d
