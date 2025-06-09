@@ -16,6 +16,7 @@ members = [
 	"pallets/relay-manager",
 	"pallets/btc-registration-pool",
 	"pallets/btc-socket-queue",
+	"pallets/blaze",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -24,6 +25,7 @@ members = [
 	"precompiles/balance",
 	"precompiles/btc-registration-pool",
 	"precompiles/btc-socket-queue",
+	"precompiles/blaze",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
@@ -59,7 +61,7 @@ impl-serde = { version = "0.5.0", default-features = false }
 serde = { version = "1.0", default-features = false }
 jsonrpsee = { version = "0.24.9" }
 log = { version = "0.4.21", default-features = false }
-miniscript = { version = "11.0.0", default-features = false, features = [
+miniscript = { version = "12.3.1", default-features = false, features = [
 	"no-std",
 ] }
 ethabi-decode = { version = "2.0.0", default-features = false }
@@ -97,6 +99,7 @@ pallet-bfc-offences = { default-features = false, path = "pallets/bfc-offences" 
 pallet-relay-manager = { default-features = false, path = "pallets/relay-manager" }
 pallet-btc-registration-pool = { default-features = false, path = "pallets/btc-registration-pool" }
 pallet-btc-socket-queue = { default-features = false, path = "pallets/btc-socket-queue" }
+pallet-blaze = { default-features = false, path = "pallets/blaze" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -107,7 +110,7 @@ precompile-collective = { default-features = false, path = "precompiles/collecti
 precompile-balance = { default-features = false, path = "precompiles/balance" }
 precompile-btc-registration-pool = { default-features = false, path = "precompiles/btc-registration-pool" }
 precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
-
+precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 sc-client-api = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }

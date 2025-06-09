@@ -1068,6 +1068,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Executives = RelayExecutiveMembership;
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
+	type Blaze = Blaze;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
 }
@@ -1088,6 +1089,23 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const FeeRateExpiration: u32 = 1 * MINUTES;
+	pub const ToleranceThreshold: u32 = 3;
+}
+
+impl pallet_blaze::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type SocketQueue = BtcSocketQueue;
+	type RegistrationPool = BtcRegistrationPool;
+	type FeeRateExpiration = FeeRateExpiration;
+	type ToleranceThreshold = ToleranceThreshold;
+	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -1208,6 +1226,9 @@ mod runtime {
 
 	#[runtime::pallet_index(61)]
 	pub type BtcRegistrationPool = pallet_btc_registration_pool;
+
+	#[runtime::pallet_index(62)]
+	pub type Blaze = pallet_blaze;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

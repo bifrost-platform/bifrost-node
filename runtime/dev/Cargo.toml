@@ -89,6 +89,7 @@ pallet-bfc-offences = { workspace = true }
 pallet-relay-manager = { workspace = true }
 pallet-btc-socket-queue = { workspace = true }
 pallet-btc-registration-pool = { workspace = true }
+pallet-blaze = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -104,6 +105,7 @@ precompile-collective = { workspace = true }
 precompile-balance = { workspace = true }
 precompile-btc-registration-pool = { workspace = true }
 precompile-btc-socket-queue = { workspace = true }
+precompile-blaze = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -144,6 +146,7 @@ std = [
 	"pallet-relay-manager/std",
 	"pallet-btc-socket-queue/std",
 	"pallet-btc-registration-pool/std",
+	"pallet-blaze/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
@@ -181,6 +184,7 @@ std = [
 	"precompile-balance/std",
 	"precompile-btc-registration-pool/std",
 	"precompile-btc-socket-queue/std",
+	"precompile-blaze/std",
 	"substrate-wasm-builder",
 ]
 evm-tracing = ["evm-tracer"]
