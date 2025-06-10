@@ -301,13 +301,18 @@ pub mod pallet {
 									),
 								);
 								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
+
+								for msg in filtered_outbound_pool.iter() {
+									let msg = Self::try_decode_socket_message(msg).unwrap();
+									<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
+								}
+
 								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
-								// unwrap is safe here because the selected utxos always exist
 								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
+								T::Blaze::handle_tolerance_counter(false);
 
 								weight +=
 									<T as Config>::WeightInfo::psbt_composition_on_initialize();
-								T::Blaze::handle_tolerance_counter(false);
 							},
 							_ => {
 								T::Blaze::handle_tolerance_counter(true);
@@ -320,6 +325,9 @@ pub mod pallet {
 				let executed_requests = T::Blaze::take_executed_requests();
 				for txid in executed_requests {
 					if let Some(request) = <FinalizedRequests<T>>::take(&txid) {
+						if request.request_type == RequestType::Migration {
+							T::RegistrationPool::execute_migration_tx(txid.clone());
+						}
 						<ExecutedRequests<T>>::insert(&txid, request);
 						Self::deposit_event(Event::RequestExecuted { txid });
 					}
