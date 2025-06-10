@@ -1,5 +1,45 @@
 use super::*;
 
+pub mod v3 {
+	use core::marker::PhantomData;
+
+	use super::*;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	pub struct V3<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V3<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 3 && onchain == 2 {
+				// make all utxos available
+				let utxos = Utxos::<T>::iter().collect::<Vec<_>>();
+				for (hash, mut utxo) in utxos {
+					if utxo.status != UtxoStatus::Available {
+						utxo.status = UtxoStatus::Available;
+						Utxos::<T>::insert(hash, utxo);
+					}
+				}
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
+				log!(info, "blaze storage migration passes v3 update ✅");
+			} else {
+				log!(warn, "Skipping blaze storage v3 💤");
+				weight = weight.saturating_add(T::DbWeight::get().reads(2));
+			}
+			weight
+		}
+	}
+}
+
 pub mod v2 {
 	use core::marker::PhantomData;
 
