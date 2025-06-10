@@ -93,6 +93,16 @@ pub mod pallet {
 		ActivationSet { is_activated: bool },
 		/// The tolerance counter has been updated.
 		ToleranceCounterUpdated { new: u32 },
+		/// The fee rate has been submitted.
+		FeeRateSubmitted { authority_id: T::AccountId, lt_fee_rate: u64, fee_rate: u64 },
+		/// The UTXO has been submitted.
+		UtxoSubmitted { authority_id: T::AccountId, utxo_hash: H256, status: UtxoStatus },
+		/// The UTXO has been force pushed.
+		UtxoForcePushed { utxo_hash: H256 },
+		/// The broadcast poll has been submitted.
+		BroadcastPolled { authority_id: T::AccountId, txid: H256, is_confirmed: bool },
+		/// The socket message has been submitted.
+		SocketMessageSubmitted { authority_id: T::AccountId, message: UnboundedBytes },
 	}
 
 	#[pallet::storage]
@@ -224,7 +234,12 @@ pub mod pallet {
 					if u.voters.len() as u32 >= T::Relayers::majority() {
 						u.status = UtxoStatus::Available;
 					}
-					<Utxos<T>>::insert(&utxo_hash, u);
+					<Utxos<T>>::insert(&utxo_hash, u.clone());
+					Self::deposit_event(Event::UtxoSubmitted {
+						authority_id: authority_id.clone(),
+						utxo_hash,
+						status: u.status,
+					});
 				} else {
 					let voters = vec![authority_id.clone()];
 					let input_vbytes = if let Some(input_vbytes) =
@@ -250,6 +265,11 @@ pub mod pallet {
 								.map_err(|_| Error::<T>::OutOfRange)?,
 						},
 					);
+					Self::deposit_event(Event::UtxoSubmitted {
+						authority_id: authority_id.clone(),
+						utxo_hash,
+						status: UtxoStatus::Unconfirmed,
+					});
 				}
 			}
 
@@ -279,6 +299,7 @@ pub mod pallet {
 				.try_push(authority_id.clone())
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
+			let mut is_confirmed = false;
 			if pending_txs.voters.len() as u32 >= T::Relayers::majority() {
 				<PendingTxs<T>>::remove(&txid);
 				<ConfirmedTxs<T>>::insert(&txid, pending_txs.clone());
@@ -291,9 +312,15 @@ pub mod pallet {
 				pending_txs.inputs.iter().for_each(|input| {
 					<Utxos<T>>::remove(&input.hash);
 				});
+				is_confirmed = true;
 			} else {
 				<PendingTxs<T>>::insert(&txid, pending_txs.clone());
 			}
+			Self::deposit_event(Event::BroadcastPolled {
+				authority_id: authority_id.clone(),
+				txid,
+				is_confirmed,
+			});
 			Ok(().into())
 		}
 
@@ -324,9 +351,11 @@ pub mod pallet {
 				<frame_system::Pallet<T>>::block_number() + T::FeeRateExpiration::get().into();
 
 			fee_rates
-				.try_insert(authority_id, (lt_fee_rate, fee_rate, expires_at))
+				.try_insert(authority_id.clone(), (lt_fee_rate, fee_rate, expires_at))
 				.map_err(|_| Error::<T>::OutOfRange)?;
 			<FeeRates<T>>::put(fee_rates);
+
+			Self::deposit_event(Event::FeeRateSubmitted { authority_id, lt_fee_rate, fee_rate });
 
 			Ok(().into())
 		}
@@ -342,7 +371,7 @@ pub mod pallet {
 			ensure_none(origin)?;
 			// we allow submission even if BLAZE is deactivated
 
-			let SocketMessagesSubmission { messages, .. } = outbound_request_submission;
+			let SocketMessagesSubmission { authority_id, messages } = outbound_request_submission;
 			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
 
 			let mut pool = <OutboundPool<T>>::get();
@@ -353,7 +382,12 @@ pub mod pallet {
 				}
 				// verify the message
 				T::SocketQueue::verify_socket_message(&message)?;
-				pool.push(message);
+				pool.push(message.clone());
+
+				Self::deposit_event(Event::SocketMessageSubmitted {
+					authority_id: authority_id.clone(),
+					message,
+				});
 			}
 
 			// Update the outbound pool
@@ -416,6 +450,7 @@ pub mod pallet {
 						voters: BoundedVec::default(),
 					},
 				);
+				Self::deposit_event(Event::UtxoForcePushed { utxo_hash });
 			}
 
 			Ok(().into())
