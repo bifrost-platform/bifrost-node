@@ -417,14 +417,18 @@ where
 	) -> Option<Psbt> {
 		let input = selected_utxos
 			.iter()
-			.map(|x| TxIn {
-				previous_output: OutPoint::new(
-					Txid::from_slice(x.txid.as_bytes()).unwrap(),
-					x.vout,
-				),
-				script_sig: ScriptBuf::new(),
-				sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-				witness: Witness::new(),
+			.map(|x| {
+				let txid = {
+					let mut slice: [u8; 32] = x.txid.0;
+					slice.reverse();
+					Txid::from_slice(&slice).unwrap()
+				};
+				TxIn {
+					previous_output: OutPoint::new(txid, x.vout),
+					script_sig: ScriptBuf::new(),
+					sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+					witness: Witness::new(),
+				}
 			})
 			.collect::<Vec<_>>();
 
