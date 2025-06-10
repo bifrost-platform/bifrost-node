@@ -445,7 +445,12 @@ where
 		if selection_strategy == SelectionStrategy::Knapsack {
 			let input_sum = selected_utxos.iter().map(|x| x.amount).sum::<u64>();
 			if input_sum - 546 > target {
-				let change_amount = input_sum - target - fee_rate * 43;
+				let input_size_sum = selected_utxos.iter().map(|x| x.input_vbytes).sum::<u64>();
+				let output_size_sum = output.iter().map(|x| x.size() as u64).sum::<u64>() + 43;
+				let estimated_size = 11 + input_size_sum + output_size_sum;
+				let fee = fee_rate * estimated_size;
+
+				let change_amount = input_sum - target - fee;
 				let system_vault =
 					T::RegistrationPool::get_system_vault(T::RegistrationPool::get_current_round())
 						.unwrap();
