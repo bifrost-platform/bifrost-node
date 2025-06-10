@@ -438,7 +438,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("UtxosSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides(authority_id)
+			.and_provides((authority_id, signature))
 			.propagate(true)
 			.build()
 	}
@@ -459,7 +459,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("BroadcastPoll")
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, txid))
+			.and_provides((authority_id, txid, signature))
 			.propagate(true)
 			.build()
 	}
@@ -490,7 +490,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("FeeRateSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, lt_fee_rate, fee_rate))
+			.and_provides((authority_id, lt_fee_rate, fee_rate, signature))
 			.propagate(true)
 			.build()
 	}
@@ -515,7 +515,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("OutboundRequestSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides(authority_id)
+			.and_provides((authority_id, signature))
 			.propagate(true)
 			.build()
 	}
@@ -540,7 +540,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("RemoveOutboundMessagesSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides(authority_id)
+			.and_provides((authority_id, signature))
 			.propagate(true)
 			.build()
 	}

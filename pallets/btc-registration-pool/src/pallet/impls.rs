@@ -294,7 +294,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix(tag_prefix)
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, who))
+			.and_provides((authority_id, who, signature))
 			.propagate(true)
 			.build()
 	}
@@ -327,7 +327,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("KeyPreSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, pub_keys))
+			.and_provides((authority_id, pub_keys, signature))
 			.propagate(true)
 			.build()
 	}
