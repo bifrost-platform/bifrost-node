@@ -1,6 +1,6 @@
 use super::*;
 
-pub mod v3 {
+pub mod v4 {
 	use core::marker::PhantomData;
 
 	use super::*;
@@ -9,16 +9,16 @@ pub mod v3 {
 		weights::Weight,
 	};
 
-	pub struct V3<T>(PhantomData<T>);
+	pub struct V4<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for V3<T> {
+	impl<T: Config> OnRuntimeUpgrade for V4<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
 			let current = Pallet::<T>::in_code_storage_version();
 			let onchain = Pallet::<T>::on_chain_storage_version();
 
-			if current == 3 && onchain == 2 {
+			if current == 4 && onchain == 3 {
 				// make all utxos available
 				let utxos = Utxos::<T>::iter().collect::<Vec<_>>();
 				for (hash, mut utxo) in utxos {
@@ -28,11 +28,14 @@ pub mod v3 {
 					}
 				}
 
+				// clear pending txs
+				let _ = <PendingTxs<T>>::clear(u32::MAX, None);
+
 				current.put::<Pallet<T>>();
 				weight = weight.saturating_add(T::DbWeight::get().reads_writes(2, 2));
-				log!(info, "blaze storage migration passes v3 update ✅");
+				log!(info, "blaze storage migration passes v4 update ✅");
 			} else {
-				log!(warn, "Skipping blaze storage v3 💤");
+				log!(warn, "Skipping blaze storage v4 💤");
 				weight = weight.saturating_add(T::DbWeight::get().reads(2));
 			}
 			weight
