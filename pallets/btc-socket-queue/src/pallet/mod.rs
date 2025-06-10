@@ -929,7 +929,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("UnsignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
@@ -950,7 +950,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("SignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
@@ -967,7 +967,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("ExecutedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
@@ -992,7 +992,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("RollbackPollSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
