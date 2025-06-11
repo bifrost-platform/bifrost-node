@@ -147,12 +147,6 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// The outbound requests that have been executed.
-	/// Value: The PSBT txids (The vector will be cleared once SocketQueue handles the requests)
-	pub type ExecutedRequests<T: Config> = StorageValue<_, Vec<H256>, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
 	/// The fee rates submitted by the relayers.
 	///
 	/// Key: The relayer address
@@ -303,10 +297,6 @@ pub mod pallet {
 			if pending_txs.voters.len() as u32 >= T::Relayers::majority() {
 				<PendingTxs<T>>::remove(&txid);
 				<ConfirmedTxs<T>>::insert(&txid, pending_txs.clone());
-
-				<ExecutedRequests<T>>::mutate(|requests| {
-					requests.push(txid);
-				});
 
 				// remove spent utxos
 				pending_txs.inputs.iter().for_each(|input| {
