@@ -230,95 +230,99 @@ pub mod pallet {
 
 			T::RegistrationPool::process_set_refunds();
 
-			if T::Blaze::is_activated()
-				&& matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
-			{
+			if T::Blaze::is_activated() {
 				if let Some((long_term_fee_rate, fee_rate)) = T::Blaze::try_fee_rate_finalization(n)
 				{
-					let outbound_pool = T::Blaze::get_outbound_pool();
-					if !outbound_pool.is_empty() {
-						let (filtered_outbound_pool, outbound_requests) =
-							Self::filter_unregistered_outbounds(outbound_pool);
+					if matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
+					{
+						let outbound_pool = T::Blaze::get_outbound_pool();
+						if !outbound_pool.is_empty() {
+							let (filtered_outbound_pool, outbound_requests) =
+								Self::filter_unregistered_outbounds(outbound_pool);
 
-						let utxos = T::Blaze::get_utxos();
+							let utxos = T::Blaze::get_utxos();
 
-						let outbound_amount_sum = outbound_requests
-							.iter()
-							.map(|x| x.0.params.amount.as_u64())
-							.sum::<u64>();
-						let blaze_vault_sum = utxos.iter().map(|x| x.amount).sum::<u64>();
+							let outbound_amount_sum = outbound_requests
+								.iter()
+								.map(|x| x.0.params.amount.as_u64())
+								.sum::<u64>();
+							let blaze_vault_sum = utxos.iter().map(|x| x.amount).sum::<u64>();
 
-						if outbound_amount_sum >= blaze_vault_sum {
-							T::Blaze::handle_tolerance_counter(true);
-							return weight;
-						}
+							if outbound_amount_sum >= blaze_vault_sum {
+								T::Blaze::handle_tolerance_counter(true);
+								return weight;
+							}
 
-						let scored_utxos = utxos
-							.iter()
-							.filter_map(|x| {
-								let fee = x.input_vbytes * fee_rate;
-								if x.amount < fee {
-									return None;
-								}
-								Some(ScoredUtxo {
-									utxo: x.clone(),
-									fee,
-									long_term_fee: x.input_vbytes * long_term_fee_rate,
-									effective_value: x.amount - fee,
+							let scored_utxos = utxos
+								.iter()
+								.filter_map(|x| {
+									let fee = x.input_vbytes * fee_rate;
+									if x.amount < fee {
+										return None;
+									}
+									Some(ScoredUtxo {
+										utxo: x.clone(),
+										fee,
+										long_term_fee: x.input_vbytes * long_term_fee_rate,
+										effective_value: x.amount - fee,
+									})
 								})
-							})
-							.collect::<Vec<_>>();
+								.collect::<Vec<_>>();
 
-						let (selected_utxos, strategy) = match T::Blaze::select_coins(
-							scored_utxos,
-							outbound_amount_sum,
-							43 * fee_rate,
-							200_000,
-							100_000,
-							546,
-						) {
-							Some(utxos) => utxos,
-							None => {
-								T::Blaze::handle_tolerance_counter(true);
-								return weight;
-							},
-						};
-						match Self::composite_psbt(
-							&selected_utxos,
-							&outbound_requests,
-							outbound_amount_sum,
-							fee_rate,
-							strategy,
-						) {
-							Some(psbt) => {
-								let txid = Self::convert_txid(psbt.unsigned_tx.compute_txid());
-								<PendingRequests<T>>::insert(
-									&txid,
-									PsbtRequest::new(
-										psbt.serialize(),
-										filtered_outbound_pool.clone(),
-										RequestType::Normal,
-									),
-								);
-								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
+							let (selected_utxos, strategy) = match T::Blaze::select_coins(
+								scored_utxos,
+								outbound_amount_sum,
+								43 * fee_rate,
+								200_000,
+								100_000,
+								546,
+							) {
+								Some(utxos) => utxos,
+								None => {
+									T::Blaze::handle_tolerance_counter(true);
+									return weight;
+								},
+							};
+							match Self::composite_psbt(
+								&selected_utxos,
+								&outbound_requests,
+								outbound_amount_sum,
+								fee_rate,
+								strategy,
+							) {
+								Some(psbt) => {
+									let txid = Self::convert_txid(psbt.unsigned_tx.compute_txid());
+									<PendingRequests<T>>::insert(
+										&txid,
+										PsbtRequest::new(
+											psbt.serialize(),
+											filtered_outbound_pool.clone(),
+											RequestType::Normal,
+										),
+									);
+									Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
-								for msg in filtered_outbound_pool.iter() {
-									let msg = Self::try_decode_socket_message(msg).unwrap();
-									<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
-								}
+									for msg in filtered_outbound_pool.iter() {
+										let msg = Self::try_decode_socket_message(msg).unwrap();
+										<SocketMessages<T>>::insert(
+											msg.req_id.sequence,
+											(txid, msg),
+										);
+									}
 
-								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
-								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
-								T::Blaze::handle_tolerance_counter(false);
+									T::Blaze::clear_outbound_pool(filtered_outbound_pool);
+									T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
+									T::Blaze::handle_tolerance_counter(false);
 
-								weight +=
-									<T as Config>::WeightInfo::psbt_composition_on_initialize();
-							},
-							_ => {
-								T::Blaze::handle_tolerance_counter(true);
-								return weight;
-							},
-						};
+									weight +=
+										<T as Config>::WeightInfo::psbt_composition_on_initialize();
+								},
+								_ => {
+									T::Blaze::handle_tolerance_counter(true);
+									return weight;
+								},
+							};
+						}
 					}
 				}
 
