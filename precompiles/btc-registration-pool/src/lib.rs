@@ -456,6 +456,11 @@ where
 	/// Get the target round of the BTC registration pool.
 	fn target_round(input: u32) -> PoolRound {
 		if input == 0 {
+			if pallet_btc_registration_pool::ServiceState::<Runtime>::get()
+				== MigrationSequence::UTXOTransfer
+			{
+				return Self::get_current_round() + 1;
+			}
 			Self::get_current_round()
 		} else {
 			input
