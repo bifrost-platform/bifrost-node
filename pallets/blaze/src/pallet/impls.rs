@@ -124,10 +124,6 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		});
 	}
 
-	fn take_executed_requests() -> Vec<H256> {
-		<ExecutedRequests<T>>::take()
-	}
-
 	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<(u64, u64)> {
 		let mut submitted_fee_rates = <FeeRates<T>>::get();
 		// remove expired fee rates

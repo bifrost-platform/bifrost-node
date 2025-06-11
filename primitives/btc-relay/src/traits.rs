@@ -97,9 +97,6 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Clear the outbound pool.
 	fn clear_outbound_pool(targets: Vec<UnboundedBytes>);
 
-	/// Take the executed requests.
-	fn take_executed_requests() -> Vec<H256>;
-
 	/// Try to finalize the fee rate.
 	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<(u64, u64)>;
 
