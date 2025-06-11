@@ -42,7 +42,13 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn get_bonded_descriptor(who: &BoundedBitcoinAddress) -> Option<Descriptor<PublicKey>> {
-		if let Some(descriptor) = <BondedDescriptor<T>>::get(CurrentRound::<T>::get(), who) {
+		let round = if Self::get_service_state() == MigrationSequence::UTXOTransfer {
+			CurrentRound::<T>::get() + 1
+		} else {
+			CurrentRound::<T>::get()
+		};
+
+		if let Some(descriptor) = <BondedDescriptor<T>>::get(round, who) {
 			let descriptor_str = match str::from_utf8(&descriptor) {
 				Ok(str) => str,
 				Err(_) => return None,
