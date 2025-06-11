@@ -5,10 +5,11 @@ use crate::{
 };
 use bp_btc_relay::{
 	blaze::{SelectionStrategy, UtxoInfoWithSize},
-	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
 	utils::estimate_finalized_input_size,
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
+use bp_staking::traits::Authorities;
 use ethabi_decode::{ParamKind, Token};
 use frame_support::ensure;
 use miniscript::{
@@ -82,13 +83,20 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 	}
 
 	fn verify_authority(authority_id: &T::AccountId) -> Result<(), TransactionValidityError> {
-		if let Some(a) = <Authority<T>>::get() {
-			if a != *authority_id {
+		if T::Blaze::is_activated() {
+			if !T::Relayers::is_authority(authority_id) {
 				return Err(InvalidTransaction::BadSigner.into());
 			}
 			Ok(())
 		} else {
-			Err(InvalidTransaction::BadSigner.into())
+			if let Some(a) = <Authority<T>>::get() {
+				if a != *authority_id {
+					return Err(InvalidTransaction::BadSigner.into());
+				}
+				Ok(())
+			} else {
+				Err(InvalidTransaction::BadSigner.into())
+			}
 		}
 	}
 
