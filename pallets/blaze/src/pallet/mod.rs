@@ -372,7 +372,9 @@ pub mod pallet {
 					continue;
 				}
 				// verify the message
-				T::SocketQueue::verify_socket_message(&message)?;
+				if T::SocketQueue::verify_socket_message(&message).is_err() {
+					continue;
+				}
 				pool.push(message.clone());
 
 				Self::deposit_event(Event::SocketMessageSubmitted {
