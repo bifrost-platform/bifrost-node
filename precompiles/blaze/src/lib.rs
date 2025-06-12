@@ -25,6 +25,18 @@ where
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BlazeCall<Runtime>>,
 {
+	#[precompile::public("getBalance()")]
+	#[precompile::public("get_balance()")]
+	#[precompile::view]
+	fn get_balance(handle: &mut impl PrecompileHandle) -> EvmResult<u64> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let balance = pallet_blaze::Utxos::<Runtime>::iter()
+			.map(|(_, utxo)| utxo.inner.amount)
+			.sum::<u64>();
+		Ok(balance)
+	}
+
 	#[precompile::public("isActivated()")]
 	#[precompile::public("is_activated()")]
 	#[precompile::view]
