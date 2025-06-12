@@ -9,6 +9,11 @@ pragma solidity >=0.8.0;
  */
 
 interface Blaze {
+    /// @dev Returns BLAZE balance
+    /// @custom:selector c1cfb99a
+    /// @return The balance
+    function get_balance() external view returns (uint256);
+
     /// @dev Returns whether BLAZE is activated
     /// @custom:selector 0e59cd4b
     /// @return The boolean result
