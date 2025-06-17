@@ -97,6 +97,8 @@ pub mod pallet {
 		FeeRateSubmitted { authority_id: T::AccountId, lt_fee_rate: u64, fee_rate: u64 },
 		/// The UTXO has been submitted.
 		UtxoSubmitted { authority_id: T::AccountId, utxo_hash: H256, status: UtxoStatus },
+		/// The UTXO has been force pushed.
+		UtxoForcePushed { utxo_hash: H256 },
 		/// The broadcast poll has been submitted.
 		BroadcastPolled { authority_id: T::AccountId, txid: H256, is_confirmed: bool },
 		/// The socket message has been submitted.
@@ -291,6 +293,7 @@ pub mod pallet {
 				.try_push(authority_id.clone())
 				.map_err(|_| Error::<T>::OutOfRange)?;
 
+			let mut is_confirmed = false;
 			if pending_txs.voters.len() as u32 >= T::Relayers::majority() {
 				<PendingTxs<T>>::remove(&txid);
 				<ConfirmedTxs<T>>::insert(&txid, pending_txs.clone());
@@ -299,19 +302,15 @@ pub mod pallet {
 				pending_txs.inputs.iter().for_each(|input| {
 					<Utxos<T>>::remove(&input.hash);
 				});
-				Self::deposit_event(Event::BroadcastPolled {
-					authority_id: authority_id.clone(),
-					txid,
-					is_confirmed: true,
-				});
+				is_confirmed = true;
 			} else {
 				<PendingTxs<T>>::insert(&txid, pending_txs.clone());
-				Self::deposit_event(Event::BroadcastPolled {
-					authority_id: authority_id.clone(),
-					txid,
-					is_confirmed: false,
-				});
 			}
+			Self::deposit_event(Event::BroadcastPolled {
+				authority_id: authority_id.clone(),
+				txid,
+				is_confirmed,
+			});
 			Ok(().into())
 		}
 
@@ -443,6 +442,7 @@ pub mod pallet {
 						voters: BoundedVec::default(),
 					},
 				);
+				Self::deposit_event(Event::UtxoForcePushed { utxo_hash });
 			}
 
 			Ok(().into())
