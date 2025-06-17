@@ -295,16 +295,26 @@ pub mod pallet {
 
 			let mut is_confirmed = false;
 			if pending_txs.voters.len() as u32 >= T::Relayers::majority() {
-				<PendingTxs<T>>::remove(&txid);
-				<ConfirmedTxs<T>>::insert(&txid, pending_txs.clone());
+				<ConfirmedTxs<T>>::insert(&txid, pending_txs);
 
-				// remove spent utxos
-				pending_txs.inputs.iter().for_each(|input| {
-					<Utxos<T>>::remove(&input.hash);
-				});
+				match <PendingTxs<T>>::take(&txid) {
+					Some(tx) => {
+						for input in &tx.inputs {
+							match <Utxos<T>>::get(&input.hash) {
+								Some(mut utxo) => {
+									utxo.status = UtxoStatus::Used;
+									<Utxos<T>>::insert(input.hash, utxo);
+								},
+								None => return Err(Error::<T>::UtxoDNE.into()),
+							}
+						}
+					},
+					None => return Err(Error::<T>::UnknownTransaction.into()),
+				};
+
 				is_confirmed = true;
 			} else {
-				<PendingTxs<T>>::insert(&txid, pending_txs.clone());
+				<PendingTxs<T>>::insert(&txid, pending_txs);
 			}
 			Self::deposit_event(Event::BroadcastPolled {
 				authority_id: authority_id.clone(),
