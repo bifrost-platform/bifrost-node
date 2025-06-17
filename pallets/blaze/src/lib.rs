@@ -40,6 +40,8 @@ pub enum UtxoStatus {
 	Available,
 	/// The UTXO is locked to a PSBT.
 	Locked,
+	/// The UTXO is used.
+	Used,
 }
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
