@@ -9,8 +9,6 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
-sha3 = { workspace = true }
-
 # Bifrost
 precompile-utils = { workspace = true }
 
