@@ -45,6 +45,10 @@ pub mod dev {
 
 	pub struct ExecutorDispatch;
 	impl sc_executor::NativeExecutionDispatch for ExecutorDispatch {
+		#[cfg(feature = "runtime-benchmarks")]
+		type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+
+		#[cfg(not(feature = "runtime-benchmarks"))]
 		type ExtendHostFunctions = fp_ext::bifrost_ext::HostFunctions;
 
 		fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {

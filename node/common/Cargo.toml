@@ -51,3 +51,4 @@ bp-core = { workspace = true }
 
 [features]
 default = []
+runtime-benchmarks = []

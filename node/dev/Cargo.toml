@@ -79,3 +79,4 @@ bifrost-common-node = { workspace = true }
 
 [features]
 default = []
+runtime-benchmarks = ["bifrost-dev-runtime/runtime-benchmarks"]
