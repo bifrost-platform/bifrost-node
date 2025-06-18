@@ -66,15 +66,18 @@ fp-ext = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-rpc-txpool = { workspace = true, features = ["std"] }
 pallet-ethereum = { workspace = true, features = [
-	"std",
-	"forbid-evm-reentrancy",
+    "std",
+    "forbid-evm-reentrancy",
 ] }
+
+# benchmarking dependencies
+frame-benchmarking = { workspace = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }
 bifrost-mainnet-runtime = { workspace = true, features = [
-	"std",
-	"evm-tracing",
+    "std",
+    "evm-tracing",
 ] }
 bifrost-mainnet-constants = { workspace = true }
 bifrost-common-node = { workspace = true }

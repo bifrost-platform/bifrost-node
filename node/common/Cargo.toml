@@ -27,6 +27,9 @@ sc-network-sync = { workspace = true }
 sc-service = { workspace = true }
 substrate-prometheus-endpoint = { workspace = true }
 
+# benchmarking dependencies
+frame-benchmarking = { workspace = true, features = ["std"] }
+
 # substrate primitives dependencies
 sp-core = { workspace = true, features = ["std"] }
 sp-runtime = { workspace = true, features = ["std"] }
