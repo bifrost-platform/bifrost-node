@@ -32,7 +32,13 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let balance = pallet_blaze::Utxos::<Runtime>::iter()
-			.map(|(_, utxo)| utxo.inner.amount)
+			.filter_map(|(_, utxo)| {
+				if utxo.status == UtxoStatus::Available {
+					Some(utxo.inner.amount)
+				} else {
+					None
+				}
+			})
 			.sum::<u64>();
 		Ok(balance)
 	}
