@@ -46,7 +46,12 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 	}
 
 	fn clear_utxos() {
-		let _ = <Utxos<T>>::clear(u32::MAX, None);
+		let utxos = <Utxos<T>>::iter().collect::<Vec<_>>();
+		for (hash, utxo) in utxos {
+			if utxo.status != UtxoStatus::Used {
+				<Utxos<T>>::remove(hash);
+			}
+		}
 	}
 
 	fn lock_utxos(txid: &H256, inputs: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError> {

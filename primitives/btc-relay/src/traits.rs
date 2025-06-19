@@ -79,7 +79,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Get all available utxos.
 	fn get_utxos() -> Vec<UtxoInfoWithSize>;
 
-	/// Clear all utxos.
+	/// Clear all utxos. Except the ones that are used.
 	fn clear_utxos();
 
 	/// Lock the given utxos (=inputs of a PSBT).
