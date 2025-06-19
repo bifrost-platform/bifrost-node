@@ -333,7 +333,8 @@ impl<T: Config> Pallet<T> {
 		let mut lowest_larger: Option<&UtxoInfoWithSize> = None;
 
 		for scored in &pool {
-			if scored.effective_value == target {
+			if scored.effective_value >= target && scored.effective_value <= target + change_target
+			{
 				return Some((vec![scored.utxo.clone()], SelectionStrategy::Knapsack));
 			} else if scored.effective_value < target + change_target {
 				applicable.push(scored);
