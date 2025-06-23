@@ -1,11 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod blaze;
 pub mod traits;
+pub mod utils;
 
 pub use miniscript::{
 	bitcoin::{
-		hashes::Hash, key::Error, secp256k1::Secp256k1, Address, Amount, Network, Psbt, PublicKey,
-		Script, Txid,
+		hashes::Hash, key::FromSliceError, secp256k1::Secp256k1, Address, Amount, Network, Psbt,
+		PublicKey, Script, Txid,
 	},
 	psbt::PsbtExt,
 	Descriptor,
