@@ -6519,12 +6519,10 @@ dependencies = [
  "bp-btc-relay",
  "frame-support",
  "frame-system",
- "hex",
  "log",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
- "sp-io",
  "sp-runtime",
  "sp-std",
 ]
