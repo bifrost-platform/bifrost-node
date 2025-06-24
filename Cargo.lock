@@ -1117,6 +1117,7 @@ dependencies = [
  "precompile-balance",
  "precompile-bfc-offences",
  "precompile-bfc-staking",
+ "precompile-blaze",
  "precompile-btc-registration-pool",
  "precompile-btc-socket-queue",
  "precompile-collective",
