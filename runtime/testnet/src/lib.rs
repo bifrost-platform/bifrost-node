@@ -1061,8 +1061,8 @@ impl pallet_btc_registration_pool::Config for Runtime {
 }
 
 parameter_types! {
-	pub const FeeRateExpiration: u32 = 1 * MINUTES;
-	pub const ToleranceThreshold: u32 = 3;
+	pub const FeeRateExpiration: u32 = 5 * MINUTES;
+	pub const ToleranceThreshold: u32 = 5;
 }
 
 impl pallet_blaze::Config for Runtime {
