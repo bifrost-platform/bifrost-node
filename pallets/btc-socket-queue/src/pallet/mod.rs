@@ -301,6 +301,7 @@ pub mod pallet {
 									<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
 								}
 
+								T::Blaze::clear_fee_rates();
 								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
 								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
 								T::Blaze::handle_tolerance_counter(false);

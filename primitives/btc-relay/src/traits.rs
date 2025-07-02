@@ -100,6 +100,9 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Try to finalize the fee rate.
 	fn try_fee_rate_finalization(n: BlockNumberFor<T>) -> Option<(u64, u64)>;
 
+	/// Clear the fee rates.
+	fn clear_fee_rates();
+
 	/// Select utxos for given target.
 	fn select_coins(
 		pool: Vec<ScoredUtxo>,
