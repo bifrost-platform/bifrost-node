@@ -22,7 +22,7 @@ use sp_core::{Get, H256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{
 	traits::{Block, Header, Verify},
-	BoundedVec, DispatchError,
+	BoundedBTreeMap, BoundedVec, DispatchError,
 };
 use sp_std::{fmt::Display, vec, vec::Vec};
 
@@ -157,6 +157,10 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 			}
 		}
 		None
+	}
+
+	fn clear_fee_rates() {
+		<FeeRates<T>>::put(BoundedBTreeMap::new());
 	}
 
 	fn select_coins(
