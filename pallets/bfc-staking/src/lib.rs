@@ -101,7 +101,17 @@ impl Default for Releases {
 }
 
 #[derive(
-	PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
 )]
 /// The candidates or the nominators bonded amount to the network
 pub struct Bond<AccountId, Balance> {
@@ -155,7 +165,18 @@ impl Default for ValidatorStatus {
 	}
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	RuntimeDebug,
+	TypeInfo,
+)]
 /// Snapshot of the validator state at the start of the round for which they are selected
 pub struct ValidatorSnapshot<AccountId, Balance> {
 	/// The self-bond of the active validator
