@@ -2,7 +2,7 @@
 
 pub mod traits;
 
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 
 use frame_support::pallet_prelude::MaxEncodedLen;
@@ -22,6 +22,7 @@ pub const MAX_AUTHORITIES: u32 = 1_000;
 	PartialOrd,
 	Encode,
 	Decode,
+	DecodeWithMemTracking,
 	Clone,
 	Copy,
 	RuntimeDebug,
