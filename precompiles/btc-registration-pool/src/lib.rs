@@ -36,6 +36,7 @@ where
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcRegistrationPoolCall<Runtime>>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	#[precompile::public("currentRound()")]
 	#[precompile::public("current_round()")]
@@ -401,7 +402,7 @@ where
 			refund_address: refund_address.to_vec(),
 		};
 		let origin = Runtime::AddressMapping::into_account_id(caller);
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		let event = log1(
 			handle.context().address,
@@ -434,7 +435,7 @@ where
 		let call =
 			BtcRegistrationPoolCall::<Runtime>::request_set_refund { new: refund_address.to_vec() };
 		let origin = Runtime::AddressMapping::into_account_id(caller);
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}

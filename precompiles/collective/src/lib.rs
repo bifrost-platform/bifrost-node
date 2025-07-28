@@ -32,6 +32,7 @@ where
 		From<CollectiveCall<Runtime, Instance>>,
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	#[precompile::public("isMember(address)")]
 	#[precompile::public("is_member(address)")]
@@ -71,7 +72,7 @@ where
 				length_bound: proposal_length,
 			};
 
-			RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+			RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 			Ok(())
 		} else {
@@ -93,7 +94,7 @@ where
 				length_bound: proposal_length,
 			};
 
-			RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+			RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 			Ok(())
 		} else {
@@ -116,7 +117,7 @@ where
 			approve,
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -138,7 +139,7 @@ where
 			length_bound,
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
