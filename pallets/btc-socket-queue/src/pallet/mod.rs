@@ -42,11 +42,7 @@ pub mod pallet {
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
-		type Signer: IdentifyAccount<AccountId = Self::AccountId>
-			+ Encode
-			+ Decode
-			+ Parameter
-			+ MaxEncodedLen;
+		type Signer: IdentifyAccount<AccountId = Self::AccountId> + Encode + Decode + MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// The Bifrost relayers.
