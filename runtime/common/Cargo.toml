@@ -10,6 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 parity-scale-codec = { workspace = true }
+ethereum = { workspace = true }
 
 # Substrate
 frame-system = { workspace = true }

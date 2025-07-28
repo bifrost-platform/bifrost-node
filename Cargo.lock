@@ -913,6 +913,7 @@ dependencies = [
 name = "bifrost-common-runtime"
 version = "1.0.0"
 dependencies = [
+ "ethereum",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
