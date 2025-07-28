@@ -418,6 +418,7 @@ impl pallet_session::Config for Runtime {
 	type SessionManager = BfcStaking;
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = opaque::SessionKeys;
+	type DisablingStrategy = ();
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
 
