@@ -966,7 +966,7 @@ impl FeeCalculator for FixedGasPrice {
 
 /// The EVM module allows unmodified EVM code to be executed in a Substrate-based blockchain.
 impl pallet_evm::Config for Runtime {
-	type AccountProvider = pallet_evm::FrameAccountProvider<Self>;
+	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type BlockGasLimit = BlockGasLimit;
