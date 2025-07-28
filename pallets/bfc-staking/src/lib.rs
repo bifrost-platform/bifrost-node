@@ -43,7 +43,7 @@ pub use inflation::{InflationInfo, Range};
 pub use pallet::pallet::*;
 use weights::WeightInfo;
 
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 
 use bp_staking::{RoundIndex, TierType};
@@ -343,6 +343,7 @@ impl<
 	Clone,
 	Encode,
 	Decode,
+	DecodeWithMemTracking,
 	RuntimeDebug,
 	TypeInfo,
 	MaxEncodedLen,

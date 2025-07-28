@@ -17,7 +17,7 @@ use sp_core::{ConstU32, RuntimeDebug};
 use sp_runtime::{BoundedBTreeMap, BoundedVec};
 use sp_std::vec::Vec;
 
-use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 /// The maximum amount of accounts a multi-sig account can consist.
@@ -39,6 +39,7 @@ pub type UnboundedBytes = Vec<u8>;
 	Clone,
 	Copy,
 	Decode,
+	DecodeWithMemTracking,
 	Encode,
 	Eq,
 	Ord,

@@ -4,7 +4,7 @@ use crate::{pallet::pallet::Config, BalanceOf, Round};
 
 use serde::{Deserialize, Serialize};
 
-use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 use frame_support::traits::Currency;
@@ -29,6 +29,7 @@ pub fn rounds_per_year<T: Config>() -> u32 {
 	Copy,
 	Encode,
 	Decode,
+	DecodeWithMemTracking,
 	Default,
 	RuntimeDebug,
 	MaxEncodedLen,
