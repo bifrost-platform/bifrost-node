@@ -17,6 +17,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 parity-scale-codec = { workspace = true }
 scale-info = { workspace = true }
 num_enum = { workspace = true }
+ethereum = { workspace = true }
+log = { workspace = true }
 
 # Bifrost
 bifrost-common-runtime = { workspace = true }
