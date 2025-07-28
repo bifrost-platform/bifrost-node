@@ -744,10 +744,12 @@ parameter_types! {
 	pub const BasicDeposit: Balance = 100 * BFC;
 	pub const ByteDeposit: Balance = 100 * BFC;
 	pub const SubAccountDeposit: Balance = 100 * BFC;
+	pub const UsernameDeposit: Balance = 100 * BFC;
 	pub const MaxSubAccounts: u32 = 100;
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
 	pub const PendingUsernameExpiration: u32 = 1 * DAYS;
+	pub const UsernameGracePeriod: u32 = 1 * DAYS;
 	pub const MaxSuffixLength: u32 = 7;
 	pub const MaxUsernameLength: u32 = 32;
 }
@@ -759,6 +761,7 @@ impl pallet_identity::Config for Runtime {
 	type BasicDeposit = BasicDeposit;
 	type ByteDeposit = ByteDeposit;
 	type SubAccountDeposit = SubAccountDeposit;
+	type UsernameDeposit = UsernameDeposit;
 	type MaxSubAccounts = MaxSubAccounts;
 	type IdentityInformation = IdentityInfo<MaxAdditionalFields>;
 	type MaxRegistrars = MaxRegistrars;
@@ -769,6 +772,7 @@ impl pallet_identity::Config for Runtime {
 	type SigningPublicKey = <Signature as traits::Verify>::Signer;
 	type UsernameAuthorityOrigin = EnsureRoot<Self::AccountId>;
 	type PendingUsernameExpiration = PendingUsernameExpiration;
+	type UsernameGracePeriod = UsernameGracePeriod;
 	type MaxSuffixLength = MaxSuffixLength;
 	type MaxUsernameLength = MaxUsernameLength;
 	type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
