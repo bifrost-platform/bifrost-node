@@ -399,6 +399,7 @@ impl pallet_scheduler::Config for Runtime {
 	type MaxScheduledPerBlock = MaxScheduledPerBlock;
 	type OriginPrivilegeCmp = EqualPrivilegeOnly;
 	type WeightInfo = pallet_scheduler::weights::SubstrateWeight<Runtime>;
+	type BlockNumberProvider = System;
 	type Preimages = Preimage;
 }
 
