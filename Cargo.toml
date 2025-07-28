@@ -50,7 +50,10 @@ scale-info = { version = "2.11.6", default-features = false, features = [
 	"derive",
 	"serde",
 ] }
-evm = { git = "https://github.com/bifrost-platform/evm", branch = "dev-bifrost-polkadot-stable2503", default-features = false }
+evm = { version = "0.43.4", default-features = false }
+ethereum = { version = "0.18.2", default-features = false, features = [
+	"with-scale",
+] }
 clap = { version = "4.5", features = ["derive"] }
 hex = { version = "0.4.3", default-features = false }
 num_enum = { version = "0.7.3", default-features = false }
@@ -61,7 +64,7 @@ log = { version = "0.4.21", default-features = false }
 miniscript = { version = "12.3.1", default-features = false, features = [
 	"no-std",
 ] }
-ethabi-decode = { version = "1.0.0", default-features = false }
+ethabi-decode = { version = "2.0.0", default-features = false }
 hex-literal = "0.4.1"
 serde_json = "1.0"
 futures = "0.3.31"
