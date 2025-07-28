@@ -29,6 +29,7 @@ where
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcSocketQueueCall<Runtime>>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	#[precompile::public("isSignedPsbtSubmitted(bytes32,bytes,address)")]
 	#[precompile::public("is_signed_psbt_submitted(bytes32,bytes,address)")]
