@@ -69,11 +69,10 @@ where
 {
 	use fc_rpc::{
 		Eth, EthApiServer, EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, Net,
-		NetApiServer, Web3, Web3ApiServer,
+		NetApiServer, TxPool, TxPoolServer, Web3, Web3ApiServer,
 	};
 	use fc_rpc_debug::{Debug, DebugServer};
 	use fc_rpc_trace::{Trace, TraceServer};
-	use fc_rpc_txpool::{TxPool, TxPoolServer};
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use sc_consensus_grandpa_rpc::{Grandpa, GrandpaApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
