@@ -168,9 +168,6 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 const MAXIMUM_BLOCK_WEIGHT: Weight =
 	Weight::from_parts(WEIGHT_REF_TIME_PER_SECOND.saturating_div(2), u64::MAX);
 
-/// The maximum storage growth per block in bytes.
-const MAX_STORAGE_GROWTH: u64 = 400 * 1024; // 400 KB
-
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
 pub fn native_version() -> NativeVersion {
@@ -929,7 +926,8 @@ parameter_types! {
 	///     (max_extrinsic.ref_time() / max_extrinsic.proof_size()) / WEIGHT_PER_GAS
 	/// )
 	pub const GasLimitPovSizeRatio: u64 = 4;
-	pub const GasLimitStorageGrowthRatio: u64 = BlockGasLimit.saturating_div(MAX_STORAGE_GROWTH);
+	/// BlockGasLimit / MAX_STORAGE_GROWTH = 60_000_000 / (400 * 1024) = 146
+	pub const GasLimitStorageGrowthRatio: u64 = 146;
 }
 
 pub struct FindAuthorAccountId<F>(sp_std::marker::PhantomData<F>);
