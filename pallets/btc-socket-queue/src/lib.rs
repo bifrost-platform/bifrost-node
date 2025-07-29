@@ -9,7 +9,7 @@ pub mod migrations;
 pub mod weights;
 use weights::WeightInfo;
 
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 
 use bp_btc_relay::{BoundedBitcoinAddress, UnboundedBytes, MULTI_SIG_MAX_ACCOUNTS};
@@ -176,7 +176,7 @@ impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> PsbtRequest<Accoun
 	}
 }
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Decode, DecodeWithMemTracking, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for unsigned PSBT submission.
 pub struct UnsignedPsbtMessage<AccountId> {
 	/// The authority's account address.
@@ -189,7 +189,7 @@ pub struct UnsignedPsbtMessage<AccountId> {
 	pub psbt: UnboundedBytes,
 }
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Decode, DecodeWithMemTracking, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for signed PSBT submission.
 pub struct SignedPsbtMessage<AccountId> {
 	/// The authority's account address.
@@ -200,7 +200,7 @@ pub struct SignedPsbtMessage<AccountId> {
 	pub signed_psbt: UnboundedBytes,
 }
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Decode, DecodeWithMemTracking, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for PSBT finalization.
 pub struct ExecutedPsbtMessage<AccountId> {
 	/// The authority's account address.
@@ -209,7 +209,7 @@ pub struct ExecutedPsbtMessage<AccountId> {
 	pub txid: H256,
 }
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Decode, DecodeWithMemTracking, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for rollback PSBT submission.
 pub struct RollbackPsbtMessage<AccountId> {
 	/// The registered user's Bifrost address.
@@ -224,7 +224,7 @@ pub struct RollbackPsbtMessage<AccountId> {
 	pub unsigned_psbt: UnboundedBytes,
 }
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Decode, DecodeWithMemTracking, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The message payload for rollback poll submission.
 pub struct RollbackPollMessage<AccountId> {
 	/// The authority's account address.
