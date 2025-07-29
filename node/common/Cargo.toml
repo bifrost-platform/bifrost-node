@@ -17,7 +17,6 @@ tokio = { workspace = true, features = ["macros", "sync"] }
 # substrate client dependencies
 sc-client-api = { workspace = true }
 sc-rpc = { workspace = true }
-sc-rpc-api = { workspace = true }
 sc-chain-spec = { workspace = true }
 sc-consensus-grandpa = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
