@@ -310,9 +310,7 @@ macro_rules! impl_common_runtime_apis {
 					<pallet_evm::Pallet<Runtime>>::find_author()
 				}
 				fn storage_at(address: H160, index: U256) -> H256 {
-					let mut tmp = [0u8; 32];
-					index.to_big_endian(&mut tmp);
-					pallet_evm::AccountStorages::<Runtime>::get(address, H256::from_slice(&tmp[..]))
+					pallet_evm::AccountStorages::<Runtime>::get(address, H256::from(index.to_big_endian()))
 				}
 				fn call(
 					from: H160,
