@@ -97,8 +97,8 @@ pub type Precompiles = BifrostPrecompiles<Runtime>;
 /// Block type as expected by this runtime.
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
-/// The SignedExtension to the basic transaction logic.
-pub type SignedExtra = (
+/// The extension to the basic transaction logic.
+pub type TxExtension = (
 	frame_system::CheckNonZeroSender<Runtime>,
 	frame_system::CheckSpecVersion<Runtime>,
 	frame_system::CheckTxVersion<Runtime>,
@@ -111,7 +111,7 @@ pub type SignedExtra = (
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
 type Migrations = ();
@@ -753,6 +753,15 @@ parameter_types! {
 	pub const MaxKeys: u32 = 10_000;
 	pub const MaxPeerInHeartbeats: u32 = 10_000;
 	pub const DefaultSlashFraction: Perbill = Perbill::from_parts(5_000_000); // 0.5%
+}
+
+impl<LocalCall> frame_system::offchain::CreateInherent<LocalCall> for Runtime
+where
+	RuntimeCall: From<LocalCall>,
+{
+	fn create_inherent(call: RuntimeCall) -> UncheckedExtrinsic {
+		UncheckedExtrinsic::new_bare(call)
+	}
 }
 
 impl<C> frame_system::offchain::CreateTransactionBase<C> for Runtime
