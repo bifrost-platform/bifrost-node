@@ -12,7 +12,6 @@ use sc_consensus_manual_seal::EngineCommand;
 use sc_network::service::traits::NetworkService;
 use sc_network_sync::SyncingService;
 use sc_rpc::SubscriptionTaskExecutor;
-use sc_rpc_api::DenyUnsafe;
 use sc_service::TaskManager;
 
 use bp_core::{BlockNumber, Hash, Header};
@@ -61,8 +60,6 @@ pub struct FullDevDeps<C, P, BE, SC, CIDP> {
 	pub chain_spec: Box<dyn sc_chain_spec::ChainSpec>,
 	/// Graph pool instance.
 	pub graph: Arc<P>,
-	/// Whether to deny unsafe calls
-	pub deny_unsafe: DenyUnsafe,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<BE>,
 	/// The Node authority flag
@@ -113,8 +110,6 @@ pub struct FullDeps<C, P, BE, SC, CIDP> {
 	pub chain_spec: Box<dyn sc_chain_spec::ChainSpec>,
 	/// Graph pool instance.
 	pub graph: Arc<P>,
-	/// Whether to deny unsafe calls
-	pub deny_unsafe: DenyUnsafe,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<BE>,
 	/// The Node authority flag

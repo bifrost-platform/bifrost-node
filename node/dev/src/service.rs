@@ -23,7 +23,6 @@ use sc_consensus_manual_seal::EngineCommand;
 pub use sc_executor::WasmExecutor;
 use sc_network::service::traits::NetworkService;
 use sc_network_sync::SyncingService;
-use sc_rpc_api::DenyUnsafe;
 use sc_service::{
 	error::Error as ServiceError, Configuration, RpcHandlers, SpawnTaskHandle, TaskManager,
 	WarpSyncConfig,
@@ -655,8 +654,7 @@ pub fn build_rpc_extensions_builder(
 	config: &Configuration,
 	rpc_config: RpcConfig,
 	builder: RpcExtensionsBuilder,
-) -> impl Fn(DenyUnsafe, sc_rpc::SubscriptionTaskExecutor) -> Result<RpcModule<()>, sc_service::Error>
-{
+) -> impl Fn(sc_rpc::SubscriptionTaskExecutor) -> Result<RpcModule<()>, sc_service::Error> {
 	let justification_stream = builder.justification_stream.clone();
 	let shared_authority_set = builder.shared_authority_set.clone();
 
@@ -806,15 +804,14 @@ pub fn build_rpc_extensions_builder(
 		}
 	};
 
-	let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
+	let rpc_extensions_builder = move |subscription_executor| {
 		let deps = FullDevDeps {
 			client_version: client_version.clone(),
 			client: client.clone(),
 			pool: pool.clone(),
-			graph: pool.pool().clone(),
+			graph: pool.clone(),
 			select_chain: select_chain.clone(),
 			chain_spec: chain_spec.cloned_box(),
-			deny_unsafe,
 			is_authority,
 			filter_pool: filter_pool.clone(),
 			ethapi_cmd: ethapi_cmd.clone(),
