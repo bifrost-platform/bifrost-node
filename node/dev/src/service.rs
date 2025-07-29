@@ -26,7 +26,7 @@ use sc_network_sync::SyncingService;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::{
 	error::Error as ServiceError, Configuration, RpcHandlers, SpawnTaskHandle, TaskManager,
-	WarpSyncParams,
+	WarpSyncConfig,
 };
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
@@ -277,7 +277,7 @@ where
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+	let (network, system_rpc_tx, tx_handler_controller, sync_service) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			net_config,
@@ -286,7 +286,7 @@ where
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
 			block_announce_validator_builder: None,
-			warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
+			warp_sync_config: Some(WarpSyncConfig::WithProvider(warp_sync)),
 			block_relay: None,
 			metrics,
 		})?;
@@ -436,7 +436,6 @@ where
 		);
 	}
 
-	network_starter.start_network();
 	Ok(NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers })
 }
 
@@ -492,7 +491,7 @@ where
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+	let (network, system_rpc_tx, tx_handler_controller, sync_service) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			net_config,
@@ -501,7 +500,7 @@ where
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
 			block_announce_validator_builder: None,
-			warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
+			warp_sync_config: Some(WarpSyncConfig::WithProvider(warp_sync)),
 			block_relay: None,
 			metrics,
 		})?;
@@ -644,7 +643,6 @@ where
 		);
 	}
 
-	network_starter.start_network();
 	Ok(NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers })
 }
 
