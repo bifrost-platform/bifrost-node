@@ -7,6 +7,8 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+extern crate alloc;
+
 pub use bifrost_dev_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
@@ -25,7 +27,7 @@ use sp_genesis_builder::PresetId;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
-	create_runtime_str, generic, impl_opaque_keys,
+	generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
 		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
@@ -146,9 +148,9 @@ pub mod opaque {
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The identifier for the different Substrate runtimes.
-	spec_name: create_runtime_str!("thebifrost-dev"),
+	spec_name: alloc::borrow::Cow::Borrowed("thebifrost-dev"),
 	// The name of the implementation of the spec.
-	impl_name: create_runtime_str!("bifrost-dev"),
+	impl_name: alloc::borrow::Cow::Borrowed("bifrost-dev"),
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
