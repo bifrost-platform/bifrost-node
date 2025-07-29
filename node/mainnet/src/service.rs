@@ -237,12 +237,13 @@ where
 		other: (grandpa_block_import, grandpa_link, frontier_backend, mut telemetry),
 	} = new_partial(&config, &rpc_config)?;
 
-	let mut net_config =
-		sc_network::config::FullNetworkConfiguration::<_, _, NB>::new(&config.network);
-	let peer_store_handle = net_config.peer_store_handle();
-	let metrics = NB::register_notification_metrics(
-		config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+	let maybe_registry = config.prometheus_config.as_ref().map(|cfg| &cfg.registry);
+	let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, NB>::new(
+		&config.network,
+		maybe_registry.cloned(),
 	);
+	let peer_store_handle = net_config.peer_store_handle();
+	let metrics = NB::register_notification_metrics(maybe_registry);
 
 	let shared_voter_state = sc_consensus_grandpa::SharedVoterState::empty();
 	let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
