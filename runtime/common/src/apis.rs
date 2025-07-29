@@ -404,6 +404,7 @@ macro_rules! impl_common_runtime_apis {
 						value,
 						Some(<Runtime as pallet_evm::Config>::ChainId::get()),
 						access_list.clone().unwrap_or_default(),
+						authorization_list.clone().unwrap_or_default(),
 					);
 
 					let gas_limit = gas_limit.min(u64::MAX.into()).low_u64();
