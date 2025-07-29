@@ -157,7 +157,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the interface for handling transactions.
 	transaction_version: 1,
 	// The version of the interface for handling state transitions.
-	state_version: 1,
+	system_version: 1,
 };
 
 /// Maximum weight per block.
