@@ -1487,7 +1487,17 @@ impl<
 
 /// Convey relevant information describing if a nominator was added to the top or bottom
 /// Nominations added to the top yield a new total
-#[derive(Clone, Copy, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(
+	Clone,
+	Copy,
+	PartialEq,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
 pub enum NominatorAdded<B> {
 	AddedToTop { new_total: B },
 	AddedToBottom,
@@ -1915,7 +1925,7 @@ impl<
 	}
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
 /// Changes requested by the nominator
 /// - limit of 1 ongoing change per nomination
 pub enum NominationChange {
@@ -1925,7 +1935,7 @@ pub enum NominationChange {
 	Decrease,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
 /// The nomination unbonding request of a specific nominator
 pub struct NominationRequest<AccountId, Balance> {
 	/// The validator who owns this nomination
