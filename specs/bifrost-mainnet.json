@@ -3,9 +3,9 @@
   "id": "mainnet",
   "chainType": "Live",
   "bootNodes": [
-    "/dns/bootnode-01.mainnet.thebifrost.io/tcp/30333/p2p/12D3KooWJ3Urvx5mxazVyzEbrykt5ryugDRU74BacfnydmRrURjD",
-    "/dns/bootnode-02.mainnet.thebifrost.io/tcp/30333/p2p/12D3KooWEsFT1hbY4tf89xcRCHzBqxgsyZ9dtqHbq6HAZZmGidFQ",
-    "/dns/bootnode-03.mainnet.thebifrost.io/tcp/30333/p2p/12D3KooWR6oYSi9MVLBvN2bH8s4PbCBANXh5GB4oobzUQZ3FRTtk"
+    "/ip4/34.47.72.5/tcp/30333/p2p/12D3KooWPC1DSqRrWpcwf5g44sdgQz9diHU6TbTU58FGUBe6VXvG",
+    "/ip4/34.22.107.64/tcp/30333/p2p/12D3KooWEPCoMQoCtuccQLoo23pKpeF7oKoHEE2QYUF5XTqrHwHX",
+    "/ip4/34.64.33.111/tcp/30333/p2p/12D3KooWSVpP33wY3q3AuLg2KM8FkaUqki2K8A746gpQVbhSfmGv"
   ],
   "telemetryEndpoints": [
     [
