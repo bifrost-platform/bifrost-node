@@ -167,7 +167,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_activation())]
 		/// Set BLAZE's activation status.
 		pub fn set_activation(
 			origin: OriginFor<T>,
@@ -188,7 +188,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_utxos())]
 		/// Submit UTXOs. The submitted UTXO will be available once the majority of the relayers approve it.
 		pub fn submit_utxos(
 			origin: OriginFor<T>,
@@ -271,7 +271,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::broadcast_poll())]
 		/// Spend UTXOs. The UTXO will be spent once the majority of the relayers approve it.
 		pub fn broadcast_poll(
 			origin: OriginFor<T>,
@@ -325,7 +325,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_fee_rate())]
 		/// Submit a fee rate. The fee rate is only available until the deadline.
 		pub fn submit_fee_rate(
 			origin: OriginFor<T>,
@@ -361,7 +361,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_outbound_requests())]
 		/// Submit Socket messages originated from a Bitcoin outbound request.
 		pub fn submit_outbound_requests(
 			origin: OriginFor<T>,
@@ -399,7 +399,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::force_push_utxos())]
 		/// Force push UTXOs. The submitted UTXOs will be available immediately.
 		pub fn force_push_utxos(
 			origin: OriginFor<T>,
@@ -459,7 +459,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_outbound_messages())]
 		/// Remove outbound messages from the OutboundPool.
 		/// Note: This call is only available when BLAZE is deactivated.
 		pub fn remove_outbound_messages(

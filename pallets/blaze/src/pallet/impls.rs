@@ -204,6 +204,12 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		ensure!(Self::is_activated() == is_activated, Error::<T>::InvalidActivationState);
 		Ok(())
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_activation(activate: bool) -> Result<(), DispatchError> {
+		<IsActivated<T>>::put(activate);
+		Ok(())
+	}
 }
 
 impl<T: Config> Pallet<T> {

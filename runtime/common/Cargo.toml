@@ -12,6 +12,7 @@ repository = { workspace = true }
 parity-scale-codec = { workspace = true }
 
 # Substrate
+frame-benchmarking = { workspace = true, optional = true }
 frame-system = { workspace = true }
 frame-support = { workspace = true }
 sp-core = { workspace = true }
@@ -21,11 +22,18 @@ sp-std = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"parity-scale-codec/std",
-	"frame-system/std",
-	"frame-support/std",
-	"sp-core/std",
-	"sp-runtime/std",
-	"sp-std/std",
+    "parity-scale-codec/std",
+    "frame-benchmarking/std",
+    "frame-system/std",
+    "frame-support/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-std/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
+runtime-benchmarks = [
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+]

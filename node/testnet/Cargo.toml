@@ -71,7 +71,7 @@ pallet-ethereum = { workspace = true, features = [
 ] }
 
 # benchmarking dependencies
-frame-benchmarking = { workspace = true, features = ["std"] }
+frame-benchmarking = { workspace = true, optional = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }
@@ -84,4 +84,7 @@ bifrost-common-node = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = ["bifrost-testnet-runtime/runtime-benchmarks"]
+runtime-benchmarks = [
+    "bifrost-testnet-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+]

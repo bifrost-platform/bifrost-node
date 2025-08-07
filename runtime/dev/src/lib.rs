@@ -1,7 +1,6 @@
 // Build both the Native Rust binary and the WASM binary.
 #![cfg_attr(not(feature = "std"), no_std)]
-#![warn(unused_crate_dependencies)]
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 // Make the WASM binary available.
 #[cfg(feature = "std")]
@@ -690,8 +689,6 @@ impl pallet_treasury::Config for Runtime {
 	type Paymaster = PayFromAccount<Balances, TreasuryAccount>;
 	type BalanceConverter = UnityAssetBalanceConversion;
 	type PayoutPeriod = ConstU32<0>;
-	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = BenchmarkHelper;
 }
 
 parameter_types! {
@@ -895,7 +892,6 @@ impl pallet_bfc_utility::Config for Runtime {
 	type Currency = Balances;
 	type MintableOrigin =
 		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>;
-	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1195,6 +1191,17 @@ mod runtime {
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benches {
+	frame_benchmarking::define_benchmarks!(
+		[frame_system, SystemBench::<Runtime>]
+		[pallet_relay_manager, RelayManager]
+		[pallet_blaze, Blaze]
+		[pallet_btc_registration_pool, BtcRegistrationPool]
+		[pallet_btc_socket_queue, BtcSocketQueue]
+	);
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();
