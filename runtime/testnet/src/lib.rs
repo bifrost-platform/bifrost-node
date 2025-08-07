@@ -1250,5 +1250,16 @@ mod runtime {
 	pub type MultiBlockMigrations = pallet_migrations;
 }
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benches {
+	frame_benchmarking::define_benchmarks!(
+		[frame_system, SystemBench::<Runtime>]
+		[pallet_relay_manager, RelayManager]
+		[pallet_blaze, Blaze]
+		[pallet_btc_registration_pool, BtcRegistrationPool]
+		[pallet_btc_socket_queue, BtcSocketQueue]
+	);
+}
+
 bifrost_common_runtime::impl_common_runtime_apis!();
 bifrost_common_runtime::impl_self_contained_call!();

@@ -220,6 +220,12 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 			None
 		}
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_activation(activate: bool) -> Result<(), DispatchError> {
+		<IsActivated<T>>::put(activate);
+		Ok(())
+	}
 }
 
 impl<T: Config> Pallet<T> {

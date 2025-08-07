@@ -51,6 +51,12 @@ pub trait PoolManager<AccountId> {
 
 	/// Process the pending set refunds.
 	fn process_set_refunds();
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_benchmark(executives: &[AccountId], user: &AccountId) -> Result<(), DispatchError>;
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_service_state(state: MigrationSequence) -> Result<(), DispatchError>;
 }
 
 pub trait SocketQueueManager<AccountId> {
@@ -118,4 +124,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Ensure the activation status.
 	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_activation(activate: bool) -> Result<(), DispatchError>;
 }

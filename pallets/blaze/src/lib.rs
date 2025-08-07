@@ -1,7 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod benchmarking;
 pub mod migrations;
+#[cfg(test)]
+mod mock;
+
 mod pallet;
 pub mod weights;
 

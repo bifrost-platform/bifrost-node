@@ -15,14 +15,15 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::BlakeTwo256;
 
-/// Only enable the benchmarking host functions when we actually want to benchmark.
+/// Host functions for runtime including bifrost extensions and benchmarking.
 #[cfg(feature = "runtime-benchmarks")]
 pub type HostFunctions = (
 	sp_io::SubstrateHostFunctions,
+	fp_ext::bifrost_ext::HostFunctions,
 	frame_benchmarking::benchmarking::HostFunctions,
-	cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
+    cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
 );
-/// Otherwise we use storage proof size host functions for compatibility.
+/// Host functions for runtime including bifrost extensions.
 #[cfg(not(feature = "runtime-benchmarks"))]
 pub type HostFunctions = (
 	sp_io::SubstrateHostFunctions,
