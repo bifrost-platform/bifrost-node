@@ -120,6 +120,11 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 	fn get_max_fee_rate() -> u64 {
 		<MaxFeeRate<T>>::get()
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_max_fee_rate(rate: u64) {
+		<MaxFeeRate<T>>::put(rate);
+	}
 }
 
 impl<T> Pallet<T>

@@ -71,6 +71,9 @@ pub trait SocketQueueManager<AccountId> {
 
 	/// Get the maximum fee rate that can be used for a transaction.
 	fn get_max_fee_rate() -> u64;
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_max_fee_rate(rate: u64);
 }
 
 pub trait SocketVerifier<AccountId> {

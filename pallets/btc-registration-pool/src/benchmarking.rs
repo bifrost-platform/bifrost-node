@@ -16,6 +16,8 @@ fn setup_normal_state<T: Config>() {
 	<ServiceState<T>>::put(MigrationSequence::Normal);
 	let current_round = 1u32;
 	<CurrentRound<T>>::put(current_round);
+
+	T::Executives::add(&account::<T::AccountId>("executive1", 0, 0));
 }
 
 #[benchmarks(

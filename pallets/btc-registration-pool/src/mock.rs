@@ -112,6 +112,9 @@ impl SocketQueueManager<AccountId> for MockSocketQueue {
 	fn get_max_fee_rate() -> u64 {
 		u64::MAX
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_max_fee_rate(_: u64) {}
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, Clone, PartialEq, Eq)]

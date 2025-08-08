@@ -111,6 +111,9 @@ impl SocketQueueManager<AccountId> for MockSocketQueue {
 	fn get_max_fee_rate() -> u64 {
 		u64::MAX
 	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_max_fee_rate(_: u64) {}
 }
 
 impl SocketVerifier<AccountId> for MockSocketQueue {
