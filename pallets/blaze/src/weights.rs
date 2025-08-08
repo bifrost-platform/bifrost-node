@@ -140,6 +140,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Minimum execution time: 26_540_000 picoseconds.
 		Weight::from_parts(27_460_000, 3470)
 			.saturating_add(T::DbWeight::get().reads(5_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	/// Storage: `Blaze::IsActivated` (r:1 w:0)
 	/// Proof: `Blaze::IsActivated` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
@@ -246,6 +247,7 @@ impl WeightInfo for () {
 		// Minimum execution time: 26_540_000 picoseconds.
 		Weight::from_parts(27_460_000, 3470)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
 	/// Storage: `Blaze::IsActivated` (r:1 w:0)
 	/// Proof: `Blaze::IsActivated` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
