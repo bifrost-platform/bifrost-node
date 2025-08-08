@@ -182,6 +182,7 @@ std = [
 evm-tracing = ["evm-tracer"]
 runtime-wasm = []
 runtime-benchmarks = [
+    "bifrost-common-runtime/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",

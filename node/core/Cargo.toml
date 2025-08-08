@@ -56,5 +56,8 @@ runtime-benchmarks = [
     "bifrost-dev-runtime/runtime-benchmarks",
     "bifrost-testnet-runtime/runtime-benchmarks",
     "bifrost-mainnet-runtime/runtime-benchmarks",
+    "bifrost-dev-node/runtime-benchmarks",
+    "bifrost-testnet-node/runtime-benchmarks",
+    "bifrost-mainnet-node/runtime-benchmarks",
     "sc-service/runtime-benchmarks",
 ]
