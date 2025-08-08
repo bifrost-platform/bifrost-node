@@ -44,6 +44,9 @@ pub trait WeightInfo {
 	fn request_vault() -> Weight;
 	fn request_system_vault() -> Weight;
 	fn submit_vault_key() -> Weight;
+	fn submit_system_vault_key() -> Weight;
+	fn vault_key_presubmission() -> Weight;
+	fn clear_vault() -> Weight;
 	fn migration_control() -> Weight;
 	fn drop_previous_round() -> Weight;
 	fn set_max_presubmission() -> Weight;
@@ -67,8 +70,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `150`
 		//  Estimated: `3615`
-		// Minimum execution time: 61_871_000 picoseconds.
-		Weight::from_parts(63_391_000, 3615)
+		// Minimum execution time: 63_731_000 picoseconds.
+		Weight::from_parts(65_031_000, 3615)
 			.saturating_add(T::DbWeight::get().reads(5_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -94,8 +97,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `152`
 		//  Estimated: `3617`
-		// Minimum execution time: 193_252_000 picoseconds.
-		Weight::from_parts(195_762_000, 3617)
+		// Minimum execution time: 192_623_000 picoseconds.
+		Weight::from_parts(222_853_000, 3617)
 			.saturating_add(T::DbWeight::get().reads(9_u64))
 			.saturating_add(T::DbWeight::get().writes(3_u64))
 	}
@@ -113,8 +116,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `55`
 		//  Estimated: `3520`
-		// Minimum execution time: 40_381_000 picoseconds.
-		Weight::from_parts(58_861_000, 3520)
+		// Minimum execution time: 39_671_000 picoseconds.
+		Weight::from_parts(40_520_000, 3520)
 			.saturating_add(T::DbWeight::get().reads(5_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -130,10 +133,65 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `150`
 		//  Estimated: `3615`
-		// Minimum execution time: 155_012_000 picoseconds.
-		Weight::from_parts(156_351_000, 3615)
+		// Minimum execution time: 154_712_000 picoseconds.
+		Weight::from_parts(156_362_000, 3615)
 			.saturating_add(T::DbWeight::get().reads(4_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
+	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::CurrentRound` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::CurrentRound` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::SystemVault` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::SystemVault` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::BondedPubKey` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::BondedPubKey` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
+	fn submit_system_vault_key() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `74`
+		//  Estimated: `3539`
+		// Minimum execution time: 151_051_000 picoseconds.
+		Weight::from_parts(177_192_000, 3539)
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
+	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::CurrentRound` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::CurrentRound` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::PreSubmittedPubKeys` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::PreSubmittedPubKeys` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::MaxPreSubmission` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::MaxPreSubmission` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	fn vault_key_presubmission() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `57`
+		//  Estimated: `3522`
+		// Minimum execution time: 518_776_000 picoseconds.
+		Weight::from_parts(550_256_000, 3522)
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
+	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::CurrentRound` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::CurrentRound` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::BondedVault` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::BondedVault` (`max_values`: None, `max_size`: Some(132), added: 2607, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::RegistrationPool` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::RegistrationPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::BondedRefund` (r:0 w:1)
+	/// Proof: `BtcRegistrationPool::BondedRefund` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::BondedDescriptor` (r:0 w:1)
+	/// Proof: `BtcRegistrationPool::BondedDescriptor` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn clear_vault() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `337`
+		//  Estimated: `3802`
+		// Minimum execution time: 64_551_000 picoseconds.
+		Weight::from_parts(66_441_000, 3802)
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
 	}
 	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:1)
 	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
@@ -149,8 +207,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `5`
 		//  Estimated: `3470`
-		// Minimum execution time: 41_731_000 picoseconds.
-		Weight::from_parts(42_590_000, 3470)
+		// Minimum execution time: 40_781_000 picoseconds.
+		Weight::from_parts(41_240_000, 3470)
 			.saturating_add(T::DbWeight::get().reads(5_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
@@ -164,8 +222,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `8`
 		//  Estimated: `1489`
-		// Minimum execution time: 63_941_000 picoseconds.
-		Weight::from_parts(65_491_000, 1489)
+		// Minimum execution time: 64_351_000 picoseconds.
+		Weight::from_parts(65_681_000, 1489)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -175,8 +233,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 7_800_000 picoseconds.
-		Weight::from_parts(8_111_000, 0)
+		// Minimum execution time: 7_610_000 picoseconds.
+		Weight::from_parts(7_961_000, 0)
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	/// Storage: `BtcRegistrationPool::MultiSigRatio` (r:1 w:1)
@@ -185,8 +243,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `1486`
-		// Minimum execution time: 16_790_000 picoseconds.
-		Weight::from_parts(21_740_000, 1486)
+		// Minimum execution time: 16_371_000 picoseconds.
+		Weight::from_parts(16_730_000, 1486)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -208,8 +266,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `150`
 		//  Estimated: `3615`
-		// Minimum execution time: 61_871_000 picoseconds.
-		Weight::from_parts(63_391_000, 3615)
+		// Minimum execution time: 63_731_000 picoseconds.
+		Weight::from_parts(65_031_000, 3615)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
@@ -235,8 +293,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `152`
 		//  Estimated: `3617`
-		// Minimum execution time: 193_252_000 picoseconds.
-		Weight::from_parts(195_762_000, 3617)
+		// Minimum execution time: 192_623_000 picoseconds.
+		Weight::from_parts(222_853_000, 3617)
 			.saturating_add(RocksDbWeight::get().reads(9_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
@@ -254,8 +312,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `55`
 		//  Estimated: `3520`
-		// Minimum execution time: 40_381_000 picoseconds.
-		Weight::from_parts(58_861_000, 3520)
+		// Minimum execution time: 39_671_000 picoseconds.
+		Weight::from_parts(40_520_000, 3520)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
@@ -271,10 +329,65 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `150`
 		//  Estimated: `3615`
-		// Minimum execution time: 155_012_000 picoseconds.
-		Weight::from_parts(156_351_000, 3615)
+		// Minimum execution time: 154_712_000 picoseconds.
+		Weight::from_parts(156_362_000, 3615)
 			.saturating_add(RocksDbWeight::get().reads(4_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::CurrentRound` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::CurrentRound` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::SystemVault` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::SystemVault` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::BondedPubKey` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::BondedPubKey` (`max_values`: None, `max_size`: Some(73), added: 2548, mode: `MaxEncodedLen`)
+	fn submit_system_vault_key() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `74`
+		//  Estimated: `3539`
+		// Minimum execution time: 151_051_000 picoseconds.
+		Weight::from_parts(177_192_000, 3539)
+			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::CurrentRound` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::CurrentRound` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::PreSubmittedPubKeys` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::PreSubmittedPubKeys` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::MaxPreSubmission` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::MaxPreSubmission` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	fn vault_key_presubmission() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `57`
+		//  Estimated: `3522`
+		// Minimum execution time: 518_776_000 picoseconds.
+		Weight::from_parts(550_256_000, 3522)
+			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::CurrentRound` (r:1 w:0)
+	/// Proof: `BtcRegistrationPool::CurrentRound` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::BondedVault` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::BondedVault` (`max_values`: None, `max_size`: Some(132), added: 2607, mode: `MaxEncodedLen`)
+	/// Storage: `BtcRegistrationPool::RegistrationPool` (r:1 w:1)
+	/// Proof: `BtcRegistrationPool::RegistrationPool` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::BondedRefund` (r:0 w:1)
+	/// Proof: `BtcRegistrationPool::BondedRefund` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `BtcRegistrationPool::BondedDescriptor` (r:0 w:1)
+	/// Proof: `BtcRegistrationPool::BondedDescriptor` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	fn clear_vault() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `337`
+		//  Estimated: `3802`
+		// Minimum execution time: 64_551_000 picoseconds.
+		Weight::from_parts(66_441_000, 3802)
+			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(4_u64))
 	}
 	/// Storage: `BtcRegistrationPool::ServiceState` (r:1 w:1)
 	/// Proof: `BtcRegistrationPool::ServiceState` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
@@ -290,8 +403,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `5`
 		//  Estimated: `3470`
-		// Minimum execution time: 41_731_000 picoseconds.
-		Weight::from_parts(42_590_000, 3470)
+		// Minimum execution time: 40_781_000 picoseconds.
+		Weight::from_parts(41_240_000, 3470)
 			.saturating_add(RocksDbWeight::get().reads(5_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
@@ -305,8 +418,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `8`
 		//  Estimated: `1489`
-		// Minimum execution time: 63_941_000 picoseconds.
-		Weight::from_parts(65_491_000, 1489)
+		// Minimum execution time: 64_351_000 picoseconds.
+		Weight::from_parts(65_681_000, 1489)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
@@ -316,8 +429,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `0`
-		// Minimum execution time: 7_800_000 picoseconds.
-		Weight::from_parts(8_111_000, 0)
+		// Minimum execution time: 7_610_000 picoseconds.
+		Weight::from_parts(7_961_000, 0)
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
 	/// Storage: `BtcRegistrationPool::MultiSigRatio` (r:1 w:1)
@@ -326,8 +439,8 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `1486`
-		// Minimum execution time: 16_790_000 picoseconds.
-		Weight::from_parts(21_740_000, 1486)
+		// Minimum execution time: 16_371_000 picoseconds.
+		Weight::from_parts(16_730_000, 1486)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}

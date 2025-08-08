@@ -491,7 +491,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
@@ -574,7 +574,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
+		#[pallet::weight(<T as Config>::WeightInfo::vault_key_presubmission())]
 		/// Submit public keys for prepare for the fast registration.
 		pub fn vault_key_presubmission(
 			origin: OriginFor<T>,
@@ -628,7 +628,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
+		#[pallet::weight(<T as Config>::WeightInfo::clear_vault())]
 		/// Clear a vault and all its related data.
 		pub fn clear_vault(
 			origin: OriginFor<T>,
