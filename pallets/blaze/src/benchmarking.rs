@@ -1,7 +1,7 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use super::*;
-use bp_btc_relay::{blaze::UtxoInfo, UnboundedBytes};
+use bp_btc_relay::{blaze::UtxoInfo, traits::SocketQueueManager, UnboundedBytes};
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use parity_scale_codec::Decode;
@@ -70,6 +70,7 @@ mod benchmarks {
 		let signature = T::Signature::decode(&mut [0u8; 65].as_ref()).expect("Valid signature");
 
 		<IsActivated<T>>::put(true);
+		T::SocketQueue::set_max_fee_rate(u64::MAX);
 
 		#[extrinsic_call]
 		_(RawOrigin::None, fee_rate_submission, signature);
