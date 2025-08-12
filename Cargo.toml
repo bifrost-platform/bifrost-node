@@ -155,6 +155,7 @@ substrate-frame-rpc-system = { default-features = false, git = "https://github.c
 frame-system = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 frame-support = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 frame-executive = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
+frame-metadata-hash-extension = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 frame-system-rpc-runtime-api = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 frame-benchmarking = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 frame-benchmarking-cli = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
