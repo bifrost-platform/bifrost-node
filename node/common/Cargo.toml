@@ -47,6 +47,9 @@ fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }
 fp-ext = { workspace = true, features = ["std"] }
 
+# Cumulus dependencies
+cumulus-primitives-proof-size-hostfunction = { workspace = true }
+
 # Local Dependencies
 bp-core = { workspace = true }
 
