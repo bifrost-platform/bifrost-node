@@ -133,6 +133,9 @@ sc-basic-authorship = { git = "https://github.com/bifrost-platform/polkadot-sdk"
 substrate-prometheus-endpoint = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 sc-offchain = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 
+# Cumulus
+cumulus-primitives-proof-size-hostfunction = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
+
 # Substrate Primitive
 sp-io = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
 sp-api = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "dev-bifrost-polkadot-stable2503" }
