@@ -427,6 +427,7 @@ impl pallet_session::Config for Runtime {
 }
 
 impl pallet_session::historical::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type FullIdentification = pallet_bfc_staking::ValidatorSnapshot<AccountId, Balance>;
 	type FullIdentificationOf = pallet_bfc_staking::ValidatorSnapshotOf<Self>;
 }
@@ -438,12 +439,12 @@ parameter_types! {
 	pub const DefaultSlashFraction: Perbill = Perbill::from_parts(1000000);
 }
 
-impl<LocalCall> frame_system::offchain::CreateInherent<LocalCall> for Runtime
+impl<LocalCall> frame_system::offchain::CreateBare<LocalCall> for Runtime
 where
 	RuntimeCall: From<LocalCall>,
 {
-	fn create_inherent(call: RuntimeCall) -> UncheckedExtrinsic {
-		UncheckedExtrinsic::new_bare(call)
+	fn create_bare(call: Self::RuntimeCall) -> Self::Extrinsic {
+		Self::Extrinsic::new_bare(call)
 	}
 }
 
@@ -992,7 +993,6 @@ impl FeeCalculator for FixedGasPrice {
 /// The EVM module allows unmodified EVM code to be executed in a Substrate-based blockchain.
 impl pallet_evm::Config for Runtime {
 	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type BlockGasLimit = BlockGasLimit;
 	type ChainId = BifrostChainId;
@@ -1023,7 +1023,6 @@ parameter_types! {
 
 /// The Ethereum module is responsible for storing block data and provides RPC compatibility.
 impl pallet_ethereum::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type StateRoot = pallet_ethereum::IntermediateStateRoot<Self::Version>;
 	type PostLogContent = PostBlockAndTxnHashes;
 	type ExtraDataLength = ConstU32<30>;
@@ -1049,7 +1048,6 @@ impl pallet_base_fee::BaseFeeThreshold for BaseFeeThreshold {
 
 /// The Base fee module adds support for EIP-1559 transactions and handles base fee calculations.
 impl pallet_base_fee::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Threshold = BaseFeeThreshold;
 	type DefaultBaseFeePerGas = DefaultBaseFeePerGas;
 	type DefaultElasticity = DefaultElasticity;
