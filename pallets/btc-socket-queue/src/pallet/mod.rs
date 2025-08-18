@@ -36,8 +36,6 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + pallet_evm::Config {
-		/// Overarching event type
-		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
