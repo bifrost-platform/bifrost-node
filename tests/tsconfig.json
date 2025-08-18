@@ -13,7 +13,7 @@
       "es2017",
       "esnext.asynciterable"
     ],
-    "module": "commonjs",
+    "module": "esnext",
     "noImplicitAny": true,
     "noImplicitReturns": false,
     "noImplicitThis": true,
@@ -26,5 +26,9 @@
     "moduleResolution": "node",
     "strict": true,
     "skipLibCheck": true
+  },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
   }
 }
