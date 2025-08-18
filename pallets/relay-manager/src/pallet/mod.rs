@@ -33,8 +33,6 @@ pub mod pallet {
 	/// Configuration trait of this pallet
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Overarching event type
-		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Interface of Bitcoin Socket Queue pallet.
 		type SocketQueue: SocketQueueManager<Self::AccountId>;
 		/// Interface of Bitcoin Registration Pool pallet.

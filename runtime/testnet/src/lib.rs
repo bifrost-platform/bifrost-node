@@ -812,7 +812,6 @@ parameter_types! {
 
 /// A module that wraps `pallet_offences` to act as a central offence handler
 impl pallet_bfc_offences::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type Slash = Treasury;
 	type DefaultOffenceExpirationInSessions = DefaultOffenceExpirationInSessions;
@@ -831,7 +830,6 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
 	type ValidatorSet = Historical;
@@ -893,7 +891,6 @@ parameter_types! {
 
 /// Minimal staking pallet that implements validator selection by total backed stake.
 impl pallet_bfc_staking::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MonetaryGovernanceOrigin = EnsureRoot<AccountId>;
 	type RelayManager = RelayManager;
@@ -929,7 +926,6 @@ impl pallet_bfc_staking::Config for Runtime {
 
 /// A module that manages this networks community
 impl pallet_bfc_utility::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MintableOrigin =
 		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>;
@@ -1064,7 +1060,6 @@ impl pallet_base_fee::Config for Runtime {
 }
 
 impl pallet_btc_socket_queue::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
@@ -1083,7 +1078,6 @@ parameter_types! {
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
