@@ -4,15 +4,15 @@
   "author": "bifrost-platform",
   "type": "module",
   "scripts": {
-    "test": "NODE_OPTIONS='--loader=ts-node/esm' mocha tests/**/**/*.ts --exit",
-    "test_local_runtime": "NODE_OPTIONS='--loader=ts-node/esm' mocha runtime/**/**/*local_runtime*.ts --exit",
-    "test_live_runtime": "NODE_OPTIONS='--loader=ts-node/esm' mocha runtime/**/**/*live_runtime*.ts --exit",
-    "run_node": "NODE_OPTIONS='--loader=ts-node/esm' ts-node commands/run_node.ts",
-    "set_node": "NODE_OPTIONS='--loader=ts-node/esm' ts-node commands/set_node.ts",
-    "rewind_node": "NODE_OPTIONS='--loader=ts-node/esm' ts-node commands/rewind_node.ts",
-    "purge_chains": "NODE_OPTIONS='--loader=ts-node/esm' ts-node commands/purge_chains.ts",
-    "purge_containers": "NODE_OPTIONS='--loader=ts-node/esm' ts-node commands/purge_containers.ts",
-    "benchmark": "NODE_OPTIONS='--loader=ts-node/esm --no-warnings' ts-node benchmark/index.ts"
+    "test": "NODE_OPTIONS='--import=tsx/esm' mocha tests/**/**/*registration_pool.ts --exit",
+    "test_local_runtime": "NODE_OPTIONS='--import=tsx/esm' mocha runtime/**/**/*local_runtime*.ts --exit",
+    "test_live_runtime": "NODE_OPTIONS='--import=tsx/esm' mocha runtime/**/**/*live_runtime*.ts --exit",
+    "run_node": "NODE_OPTIONS='--import=tsx/esm' tsx commands/run_node.ts",
+    "set_node": "NODE_OPTIONS='--import=tsx/esm' tsx commands/set_node.ts",
+    "rewind_node": "NODE_OPTIONS='--import=tsx/esm' tsx commands/rewind_node.ts",
+    "purge_chains": "NODE_OPTIONS='--import=tsx/esm' tsx commands/purge_chains.ts",
+    "purge_containers": "NODE_OPTIONS='--import=tsx/esm' tsx commands/purge_containers.ts",
+    "benchmark": "NODE_OPTIONS='--import=tsx/esm --no-warnings' tsx benchmark/index.ts"
   },
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
     "ethers": "6.15.0",
     "shelljs": "0.10.0",
     "tcp-port-used": "1.0.2",
+    "tsx": "4.20.4",
     "web3": "4.16.0"
   },
   "devDependencies": {

@@ -137,7 +137,7 @@ export function describeDevNode(
       await Promise.all(context._polkadotApis.map((p) => p.disconnect()));
 
       if (node) {
-        node.kill();
+        await killNodeProcess(node);
         node = null;
       }
     });
@@ -204,7 +204,54 @@ export async function startSingleDevNode(overrideRpcPort?: number | null, multi:
     process.exit(1);
   });
 
+  // Wait for node to be ready by checking if RPC port accepts connections
+  await waitForNodeReady(rpcPort, 15000);
+
   return { p2pPort, rpcPort, wsPort, runningNode };
+}
+
+async function waitForNodeReady(port: number, timeoutMs: number = 15000): Promise<void> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const inUse = await tcpPortUsed.check(port, '127.0.0.1');
+      if (inUse) {
+        await sleep(1000); // Wait 1s more for node to fully initialize
+        return;
+      }
+    } catch (error) {
+      // Port check failed, continue waiting
+    }
+    await sleep(500); // Check every 500ms
+  }
+  throw new Error(`Node failed to start on port ${port} within ${timeoutMs}ms`);
+}
+
+async function killNodeProcess(node: ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    if (!node.pid) {
+      resolve();
+      return;
+    }
+
+    // Set a timeout to force kill if graceful shutdown fails
+    const forceKillTimer = globalThis.setTimeout(() => {
+      if (!node.killed) {
+        console.debug(`Force killing node process ${node.pid}`);
+        node.kill('SIGKILL');
+      }
+    }, 5000);
+
+    node.once('exit', () => {
+      clearTimeout(forceKillTimer);
+      console.debug(`Node process ${node.pid} terminated`);
+      resolve();
+    });
+
+    // Try graceful shutdown first
+    console.debug(`Gracefully stopping node process ${node.pid}`);
+    node.kill('SIGTERM');
+  });
 }
 
 export async function findAvailablePorts() {
