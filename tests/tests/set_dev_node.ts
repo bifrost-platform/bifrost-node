@@ -137,7 +137,7 @@ export function describeDevNode(
       await Promise.all(context._polkadotApis.map((p) => p.disconnect()));
 
       if (node) {
-        await killNodeProcess(node);
+        node.kill();
         node = null;
       }
     });
@@ -225,33 +225,6 @@ async function waitForNodeReady(port: number, timeoutMs: number = 15000): Promis
     await sleep(500); // Check every 500ms
   }
   throw new Error(`Node failed to start on port ${port} within ${timeoutMs}ms`);
-}
-
-async function killNodeProcess(node: ChildProcess): Promise<void> {
-  return new Promise((resolve) => {
-    if (!node.pid) {
-      resolve();
-      return;
-    }
-
-    // Set a timeout to force kill if graceful shutdown fails
-    const forceKillTimer = globalThis.setTimeout(() => {
-      if (!node.killed) {
-        console.debug(`Force killing node process ${node.pid}`);
-        node.kill('SIGKILL');
-      }
-    }, 5000);
-
-    node.once('exit', () => {
-      clearTimeout(forceKillTimer);
-      console.debug(`Node process ${node.pid} terminated`);
-      resolve();
-    });
-
-    // Try graceful shutdown first
-    console.debug(`Gracefully stopping node process ${node.pid}`);
-    node.kill('SIGTERM');
-  });
 }
 
 export async function findAvailablePorts() {
