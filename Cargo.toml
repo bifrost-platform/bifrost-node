@@ -180,6 +180,7 @@ pallet-utility = { default-features = false, git = "https://github.com/bifrost-p
 pallet-collective = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 pallet-democracy = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 pallet-membership = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
+pallet-migrations = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 pallet-im-online = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 pallet-offences = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 pallet-treasury = { default-features = false, git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }

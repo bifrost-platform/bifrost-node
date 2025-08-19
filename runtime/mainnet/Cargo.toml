@@ -56,6 +56,7 @@ pallet-identity = { workspace = true }
 pallet-preimage = { workspace = true }
 pallet-safe-mode = { workspace = true }
 pallet-tx-pause = { workspace = true }
+pallet-migrations = {workspace = true}
 
 # substrate primitives
 sp-api = { workspace = true }
@@ -176,6 +177,7 @@ std = [
 	"evm-tracer/std",
 	"precompile-utils/std",
 	"substrate-wasm-builder",
+	"pallet-migrations/std",
 ]
 evm-tracing = ["evm-tracer"]
 runtime-wasm = []

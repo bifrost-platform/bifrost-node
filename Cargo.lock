@@ -1052,6 +1052,7 @@ dependencies = [
  "pallet-identity",
  "pallet-im-online",
  "pallet-membership",
+ "pallet-migrations",
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
@@ -1202,6 +1203,7 @@ dependencies = [
  "pallet-identity",
  "pallet-im-online",
  "pallet-membership",
+ "pallet-migrations",
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
@@ -1372,6 +1374,7 @@ dependencies = [
  "pallet-identity",
  "pallet-im-online",
  "pallet-membership",
+ "pallet-migrations",
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
@@ -5210,7 +5213,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -8019,6 +8022,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-migrations"
+version = "11.0.0"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2506#842d92747f3457026ce3f0406f44dd87fbf9dcb0"
+dependencies = [
+ "docify",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "log",
+ "parity-scale-codec",
+ "polkadot-sdk-frame",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
 name = "pallet-mmr"
 version = "41.0.0"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2506#842d92747f3457026ce3f0406f44dd87fbf9dcb0"
@@ -9402,7 +9424,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck 0.5.0",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "log",
  "multimap",
  "once_cell",
@@ -9435,7 +9457,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -10037,7 +10059,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -12016,16 +12038,6 @@ dependencies = [
  "rustc_version",
  "sha2 0.10.8",
  "subtle 2.6.1",
-]
-
-[[package]]
-name = "socket2"
-version = "0.4.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
