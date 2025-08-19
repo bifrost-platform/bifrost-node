@@ -234,7 +234,11 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - system vault is not generated', async function () {
+    await context.createBlock();
+
     await requestSystemVault(context);
+
+    await context.createBlock();
 
     const msg = {
       authorityId: alith.address,
@@ -250,7 +254,11 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - empty socket message submitted', async function () {
+    await context.createBlock();
+
     await submitSystemVaultKey(context);
+
+    await context.createBlock();
 
     const msg = {
       authorityId: alith.address,
@@ -266,6 +274,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - invalid socket message bytes', async function () {
+    await context.createBlock();
     const msg = {
       authorityId: alith.address,
       outputs: [[REFUND_ADDRESS, [INVALID_SOCKET_MESSAGE_WITH_INVALID_BYTES]], [SYSTEM_VAULT, []]],
@@ -280,6 +289,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - socket contract is not set', async function () {
+    await context.createBlock();
     const msg = {
       authorityId: alith.address,
       outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
@@ -294,7 +304,10 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - invalid request info response', async function () {
+    await context.createBlock();
     await setSocket(context, ZERO_ADDRESS, false); // set socket to wrong address
+    await context.createBlock();
+    await context.createBlock();
 
     const msg = {
       authorityId: alith.address,
@@ -310,10 +323,13 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - socket message hash does not match', async function () {
+    await context.createBlock();
+
     const socket = await deployDemoSocket(context, INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_MSG_HASH);
     if (socket) {
       await setSocket(context, socket, false);
     }
+    await context.createBlock();
 
     const msg = {
       authorityId: alith.address,
@@ -329,6 +345,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - message status is not accepted', async function () {
+    await context.createBlock();
     const socket = await deployDemoSocket(context, INVALID_DEMO_SOCKET_BYTE_CODE_WITH_INVALID_STATUS);
     if (socket) {
       await setSocket(context, socket, false);
@@ -348,10 +365,12 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - invalid bridge relay chains', async function () {
+    await context.createBlock();
     const socket = await deployDemoSocket(context, VALID_DEMO_SOCKET_BYTE_CODE);
     if (socket) {
       await setSocket(context, socket, false);
     }
+    await context.createBlock();
 
     const msg = {
       authorityId: alith.address,
@@ -367,6 +386,9 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - user is not registered', async function () {
+    await context.createBlock();
+    await context.createBlock();
+
     const msg = {
       authorityId: alith.address,
       outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
@@ -381,8 +403,13 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - socket message duplication', async function () {
+    await context.createBlock();
+
     await joinRegistrationPool(context, REFUND_ADDRESS, TEST_CONTROLLERS[1].private);
+    await context.createBlock();
+
     await submitVaultKey(context);
+    await context.createBlock();
 
     const msg = {
       authorityId: alith.address,
@@ -398,6 +425,8 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - missing refund tx output', async function () {
+    await context.createBlock();
+
     const msg = {
       authorityId: alith.address,
       outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
@@ -412,6 +441,8 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should fail to submit unsigned psbt - tx output with wrong amount', async function () {
+    await context.createBlock();
+
     const msg = {
       authorityId: alith.address,
       outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
@@ -426,6 +457,7 @@ describeDevNode('pallet_btc_socket_queue - submit unsigned pbst', (context) => {
   });
 
   it('should successfully submit an unsigned psbt', async function () {
+    await context.createBlock();
     const msg = {
       authorityId: alith.address,
       outputs: [[REFUND_ADDRESS, [VALID_SOCKET_MESSAGE]], [SYSTEM_VAULT, []]],
@@ -529,6 +561,7 @@ describeDevNode('pallet_btc_socket_queue - submit signed pbst', (context) => {
   });
 
   it('should fail to submit signed psbt - did not sign psbt', async function () {
+    await context.createBlock();
     const msg = {
       authorityId: alithRelayer.address,
       unsignedPsbt: VALID_UNSIGNED_PSBT,
