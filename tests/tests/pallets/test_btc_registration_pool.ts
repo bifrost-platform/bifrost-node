@@ -400,15 +400,6 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
     const messageU8a = new TextEncoder().encode(message);
     const signature = charlethRelayer.sign(messageU8a);
 
-    const rawRegisteredBitcoinPairBefore: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(poolRound, baltathar.address);
-    const registeredBitcoinPairBefore = rawRegisteredBitcoinPairBefore.toHuman();
-    console.log('Before submission - vault pubKeys:', registeredBitcoinPairBefore?.vault?.pubKeys);
-    console.log('alithRelayer address:', alithRelayer.address);
-    console.log('charlethRelayer address:', charlethRelayer.address);
-
-    const rawBondedPubKey = await context.polkadotApi.query.btcRegistrationPool.bondedPubKey(poolRound, pubKey);
-    console.log('Bonded pubKey owner:', rawBondedPubKey?.toHuman());
-
     const keySubmission = {
       authorityId: charlethRelayer.address,
       who: baltathar.address,
@@ -416,17 +407,10 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
       poolRound
     };
 
-    console.log('Submitting with keySubmission:', keySubmission);
-
     await context.polkadotApi.tx.btcRegistrationPool.submitVaultKey(keySubmission, signature).send();
     await context.createBlock();
 
     const extrinsicResult = await getExtrinsicResult(context, 'btcRegistrationPool', 'submitVaultKey');
-
-    // Check state after submission
-    const rawRegisteredBitcoinPairAfter: any = await context.polkadotApi.query.btcRegistrationPool.registrationPool(poolRound, baltathar.address);
-    const registeredBitcoinPairAfter = rawRegisteredBitcoinPairAfter.toHuman();
-    console.log('After submission - vault pubKeys:', registeredBitcoinPairAfter?.vault?.pubKeys);
 
     expect(extrinsicResult).eq('VaultAlreadyContainsPubKey');
   });
