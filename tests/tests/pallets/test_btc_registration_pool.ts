@@ -391,6 +391,8 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   });
 
   it('should fail to submit a key due to already submitted key', async function () {
+    await context.createBlock();
+
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const poolRound = await getCurrentRound(context);
 
@@ -430,6 +432,8 @@ describeDevNode('pallet_btc_registration_pool - submit_key (2-of-2)', (context) 
   });
 
   it('should fail to submit a key due unknown user', async function () {
+    await context.createBlock();
+
     const pubKey = '0x02c56c0cf38df8708f2e5725102f87a1d91f9356b0b7ebc4f6cafb396684e143b4';
     const keySubmission = {
       authorityId: charlethRelayer.address,
