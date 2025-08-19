@@ -252,10 +252,8 @@ describe('test_runtime - ethapi', function () {
 
   it('should successfully calculate estimated gas - transfer', async function () {
     const [gasLimit, signedTx] = await createErc20Transfer();
-    console.log(gasLimit);
     const txHash = await sendTransaction(signedTx);
     const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    console.log(receipt);
     expect(receipt).is.ok;
     expect(receipt?.gasUsed).is.ok;
     expect(Number(receipt?.gasUsed)).lte(Number(gasLimit));
@@ -263,10 +261,8 @@ describe('test_runtime - ethapi', function () {
 
   it('should successfully calculate estimated gas - approve', async function () {
     const [gasLimit, signedTx] = await createErc20Approve();
-    console.log(gasLimit);
     const txHash = await sendTransaction(signedTx);
     const receipt = await web3.requestManager.send({ method: 'eth_getTransactionReceipt', params: [txHash] });
-    console.log(receipt);
     expect(receipt).is.ok;
     expect(receipt?.gasUsed).is.ok;
     expect(Number(receipt?.gasUsed)).lte(Number(gasLimit));
