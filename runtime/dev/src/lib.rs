@@ -52,7 +52,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
+	FeeCalculator, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -861,7 +861,7 @@ parameter_types! {
 	/// Default maximum basicvalidators selected per round, default at genesis.
 	pub const DefaultMaxSelectedBasicCandidates: u32 = 10;
 	/// Maximum top nominations per candidate.
-	pub const MaxTopNominationsPerCandidate: u32 = 2_000;
+	pub const MaxTopNominationsPerCandidate: u32 = 2;
 	/// Maximum bottom nominations per candidate.
 	pub const MaxBottomNominationsPerCandidate: u32 = 1;
 	/// Maximum nominations per nominator.
@@ -1091,7 +1091,6 @@ parameter_types! {
 }
 
 impl pallet_blaze::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = RelayManager;

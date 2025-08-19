@@ -28,7 +28,6 @@ bp-staking = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"serde/std",
 	"scale-info/std",
 	"parity-scale-codec/std",
 	"frame-support/std",

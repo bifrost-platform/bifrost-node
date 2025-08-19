@@ -50,7 +50,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
+	FeeCalculator, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -114,9 +114,6 @@ pub type TxExtension = (
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
-
-/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type Migrations = ();
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
 type Migrations = ();
@@ -1097,7 +1094,6 @@ parameter_types! {
 }
 
 impl pallet_blaze::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = RelayManager;

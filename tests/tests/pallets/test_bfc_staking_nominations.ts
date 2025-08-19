@@ -1,3 +1,12 @@
+/**
+ * NOTE:
+ * 
+ * - This test requires runtime configurations set to:
+ *   - MaxTopNominationsPerCandidate: 2
+ *   - MaxBottomNominationsPerCandidate: 1
+ *   - DefaultBlocksPerRound: 2 * MINUTES
+ */
+
 import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 
@@ -25,6 +34,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   it('should fail due to minimum amount constraint', async function () {
     const stakeBelowMin = new BigNumber(MIN_NOMINATOR_STAKING_AMOUNT).minus(10 ** 15);
 
+    await context.createBlock();
+
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stakeBelowMin.toFixed(), 0, 0)
       .signAndSend(baltathar);
@@ -34,6 +45,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
 
   it('should fail due to unknown candidate', async function () {
     const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+
+    await context.createBlock();
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(charleth.address, stake.toFixed(), 0, 0)
@@ -47,6 +60,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
 
   it('should successfully nominate to alith - baltathar', async function () {
     const stake = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
+
+    await context.createBlock();
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 0, 0)
@@ -80,6 +95,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
 
   it('should successfully nominate to alith - charleth', async function () {
     const stake = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
+
+    await context.createBlock();
 
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 10, 10)
@@ -116,6 +133,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   it('should fail due to calling nominate function twice', async function () {
     const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
 
+    await context.createBlock();
+
     await context.polkadotApi.tx.bfcStaking
       .nominate(alith.address, stake.toFixed(), 1, 1)
       .signAndSend(baltathar);
@@ -128,6 +147,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
 
   it('should fail due to calling nominatorBondMore before nominate', async function () {
     const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+
+    await context.createBlock();
 
     await context.polkadotApi.tx.bfcStaking
       .nominatorBondMore(alith.address, stake.toFixed())
@@ -142,6 +163,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   it('should successfully bond more', async function () {
     const more = new BigNumber(DEFAULT_STAKING_AMOUNT); // 1000 BFC
     const stakeBefore = more;
+
+    await context.createBlock();
 
     await context.polkadotApi.tx.bfcStaking
       .nominatorBondMore(alith.address, more.toFixed())
@@ -176,6 +199,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   });
 
   it('should successfully join bottom nominations', async function () {
+    await context.createBlock();
+
     const defaultStake = new BigNumber(DEFAULT_STAKING_AMOUNT);
     const stake = new BigNumber(900).multipliedBy(10 ** 18); // 900 BFC
 
@@ -184,6 +209,9 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
       .signAndSend(dorothy);
 
     await context.createBlock();
+
+    const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'nominate');
+    console.log(extrinsicResult);
 
     const rawCandidateState: any = await context.polkadotApi.query.bfcStaking.candidateInfo(alith.address);
     const candidateState = rawCandidateState.unwrap();
@@ -281,6 +309,8 @@ describeDevNode('pallet_bfc_staking - nominations', (context) => {
   it('should successfully schedule nominator bond less multiple times - same round', async function () {
     const prevLess = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(2); // 500 BFC
     const less = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(10); // 100 BFC -> 1400 BFC
+
+    await context.createBlock();
 
     await context.polkadotApi.tx.bfcStaking
       .scheduleNominatorBondLess(alith.address, less.toFixed())
