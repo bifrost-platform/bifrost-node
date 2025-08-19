@@ -82,7 +82,7 @@ export function describeDevNode(
       node = init.runningNode;
       context.rpcPort = init.rpcPort;
 
-      // Context is given prior to this assignement, so doing
+      // Context is given prior to this assignment, so doing
       // context = init.context will fail because it replace the variable;
 
       context._polkadotApis = [];
