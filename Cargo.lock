@@ -1052,6 +1052,7 @@ dependencies = [
  "pallet-identity",
  "pallet-im-online",
  "pallet-membership",
+ "pallet-migrations",
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
@@ -1202,6 +1203,7 @@ dependencies = [
  "pallet-identity",
  "pallet-im-online",
  "pallet-membership",
+ "pallet-migrations",
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
@@ -1372,6 +1374,7 @@ dependencies = [
  "pallet-identity",
  "pallet-im-online",
  "pallet-membership",
+ "pallet-migrations",
  "pallet-offences",
  "pallet-preimage",
  "pallet-relay-manager",
@@ -7976,6 +7979,25 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-weights",
+]
+
+[[package]]
+name = "pallet-migrations"
+version = "11.0.0"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2506#842d92747f3457026ce3f0406f44dd87fbf9dcb0"
+dependencies = [
+ "docify",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "log",
+ "parity-scale-codec",
+ "polkadot-sdk-frame",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]

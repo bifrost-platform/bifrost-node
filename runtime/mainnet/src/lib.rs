@@ -223,6 +223,8 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	/// migrations pallet
+	type MultiBlockMigrator = MultiBlockMigrations;
 }
 
 /// Calls that can bypass the safe-mode pallet.
@@ -1095,6 +1097,21 @@ impl pallet_blaze::Config for Runtime {
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub MbmServiceWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
+}
+
+impl pallet_migrations::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Migrations = pallet_identity::migration::v2::LazyMigrationV1ToV2<Runtime>;
+	type CursorMaxLen = ConstU32<65_536>;
+	type IdentifierMaxLen = ConstU32<256>;
+	type MigrationStatusHandler = ();
+	type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
+	type MaxServiceWeight = MbmServiceWeight;
+	type WeightInfo = pallet_migrations::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -1219,6 +1236,9 @@ mod runtime {
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
+
+	#[runtime::pallet_index(100)]
+	pub type MultiBlockMigrations = pallet_migrations;
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();
