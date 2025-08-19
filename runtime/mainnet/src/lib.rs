@@ -1086,7 +1086,6 @@ parameter_types! {
 }
 
 impl pallet_blaze::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = RelayManager;
