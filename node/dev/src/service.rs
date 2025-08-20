@@ -160,10 +160,11 @@ pub fn new_partial(
 	let executor = sc_service::new_wasm_executor(&config.executor);
 
 	let (client, backend, keystore_container, task_manager) =
-		sc_service::new_full_parts::<Block, dev::RuntimeApi, _>(
+		sc_service::new_full_parts_record_import::<Block, dev::RuntimeApi, _>(
 			config,
 			telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
 			executor,
+			true,
 		)?;
 	let client = Arc::new(client);
 
