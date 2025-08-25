@@ -123,7 +123,6 @@ std = [
 	"frame-support/std",
 	"frame-system-rpc-runtime-api/std",
 	"frame-system/std",
-    "frame-system-benchmarking/std",
     "pallet-treasury/std",
 	"pallet-aura/std",
 	"pallet-balances/std",
