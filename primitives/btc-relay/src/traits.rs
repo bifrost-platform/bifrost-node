@@ -51,6 +51,12 @@ pub trait PoolManager<AccountId> {
 
 	/// Process the pending set refunds.
 	fn process_set_refunds();
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_benchmark(executives: &[AccountId], user: &AccountId) -> Result<(), DispatchError>;
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_service_state(state: MigrationSequence) -> Result<(), DispatchError>;
 }
 
 pub trait SocketQueueManager<AccountId> {
@@ -65,6 +71,9 @@ pub trait SocketQueueManager<AccountId> {
 
 	/// Get the maximum fee rate that can be used for a transaction.
 	fn get_max_fee_rate() -> u64;
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_max_fee_rate(rate: u64);
 }
 
 pub trait SocketVerifier<AccountId> {
@@ -118,4 +127,7 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Ensure the activation status.
 	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_activation(activate: bool) -> Result<(), DispatchError>;
 }

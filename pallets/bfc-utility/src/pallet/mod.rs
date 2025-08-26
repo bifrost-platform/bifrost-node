@@ -1,4 +1,4 @@
-use crate::{migrations, BalanceOf, PropIndex, Proposal, WeightInfo};
+use crate::{migrations, BalanceOf, PropIndex, Proposal};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -30,8 +30,6 @@ pub mod pallet {
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 		/// The origin which may forcibly mint native tokens.
 		type MintableOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-		/// Weight information for extrinsics in this pallet.
-		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::error]
@@ -88,7 +86,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::community_proposal())]
+		#[pallet::weight((T::DbWeight::get().reads(2).saturating_add(T::DbWeight::get().writes(2)), DispatchClass::Operational,))]
 		/// General Proposal
 		/// ####
 		/// General community proposal without changes on codes.
@@ -111,7 +109,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::mint_native())]
+		#[pallet::weight((T::DbWeight::get().writes(1), DispatchClass::Operational,))]
 		/// Mint the exact amount of native tokens and deposit to the target address.
 		pub fn mint_native(
 			origin: OriginFor<T>,

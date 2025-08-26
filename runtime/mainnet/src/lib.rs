@@ -921,7 +921,6 @@ impl pallet_bfc_utility::Config for Runtime {
 	type Currency = Balances;
 	type MintableOrigin =
 		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>;
-	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1238,6 +1237,17 @@ mod runtime {
 
 	#[runtime::pallet_index(100)]
 	pub type MultiBlockMigrations = pallet_migrations;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benches {
+	frame_benchmarking::define_benchmarks!(
+		[frame_system, SystemBench::<Runtime>]
+		[pallet_relay_manager, RelayManager]
+		[pallet_blaze, Blaze]
+		[pallet_btc_registration_pool, BtcRegistrationPool]
+		[pallet_btc_socket_queue, BtcSocketQueue]
+	);
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();
