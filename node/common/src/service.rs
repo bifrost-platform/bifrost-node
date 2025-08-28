@@ -21,7 +21,7 @@ pub type HostFunctions = (
 	sp_io::SubstrateHostFunctions,
 	fp_ext::bifrost_ext::HostFunctions,
 	frame_benchmarking::benchmarking::HostFunctions,
-    cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
+	cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
 );
 /// Host functions for runtime including bifrost extensions.
 #[cfg(not(feature = "runtime-benchmarks"))]

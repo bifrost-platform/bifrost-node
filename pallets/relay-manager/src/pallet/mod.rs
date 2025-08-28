@@ -341,7 +341,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::heartbeat())]
+		#[pallet::weight((<T as Config>::WeightInfo::heartbeat(), DispatchClass::Operational))]
 		/// DEPRECATED, this extrinsic will be removed later on. Please use `heartbeat_v2()`
 		/// instead. Sends a new heartbeat to manage relayer liveness for the current session. The
 		/// origin must be the registered relayer account, and only the selected relayers can

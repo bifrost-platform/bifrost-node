@@ -5,11 +5,10 @@ mod pallet;
 use ethabi_decode::Token;
 pub use pallet::pallet::*;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
-
-#[cfg(test)]
-mod mock;
+// #[cfg(feature = "runtime-benchmarks")]
+// mod benchmarking;
+// #[cfg(feature = "runtime-benchmarks")]
+// mod mock;
 
 pub mod migrations;
 pub mod weights;
