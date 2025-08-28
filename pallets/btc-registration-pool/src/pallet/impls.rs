@@ -176,109 +176,6 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 
 		let _ = <PendingSetRefunds<T>>::clear_prefix(round, u32::MAX, None);
 	}
-
-	#[cfg(feature = "runtime-benchmarks")]
-	fn set_benchmark(
-		executives: &[T::AccountId],
-		user: &T::AccountId,
-	) -> Result<(), DispatchError> {
-		use crate::BitcoinRelayTarget;
-		use bp_btc_relay::{Descriptor, PublicKey};
-		use sp_runtime::BoundedBTreeMap;
-
-		<CurrentRound<T>>::put(1);
-
-		let pk1 = PublicKey::from_str(
-			"02ece3a9b4c4e42811c4b9d424d76ba4ffeda5e6590d9f6144be1175a0bd54dc0b",
-		)
-		.unwrap();
-		let pk2 = PublicKey::from_str(
-			"03547cb2686e9b53e81bdbe1b2b8a0b5b494cfa05223f5e105fe9364bfbb3aa05f",
-		)
-		.unwrap();
-		let pk3 = PublicKey::from_str(
-			"03b238f9c7bbee00e4e9b3df445ea751a77fe5e4d0eca0f74985676e4a93759c40",
-		)
-		.unwrap();
-
-		let desc_str = format!("wsh(sortedmulti(3,{},{},{}))", pk1, pk2, pk3);
-		let descriptor = desc_str.parse::<Descriptor<PublicKey>>().unwrap();
-		let address = descriptor.address(Network::Regtest).unwrap();
-
-		let mut pub_keys = BoundedBTreeMap::new();
-		pub_keys
-			.try_insert(executives[0].clone(), Public(pk1.inner.serialize()))
-			.unwrap();
-		pub_keys
-			.try_insert(executives[1].clone(), Public(pk2.inner.serialize()))
-			.unwrap();
-		pub_keys
-			.try_insert(executives[2].clone(), Public(pk3.inner.serialize()))
-			.unwrap();
-
-		let system_vault = MultiSigAccount::<T::AccountId> {
-			address: AddressState::Generated(
-				BoundedVec::try_from(address.to_string().as_bytes().to_vec()).unwrap(),
-			),
-			descriptor: descriptor.to_string().as_bytes().to_vec(),
-			pub_keys,
-			m: 3,
-			n: 3,
-		};
-		<SystemVault<T>>::insert(<CurrentRound<T>>::get(), system_vault.clone());
-		<SystemVault<T>>::insert(<CurrentRound<T>>::get() + 1, system_vault);
-
-		let pk1 = PublicKey::from_str(
-			"02f1484159b37084e3e9915a737ec59261e95cb3740f6da3afc73d7cceb18ec54e",
-		)
-		.unwrap();
-		let pk2 = PublicKey::from_str(
-			"0248b972a4d2497524f07e656072d01fd261e7bbb281e74dfad2495e771af97ab3",
-		)
-		.unwrap();
-		let pk3 = PublicKey::from_str(
-			"02cbe04f62e0b2ca17ddb520632ecc4d5673a443bd74b8f45eeb5c7c2b68da0554",
-		)
-		.unwrap();
-		let mut pub_keys = BoundedBTreeMap::new();
-		pub_keys
-			.try_insert(executives[0].clone(), Public(pk1.inner.serialize()))
-			.unwrap();
-		pub_keys
-			.try_insert(executives[1].clone(), Public(pk2.inner.serialize()))
-			.unwrap();
-		pub_keys
-			.try_insert(executives[2].clone(), Public(pk3.inner.serialize()))
-			.unwrap();
-		let user_vault = BitcoinRelayTarget::<T::AccountId> {
-			refund_address: BoundedBitcoinAddress::try_from(
-				b"bcrt1qsy2vasqmg02gl9f62qu53afxw9jm5a4dpa48un".to_vec(),
-			)
-			.unwrap(),
-			vault: MultiSigAccount::<T::AccountId> {
-				address: AddressState::Generated(
-					BoundedBitcoinAddress::try_from(
-						b"bcrt1qt93qw4q5mkeeq9k200tnj6ru6vshpcqvrxvkgeac77kvn7yncw2qm70gzn"
-							.to_vec(),
-					)
-					.unwrap(),
-				),
-				descriptor: format!("wsh(multi(3,{},{},{}))", pk1, pk2, pk3).as_bytes().to_vec(),
-				pub_keys,
-				m: 3,
-				n: 3,
-			},
-		};
-		<RegistrationPool<T>>::insert(<CurrentRound<T>>::get(), user, user_vault);
-
-		Ok(())
-	}
-
-	#[cfg(feature = "runtime-benchmarks")]
-	fn set_service_state(state: MigrationSequence) -> Result<(), DispatchError> {
-		<ServiceState<T>>::put(state);
-		Ok(())
-	}
 }
 
 impl<T: Config> Pallet<T> {
@@ -330,7 +227,7 @@ impl<T: Config> Pallet<T> {
 					.as_bytes()
 					.to_vec(),
 			)
-			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
+				.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
 			desc.to_string().as_bytes().to_vec(),
 		))
 	}

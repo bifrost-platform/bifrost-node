@@ -48,12 +48,10 @@ where
 		let request_info = Self::try_get_request(&msg.encode_req_id())?;
 		// the socket message should be valid
 		if !request_info.is_msg_hash(msg_hash) {
-			#[cfg(not(feature = "runtime-benchmarks"))]
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
 		// the socket message should be accepted
 		if !request_info.is_accepted() || !msg.is_accepted() {
-			#[cfg(not(feature = "runtime-benchmarks"))]
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
 		// the socket message should be outbound
@@ -61,12 +59,10 @@ where
 			<T as pallet_evm::Config>::ChainId::get() as u32,
 			T::RegistrationPool::get_bitcoin_chain_id(),
 		) {
-			#[cfg(not(feature = "runtime-benchmarks"))]
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
 		// the socket message should not be submitted yet
 		if SocketMessages::<T>::get(&msg.req_id.sequence).is_some() {
-			#[cfg(not(feature = "runtime-benchmarks"))]
 			return Err(Error::<T>::SocketMessageAlreadySubmitted.into());
 		}
 		Ok(())
@@ -120,11 +116,6 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 	fn get_max_fee_rate() -> u64 {
 		<MaxFeeRate<T>>::get()
 	}
-
-	#[cfg(feature = "runtime-benchmarks")]
-	fn set_max_fee_rate(rate: u64) {
-		<MaxFeeRate<T>>::put(rate);
-	}
 }
 
 impl<T> Pallet<T>
@@ -153,16 +144,8 @@ where
 
 	/// Try to convert a script to a Bitcoin address.
 	pub fn try_convert_to_address_from_script(script: &Script) -> Result<Address, DispatchError> {
-		#[cfg(not(feature = "runtime-benchmarks"))]
-		return Ok(Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
-			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?);
-
-		#[cfg(feature = "runtime-benchmarks")]
-		{
-			use bp_btc_relay::Network;
-			Ok(Address::from_script(script, Network::Regtest)
-				.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
-		}
+		Ok(Address::from_script(script, T::RegistrationPool::get_bitcoin_network())
+			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?)
 	}
 
 	/// Try to convert bytes to a Bitcoin address.
@@ -185,7 +168,7 @@ where
 				input.witness_script.as_ref().ok_or(Error::<T>::InvalidPsbt)?,
 				Some(txin),
 			)
-			.ok_or(Error::<T>::InvalidPsbt)?;
+				.ok_or(Error::<T>::InvalidPsbt)?;
 			total_vb += input_vb;
 		}
 		total_vb +=
@@ -253,7 +236,7 @@ where
 							.as_bytes()
 							.to_vec(),
 					)
-					.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
+						.map_err(|_| Error::<T>::InvalidBitcoinAddress)?,
 					U256::from(output.value.to_sat()),
 				))
 			})
@@ -266,7 +249,7 @@ where
 					.as_bytes()
 					.to_vec(),
 			)
-			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+				.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
 			if let Some(old_amount) = old_outputs_map.get(&to) {
 				let new_amount = U256::from(output.value.to_sat());
@@ -344,7 +327,7 @@ where
 					.as_bytes()
 					.to_vec(),
 			)
-			.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
+				.map_err(|_| Error::<T>::InvalidBitcoinAddress)?;
 
 			if let Some(socket_messages) = unchecked_outputs_map.get(&to) {
 				if to == system_vault {
@@ -562,7 +545,7 @@ where
 			None,
 			<T as pallet_evm::Config>::config(),
 		)
-		.map_err(|_| Error::<T>::InvalidCalldata)?;
+			.map_err(|_| Error::<T>::InvalidCalldata)?;
 
 		Ok(info.value)
 	}
@@ -577,21 +560,8 @@ where
 			array_bytes::bytes2hex("", req_id)
 		);
 
-		#[cfg(not(feature = "runtime-benchmarks"))]
-		{
-			Ok(Self::try_decode_request_info(&Self::try_evm_call(caller, socket, &calldata)?)
-				.map_err(|_| Error::<T>::InvalidRequestInfo)?)
-		}
-
-		#[cfg(feature = "runtime-benchmarks")]
-		{
-			let _ = Self::try_evm_call(caller, socket, &calldata);
-			Ok(RequestInfo {
-				field: vec![U256::from(5)],
-				msg_hash: H256([0; 32]),
-				registered_time: U256::from(0),
-			})
-		}
+		Ok(Self::try_decode_request_info(&Self::try_evm_call(caller, socket, &calldata)?)
+			.map_err(|_| Error::<T>::InvalidRequestInfo)?)
 	}
 
 	/// Generate a hash key.
@@ -610,30 +580,8 @@ where
 			array_bytes::bytes2hex("", hash_key.as_bytes())
 		);
 
-		#[cfg(not(feature = "runtime-benchmarks"))]
-		return Ok(Self::try_decode_tx_info(&Self::try_evm_call(
-			caller,
-			bitcoin_socket,
-			&calldata,
-		)?)
-		.map_err(|_| Error::<T>::InvalidTxInfo)?);
-
-		#[cfg(feature = "runtime-benchmarks")]
-		{
-			use crate::RequestID;
-			let _ =
-				Self::try_decode_tx_info(&Self::try_evm_call(caller, bitcoin_socket, &calldata)?);
-			Ok(TxInfo {
-				to: Default::default(),
-				amount: Default::default(),
-				vote_count: Default::default(),
-				request_id: RequestID {
-					chain: vec![],
-					round_id: Default::default(),
-					sequence: Default::default(),
-				},
-			})
-		}
+		Ok(Self::try_decode_tx_info(&Self::try_evm_call(caller, bitcoin_socket, &calldata)?)
+			.map_err(|_| Error::<T>::InvalidTxInfo)?)
 	}
 
 	/// Try to decode the given `TxInfo`.

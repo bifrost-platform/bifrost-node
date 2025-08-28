@@ -15,15 +15,14 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_runtime::traits::BlakeTwo256;
 
-/// Host functions for runtime including bifrost extensions and benchmarking.
+/// Only enable the benchmarking host functions when we actually want to benchmark.
 #[cfg(feature = "runtime-benchmarks")]
 pub type HostFunctions = (
 	sp_io::SubstrateHostFunctions,
-	fp_ext::bifrost_ext::HostFunctions,
 	frame_benchmarking::benchmarking::HostFunctions,
 	cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
 );
-/// Host functions for runtime including bifrost extensions.
+/// Otherwise we use storage proof size host functions for compatibility.
 #[cfg(not(feature = "runtime-benchmarks"))]
 pub type HostFunctions = (
 	sp_io::SubstrateHostFunctions,
@@ -97,7 +96,7 @@ where
 				std::num::NonZeroU32::new(num_ops_timeout),
 				overrides.clone(),
 			))
-			.unwrap_or_else(|err| panic!("failed creating sql backend: {:?}", err));
+				.unwrap_or_else(|err| panic!("failed creating sql backend: {:?}", err));
 			fc_db::Backend::Sql(Arc::new(backend))
 		},
 	};

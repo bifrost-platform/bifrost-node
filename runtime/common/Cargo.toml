@@ -25,7 +25,6 @@ default = ["std"]
 std = [
 	"ethereum/std",
 	"parity-scale-codec/std",
-    "frame-benchmarking/std",
     "frame-system/std",
 	"frame-support/std",
 	"sp-core/std",

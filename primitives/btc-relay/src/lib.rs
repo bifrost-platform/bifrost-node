@@ -6,10 +6,8 @@ pub mod utils;
 
 pub use miniscript::{
 	bitcoin::{
-		hashes::Hash,
-		key::FromSliceError,
-		secp256k1::{Secp256k1, SecretKey},
-		Address, Amount, Network, Psbt, PublicKey, Script, Txid,
+		hashes::Hash, key::FromSliceError, secp256k1::Secp256k1, Address, Amount, Network, Psbt,
+		PublicKey, Script, Txid,
 	},
 	psbt::PsbtExt,
 	Descriptor,
@@ -60,7 +58,7 @@ impl AsRef<[u8]> for Public {
 	}
 }
 
-#[derive(Clone, Decode, Encode, TypeInfo)]
+#[derive(Decode, Encode, TypeInfo)]
 /// An m-of-n multi signature based Bitcoin address.
 pub struct MultiSigAccount<AccountId> {
 	/// The vault address.
@@ -134,7 +132,7 @@ impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> MultiSigAccount<Ac
 	}
 }
 
-#[derive(Clone, Eq, PartialEq, Decode, Encode, TypeInfo, MaxEncodedLen)]
+#[derive(Eq, PartialEq, Decode, Encode, TypeInfo, MaxEncodedLen)]
 /// The vault address state.
 pub enum AddressState {
 	/// Required number of public keys has not been submitted yet.

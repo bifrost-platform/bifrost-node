@@ -204,13 +204,6 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		ensure!(Self::is_activated() == is_activated, Error::<T>::InvalidActivationState);
 		Ok(())
 	}
-
-
-	#[cfg(feature = "runtime-benchmarks")]
-	fn set_activation(activate: bool) -> Result<(), DispatchError> {
-		<IsActivated<T>>::put(activate);
-		Ok(())
-	}
 }
 
 impl<T: Config> Pallet<T> {
@@ -444,9 +437,9 @@ impl<T: Config> Pallet<T> {
 					.collect::<Vec<String>>()
 					.concat()
 			)
-			.as_bytes(),
+				.as_bytes(),
 		]
-		.concat();
+			.concat();
 		Self::verify_signature(&message, signature, authority_id)?;
 
 		ValidTransaction::with_tag_prefix("UtxosSubmission")

@@ -334,50 +334,25 @@ macro_rules! impl_common_runtime_apis {
 					} else {
 						None
 					};
+					let is_transactional = false;
+					let validate = true;
 
-					// Estimated encoded transaction size must be based on the heaviest transaction
-					// type (EIP7702Transaction) to be compatible with all transaction types.
-					let mut estimated_transaction_len = data.len() +
-						// pallet ethereum index: 1
-						// transact call index: 1
-						// Transaction enum variant: 1
-						// chain_id 8 bytes
-						// nonce: 32
-						// max_priority_fee_per_gas: 32
-						// max_fee_per_gas: 32
-						// gas_limit: 32
-						// action: 21 (enum varianrt + call address)
-						// value: 32
-						// access_list: 1 (empty vec size)
-						// authorization_list: 1 (empty vec size)
-						// 65 bytes signature
-						259;
+					let transaction_data = pallet_ethereum::TransactionData::new(
+						pallet_ethereum::TransactionAction::Call(to),
+						data.clone(),
+						nonce.unwrap_or_default(),
+						gas_limit,
+						None,
+						max_fee_per_gas.or(Some(U256::default())),
+						max_priority_fee_per_gas.or(Some(U256::default())),
+						value,
+						Some(<Runtime as pallet_evm::Config>::ChainId::get()),
+						access_list.clone().unwrap_or_default(),
+						authorization_list.clone().unwrap_or_default(),
+					);
 
-					if access_list.is_some() {
-						estimated_transaction_len += access_list.encoded_size();
-					}
-
-					if authorization_list.is_some() {
-						estimated_transaction_len += authorization_list.encoded_size();
-					}
-
-					let gas_limit = if gas_limit > U256::from(u64::MAX) {
-						u64::MAX
-					} else {
-						gas_limit.low_u64()
-					};
-					let without_base_extrinsic_weight = true;
-
-					let (weight_limit, proof_size_base_cost) =
-						match <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
-							gas_limit,
-							without_base_extrinsic_weight
-						) {
-							weight_limit if weight_limit.proof_size() > 0 => {
-								(Some(weight_limit), Some(estimated_transaction_len as u64))
-							}
-							_ => (None, None),
-						};
+					let gas_limit = gas_limit.min(u64::MAX.into()).low_u64();
+					let (weight_limit, proof_size_base_cost) = pallet_ethereum::Pallet::<Runtime>::transaction_weight(&transaction_data);
 
 					<Runtime as pallet_evm::Config>::Runner::call(
 						from,
@@ -390,8 +365,8 @@ macro_rules! impl_common_runtime_apis {
 						nonce,
 						access_list.unwrap_or_default(),
 						authorization_list.unwrap_or_default(),
-						false,
-						true,
+						is_transactional,
+						validate,
 						weight_limit,
 						proof_size_base_cost,
 						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
@@ -585,38 +560,39 @@ macro_rules! impl_common_runtime_apis {
 					Vec<frame_benchmarking::BenchmarkList>,
 					Vec<frame_support::traits::StorageInfo>,
 				) {
-					use frame_benchmarking::{list_benchmark, Benchmarking, BenchmarkList};
-					use frame_system_benchmarking::Pallet as SystemBench;
+					use frame_benchmarking::{baseline, Benchmarking, BenchmarkList};
 					use frame_support::traits::StorageInfoTrait;
-
-                    let mut list = Vec::<BenchmarkList>::new();
-                    list_benchmarks!(list, extra);
-
-                    let storage_info = AllPalletsWithSystem::storage_info();
-
-                    (list, storage_info)
+					use frame_system_benchmarking::Pallet as SystemBench;
+					use baseline::Pallet as BaselineBench;
+					let mut list = Vec::<BenchmarkList>::new();
+					list_benchmarks!(list, extra);
+					let storage_info = AllPalletsWithSystem::storage_info();
+					return (list, storage_info)
 				}
 				fn dispatch_benchmark(
 					config: frame_benchmarking::BenchmarkConfig
 				) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
-					use frame_benchmarking::{add_benchmark, BenchmarkBatch, Benchmarking};
-					use frame_support::traits::TrackedStorageKey;
-
-                    use frame_system_benchmarking::Pallet as SystemBench;
-                    impl frame_system_benchmarking::Config for Runtime {}
-
-                    use frame_support::traits::WhitelistedStorageKeys;
-                    let whitelist: Vec<TrackedStorageKey> = AllPalletsWithSystem::whitelisted_storage_keys();
-
-                    let mut batches = Vec::<BenchmarkBatch>::new();
-                    let params = (&config, &whitelist);
-                    add_benchmarks!(params, batches);
-
-					if batches.is_empty() {
-						return Err("Benchmark not found for this pallet.".into());
-					}
-
-                    Ok(batches)
+					use frame_benchmarking::{baseline, Benchmarking, BenchmarkBatch, TrackedStorageKey};
+					use frame_system_benchmarking::Pallet as SystemBench;
+					use baseline::Pallet as BaselineBench;
+					impl frame_system_benchmarking::Config for Runtime {}
+					impl baseline::Config for Runtime {}
+					let whitelist: Vec<TrackedStorageKey> = vec![
+						// Block Number
+						hex_literal::hex!("26aa394eea5630e07c48ae0c9558cef702a5c1b19ab7a04f536c519aca4983ac").to_vec().into(),
+						// Total Issuance
+						hex_literal::hex!("c2261276cc9d1f8598ea4b6a74b15c2f57c875e4cff74148e4628f264b974c80").to_vec().into(),
+						// Execution Phase
+						hex_literal::hex!("26aa394eea5630e07c48ae0c9558cef7ff553b5a9862a516939d82b3d3d8661a").to_vec().into(),
+						// Event Count
+						hex_literal::hex!("26aa394eea5630e07c48ae0c9558cef70a98fdbe9ce6c55837576c60c7af3850").to_vec().into(),
+						// System Events
+						hex_literal::hex!("26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7").to_vec().into(),
+					];
+					let mut batches = Vec::<BenchmarkBatch>::new();
+					let params = (&config, &whitelist);
+					add_benchmarks!(params, batches);
+					Ok(batches)
 				}
 			}
 		}
