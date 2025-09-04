@@ -211,8 +211,13 @@ where
 	if let Some(tracing_config) = maybe_tracing_config {
 		if let Some(trace_filter_requester) = tracing_config.tracing_requesters.trace {
 			io.merge(
-				Trace::new(client, trace_filter_requester, tracing_config.trace_filter_max_count)
-					.into_rpc(),
+				Trace::new(
+					client,
+					trace_filter_requester,
+					tracing_config.trace_filter_max_count,
+					frontier_backend.clone(),
+				)
+				.into_rpc(),
 			)
 			.ok();
 		}
