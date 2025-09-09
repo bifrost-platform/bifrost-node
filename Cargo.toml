@@ -194,36 +194,36 @@ substrate-wasm-builder = { git = "https://github.com/bifrost-platform/polkadot-s
 substrate-build-script-utils = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
 
 # Frontier Client
-fc-db = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fc-rpc = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190", features = [
+fc-db = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fc-rpc = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506", features = [
 	"txpool",
 ] }
-fc-mapping-sync = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fc-rpc-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fc-rpc-debug = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fc-rpc-trace = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fc-api = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
+fc-mapping-sync = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fc-rpc-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fc-rpc-debug = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fc-rpc-trace = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fc-api = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
 
 # Frontier Primitive
-fp-self-contained = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fp-account = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fp-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fp-ext = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fp-rpc = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fp-rpc-debug = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-fp-rpc-txpool = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
+fp-self-contained = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fp-account = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fp-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fp-ext = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fp-rpc = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fp-rpc-debug = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+fp-rpc-txpool = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
 
 # Frontier Runtime
-evm-tracer = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
+evm-tracer = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
 
 # Frontier FRAME
-pallet-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-pallet-ethereum = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-pallet-base-fee = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-pallet-evm-precompile-simple = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-pallet-evm-precompile-bn128 = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-pallet-evm-precompile-modexp = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
-pallet-evm-precompile-blake2 = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
+pallet-evm = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+pallet-ethereum = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+pallet-base-fee = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+pallet-evm-precompile-simple = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+pallet-evm-precompile-bn128 = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+pallet-evm-precompile-modexp = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
+pallet-evm-precompile-blake2 = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
 
 # Frontier Utilities
-precompile-utils = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "NODE-190" }
+precompile-utils = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2506" }
