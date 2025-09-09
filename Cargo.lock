@@ -846,8 +846,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
-name = "base58"
-version = "0.2.0"
+name = "base58ck"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c8d66485a3a2ea485c1913c4572ce0256067a5377ac8c75c4960e1cda98605f"
+dependencies = [
+ "bitcoin-internals 0.3.0",
+ "bitcoin_hashes 0.14.0",
+]
+
+[[package]]
+name = "base64"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6107fe1be6682a68940da878d9e9f5e90ca5745b3dec9fd1bb393c8777d4f581"
 
@@ -871,9 +881,9 @@ checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
 
 [[package]]
 name = "bech32"
-version = "0.10.0-beta"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98f7eed2b2781a6f0b5c903471d48e15f56fb4e1165df8a9a2337fd1a59d45ea"
+checksum = "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
 
 [[package]]
 name = "bifrost-common-constants"
@@ -1027,6 +1037,7 @@ dependencies = [
  "pallet-bfc-offences",
  "pallet-bfc-staking",
  "pallet-bfc-utility",
+ "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
  "pallet-collective",
@@ -1058,6 +1069,7 @@ dependencies = [
  "precompile-balance",
  "precompile-bfc-offences",
  "precompile-bfc-staking",
+ "precompile-blaze",
  "precompile-btc-registration-pool",
  "precompile-btc-socket-queue",
  "precompile-collective",
@@ -1175,6 +1187,7 @@ dependencies = [
  "pallet-bfc-offences",
  "pallet-bfc-staking",
  "pallet-bfc-utility",
+ "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
  "pallet-collective",
@@ -1344,6 +1357,7 @@ dependencies = [
  "pallet-bfc-offences",
  "pallet-bfc-staking",
  "pallet-bfc-utility",
+ "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
  "pallet-collective",
@@ -1375,6 +1389,7 @@ dependencies = [
  "precompile-balance",
  "precompile-bfc-offences",
  "precompile-bfc-staking",
+ "precompile-blaze",
  "precompile-btc-registration-pool",
  "precompile-btc-socket-queue",
  "precompile-collective",
@@ -1467,10 +1482,11 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.31.2"
+version = "0.32.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c85783c2fe40083ea54a33aa2f0ba58831d90fcd190f5bdc47e74e84d2a96ae"
+checksum = "ce6bc65742dea50536e35ad42492b234c27904a27f0abdcbce605015cb4ea026"
 dependencies = [
+ "base58ck",
  "bech32",
  "bitcoin-internals",
  "bitcoin_hashes 0.13.0",
@@ -1478,6 +1494,13 @@ dependencies = [
  "hex-conservative 0.1.2",
  "hex_lit",
  "secp256k1 0.28.2",
+ "bitcoin-internals 0.3.0",
+ "bitcoin-io",
+ "bitcoin-units",
+ "bitcoin_hashes 0.14.0",
+ "hex-conservative 0.2.1",
+ "hex_lit",
+ "secp256k1 0.29.1",
 ]
 
 [[package]]
@@ -1487,10 +1510,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9425c3bf7089c983facbae04de54513cce73b41c7f9ff8c845b54e7bc64ebbfb"
 
 [[package]]
+name = "bitcoin-internals"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30bdbe14aa07b06e6cfeffc529a1f099e5fbe249524f8125358604df99a4bed2"
+
+[[package]]
 name = "bitcoin-io"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b47c4ab7a93edb0c7198c5535ed9b52b63095f4e9b45279c6736cec4b856baf"
+
+[[package]]
+name = "bitcoin-units"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5285c8bcaa25876d07f37e3d30c303f2609179716e11d688f51e8f1fe70063e2"
+dependencies = [
+ "bitcoin-internals 0.3.0",
+]
 
 [[package]]
 name = "bitcoin_hashes"
@@ -1498,8 +1536,7 @@ version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1930a4dabfebb8d7d9992db18ebe3ae2876f0a305fab206fd168df931ede293b"
 dependencies = [
- "bitcoin-internals",
- "core2 0.3.3",
+ "bitcoin-internals 0.2.0",
  "hex-conservative 0.1.2",
 ]
 
@@ -1660,6 +1697,7 @@ dependencies = [
 name = "bp-btc-relay"
 version = "0.0.1"
 dependencies = [
+ "frame-system",
  "miniscript",
  "parity-scale-codec",
  "scale-info",
@@ -1910,7 +1948,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9b68e3193982cd54187d71afdb2a271ad4cf8af157858e9cb911b91321de143"
 dependencies = [
- "core2 0.4.0",
+ "core2",
  "multibase",
  "multihash 0.17.0",
  "serde",
@@ -1923,7 +1961,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3147d8272e8fa0ccd29ce51194dd98f79ddfb8191ba9e3409884e751798acf3a"
 dependencies = [
- "core2 0.4.0",
+ "core2",
  "multibase",
  "multihash 0.19.3",
  "unsigned-varint 0.8.0",
@@ -2176,15 +2214,6 @@ name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
-
-[[package]]
-name = "core2"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "core2"
@@ -4942,8 +4971,14 @@ name = "hex-conservative"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212ab92002354b4819390025006c897e8140934349e8635c9b077f47b4dcbd20"
+
+[[package]]
+name = "hex-conservative"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5313b072ce3c597065a808dbf612c4c8e8590bdbf8b579508bf7a762c5eae6cd"
 dependencies = [
- "core2 0.3.3",
+ "arrayvec",
 ]
 
 [[package]]
@@ -6833,13 +6868,12 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "miniscript"
-version = "11.2.3"
+version = "12.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ca1d13489323d955aadba3d9f7805acf0d1258a7ebd05c2070010c5fbd936fc"
+checksum = "82911d2fb527bb9aacd2446d2f517aff3f8e3846ace1b3c24258b61ea3cce2bc"
 dependencies = [
  "bech32",
  "bitcoin",
- "bitcoin-internals",
 ]
 
 [[package]]
@@ -6985,23 +7019,6 @@ dependencies = [
  "base-x",
  "data-encoding",
  "data-encoding-macro",
-]
-
-[[package]]
-name = "multihash"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "835d6ff01d610179fbce3de1694d007e500bf33a7f29689838941d6bf783ae40"
-dependencies = [
- "blake2b_simd",
- "blake2s_simd",
- "blake3",
- "core2 0.4.0",
- "digest 0.10.7",
- "multihash-derive",
- "sha2 0.10.9",
- "sha3",
- "unsigned-varint 0.7.2",
 ]
 
 [[package]]
@@ -7694,29 +7711,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-broker"
-version = "0.20.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2506#842d92747f3457026ce3f0406f44dd87fbf9dcb0"
-dependencies = [
- "bitvec",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "parity-scale-codec",
- "scale-info",
- "sp-api",
- "sp-arithmetic",
- "sp-core",
- "sp-runtime",
-]
-
-[[package]]
-name = "pallet-btc-registration-pool"
+name = "pallet-blaze"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
  "bp-btc-relay",
+ "bp-staking",
  "frame-support",
  "frame-system",
  "hex",
@@ -7725,6 +7725,22 @@ dependencies = [
  "scale-info",
  "sp-core",
  "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-btc-registration-pool"
+version = "1.0.0"
+dependencies = [
+ "array-bytes",
+ "bp-btc-relay",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
  "sp-runtime",
  "sp-std",
 ]
@@ -8233,8 +8249,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e69bf016dc406eff7d53a7d3f7cf1c2e72c82b9088aac1118591e36dd2cd3e9"
 dependencies = [
  "bitcoin_hashes 0.13.0",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand",
+ "rand_core",
  "serde",
  "unicode-normalization",
 ]
@@ -9007,6 +9023,23 @@ dependencies = [
  "pallet-evm",
  "precompile-utils",
  "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-blaze"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-blaze",
+ "pallet-evm",
+ "parity-scale-codec",
+ "precompile-utils",
+ "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
@@ -11451,25 +11484,6 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25996b82292a7a57ed3508f052cfff8640d38d32018784acd714758b43da9c8f"
-dependencies = [
- "secp256k1-sys 0.8.2",
-]
-
-[[package]]
-name = "secp256k1"
-version = "0.28.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d24b59d129cdadea20aea4fb2352fa053712e5d713eee47d700cd4b2bc002f10"
-dependencies = [
- "bitcoin_hashes 0.13.0",
- "secp256k1-sys 0.9.2",
-]
-
-[[package]]
-name = "secp256k1"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b50c5943d326858130af85e049f2661ba3c78b26589b8ab98e65e80ae44a1252"
@@ -11477,24 +11491,6 @@ dependencies = [
  "bitcoin_hashes 0.14.0",
  "rand 0.8.5",
  "secp256k1-sys 0.10.1",
-]
-
-[[package]]
-name = "secp256k1-sys"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4473013577ec77b4ee3668179ef1186df3146e2cf2d927bd200974c6fe60fd99"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "secp256k1-sys"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d1746aae42c19d583c3c1a8c646bfad910498e2051c551a7f2e3c0c9fbb7eb"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -12185,7 +12181,7 @@ dependencies = [
  "scale-info",
  "schnorrkel",
  "secp256k1 0.28.2",
- "secrecy 0.8.0",
+ "secrecy",
  "serde",
  "sha2 0.10.9",
  "sp-crypto-hashing 0.1.0 (git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2506)",
