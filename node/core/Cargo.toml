@@ -1,6 +1,6 @@
 [package]
 name = "bifrost-node"
-version = "2.1.0"
+version = "2.1.1"
 description = "The node client implementation for Bifrost"
 authors = { workspace = true }
 homepage = { workspace = true }
@@ -33,12 +33,12 @@ frame-benchmarking-cli = { workspace = true }
 # Bifrost runtimes
 bifrost-dev-runtime = { workspace = true, features = ["std", "evm-tracing"] }
 bifrost-testnet-runtime = { workspace = true, features = [
-    "std",
-    "evm-tracing",
+	"std",
+	"evm-tracing",
 ] }
 bifrost-mainnet-runtime = { workspace = true, features = [
-    "std",
-    "evm-tracing",
+	"std",
+	"evm-tracing",
 ] }
 
 # Bifrost node specs
@@ -53,11 +53,11 @@ substrate-build-script-utils = { workspace = true }
 [features]
 default = []
 runtime-benchmarks = [
-    "bifrost-dev-runtime/runtime-benchmarks",
-    "bifrost-testnet-runtime/runtime-benchmarks",
-    "bifrost-mainnet-runtime/runtime-benchmarks",
-    "bifrost-dev-node/runtime-benchmarks",
-    "bifrost-testnet-node/runtime-benchmarks",
-    "bifrost-mainnet-node/runtime-benchmarks",
-    "sc-service/runtime-benchmarks",
+	"bifrost-dev-runtime/runtime-benchmarks",
+	"bifrost-testnet-runtime/runtime-benchmarks",
+	"bifrost-mainnet-runtime/runtime-benchmarks",
+	"bifrost-dev-node/runtime-benchmarks",
+	"bifrost-testnet-node/runtime-benchmarks",
+	"bifrost-mainnet-node/runtime-benchmarks",
+	"sc-service/runtime-benchmarks",
 ]
