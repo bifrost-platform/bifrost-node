@@ -16,6 +16,7 @@ array-bytes = { workspace = true }
 # Substrate
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
@@ -24,6 +25,13 @@ sp-std = { workspace = true }
 
 # Bifrost
 bp-btc-relay = { workspace = true }
+
+[dev-dependencies]
+pallet-balances = { workspace = true }
+pallet-btc-registration-pool = { workspace = true }
+fp-account = { workspace = true }
+bp-core = { workspace = true }
+sp-io = { workspace = true }
 
 [features]
 default = ["std"]
@@ -38,3 +46,10 @@ std = [
 	"bp-btc-relay/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
+runtime-benchmarks = [
+	"frame-benchmarking",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+	"bp-btc-relay/runtime-benchmarks",
+]

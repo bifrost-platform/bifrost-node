@@ -3,11 +3,9 @@
 
 pub mod migrations;
 mod pallet;
-pub mod weights;
 
 use frame_support::{pallet_prelude::MaxEncodedLen, traits::Currency};
 pub use pallet::pallet::*;
-use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, Encode};
 use scale_info::TypeInfo;
