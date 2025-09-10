@@ -13,7 +13,8 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
+	blaze::ScoredUtxo,
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
 use bp_staking::traits::Authorities;
@@ -52,6 +53,8 @@ pub mod pallet {
 		type Relayers: Authorities<Self::AccountId>;
 		/// The Bitcoin registration pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
+		/// The Blaze pallet.
+		type Blaze: BlazeManager<Self>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 		/// The maximum fee rate that can be set for PSBT.
@@ -221,6 +224,107 @@ pub mod pallet {
 		fn on_runtime_upgrade() -> Weight {
 			migrations::init_v2::InitV2::<T>::on_runtime_upgrade()
 		}
+
+		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+			let mut weight = <T as Config>::WeightInfo::base_on_initialize();
+
+			T::RegistrationPool::process_set_refunds();
+
+			if T::Blaze::is_activated()
+				&& matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
+			{
+				if let Some((long_term_fee_rate, fee_rate)) = T::Blaze::try_fee_rate_finalization(n)
+				{
+					let outbound_pool = T::Blaze::get_outbound_pool();
+					if !outbound_pool.is_empty() {
+						let (filtered_outbound_pool, outbound_requests) =
+							Self::filter_unregistered_outbounds(outbound_pool);
+
+						let utxos = T::Blaze::get_utxos();
+
+						let outbound_amount_sum = outbound_requests
+							.iter()
+							.map(|x| x.0.params.amount.as_u64())
+							.sum::<u64>();
+						let blaze_vault_sum = utxos.iter().map(|x| x.amount).sum::<u64>();
+
+						if outbound_amount_sum >= blaze_vault_sum {
+							T::Blaze::handle_tolerance_counter(true);
+							return weight;
+						}
+
+						let scored_utxos = utxos
+							.iter()
+							.filter_map(|x| {
+								let fee = x.input_vbytes * fee_rate;
+								if x.amount < fee {
+									return None;
+								}
+								Some(ScoredUtxo {
+									utxo: x.clone(),
+									fee,
+									long_term_fee: x.input_vbytes * long_term_fee_rate,
+									effective_value: x.amount - fee,
+								})
+							})
+							.collect::<Vec<_>>();
+
+						let (selected_utxos, strategy) = match T::Blaze::select_coins(
+							scored_utxos,
+							outbound_amount_sum,
+							43 * fee_rate,
+							200_000,
+							100_000,
+							546,
+						) {
+							Some(utxos) => utxos,
+							None => {
+								T::Blaze::handle_tolerance_counter(true);
+								return weight;
+							},
+						};
+						match Self::composite_psbt(
+							&selected_utxos,
+							&outbound_requests,
+							outbound_amount_sum,
+							fee_rate,
+							strategy,
+						) {
+							Some(psbt) => {
+								let txid = Self::convert_txid(psbt.unsigned_tx.compute_txid());
+								<PendingRequests<T>>::insert(
+									&txid,
+									PsbtRequest::new(
+										psbt.serialize(),
+										filtered_outbound_pool.clone(),
+										RequestType::Normal,
+									),
+								);
+								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
+
+								for msg in filtered_outbound_pool.iter() {
+									let msg = Self::try_decode_socket_message(msg).unwrap();
+									<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
+								}
+
+								T::Blaze::clear_fee_rates();
+								T::Blaze::clear_outbound_pool(filtered_outbound_pool);
+								T::Blaze::lock_utxos(&txid, &selected_utxos).unwrap();
+								T::Blaze::handle_tolerance_counter(false);
+
+								weight +=
+									<T as Config>::WeightInfo::psbt_composition_on_initialize();
+							},
+							_ => {
+								T::Blaze::handle_tolerance_counter(true);
+								return weight;
+							},
+						};
+					}
+				}
+			}
+			weight
+		}
 	}
 
 	#[pallet::genesis_config]
@@ -305,6 +409,7 @@ pub mod pallet {
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
+			T::Blaze::ensure_activation(false)?;
 
 			let UnsignedPsbtMessage { outputs, psbt, .. } = msg;
 
@@ -315,7 +420,7 @@ pub mod pallet {
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
-			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let txid = Self::convert_txid(psbt_obj.unsigned_tx.compute_txid());
 
 			// verify if the fee rate is set properly
 			Self::try_psbt_fee_verification(&psbt_obj)?;
@@ -359,7 +464,7 @@ pub mod pallet {
 			let unsigned_psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
 			let signed_psbt_obj = Self::try_get_checked_psbt(&signed_psbt)?;
 
-			let txid = Self::convert_txid(unsigned_psbt_obj.unsigned_tx.txid());
+			let txid = Self::convert_txid(unsigned_psbt_obj.unsigned_tx.compute_txid());
 
 			let mut pending_request =
 				<PendingRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
@@ -449,7 +554,7 @@ pub mod pallet {
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&unsigned_psbt)?;
-			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let psbt_txid = Self::convert_txid(psbt_obj.unsigned_tx.compute_txid());
 
 			// verify if the fee rate is set properly
 			Self::try_psbt_fee_verification(&psbt_obj)?;
@@ -517,6 +622,12 @@ pub mod pallet {
 				}
 				// addresses that are not either system vault or refund will be rejected.
 				return Err(Error::<T>::InvalidPsbt.into());
+			}
+
+			if T::Blaze::is_activated() {
+				// lock the utxos used in the rollback PSBT
+				let inputs = T::Blaze::extract_utxos_from_psbt(&psbt_obj)?;
+				T::Blaze::lock_utxos(&psbt_txid, &inputs)?;
 			}
 
 			<RollbackRequests<T>>::insert(
@@ -591,7 +702,7 @@ pub mod pallet {
 
 			// verify if psbt bytes are valid
 			let psbt_obj = Self::try_get_checked_psbt(&psbt)?;
-			let txid = Self::convert_txid(psbt_obj.unsigned_tx.txid());
+			let txid = Self::convert_txid(psbt_obj.unsigned_tx.compute_txid());
 
 			// verify if the fee rate is set properly
 			Self::try_psbt_fee_verification(&psbt_obj)?;
@@ -628,6 +739,7 @@ pub mod pallet {
 				PsbtRequest::new(psbt.clone(), vec![], RequestType::Migration),
 			);
 			T::RegistrationPool::add_migration_tx(txid.clone());
+			T::Blaze::clear_utxos();
 			Self::deposit_event(Event::MigrationPsbtSubmitted { txid });
 			Ok(().into())
 		}
@@ -684,7 +796,7 @@ pub mod pallet {
 			// verify if psbt bytes are valid
 			let old_psbt_obj = Self::try_get_checked_psbt(&old_request.unsigned_psbt)?;
 			let new_psbt_obj = Self::try_get_checked_psbt(&new_unsigned_psbt)?;
-			let new_txid = Self::convert_txid(new_psbt_obj.unsigned_tx.txid());
+			let new_txid = Self::convert_txid(new_psbt_obj.unsigned_tx.compute_txid());
 			ensure!(new_txid != old_txid, Error::<T>::NoWritingSameValue);
 
 			// verify if the fee rate is set properly
@@ -747,6 +859,15 @@ pub mod pallet {
 			}
 			<ExecutedRequests<T>>::remove(old_txid);
 
+			if T::Blaze::is_activated() {
+				// unlock the utxos used in the old PSBT
+				T::Blaze::unlock_utxos(&old_txid)?;
+
+				// lock the utxos used in the new PSBT
+				let inputs = T::Blaze::extract_utxos_from_psbt(&new_psbt_obj)?;
+				T::Blaze::lock_utxos(&new_txid, &inputs)?;
+			}
+
 			// insert to PendingRequests
 			<PendingRequests<T>>::insert(
 				&new_txid,
@@ -781,6 +902,10 @@ pub mod pallet {
 
 			<RollbackRequests<T>>::remove(&txid);
 
+			if T::Blaze::is_activated() {
+				T::Blaze::unlock_utxos(&txid)?;
+			}
+
 			Ok(().into())
 		}
 	}
@@ -807,7 +932,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("UnsignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
@@ -828,7 +953,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("SignedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
@@ -845,7 +970,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("ExecutedPsbtSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
@@ -870,7 +995,7 @@ pub mod pallet {
 
 					ValidTransaction::with_tag_prefix("RollbackPollSubmission")
 						.priority(TransactionPriority::MAX)
-						.and_provides(authority_id)
+						.and_provides((authority_id, signature))
 						.propagate(true)
 						.build()
 				},
