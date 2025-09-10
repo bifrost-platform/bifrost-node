@@ -52,7 +52,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
+	FeeCalculator, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -114,9 +114,6 @@ pub type TxExtension = (
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
-
-/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type Migrations = ();
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
 type Migrations = ();
@@ -232,59 +229,6 @@ impl frame_system::Config for Runtime {
 	type MaxConsumers = ConstU32<16>;
 	/// migrations pallet
 	type MultiBlockMigrator = MultiBlockMigrations;
-}
-
-/// Calls that can bypass the safe-mode pallet.
-pub struct SafeModeWhitelistedCalls;
-impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
-	fn contains(call: &RuntimeCall) -> bool {
-		match call {
-			RuntimeCall::System(_)
-			| RuntimeCall::Sudo(_)
-			| RuntimeCall::Timestamp(_)
-			| RuntimeCall::SafeMode(_)
-			| RuntimeCall::TxPause(_)
-			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
-			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
-			_ => false,
-		}
-	}
-}
-
-impl pallet_tx_pause::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type RuntimeCall = RuntimeCall;
-	type PauseOrigin = EnsureRoot<AccountId>;
-	type UnpauseOrigin = EnsureRoot<AccountId>;
-	type WhitelistedCalls = ();
-	type MaxNameLen = ConstU32<256>;
-	type WeightInfo = pallet_tx_pause::weights::SubstrateWeight<Runtime>;
-}
-
-parameter_types! {
-	pub const EnterDuration: BlockNumber = 2 * MINUTES;
-	pub const EnterDepositAmount: Balance = 2_000 * BFC;
-	pub const ExtendDuration: BlockNumber = 1 * MINUTES;
-	pub const ExtendDepositAmount: Balance = 1_000 * BFC;
-	pub const ReleaseDelay: u32 = 1 * MINUTES;
-}
-
-impl pallet_safe_mode::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type RuntimeHoldReason = RuntimeHoldReason;
-	type WhitelistedCalls = SafeModeWhitelistedCalls;
-	type EnterDuration = EnterDuration;
-	type EnterDepositAmount = EnterDepositAmount;
-	type ExtendDuration = ExtendDuration;
-	type ExtendDepositAmount = ExtendDepositAmount;
-	type ForceEnterOrigin = EnsureRootWithSuccess<AccountId, EnterDuration>;
-	type ForceExtendOrigin = EnsureRootWithSuccess<AccountId, ExtendDuration>;
-	type ForceExitOrigin = EnsureRoot<AccountId>;
-	type ForceDepositOrigin = EnsureRoot<AccountId>;
-	type ReleaseDelay = ReleaseDelay;
-	type Notify = ();
-	type WeightInfo = pallet_safe_mode::weights::SubstrateWeight<Runtime>;
 }
 
 /// Calls that can bypass the safe-mode pallet.
