@@ -2,7 +2,11 @@ import BigNumber from 'bignumber.js';
 import { expect } from 'chai';
 import { numberToHex } from 'web3-utils';
 
-import { MIN_FULL_CANDIDATE_STAKING_AMOUNT } from '../../constants/currency';
+import { Keyring } from '@polkadot/api';
+
+import {
+  DEFAULT_STAKING_AMOUNT, MIN_FULL_CANDIDATE_STAKING_AMOUNT
+} from '../../constants/currency';
 import {
   TEST_CONTROLLERS, TEST_RELAYERS, TEST_STASHES
 } from '../../constants/keys';
@@ -81,7 +85,58 @@ const SELECTORS = {
 const PRECOMPILE_ADDRESS = '0x0000000000000000000000000000000000000400';
 
 describeDevNode('precompile_bfc_staking - precompile view functions', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+
   const alith: { public: string, private: string } = TEST_CONTROLLERS[0];
+
+  const baltathar = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const faith = keyring.addFromUri(TEST_CONTROLLERS[5].private);
+  const faithStash = keyring.addFromUri(TEST_STASHES[5].private);
+
+  before('it should setup state for nominator_requests', async function () {
+    const stake = new BigNumber(DEFAULT_STAKING_AMOUNT);
+    const less = stake.dividedBy(10);
+
+    await context.polkadotApi.tx.bfcStaking
+      .joinCandidates(faith.address, null, stake.toFixed(), 1)
+      .signAndSend(faithStash);
+
+    await context.createBlock();
+
+    await context.polkadotApi.tx.bfcStaking
+      .nominate(alith.public, stake.toFixed(), 10, 10)
+      .signAndSend(baltathar);
+
+    await context.createBlock();
+
+    await context.polkadotApi.tx.bfcStaking
+      .nominate(faith.address, stake.toFixed(), 10, 10)
+      .signAndSend(baltathar);
+
+    await context.createBlock();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleNominatorBondLess(alith.public, less.toFixed())
+      .signAndSend(baltathar);
+
+    await context.createBlock();
+
+    const rawCurrentRound: any = await context.polkadotApi.query.bfcStaking.round();
+    const currentRound = rawCurrentRound.currentRoundIndex.toNumber();
+    await jumpToRound(context, currentRound + 1);
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleNominatorBondLess(alith.public, less.toFixed())
+      .signAndSend(baltathar);
+
+    await context.createBlock();
+
+    await context.polkadotApi.tx.bfcStaking
+      .scheduleNominatorBondLess(faith.address, less.toFixed())
+      .signAndSend(baltathar);
+
+    await context.createBlock();
+  });
 
   it('should successfully verify validator/candidate roles', async function () {
     const is_candidate = await callPrecompile(
@@ -140,7 +195,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ['tuple(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)'],
       round_info,
     )[0];
-    expect(Number(decoded_round_info[0])).equal(1);
+    expect(Number(decoded_round_info[0])).equal(2);
 
     const latest_round = await callPrecompile(
       context,
@@ -154,7 +209,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ['uint256'],
       latest_round,
     )[0];
-    expect(Number(decoded_latest_round)).equal(1);
+    expect(Number(decoded_latest_round)).equal(2);
 
     const majority = await callPrecompile(
       context,
@@ -191,7 +246,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'points',
-      ['0x1'],
+      ['0x2'],
     );
     const decoded_points = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -205,7 +260,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'validator_points',
-      ['0x1', alith.public],
+      ['0x2', alith.public],
     );
     const decoded_validator_points = context.web3.eth.abi.decodeParameters(
       ['uint256'],
@@ -316,8 +371,8 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       max_nominations_per_candidate,
     );
     expect(decoded_max_nominations_per_candidate.__length__).equal(2);
-    expect(Number(decoded_max_nominations_per_candidate[0])).equal(10);
-    expect(Number(decoded_max_nominations_per_candidate[1])).equal(2);
+    expect(Number(decoded_max_nominations_per_candidate[0])).equal(2);
+    expect(Number(decoded_max_nominations_per_candidate[1])).equal(1);
 
     const candidate_bond_less_delay = await callPrecompile(
       context,
@@ -366,7 +421,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ['uint256'],
       candidate_count,
     );
-    expect(Number(decoded_candidate_count[0])).equal(1);
+    expect(Number(decoded_candidate_count[0])).equal(2);
 
     const selected_candidates = await callPrecompile(
       context,
@@ -410,9 +465,9 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ['address[]', 'uint256[]'],
       candidate_pool,
     );
-    expect(decoded_candidate_pool[0].length).equal(1);
-    expect(decoded_candidate_pool[1].length).equal(1);
-    expect(decoded_candidate_pool[0][0]).equal(alith.public);
+    expect(decoded_candidate_pool[0].length).equal(2);
+    expect(decoded_candidate_pool[1].length).equal(2);
+    expect(decoded_candidate_pool[0][1]).equal(alith.public);
 
     const candidate_state = await callPrecompile(
       context,
@@ -463,7 +518,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ],
       candidate_states,
     );
-    expect(decoded_candidate_states[0][0]).equal(alith.public);
+    expect(decoded_candidate_states[0][1]).equal(alith.public);
 
     const candidate_states_by_selection = await callPrecompile(
       context,
@@ -568,22 +623,21 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ],
       candidate_nomination_count,
     )[0];
-    expect(Number(decoded_candidate_nomination_count)).equal(0);
+    expect(Number(decoded_candidate_nomination_count)).equal(1);
   });
 
   it('should successfully verify nominator storage existance', async function () {
     const nominator_state = await callPrecompile(
       context,
-      alith.public,
+      baltathar.address,
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'nominator_state',
-      [alith.public],
+      [baltathar.address],
     );
     const decoded_nominator_state = context.web3.eth.abi.decodeParameters(
       [
         'address',
-        'uint256',
         'uint256',
         'uint256',
         'uint256',
@@ -596,29 +650,36 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       ],
       nominator_state,
     );
-    expect(decoded_nominator_state[0]).equal(alith.public);
+    expect(decoded_nominator_state[0]).equal(baltathar.address);
 
     const nominator_requests = await callPrecompile(
       context,
-      alith.public,
+      baltathar.address,
       PRECOMPILE_ADDRESS,
       SELECTORS,
       'nominator_requests',
-      [alith.public],
+      [baltathar.address],
     );
     const decoded_nominator_requests = context.web3.eth.abi.decodeParameters(
       [
         'address',
         'uint256',
-        'uint256',
         'address[]',
-        'uint256[]',
-        'uint256[]',
+        'uint256[][]',
+        'uint256[][]',
         'uint256[]',
       ],
       nominator_requests,
     );
-    expect(decoded_nominator_requests[0]).equal(alith.public);
+    const less = new BigNumber(DEFAULT_STAKING_AMOUNT).dividedBy(10);
+    expect(decoded_nominator_requests[0]).equal(baltathar.address);
+    expect(new BigNumber(decoded_nominator_requests[1] as any).toFixed()).equal(less.multipliedBy(3).toFixed());
+    expect((decoded_nominator_requests as any)[2].length).equal(2);
+    expect((decoded_nominator_requests as any)[3][0].length).equal(1);
+    expect((decoded_nominator_requests as any)[3][1].length).equal(2);
+    expect((decoded_nominator_requests as any)[4][0].length).equal(1);
+    expect((decoded_nominator_requests as any)[4][1].length).equal(2);
+    expect((decoded_nominator_requests as any)[5].length).equal(2);
 
     const nominator_nomination_count = await callPrecompile(
       context,

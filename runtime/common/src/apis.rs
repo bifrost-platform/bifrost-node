@@ -325,6 +325,8 @@ macro_rules! impl_common_runtime_apis {
 					access_list: Option<Vec<(H160, Vec<H256>)>>,
 					authorization_list: Option<AuthorizationList>,
 				) -> Result<pallet_evm::CallInfo, sp_runtime::DispatchError> {
+					use pallet_evm::GasWeightMapping as _;
+
 					let config = if estimate {
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
 						config.estimate = true;
@@ -382,6 +384,8 @@ macro_rules! impl_common_runtime_apis {
 					access_list: Option<Vec<(H160, Vec<H256>)>>,
 					authorization_list: Option<AuthorizationList>,
 				) -> Result<pallet_evm::CreateInfo, sp_runtime::DispatchError> {
+					use pallet_evm::GasWeightMapping as _;
+
 					let config = if estimate {
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
 						config.estimate = true;

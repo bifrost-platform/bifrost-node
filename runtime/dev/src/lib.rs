@@ -156,7 +156,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 372,
+	spec_version: 373,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -862,7 +862,7 @@ parameter_types! {
 	/// Maximum top nominations per candidate.
 	pub const MaxTopNominationsPerCandidate: u32 = 2;
 	/// Maximum bottom nominations per candidate.
-	pub const MaxBottomNominationsPerCandidate: u32 = 2;
+	pub const MaxBottomNominationsPerCandidate: u32 = 1;
 	/// Maximum nominations per nominator.
 	pub const MaxNominationsPerNominator: u32 = 3;
 	/// Default commission rate for full validators.
