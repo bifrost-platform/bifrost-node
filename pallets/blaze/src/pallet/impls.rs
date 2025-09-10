@@ -204,22 +204,6 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		ensure!(Self::is_activated() == is_activated, Error::<T>::InvalidActivationState);
 		Ok(())
 	}
-
-	fn try_fee_rate_finalization() -> Option<u64> {
-		let submitted_fee_rates = <FeeRates<T>>::get();
-
-		// check majority
-		if submitted_fee_rates.len() as u32 >= T::Relayers::majority() {
-			// choose the median fee rate
-			let mut fee_rates = submitted_fee_rates.values().cloned().collect::<Vec<_>>();
-			fee_rates.sort();
-			let median_index = fee_rates.len() / 2;
-			let median_fee_rate = fee_rates[median_index];
-			Some(median_fee_rate.0)
-		} else {
-			None
-		}
-	}
 }
 
 impl<T: Config> Pallet<T> {
@@ -563,31 +547,6 @@ impl<T: Config> Pallet<T> {
 		ValidTransaction::with_tag_prefix("RemoveOutboundMessagesSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides((authority_id, signature))
-			.propagate(true)
-			.build()
-	}
-
-	pub fn verify_remove_outbound_messages(
-		remove_submission: &SocketMessagesSubmission<T::AccountId>,
-		signature: &T::Signature,
-	) -> TransactionValidity {
-		let SocketMessagesSubmission { authority_id, messages } = remove_submission;
-
-		// verify if the authority is psbt manager.
-		T::SocketQueue::verify_authority(authority_id)?;
-
-		// verify if the signature was originated from psbt manager.
-		let message = messages
-			.iter()
-			.map(|x| array_bytes::bytes2hex("0x", x))
-			.collect::<Vec<String>>()
-			.concat();
-
-		Self::verify_signature(message.as_bytes(), signature, authority_id)?;
-
-		ValidTransaction::with_tag_prefix("RemoveOutboundMessagesSubmission")
-			.priority(TransactionPriority::MAX)
-			.and_provides(authority_id)
 			.propagate(true)
 			.build()
 	}
