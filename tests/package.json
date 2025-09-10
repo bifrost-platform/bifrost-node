@@ -1,6 +1,6 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "2.0.1",
+  "version": "2.1.1",
   "author": "bifrost-platform",
   "type": "module",
   "scripts": {
