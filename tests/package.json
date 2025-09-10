@@ -4,9 +4,10 @@
   "author": "bifrost-platform",
   "type": "module",
   "scripts": {
-    "test": "NODE_OPTIONS='--import=tsx/esm' mocha tests/**/**/*.ts --exit",
-    "test_local_runtime": "NODE_OPTIONS='--import=tsx/esm' mocha runtime/**/**/*local_runtime*.ts --exit",
-    "test_live_runtime": "NODE_OPTIONS='--import=tsx/esm' mocha runtime/**/**/*live_runtime*.ts --exit",
+    "test": "tsx ./node_modules/.bin/mocha tests/**/**/*.ts --exit",
+    "clean_test": "rm -rf node_modules && npm install && npm test",
+    "test_local_runtime": "tsx ./node_modules/.bin/mocha runtime/**/**/*local_runtime*.ts --exit",
+    "test_live_runtime": "tsx ./node_modules/.bin/mocha runtime/**/**/*live_runtime*.ts --exit",
     "run_node": "NODE_OPTIONS='--import=tsx/esm' tsx commands/run_node.ts",
     "set_node": "NODE_OPTIONS='--import=tsx/esm' tsx commands/set_node.ts",
     "rewind_node": "NODE_OPTIONS='--import=tsx/esm' tsx commands/rewind_node.ts",
