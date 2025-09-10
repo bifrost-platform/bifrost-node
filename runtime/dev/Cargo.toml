@@ -151,7 +151,7 @@ std = [
 	"pallet-btc-registration-pool/std",
 	"pallet-blaze/std",
 	"pallet-bifrost-evm-tx-payment/std",
-    "pallet-im-online/std",
+	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
 	"pallet-preimage/std",
@@ -189,21 +189,21 @@ std = [
 	"precompile-btc-registration-pool/std",
 	"precompile-btc-socket-queue/std",
 	"precompile-blaze/std",
-    "precompile-bifrost-evm-tx-payment/std",
+	"precompile-bifrost-evm-tx-payment/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
 evm-tracing = ["evm-tracer"]
 runtime-wasm = []
 runtime-benchmarks = [
-    "sp-runtime/runtime-benchmarks",
-    "frame-benchmarking/runtime-benchmarks",
-    "frame-support/runtime-benchmarks",
-    "frame-system-benchmarking",
-    "frame-system/runtime-benchmarks",
-    "pallet-balances/runtime-benchmarks",
-    "pallet-timestamp/runtime-benchmarks",
-    "pallet-utility/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system-benchmarking",
+	"frame-system/runtime-benchmarks",
+	"pallet-balances/runtime-benchmarks",
+	"pallet-timestamp/runtime-benchmarks",
+	"pallet-utility/runtime-benchmarks",
 ]
 
 # Enable the metadata hash generation.

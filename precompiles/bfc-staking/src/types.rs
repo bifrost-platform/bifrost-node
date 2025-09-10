@@ -90,9 +90,10 @@ pub type EvmCandidateStatesOf = (
 );
 
 pub type EvmNominatorStateOf =
-	(Address, U256, u32, u32, U256, Vec<Address>, Vec<U256>, Vec<U256>, u32, U256, Vec<U256>);
+	(Address, U256, u32, U256, Vec<Address>, Vec<U256>, Vec<U256>, u32, U256, Vec<U256>);
 
-pub type EvmNominatorRequestsOf = (Address, u32, U256, Vec<Address>, Vec<U256>, Vec<u32>, Vec<u32>);
+pub type EvmNominatorRequestsOf =
+	(Address, U256, Vec<Address>, Vec<Vec<U256>>, Vec<Vec<u32>>, Vec<u32>);
 
 /// EVM struct for candidate states
 pub struct CandidateStates<Runtime: pallet_bfc_staking::Config> {
@@ -445,8 +446,6 @@ pub struct NominatorState<Runtime: pallet_bfc_staking::Config> {
 	pub initial_nominations: Vec<BalanceOf<Runtime>>,
 	/// The total balance locked for this nominator
 	pub total: BalanceOf<Runtime>,
-	/// The number of pending revocations
-	pub request_revocations_count: u32,
 	/// The sum of pending revocation amounts + bond less amounts
 	pub request_less_total: BalanceOf<Runtime>,
 	/// The status of this nominator
@@ -472,7 +471,6 @@ where
 			nominations: vec![],
 			initial_nominations: vec![],
 			total: zero.into(),
-			request_revocations_count: zero.into(),
 			request_less_total: zero.into(),
 			status: zero.into(),
 			reward_dst: zero.into(),
@@ -491,7 +489,6 @@ where
 		});
 
 		self.total = state.total;
-		self.request_revocations_count = state.requests.revocations_count.into();
 		self.request_less_total = state.requests.less_total;
 
 		self.status = match state.status {
@@ -516,7 +513,6 @@ where
 			owner,
 			self.total.into(),
 			self.status,
-			self.request_revocations_count,
 			self.request_less_total.into(),
 			self.candidates.clone(),
 			self.nominations.clone().into_iter().map(|n| n.into()).collect::<Vec<U256>>(),

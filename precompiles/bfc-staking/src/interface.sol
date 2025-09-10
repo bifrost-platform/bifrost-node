@@ -423,7 +423,6 @@ interface BfcStaking {
             uint256,
             uint256,
             uint256,
-            uint256,
             address[] memory,
             uint256[] memory,
             uint256[] memory,
@@ -444,10 +443,9 @@ interface BfcStaking {
         returns (
             address,
             uint256,
-            uint256,
             address[] memory,
-            uint256[] memory,
-            uint256[] memory,
+            uint256[][] memory,
+            uint256[][] memory,
             uint256[] memory
         );
 
@@ -593,18 +591,24 @@ interface BfcStaking {
     ) external;
 
     /// @dev Execute pending nomination request (if exists && is due)
-    /// Selector: bfb13332
+    /// Selector: 29c0e286
     /// @param candidate The address of the candidate
-    function execute_nomination_request(address candidate) external;
+    function execute_nomination_request(
+        address candidate,
+        uint256 when
+    ) external;
 
     /// @dev Cancel request to leave the set of nominators
     /// Selector: e48105f0
     function cancel_leave_nominators() external;
 
     /// @dev Cancel pending nomination request (already made in support of input by caller)
-    /// Selector: bdb20cae
+    /// Selector: 74d430a5
     /// @param candidate The address of the candidate
-    function cancel_nomination_request(address candidate) external;
+    function cancel_nomination_request(
+        address candidate,
+        uint256 when
+    ) external;
 
     /// @dev Set the nominator reward destination
     /// Selector: 5706390d
