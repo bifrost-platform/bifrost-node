@@ -37,16 +37,10 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Overarching event type
-		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
-		type Signer: IdentifyAccount<AccountId = Self::AccountId>
-			+ Encode
-			+ Decode
-			+ Parameter
-			+ MaxEncodedLen;
+		type Signer: IdentifyAccount<AccountId = Self::AccountId> + Encode + Decode + MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// Interface of Bitcoin Socket Queue pallet.

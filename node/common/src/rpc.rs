@@ -12,9 +12,7 @@ use sc_consensus_manual_seal::EngineCommand;
 use sc_network::service::traits::NetworkService;
 use sc_network_sync::SyncingService;
 use sc_rpc::SubscriptionTaskExecutor;
-use sc_rpc_api::DenyUnsafe;
 use sc_service::TaskManager;
-use sc_transaction_pool::{ChainApi, Pool};
 
 use bp_core::{BlockNumber, Hash, Header};
 use sp_core::H256;
@@ -49,7 +47,7 @@ pub struct GrandpaDeps<B> {
 }
 
 /// Full client dependencies.
-pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
+pub struct FullDevDeps<C, P, BE, SC, CIDP> {
 	/// Client version.
 	pub client_version: String,
 	/// The client instance to use.
@@ -61,9 +59,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// A copy of the chain spec.
 	pub chain_spec: Box<dyn sc_chain_spec::ChainSpec>,
 	/// Graph pool instance.
-	pub graph: Arc<Pool<A>>,
-	/// Whether to deny unsafe calls
-	pub deny_unsafe: DenyUnsafe,
+	pub graph: Arc<P>,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<BE>,
 	/// The Node authority flag
@@ -101,7 +97,7 @@ pub struct FullDevDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 }
 
 /// Mainnet/Testnet client dependencies.
-pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
+pub struct FullDeps<C, P, BE, SC, CIDP> {
 	/// Client version.
 	pub client_version: String,
 	/// The client instance to use.
@@ -113,9 +109,7 @@ pub struct FullDeps<C, P, BE, SC, A: ChainApi, CIDP> {
 	/// A copy of the chain spec.
 	pub chain_spec: Box<dyn sc_chain_spec::ChainSpec>,
 	/// Graph pool instance.
-	pub graph: Arc<Pool<A>>,
-	/// Whether to deny unsafe calls
-	pub deny_unsafe: DenyUnsafe,
+	pub graph: Arc<P>,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<BE>,
 	/// The Node authority flag

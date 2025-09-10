@@ -32,6 +32,7 @@ where
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<RelayManagerCall<Runtime>>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	// Role verifiers
 
@@ -358,7 +359,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = RelayManagerCall::<Runtime>::heartbeat {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -377,7 +378,7 @@ where
 			spec_version: spec_version.into(),
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}

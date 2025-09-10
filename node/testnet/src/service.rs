@@ -22,10 +22,9 @@ use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 pub use sc_executor::WasmExecutor;
 use sc_network::service::traits::NetworkService;
 use sc_network_sync::SyncingService;
-use sc_rpc_api::DenyUnsafe;
 use sc_service::{
 	error::Error as ServiceError, Configuration, RpcHandlers, SpawnTaskHandle, TaskManager,
-	WarpSyncParams,
+	WarpSyncConfig,
 };
 use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
@@ -70,7 +69,7 @@ type FullBackend = sc_service::TFullBackend<Block>;
 type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 
 /// The transaction pool type definition.
-pub type TransactionPool = sc_transaction_pool::FullPool<Block, FullClient>;
+pub type TransactionPool = sc_transaction_pool::TransactionPoolHandle<Block, FullClient>;
 
 /// Builds a new service for a full client.
 pub fn new_full(config: Configuration, rpc_config: RpcConfig) -> Result<TaskManager, ServiceError> {
@@ -120,7 +119,7 @@ pub fn new_partial(
 		FullBackend,
 		FullSelectChain,
 		sc_consensus::DefaultImportQueue<Block>,
-		sc_transaction_pool::FullPool<Block, FullClient>,
+		sc_transaction_pool::TransactionPoolHandle<Block, FullClient>,
 		(
 			sc_consensus_grandpa::GrandpaBlockImport<
 				FullBackend,
@@ -146,13 +145,14 @@ pub fn new_partial(
 		})
 		.transpose()?;
 
-	let executor = sc_service::new_wasm_executor(config);
+	let executor = sc_service::new_wasm_executor(&config.executor);
 
 	let (client, backend, keystore_container, task_manager) =
-		sc_service::new_full_parts::<Block, testnet::RuntimeApi, _>(
+		sc_service::new_full_parts_record_import::<Block, testnet::RuntimeApi, _>(
 			config,
 			telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
 			executor,
+			true,
 		)?;
 	let client = Arc::new(client);
 
@@ -163,12 +163,15 @@ pub fn new_partial(
 
 	let select_chain = sc_consensus::LongestChain::new(backend.clone());
 
-	let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-		config.transaction_pool.clone(),
-		config.role.is_authority().into(),
-		config.prometheus_registry(),
-		task_manager.spawn_essential_handle(),
-		client.clone(),
+	let transaction_pool = Arc::from(
+		sc_transaction_pool::Builder::new(
+			task_manager.spawn_essential_handle(),
+			client.clone(),
+			config.role.is_authority().into(),
+		)
+		.with_options(config.transaction_pool.clone())
+		.with_prometheus(config.prometheus_registry())
+		.build(),
 	);
 
 	let frontier_backend = open_frontier_backend(client.clone(), config, &rpc_config)?;
@@ -237,12 +240,13 @@ where
 		other: (grandpa_block_import, grandpa_link, frontier_backend, mut telemetry),
 	} = new_partial(&config, &rpc_config)?;
 
-	let mut net_config =
-		sc_network::config::FullNetworkConfiguration::<_, _, NB>::new(&config.network);
-	let peer_store_handle = net_config.peer_store_handle();
-	let metrics = NB::register_notification_metrics(
-		config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+	let maybe_registry = config.prometheus_config.as_ref().map(|cfg| &cfg.registry);
+	let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, NB>::new(
+		&config.network,
+		maybe_registry.cloned(),
 	);
+	let peer_store_handle = net_config.peer_store_handle();
+	let metrics = NB::register_notification_metrics(maybe_registry);
 
 	let shared_voter_state = sc_consensus_grandpa::SharedVoterState::empty();
 	let grandpa_protocol_name = sc_consensus_grandpa::protocol_standard_name(
@@ -265,7 +269,7 @@ where
 		Vec::default(),
 	));
 
-	let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+	let (network, system_rpc_tx, tx_handler_controller, sync_service) =
 		sc_service::build_network(sc_service::BuildNetworkParams {
 			config: &config,
 			net_config,
@@ -274,15 +278,13 @@ where
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
 			block_announce_validator_builder: None,
-			warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
+			warp_sync_config: Some(WarpSyncConfig::WithProvider(warp_sync)),
 			block_relay: None,
 			metrics,
 		})?;
 
 	if config.offchain_worker.enabled {
-		task_manager.spawn_handle().spawn(
-			"offchain-workers-runner",
-			"offchain-worker",
+		let offchain_workers =
 			sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
 				runtime_api_provider: client.clone(),
 				is_validator: config.role.is_authority(),
@@ -294,9 +296,11 @@ where
 				network_provider: Arc::new(network.clone()),
 				enable_http_requests: true,
 				custom_extensions: |_| vec![],
-			})
-			.run(client.clone(), task_manager.spawn_handle())
-			.boxed(),
+			})?;
+		task_manager.spawn_handle().spawn(
+			"offchain-workers-runner",
+			"offchain-worker",
+			offchain_workers.run(client.clone(), task_manager.spawn_handle()).boxed(),
 		);
 	}
 
@@ -423,7 +427,6 @@ where
 		);
 	}
 
-	network_starter.start_network();
 	Ok(NewFullBase { task_manager, client, network, transaction_pool, rpc_handlers })
 }
 
@@ -431,8 +434,7 @@ pub fn build_rpc_extensions_builder(
 	config: &Configuration,
 	rpc_config: RpcConfig,
 	builder: RpcExtensionsBuilder,
-) -> impl Fn(DenyUnsafe, sc_rpc::SubscriptionTaskExecutor) -> Result<RpcModule<()>, sc_service::Error>
-{
+) -> impl Fn(sc_rpc::SubscriptionTaskExecutor) -> Result<RpcModule<()>, sc_service::Error> {
 	let justification_stream = builder.justification_stream.clone();
 	let shared_authority_set = builder.shared_authority_set.clone();
 
@@ -581,15 +583,14 @@ pub fn build_rpc_extensions_builder(
 		}
 	};
 
-	let rpc_extensions_builder = move |deny_unsafe, subscription_executor| {
+	let rpc_extensions_builder = move |subscription_executor| {
 		let deps = FullDeps {
 			client_version: client_version.clone(),
 			client: client.clone(),
 			pool: pool.clone(),
-			graph: pool.pool().clone(),
+			graph: pool.clone(),
 			select_chain: select_chain.clone(),
 			chain_spec: chain_spec.cloned_box(),
-			deny_unsafe,
 			is_authority,
 			filter_pool: filter_pool.clone(),
 			ethapi_cmd: ethapi_cmd.clone(),

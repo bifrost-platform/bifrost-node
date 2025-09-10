@@ -49,6 +49,7 @@ where
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
 	BlockNumberFor<Runtime>: Into<U256>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	// Storage getters
 
@@ -266,7 +267,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::propose { proposal: bounded, value };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -282,7 +283,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::second { proposal: prop_index };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -311,7 +312,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::vote { ref_index, vote };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -322,7 +323,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::remove_vote { index: ref_index };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -347,7 +348,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::delegate { to, conviction, balance: amount };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -358,7 +359,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::undelegate {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -373,7 +374,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = DemocracyCall::<Runtime>::unlock { target };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -388,7 +389,7 @@ where
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = PreimageCall::<Runtime>::note_preimage { bytes: encoded_proposal.into() };
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -414,7 +415,7 @@ where
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = PreimageCall::<Runtime>::note_preimage { bytes: encoded_proposal.into() };
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}

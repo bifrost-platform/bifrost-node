@@ -42,6 +42,7 @@ where
 	Runtime::RuntimeCall: From<StakingCall<Runtime>>,
 	BalanceOf<Runtime>: TryFrom<U256> + Into<U256>,
 	BlockNumberFor<Runtime>: Into<U256>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	// Role Verifiers
 
@@ -1046,7 +1047,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::go_offline {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1057,7 +1058,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::go_online {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1096,7 +1097,7 @@ where
 			}
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1109,7 +1110,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::candidate_bond_more { more };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1123,7 +1124,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_leave_candidates { candidate_count };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1136,7 +1137,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_candidate_bond_less { less };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1150,7 +1151,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1161,7 +1162,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_candidate_bond_less {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1175,7 +1176,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_leave_candidates { candidate_count };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1186,7 +1187,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_candidate_bond_less {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1198,7 +1199,7 @@ where
 		let call =
 			StakingCall::<Runtime>::set_validator_commission { new: Perbill::from_parts(new) };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1211,7 +1212,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::set_controller { new };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1228,7 +1229,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::set_candidate_reward_dst { new_reward_dst };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1254,7 +1255,7 @@ where
 			nomination_count,
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1272,7 +1273,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::nominator_bond_more { candidate, more };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1283,7 +1284,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_leave_nominators {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1299,7 +1300,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_revoke_nomination { validator: candidate };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1317,7 +1318,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_nominator_bond_less { candidate, less };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1331,7 +1332,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_leave_nominators { nomination_count };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1347,7 +1348,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_nomination_request { candidate };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1358,7 +1359,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_leave_nominators {};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1374,7 +1375,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_nomination_request { candidate };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -1391,7 +1392,7 @@ where
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::set_nominator_reward_dst { new_reward_dst };
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
