@@ -279,7 +279,7 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::request_set_refund())]
 		/// Request to (re-)set the user's refund address.
 		pub fn request_set_refund(
 			origin: OriginFor<T>,
@@ -319,7 +319,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
 			origin: OriginFor<T>,
@@ -393,7 +393,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
 		/// Request a system vault address. Initially, the vault address will be in pending state.
 		pub fn request_system_vault(
 			origin: OriginFor<T>,
@@ -427,7 +427,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_vault_key(
 			origin: OriginFor<T>,
@@ -491,7 +491,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
@@ -574,7 +574,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::vault_key_presubmission())]
 		/// Submit public keys for prepare for the fast registration.
 		pub fn vault_key_presubmission(
 			origin: OriginFor<T>,
@@ -628,7 +628,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::clear_vault())]
 		/// Clear a vault and all its related data.
 		pub fn clear_vault(
 			origin: OriginFor<T>,
@@ -673,7 +673,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(7)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::migration_control())]
 		/// Initiates and control the current state of the vault migration.
 		/// Every specific calls will be blocked (except submitting a public key for the next system vault)
 		/// until the migration successfully ends.
@@ -728,7 +728,7 @@ pub mod pallet {
 
 		#[allow(unused_must_use)]
 		#[pallet::call_index(8)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::drop_previous_round())]
 		/// Drop a previous round and all its related data.
 		pub fn drop_previous_round(
 			origin: OriginFor<T>,
@@ -759,7 +759,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(9)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_max_presubmission())]
 		/// Set the maximum number of public keys that can be presubmitted.
 		pub fn set_max_presubmission(origin: OriginFor<T>, max: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -772,7 +772,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(10)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_multi_sig_ratio())]
 		/// Set the ratio of the multi-signature threshold.
 		pub fn set_multi_sig_ratio(
 			origin: OriginFor<T>,

@@ -23,12 +23,12 @@ sp-std = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"impl-serde/std",
-	"scale-info/std",
-	"parity-scale-codec/std",
-	"frame-support/std",
-	"frame-system/std",
-	"sp-runtime/std",
-	"sp-std/std",
+    "impl-serde/std",
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-runtime/std",
+    "sp-std/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
