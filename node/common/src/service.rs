@@ -17,11 +17,18 @@ use sp_runtime::traits::BlakeTwo256;
 
 /// Only enable the benchmarking host functions when we actually want to benchmark.
 #[cfg(feature = "runtime-benchmarks")]
-pub type HostFunctions =
-	(sp_io::SubstrateHostFunctions, frame_benchmarking::benchmarking::HostFunctions);
-/// Otherwise we use empty host functions for ext host functions.
+pub type HostFunctions = (
+	sp_io::SubstrateHostFunctions,
+	frame_benchmarking::benchmarking::HostFunctions,
+	cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
+);
+/// Otherwise we use storage proof size host functions for compatibility.
 #[cfg(not(feature = "runtime-benchmarks"))]
-pub type HostFunctions = (sp_io::SubstrateHostFunctions, fp_ext::bifrost_ext::HostFunctions);
+pub type HostFunctions = (
+	sp_io::SubstrateHostFunctions,
+	fp_ext::bifrost_ext::HostFunctions,
+	cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
+);
 
 /// Configure frontier database.
 pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {

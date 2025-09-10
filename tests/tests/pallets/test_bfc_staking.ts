@@ -946,6 +946,8 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
   });
 
   it('should successfully join candidate pool with identical essential accounts - full node', async function () {
+    await context.createBlock();
+
     const stake = new BigNumber(MIN_FULL_CANDIDATE_STAKING_AMOUNT);
     const rawCandidatesBefore: any = await context.polkadotApi.query.bfcStaking.candidatePool();
     const candidatesBefore = rawCandidatesBefore.toJSON();
@@ -954,6 +956,8 @@ describeDevNode('pallet_bfc_staking - join candidates', (context) => {
     await context.polkadotApi.tx.bfcStaking
       .joinCandidates(charleth.address, charleth.address, stake.toFixed(), Object.keys(candidatesBefore).length)
       .signAndSend(charleth, { nonce: -1 });
+    await context.createBlock();
+
     const keys: any = {
       aura: SESSION_KEYS[2].aura,
       grandpa: SESSION_KEYS[2].gran,
@@ -1407,6 +1411,8 @@ describeDevNode('pallet_bfc_staking - candidate stake management', (context) => 
   });
 
   it('should be non-selected as active validator at next round - full node', async function () {
+    await context.createBlock();
+
     this.timeout(20000);
     const stake = new BigNumber(MIN_FULL_VALIDATOR_STAKING_AMOUNT);
 

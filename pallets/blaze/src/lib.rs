@@ -1,7 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
+#[cfg(any(test, feature = "runtime-benchmarks"))]
+mod benchmarking;
 pub mod migrations;
+#[cfg(test)]
+mod mock;
+
 mod pallet;
 pub mod weights;
 
@@ -13,7 +18,7 @@ use bp_btc_relay::{
 	UnboundedBytes,
 };
 use bp_staking::MAX_AUTHORITIES;
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H256};
 use sp_runtime::BoundedVec;
@@ -32,7 +37,7 @@ macro_rules! log {
 	};
 }
 
-#[derive(Eq, PartialEq, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Eq, PartialEq, Clone, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
 /// The status of a UTXO.
 pub enum UtxoStatus {
 	/// The UTXO is not confirmed.
@@ -65,7 +70,7 @@ pub struct BTCTransaction<AccountId> {
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// A submission of UTXOs.
 pub struct UtxoSubmission<AccountId> {
 	/// The authority id.
@@ -74,7 +79,7 @@ pub struct UtxoSubmission<AccountId> {
 	pub utxos: Vec<UtxoInfo>,
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// A submission of txid which is broadcasted.
 pub struct BroadcastSubmission<AccountId> {
 	/// The authority id.
@@ -83,7 +88,7 @@ pub struct BroadcastSubmission<AccountId> {
 	pub txid: H256,
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// A submission of a fee rate.
 pub struct FeeRateSubmission<AccountId, BlockNumber> {
 	/// The authority id.
@@ -96,7 +101,7 @@ pub struct FeeRateSubmission<AccountId, BlockNumber> {
 	pub deadline: BlockNumber,
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// A submission of Socket messages.
 pub struct SocketMessagesSubmission<AccountId> {
 	/// The authority id.

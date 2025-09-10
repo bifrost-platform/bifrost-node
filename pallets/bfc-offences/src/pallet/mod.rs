@@ -27,8 +27,6 @@ pub mod pallet {
 	/// Configuration trait of this pallet
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Overarching event type
-		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The currency type
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 		/// Handler for the unbalanced reduction when slashing a preimage deposit.
@@ -148,7 +146,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(
-			<T as Config>::WeightInfo::set_offence_expiration()
+			(<T as Config>::WeightInfo::set_offence_expiration(), DispatchClass::Operational,)
 		)]
 		/// Set a new offence expiration for all validators. It must be specified in sessions.
 		pub fn set_offence_expiration(
@@ -166,7 +164,7 @@ pub mod pallet {
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(
-			<T as Config>::WeightInfo::set_max_offence_count()
+			(<T as Config>::WeightInfo::set_max_offence_count(), DispatchClass::Operational,)
 		)]
 		/// Set a new maximum offence count for all validators.
 		pub fn set_max_offence_count(
@@ -215,7 +213,7 @@ pub mod pallet {
 
 		#[pallet::call_index(2)]
 		#[pallet::weight(
-			<T as Config>::WeightInfo::set_offence_activation()
+			(<T as Config>::WeightInfo::set_offence_activation(), DispatchClass::Operational,)
 		)]
 		/// Set the activation of validator offence management.
 		pub fn set_offence_activation(
@@ -231,7 +229,7 @@ pub mod pallet {
 
 		#[pallet::call_index(3)]
 		#[pallet::weight(
-			<T as Config>::WeightInfo::set_slash_activation()
+			(<T as Config>::WeightInfo::set_slash_activation(), DispatchClass::Operational,)
 		)]
 		/// Set the activation of validator slashing.
 		pub fn set_slash_activation(

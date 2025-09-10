@@ -1,10 +1,10 @@
 use crate::BoundedBitcoinAddress;
 
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::{prelude::string::String, TypeInfo};
 use sp_core::{RuntimeDebug, H256};
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(Decode, Encode, DecodeWithMemTracking, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// The information of a UTXO.
 pub struct UtxoInfo {
 	/// The txid of the UTXO.

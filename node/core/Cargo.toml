@@ -28,18 +28,17 @@ sc-service = { workspace = true }
 sc-consensus-grandpa = { workspace = true }
 
 # benchmarking dependencies
-frame-benchmarking = { workspace = true, features = ["std"] }
 frame-benchmarking-cli = { workspace = true }
 
 # Bifrost runtimes
 bifrost-dev-runtime = { workspace = true, features = ["std", "evm-tracing"] }
 bifrost-testnet-runtime = { workspace = true, features = [
-	"std",
-	"evm-tracing",
+    "std",
+    "evm-tracing",
 ] }
 bifrost-mainnet-runtime = { workspace = true, features = [
-	"std",
-	"evm-tracing",
+    "std",
+    "evm-tracing",
 ] }
 
 # Bifrost node specs
@@ -53,4 +52,12 @@ substrate-build-script-utils = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = []
+runtime-benchmarks = [
+    "bifrost-dev-runtime/runtime-benchmarks",
+    "bifrost-testnet-runtime/runtime-benchmarks",
+    "bifrost-mainnet-runtime/runtime-benchmarks",
+    "bifrost-dev-node/runtime-benchmarks",
+    "bifrost-testnet-node/runtime-benchmarks",
+    "bifrost-mainnet-node/runtime-benchmarks",
+    "sc-service/runtime-benchmarks",
+]

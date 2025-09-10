@@ -29,3 +29,4 @@ std = [
     "sp-runtime/std",
     "frame-system/std",
 ]
+runtime-benchmarks = []
