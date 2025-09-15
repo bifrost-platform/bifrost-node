@@ -325,6 +325,8 @@ macro_rules! impl_common_runtime_apis {
 					access_list: Option<Vec<(H160, Vec<H256>)>>,
 					authorization_list: Option<AuthorizationList>,
 				) -> Result<pallet_evm::CallInfo, sp_runtime::DispatchError> {
+					use pallet_evm::GasWeightMapping as _;
+
 					let config = if estimate {
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
 						config.estimate = true;
@@ -332,25 +334,50 @@ macro_rules! impl_common_runtime_apis {
 					} else {
 						None
 					};
-					let is_transactional = false;
-					let validate = true;
 
-					let transaction_data = pallet_ethereum::TransactionData::new(
-						pallet_ethereum::TransactionAction::Call(to),
-						data.clone(),
-						nonce.unwrap_or_default(),
-						gas_limit,
-						None,
-						max_fee_per_gas.or(Some(U256::default())),
-						max_priority_fee_per_gas.or(Some(U256::default())),
-						value,
-						Some(<Runtime as pallet_evm::Config>::ChainId::get()),
-						access_list.clone().unwrap_or_default(),
-						authorization_list.clone().unwrap_or_default(),
-					);
+					// Estimated encoded transaction size must be based on the heaviest transaction
+					// type (EIP7702Transaction) to be compatible with all transaction types.
+					let mut estimated_transaction_len = data.len() +
+						// pallet ethereum index: 1
+						// transact call index: 1
+						// Transaction enum variant: 1
+						// chain_id 8 bytes
+						// nonce: 32
+						// max_priority_fee_per_gas: 32
+						// max_fee_per_gas: 32
+						// gas_limit: 32
+						// action: 21 (enum variant + call address)
+						// value: 32
+						// access_list: 1 (empty vec size)
+						// authorization_list: 1 (empty vec size)
+						// 65 bytes signature
+						259;
 
-					let gas_limit = gas_limit.min(u64::MAX.into()).low_u64();
-					let (weight_limit, proof_size_base_cost) = pallet_ethereum::Pallet::<Runtime>::transaction_weight(&transaction_data);
+					if access_list.is_some() {
+						estimated_transaction_len += access_list.encoded_size();
+					}
+
+					if authorization_list.is_some() {
+						estimated_transaction_len += authorization_list.encoded_size();
+					}
+
+					let gas_limit = if gas_limit > U256::from(u64::MAX) {
+						u64::MAX
+					} else {
+						gas_limit.low_u64()
+					};
+					let without_base_extrinsic_weight = true;
+
+					let (weight_limit, proof_size_base_cost) =
+						match <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
+							gas_limit,
+							without_base_extrinsic_weight
+						) {
+							weight_limit if weight_limit.proof_size() > 0 => {
+								(Some(weight_limit), Some(estimated_transaction_len as u64))
+							}
+							_ => (None, None),
+						};
 
 					<Runtime as pallet_evm::Config>::Runner::call(
 						from,
@@ -363,8 +390,8 @@ macro_rules! impl_common_runtime_apis {
 						nonce,
 						access_list.unwrap_or_default(),
 						authorization_list.unwrap_or_default(),
-						is_transactional,
-						validate,
+						false,
+						true,
 						weight_limit,
 						proof_size_base_cost,
 						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
@@ -382,6 +409,8 @@ macro_rules! impl_common_runtime_apis {
 					access_list: Option<Vec<(H160, Vec<H256>)>>,
 					authorization_list: Option<AuthorizationList>,
 				) -> Result<pallet_evm::CreateInfo, sp_runtime::DispatchError> {
+					use pallet_evm::GasWeightMapping as _;
+
 					let config = if estimate {
 						let mut config = <Runtime as pallet_evm::Config>::config().clone();
 						config.estimate = true;
@@ -389,24 +418,47 @@ macro_rules! impl_common_runtime_apis {
 					} else {
 						None
 					};
-					let is_transactional = false;
-					let validate = true;
-					let transaction_data = pallet_ethereum::TransactionData::new(
-						pallet_ethereum::TransactionAction::Create,
-						data.clone(),
-						nonce.unwrap_or_default(),
-						gas_limit,
-						None,
-						max_fee_per_gas.or(Some(U256::default())),
-						max_priority_fee_per_gas.or(Some(U256::default())),
-						value,
-						Some(<Runtime as pallet_evm::Config>::ChainId::get()),
-						access_list.clone().unwrap_or_default(),
-						authorization_list.clone().unwrap_or_default(),
-					);
 
-					let gas_limit = gas_limit.min(u64::MAX.into()).low_u64();
-					let (weight_limit, proof_size_base_cost) = pallet_ethereum::Pallet::<Runtime>::transaction_weight(&transaction_data);
+					let mut estimated_transaction_len = data.len() +
+						// from: 20
+						// value: 32
+						// gas_limit: 32
+						// nonce: 32
+						// 1 byte transaction action variant
+						// chain id 8 bytes
+						// 65 bytes signature
+						190;
+
+					if max_fee_per_gas.is_some() {
+						estimated_transaction_len += 32;
+					}
+					if max_priority_fee_per_gas.is_some() {
+						estimated_transaction_len += 32;
+					}
+					if access_list.is_some() {
+						estimated_transaction_len += access_list.encoded_size();
+					}
+					if authorization_list.is_some() {
+						estimated_transaction_len += authorization_list.encoded_size();
+					}
+
+					let gas_limit = if gas_limit > U256::from(u64::MAX) {
+						u64::MAX
+					} else {
+						gas_limit.low_u64()
+					};
+					let without_base_extrinsic_weight = true;
+
+					let (weight_limit, proof_size_base_cost) =
+						match <Runtime as pallet_evm::Config>::GasWeightMapping::gas_to_weight(
+							gas_limit,
+							without_base_extrinsic_weight
+						) {
+							weight_limit if weight_limit.proof_size() > 0 => {
+								(Some(weight_limit), Some(estimated_transaction_len as u64))
+							}
+							_ => (None, None),
+						};
 
 					<Runtime as pallet_evm::Config>::Runner::create(
 						from,
@@ -418,8 +470,8 @@ macro_rules! impl_common_runtime_apis {
 						nonce,
 						access_list.unwrap_or_default(),
 						authorization_list.unwrap_or_default(),
-						is_transactional,
-						validate,
+						false,
+						true,
 						weight_limit,
 						proof_size_base_cost,
 						config.as_ref().unwrap_or(<Runtime as pallet_evm::Config>::config()),
