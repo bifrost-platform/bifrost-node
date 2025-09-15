@@ -162,7 +162,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 492,
+	spec_version: 493,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -948,7 +948,7 @@ parameter_types! {
 	/// ceil(
 	///     (max_extrinsic.ref_time() / max_extrinsic.proof_size()) / WEIGHT_PER_GAS
 	/// )
-	pub const GasLimitPovSizeRatio: u64 = 4;
+	pub const GasLimitPovSizeRatio: u64 = 0;
 	/// BlockGasLimit / MAX_STORAGE_GROWTH = 60_000_000 / (400 * 1024) = 146
 	pub const GasLimitStorageGrowthRatio: u64 = 146;
 }
