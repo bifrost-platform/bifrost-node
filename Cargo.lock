@@ -1287,6 +1287,7 @@ dependencies = [
  "futures 0.3.31",
  "hex-literal",
  "jsonrpsee",
+ "log",
  "pallet-bfc-staking",
  "pallet-ethereum",
  "pallet-im-online",

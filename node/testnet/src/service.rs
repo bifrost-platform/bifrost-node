@@ -1,6 +1,6 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
-use crate::rpc::create_full;
+use crate::{block_validator::BlockSkipValidator, rpc::create_full};
 
 use bifrost_testnet_runtime::MILLISECS_PER_BLOCK;
 use futures::{FutureExt, StreamExt};
@@ -278,7 +278,9 @@ where
 			transaction_pool: transaction_pool.clone(),
 			spawn_handle: task_manager.spawn_handle(),
 			import_queue,
-			block_announce_validator_builder: None,
+			block_announce_validator_builder: Some(Box::new(move |_| {
+				Box::new(BlockSkipValidator::new())
+			})),
 			warp_sync_config: Some(WarpSyncConfig::WithProvider(warp_sync)),
 			block_relay: None,
 			metrics,

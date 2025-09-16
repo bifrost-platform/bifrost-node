@@ -14,6 +14,7 @@ serde_json = { workspace = true }
 jsonrpsee = { workspace = true, features = ["server"] }
 futures = { workspace = true }
 hex-literal = { workspace = true }
+log = { workspace = true }
 
 # substrate client dependencies
 sc-client-api = { workspace = true }
@@ -83,6 +84,6 @@ bifrost-common-node = { workspace = true }
 [features]
 default = []
 runtime-benchmarks = [
-    "bifrost-testnet-runtime/runtime-benchmarks",
-    "frame-benchmarking/runtime-benchmarks",
+	"bifrost-testnet-runtime/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
 ]
