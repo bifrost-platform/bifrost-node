@@ -2,6 +2,7 @@
 
 use crate::rpc::create_full;
 
+use bifrost_testnet_runtime::MILLISECS_PER_BLOCK;
 use futures::{FutureExt, StreamExt};
 use jsonrpsee::RpcModule;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
@@ -471,7 +472,10 @@ pub fn build_rpc_extensions_builder(
 
 	let slot_duration = sc_consensus_aura::slot_duration(&*client).expect("Slot duration exists");
 	let pending_create_inherent_data_providers = move |_, ()| async move {
-		let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+		let additional_duration = Duration::from_millis(MILLISECS_PER_BLOCK);
+		let adjusted_timestamp = sp_timestamp::InherentDataProvider::from_system_time().timestamp()
+			+ additional_duration.as_millis() as u64;
+		let timestamp = sp_timestamp::InherentDataProvider::new(adjusted_timestamp);
 		let slot =
 			sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 				*timestamp,
