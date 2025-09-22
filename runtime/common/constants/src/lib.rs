@@ -24,7 +24,7 @@ pub mod time {
 	/// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
 	/// `SLOT_DURATION` is picked up by `pallet_timestamp` which is in turn picked
 	/// up by `pallet_aura` to implement `fn slot_duration()`.
-	pub const MILLISECS_PER_BLOCK: u64 = 3000;
+	pub const MILLISECS_PER_BLOCK: u64 = 500;
 
 	/// Currently it is not possible to change the slot duration after the chain has started.
 	/// Attempting to do so will brick block production.
