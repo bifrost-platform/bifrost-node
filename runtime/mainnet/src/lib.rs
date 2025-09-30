@@ -115,6 +115,14 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+type Migrations = (
+	pallet_session::migrations::v1::MigrateV0ToV1<
+		Runtime,
+		pallet_session::migrations::v1::InitOffenceSeverity<Runtime>,
+	>,
+);
+
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
 	Runtime,
@@ -122,6 +130,7 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
+	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -153,7 +162,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2035,
+	spec_version: 2036,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -1080,8 +1089,8 @@ impl pallet_btc_registration_pool::Config for Runtime {
 }
 
 parameter_types! {
-	pub const FeeRateExpiration: u32 = 1 * MINUTES;
-	pub const ToleranceThreshold: u32 = 3;
+	pub const FeeRateExpiration: u32 = 5 * MINUTES;
+	pub const ToleranceThreshold: u32 = 5;
 }
 
 impl pallet_blaze::Config for Runtime {

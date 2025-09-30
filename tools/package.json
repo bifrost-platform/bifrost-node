@@ -1,6 +1,6 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "author": "bifrost-platform",
   "scripts": {
     "set_session_keys": "NODE_OPTIONS='--import=tsx/esm' tsx src/set_session_keys.ts",
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@polkadot/api": "16.4.4",
-    "axios": "1.11.0",
+    "axios": "1.12.2",
     "bignumber.js": "9.3.1",
     "gauge": "5.0.1",
     "shelljs": "0.10.0",
