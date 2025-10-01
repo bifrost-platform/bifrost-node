@@ -2,7 +2,6 @@
 
 use crate::rpc::create_full;
 
-use bifrost_testnet_runtime::MILLISECS_PER_BLOCK;
 use futures::{FutureExt, StreamExt};
 use jsonrpsee::RpcModule;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
@@ -31,7 +30,7 @@ use sc_telemetry::{Telemetry, TelemetryWorker};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 
 use bp_core::*;
-use sp_consensus_aura::{sr25519::AuthorityPair as AuraPair, SlotDuration};
+use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
 use sp_runtime::traits::{Block as BlockT, NumberFor};
 
 /// The minimum period of blocks on which justifications will be
@@ -470,18 +469,15 @@ pub fn build_rpc_extensions_builder(
 		prometheus_registry.clone(),
 	));
 
+	let slot_duration = sc_consensus_aura::slot_duration(&*client).expect("Slot duration exists");
 	let pending_create_inherent_data_providers = move |_, ()| async move {
-		// Timestamp should be in the future so the new slot is calculated correctly
-		let additional_duration = Duration::from_millis(MILLISECS_PER_BLOCK);
-		let new_timestamp = sp_timestamp::InherentDataProvider::from_system_time().timestamp()
-			+ additional_duration.as_millis() as u64;
-		let timestamp_provider = sp_timestamp::InherentDataProvider::new(new_timestamp);
+		let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 		let slot =
 			sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-				timestamp_provider.timestamp(),
-				SlotDuration::from_millis(MILLISECS_PER_BLOCK),
+				*timestamp,
+				slot_duration,
 			);
-		Ok((slot, timestamp_provider))
+		Ok((slot, timestamp))
 	};
 
 	// Sinks for pubsub notifications.

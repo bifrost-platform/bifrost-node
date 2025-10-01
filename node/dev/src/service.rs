@@ -693,9 +693,7 @@ pub fn build_rpc_extensions_builder(
 
 	let slot_duration = sc_consensus_aura::slot_duration(&*client).expect("Slot duration exists");
 	let pending_create_inherent_data_providers = move |_, ()| async move {
-		let current = sp_timestamp::InherentDataProvider::from_system_time();
-		let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
-		let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
+		let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 		let slot =
 			sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 				*timestamp,
