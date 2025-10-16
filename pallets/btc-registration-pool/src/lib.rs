@@ -1,6 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+#[cfg(test)]
+mod mock;
+
 pub mod migrations;
 mod pallet;
 pub mod weights;
@@ -8,7 +13,7 @@ pub mod weights;
 pub use pallet::pallet::*;
 use weights::WeightInfo;
 
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 use sp_core::RuntimeDebug;
 use sp_std::vec::Vec;
@@ -56,7 +61,7 @@ impl<AccountId: PartialEq + Clone + Ord + sp_std::fmt::Debug> BitcoinRelayTarget
 	}
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// The payload used for public key submission.
 pub struct VaultKeySubmission<AccountId> {
 	/// The authority Ethereum address. (Relay executive)
@@ -69,7 +74,7 @@ pub struct VaultKeySubmission<AccountId> {
 	pub pool_round: PoolRound,
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// The payload used for public key submission.
 pub struct VaultKeyPreSubmission<AccountId> {
 	/// The authority Ethereum address. (Relay executive)
@@ -80,7 +85,7 @@ pub struct VaultKeyPreSubmission<AccountId> {
 	pub pool_round: PoolRound,
 }
 
-#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// The payload used for set refund approval.
 pub struct SetRefundsApproval<AccountId, BlockNumber> {
 	/// The authority Ethereum address. (`SocketQueue::Authority`)

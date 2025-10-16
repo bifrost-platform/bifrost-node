@@ -48,7 +48,7 @@ describeDevNode('Txpool - Pending Ethereum transaction', (context) => {
     const content = await customWeb3Request(context.web3, 'txpool_content', []);
     const data = content.pending['0xf24ff3a9cf04c71dbc94d0b566f7a27b94566cac'][context.web3.utils.toHex(0)];
     expect(data).to.include({
-      blockHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      blockHash: null,
       blockNumber: null,
       from: '0xf24ff3a9cf04c71dbc94d0b566f7a27b94566cac',
       hash: txHash,

@@ -22,21 +22,18 @@ use sp_blockchain::{
 use sp_consensus::SelectChain;
 use sp_consensus_aura::{sr25519::AuthorityId as AuraId, AuraApi};
 use sp_inherents::CreateInherentDataProviders;
-use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::traits::{BlakeTwo256, Block as BlockT};
 
-use fc_rpc::pending::AuraConsensusDataProvider;
 use sc_client_api::{
 	backend::{Backend, StateBackend, StorageProvider},
 	UsageProvider,
 };
 pub use sc_client_api::{AuxStore, BlockOf, BlockchainEvents};
-pub use sc_rpc_api::DenyUnsafe;
-use sc_transaction_pool::ChainApi;
 use sc_transaction_pool_api::TransactionPool;
 
 /// Instantiate all full RPC extensions.
-pub fn create_full<C, P, BE, SC, A, CIDP>(
-	deps: FullDeps<C, P, BE, SC, A, CIDP>,
+pub fn create_full<C, P, BE, SC, CIDP>(
+	deps: FullDeps<C, P, BE, SC, CIDP>,
 	maybe_tracing_config: Option<TracingConfig>,
 	pubsub_notification_sinks: Arc<
 		fc_mapping_sync::EthereumBlockNotificationSinks<
@@ -62,18 +59,17 @@ where
 	C::Api: fp_rpc::ConvertTransactionRuntimeApi<Block>,
 	C::Api: fp_rpc_txpool::TxPoolRuntimeApi<Block>,
 	C::Api: AuraApi<Block, AuraId>,
-	P: TransactionPool<Block = Block> + 'static,
-	A: ChainApi<Block = Block> + 'static,
+	P: TransactionPool<Block = Block, Hash = <Block as BlockT>::Hash> + 'static,
 	SC: SelectChain<Block> + 'static,
 	CIDP: CreateInherentDataProviders<Block, ()> + Send + 'static,
 {
 	use fc_rpc::{
-		Eth, EthApiServer, EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, Net,
-		NetApiServer, Web3, Web3ApiServer,
+		pending::AuraConsensusDataProvider, Eth, EthApiServer, EthFilter, EthFilterApiServer,
+		EthPubSub, EthPubSubApiServer, Net, NetApiServer, TxPool, TxPoolApiServer, Web3,
+		Web3ApiServer,
 	};
 	use fc_rpc_debug::{Debug, DebugServer};
 	use fc_rpc_trace::{Trace, TraceServer};
-	use fc_rpc_txpool::{TxPool, TxPoolServer};
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use sc_consensus_grandpa_rpc::{Grandpa, GrandpaApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
@@ -85,7 +81,6 @@ where
 		pool,
 		select_chain: _,
 		chain_spec: _,
-		deny_unsafe,
 		graph,
 		network,
 		filter_pool,
@@ -113,8 +108,7 @@ where
 		finality_provider,
 	} = grandpa;
 
-	io.merge(System::new(Arc::clone(&client), Arc::clone(&pool), deny_unsafe).into_rpc())
-		.ok();
+	io.merge(System::new(Arc::clone(&client), Arc::clone(&pool)).into_rpc()).ok();
 	io.merge(TransactionPayment::new(Arc::clone(&client)).into_rpc()).ok();
 
 	io.merge(
@@ -189,7 +183,7 @@ where
 	let convert_transaction: Option<Never> = None;
 
 	io.merge(
-		Eth::<_, _, _, _, _, _, _, DefaultEthConfig<C, BE>>::new(
+		Eth::<_, _, _, _, _, _, DefaultEthConfig<C, BE>>::new(
 			Arc::clone(&client),
 			Arc::clone(&pool),
 			graph.clone(),
@@ -215,8 +209,13 @@ where
 	if let Some(tracing_config) = maybe_tracing_config {
 		if let Some(trace_filter_requester) = tracing_config.tracing_requesters.trace {
 			io.merge(
-				Trace::new(client, trace_filter_requester, tracing_config.trace_filter_max_count)
-					.into_rpc(),
+				Trace::new(
+					client,
+					trace_filter_requester,
+					tracing_config.trace_filter_max_count,
+					frontier_backend.clone(),
+				)
+				.into_rpc(),
 			)
 			.ok();
 		}

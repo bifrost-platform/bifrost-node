@@ -7,6 +7,8 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+extern crate alloc;
+
 pub use bifrost_mainnet_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
@@ -25,7 +27,7 @@ use sp_genesis_builder::PresetId;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 use sp_runtime::{
-	create_runtime_str, generic, impl_opaque_keys,
+	generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
 		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
@@ -48,7 +50,7 @@ use pallet_ethereum::{
 };
 use pallet_evm::{
 	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, GasWeightMapping, IdentityAddressMapping, Runner,
+	FeeCalculator, IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -95,8 +97,8 @@ pub type Precompiles = BifrostPrecompiles<Runtime>;
 /// Block type as expected by this runtime.
 pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
-/// The SignedExtension to the basic transaction logic.
-pub type SignedExtra = (
+/// The `TransactionExtension` to the basic transaction logic.
+pub type TxExtension = (
 	frame_system::CheckNonZeroSender<Runtime>,
 	frame_system::CheckSpecVersion<Runtime>,
 	frame_system::CheckTxVersion<Runtime>,
@@ -105,11 +107,21 @@ pub type SignedExtra = (
 	frame_system::CheckNonce<Runtime>,
 	frame_system::CheckWeight<Runtime>,
 	pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+	frame_metadata_hash_extension::CheckMetadataHash<Runtime>,
+	frame_system::WeightReclaim<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
+
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+type Migrations = (
+	pallet_session::migrations::v1::MigrateV0ToV1<
+		Runtime,
+		pallet_session::migrations::v1::InitOffenceSeverity<Runtime>,
+	>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -118,6 +130,7 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
+	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -143,13 +156,13 @@ pub mod opaque {
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The identifier for the different Substrate runtimes.
-	spec_name: create_runtime_str!("thebifrost-mainnet"),
+	spec_name: alloc::borrow::Cow::Borrowed("thebifrost-mainnet"),
 	// The name of the implementation of the spec.
-	impl_name: create_runtime_str!("bifrost-mainnet"),
+	impl_name: alloc::borrow::Cow::Borrowed("bifrost-mainnet"),
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2034,
+	spec_version: 2036,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -157,7 +170,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the interface for handling transactions.
 	transaction_version: 1,
 	// The version of the interface for handling state transitions.
-	state_version: 1,
+	system_version: 1,
 };
 
 /// Maximum weight per block.
@@ -219,6 +232,8 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	/// migrations pallet
+	type MultiBlockMigrator = MultiBlockMigrations;
 }
 
 /// Calls that can bypass the safe-mode pallet.
@@ -325,6 +340,7 @@ impl pallet_balances::Config for Runtime {
 	type MaxFreezes = ConstU32<0>;
 	type RuntimeHoldReason = RuntimeHoldReason;
 	type RuntimeFreezeReason = RuntimeFreezeReason;
+	type DoneSlashHandler = ();
 }
 
 pub struct DealWithFees<R>(sp_std::marker::PhantomData<R>);
@@ -334,7 +350,7 @@ where
 	pallet_treasury::Pallet<R>: OnUnbalanced<NegativeImbalance<R>>,
 {
 	// this seems to be called for substrate-based transactions
-	fn on_unbalanceds<B>(mut fees_then_tips: impl Iterator<Item = NegativeImbalance<R>>) {
+	fn on_unbalanceds(mut fees_then_tips: impl Iterator<Item = NegativeImbalance<R>>) {
 		if let Some(fees) = fees_then_tips.next() {
 			// for fees, 50% are burned, 50% to the treasury
 			let (_, to_treasury) = fees.ration(50, 50);
@@ -368,6 +384,7 @@ impl pallet_transaction_payment::Config for Runtime {
 	type WeightToFee = IdentityFee<Balance>;
 	type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
 	type FeeMultiplierUpdate = ();
+	type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
 
 /// The Sudo module allows for a single account (called the "sudo key")
@@ -396,6 +413,7 @@ impl pallet_scheduler::Config for Runtime {
 	type MaxScheduledPerBlock = MaxScheduledPerBlock;
 	type OriginPrivilegeCmp = EqualPrivilegeOnly;
 	type WeightInfo = pallet_scheduler::weights::SubstrateWeight<Runtime>;
+	type BlockNumberProvider = System;
 	type Preimages = Preimage;
 }
 
@@ -415,10 +433,12 @@ impl pallet_session::Config for Runtime {
 	type SessionManager = BfcStaking;
 	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
 	type Keys = opaque::SessionKeys;
+	type DisablingStrategy = ();
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_session::historical::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type FullIdentification = pallet_bfc_staking::ValidatorSnapshot<AccountId, Balance>;
 	type FullIdentificationOf = pallet_bfc_staking::ValidatorSnapshotOf<Self>;
 }
@@ -430,12 +450,21 @@ parameter_types! {
 	pub const DefaultSlashFraction: Perbill = Perbill::from_parts(1000000);
 }
 
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+impl<LocalCall> frame_system::offchain::CreateBare<LocalCall> for Runtime
+where
+	RuntimeCall: From<LocalCall>,
+{
+	fn create_bare(call: Self::RuntimeCall) -> Self::Extrinsic {
+		Self::Extrinsic::new_bare(call)
+	}
+}
+
+impl<C> frame_system::offchain::CreateTransactionBase<C> for Runtime
 where
 	RuntimeCall: From<C>,
 {
 	type Extrinsic = UncheckedExtrinsic;
-	type OverarchingCall = RuntimeCall;
+	type RuntimeCall = RuntimeCall;
 }
 
 /// The module that manages validator livenesses.
@@ -516,6 +545,9 @@ impl pallet_collective::Config<RelayExecutiveInstance> for Runtime {
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
 	type MaxProposalWeight = MaxProposalWeight;
+	type DisapproveOrigin = EnsureRoot<Self::AccountId>;
+	type KillOrigin = EnsureRoot<Self::AccountId>;
+	type Consideration = ();
 }
 
 /// A type that represents a council member for governance
@@ -533,6 +565,9 @@ impl pallet_collective::Config<CouncilInstance> for Runtime {
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
 	type MaxProposalWeight = MaxProposalWeight;
+	type DisapproveOrigin = EnsureRoot<Self::AccountId>;
+	type KillOrigin = EnsureRoot<Self::AccountId>;
+	type Consideration = ();
 }
 
 /// A type that represents a technical committee member for governance
@@ -550,6 +585,9 @@ impl pallet_collective::Config<TechCommitteeInstance> for Runtime {
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
 	type MaxProposalWeight = MaxProposalWeight;
+	type DisapproveOrigin = EnsureRoot<Self::AccountId>;
+	type KillOrigin = EnsureRoot<Self::AccountId>;
+	type Consideration = ();
 }
 
 type MoreThanHalfCouncil = EitherOfDiverse<
@@ -722,6 +760,7 @@ impl pallet_treasury::Config for Runtime {
 	type Paymaster = PayFromAccount<Balances, TreasuryAccount>;
 	type BalanceConverter = UnityAssetBalanceConversion;
 	type PayoutPeriod = ConstU32<0>;
+	type BlockNumberProvider = System;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = BenchmarkHelper;
 }
@@ -730,10 +769,12 @@ parameter_types! {
 	pub const BasicDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
 	pub const ByteDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
 	pub const SubAccountDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
+	pub const UsernameDeposit: Balance = 100 * SUPPLY_FACTOR * BFC;
 	pub const MaxSubAccounts: u32 = 100;
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
 	pub const PendingUsernameExpiration: u32 = 7 * DAYS;
+	pub const UsernameGracePeriod: u32 = 7 * DAYS;
 	pub const MaxSuffixLength: u32 = 7;
 	pub const MaxUsernameLength: u32 = 32;
 }
@@ -745,6 +786,7 @@ impl pallet_identity::Config for Runtime {
 	type BasicDeposit = BasicDeposit;
 	type ByteDeposit = ByteDeposit;
 	type SubAccountDeposit = SubAccountDeposit;
+	type UsernameDeposit = UsernameDeposit;
 	type MaxSubAccounts = MaxSubAccounts;
 	type IdentityInformation = IdentityInfo<MaxAdditionalFields>;
 	type MaxRegistrars = MaxRegistrars;
@@ -755,6 +797,7 @@ impl pallet_identity::Config for Runtime {
 	type SigningPublicKey = <Signature as traits::Verify>::Signer;
 	type UsernameAuthorityOrigin = EnsureRoot<Self::AccountId>;
 	type PendingUsernameExpiration = PendingUsernameExpiration;
+	type UsernameGracePeriod = UsernameGracePeriod;
 	type MaxSuffixLength = MaxSuffixLength;
 	type MaxUsernameLength = MaxUsernameLength;
 	type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
@@ -770,7 +813,6 @@ parameter_types! {
 
 /// A module that wraps `pallet_offences` to act as a central offence handler
 impl pallet_bfc_offences::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type Slash = Treasury;
 	type DefaultOffenceExpirationInSessions = DefaultOffenceExpirationInSessions;
@@ -789,7 +831,6 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
 	type ValidatorSet = Historical;
@@ -851,7 +892,6 @@ parameter_types! {
 
 /// Minimal staking pallet that implements validator selection by total backed stake.
 impl pallet_bfc_staking::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MonetaryGovernanceOrigin = EnsureRoot<AccountId>;
 	type RelayManager = RelayManager;
@@ -887,11 +927,9 @@ impl pallet_bfc_staking::Config for Runtime {
 
 /// A module that manages this networks community
 impl pallet_bfc_utility::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
 	type MintableOrigin =
 		pallet_collective::EnsureProportionMoreThan<AccountId, CouncilInstance, 1, 2>;
-	type WeightInfo = pallet_bfc_utility::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -904,7 +942,9 @@ parameter_types! {
 	/// ceil(
 	///     (max_extrinsic.ref_time() / max_extrinsic.proof_size()) / WEIGHT_PER_GAS
 	/// )
-	pub const GasLimitPovSizeRatio: u64 = 4;
+	pub const GasLimitPovSizeRatio: u64 = 0;
+	/// BlockGasLimit / MAX_STORAGE_GROWTH = 60_000_000 / (400 * 1024) = 146
+	pub const GasLimitStorageGrowthRatio: u64 = 146;
 }
 
 pub struct FindAuthorAccountId<F>(sp_std::marker::PhantomData<F>);
@@ -930,7 +970,7 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorAccountId<F> {
 pub struct TransactionConverter;
 impl fp_rpc::ConvertTransaction<UncheckedExtrinsic> for TransactionConverter {
 	fn convert_transaction(&self, transaction: pallet_ethereum::Transaction) -> UncheckedExtrinsic {
-		UncheckedExtrinsic::new_unsigned(
+		UncheckedExtrinsic::new_bare(
 			pallet_ethereum::Call::<Runtime>::transact { transaction }.into(),
 		)
 	}
@@ -940,7 +980,7 @@ impl fp_rpc::ConvertTransaction<opaque::UncheckedExtrinsic> for TransactionConve
 		&self,
 		transaction: pallet_ethereum::Transaction,
 	) -> opaque::UncheckedExtrinsic {
-		let extrinsic = UncheckedExtrinsic::new_unsigned(
+		let extrinsic = UncheckedExtrinsic::new_bare(
 			pallet_ethereum::Call::<Runtime>::transact { transaction }.into(),
 		);
 		let encoded = extrinsic.encode();
@@ -958,7 +998,7 @@ impl FeeCalculator for FixedGasPrice {
 
 /// The EVM module allows unmodified EVM code to be executed in a Substrate-based blockchain.
 impl pallet_evm::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
+	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
 	type Currency = Balances;
 	type BlockGasLimit = BlockGasLimit;
 	type ChainId = BifrostChainId;
@@ -976,8 +1016,10 @@ impl pallet_evm::Config for Runtime {
 	type PrecompilesValue = PrecompilesValue;
 	type OnCreate = ();
 	type GasLimitPovSizeRatio = GasLimitPovSizeRatio;
-	type SuicideQuickClearLimit = ConstU32<0>;
+	type GasLimitStorageGrowthRatio = GasLimitStorageGrowthRatio;
 	type Timestamp = Timestamp;
+	type CreateInnerOriginFilter = ();
+	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 
@@ -987,8 +1029,7 @@ parameter_types! {
 
 /// The Ethereum module is responsible for storing block data and provides RPC compatibility.
 impl pallet_ethereum::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type StateRoot = pallet_ethereum::IntermediateStateRoot<Self>;
+	type StateRoot = pallet_ethereum::IntermediateStateRoot<Self::Version>;
 	type PostLogContent = PostBlockAndTxnHashes;
 	type ExtraDataLength = ConstU32<30>;
 }
@@ -1013,19 +1054,18 @@ impl pallet_base_fee::BaseFeeThreshold for BaseFeeThreshold {
 
 /// The Base fee module adds support for EIP-1559 transactions and handles base fee calculations.
 impl pallet_base_fee::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Threshold = BaseFeeThreshold;
 	type DefaultBaseFeePerGas = DefaultBaseFeePerGas;
 	type DefaultElasticity = DefaultElasticity;
 }
 
 impl pallet_btc_socket_queue::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
 	type Relayers = RelayManager;
 	type RegistrationPool = BtcRegistrationPool;
+	type Blaze = Blaze;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
 }
@@ -1038,7 +1078,6 @@ parameter_types! {
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = RelayExecutiveMembership;
@@ -1047,6 +1086,37 @@ impl pallet_btc_registration_pool::Config for Runtime {
 	type BitcoinChainId = BitcoinChainId;
 	type BitcoinNetwork = BitcoinNetwork;
 	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const FeeRateExpiration: u32 = 5 * MINUTES;
+	pub const ToleranceThreshold: u32 = 5;
+}
+
+impl pallet_blaze::Config for Runtime {
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type SocketQueue = BtcSocketQueue;
+	type RegistrationPool = BtcRegistrationPool;
+	type FeeRateExpiration = FeeRateExpiration;
+	type ToleranceThreshold = ToleranceThreshold;
+	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub MbmServiceWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
+}
+
+impl pallet_migrations::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Migrations = pallet_identity::migration::v2::LazyMigrationV1ToV2<Runtime>;
+	type CursorMaxLen = ConstU32<65_536>;
+	type IdentifierMaxLen = ConstU32<256>;
+	type MigrationStatusHandler = ();
+	type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
+	type MaxServiceWeight = MbmServiceWeight;
+	type WeightInfo = pallet_migrations::weights::SubstrateWeight<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -1168,8 +1238,14 @@ mod runtime {
 	#[runtime::pallet_index(61)]
 	pub type BtcRegistrationPool = pallet_btc_registration_pool;
 
+	#[runtime::pallet_index(62)]
+	pub type Blaze = pallet_blaze;
+
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
+
+	#[runtime::pallet_index(100)]
+	pub type MultiBlockMigrations = pallet_migrations;
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();

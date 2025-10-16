@@ -29,7 +29,6 @@ sc-consensus = { workspace = true }
 sc-network = { workspace = true }
 sc-network-sync = { workspace = true }
 sc-rpc = { workspace = true }
-sc-rpc-api = { workspace = true }
 sc-chain-spec = { workspace = true }
 sc-basic-authorship = { workspace = true }
 sc-offchain = { workspace = true }
@@ -56,32 +55,34 @@ substrate-frame-rpc-system = { workspace = true }
 fc-db = { workspace = true, features = ["rocksdb"] }
 fc-rpc-core = { workspace = true }
 fc-mapping-sync = { workspace = true, features = ["sql"] }
-fc-rpc-txpool = { workspace = true }
 fc-rpc-debug = { workspace = true }
 fc-rpc-trace = { workspace = true }
-fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate"] }
+fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate", "aura"] }
 
 fp-evm = { workspace = true }
 fp-ext = { workspace = true, features = ["std"] }
 fp-rpc = { workspace = true, features = ["std"] }
 fp-rpc-txpool = { workspace = true, features = ["std"] }
 pallet-ethereum = { workspace = true, features = [
-    "std",
-    "forbid-evm-reentrancy",
+	"std",
+	"forbid-evm-reentrancy",
 ] }
 
 # benchmarking dependencies
-frame-benchmarking = { workspace = true, features = ["std"] }
+frame-benchmarking = { workspace = true, optional = true, features = ["std"] }
 
 # Local Dependencies
 bp-core = { workspace = true }
 bifrost-mainnet-runtime = { workspace = true, features = [
-    "std",
-    "evm-tracing",
+	"std",
+	"evm-tracing",
 ] }
 bifrost-mainnet-constants = { workspace = true }
 bifrost-common-node = { workspace = true }
 
 [features]
 default = []
-runtime-benchmarks = ["bifrost-mainnet-runtime/runtime-benchmarks"]
+runtime-benchmarks = [
+    "bifrost-mainnet-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+]

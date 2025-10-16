@@ -43,7 +43,7 @@ pub use inflation::{InflationInfo, Range};
 pub use pallet::pallet::*;
 use weights::WeightInfo;
 
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 
 use bp_staking::{RoundIndex, TierType};
@@ -101,7 +101,17 @@ impl Default for Releases {
 }
 
 #[derive(
-	PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen,
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
 )]
 /// The candidates or the nominators bonded amount to the network
 pub struct Bond<AccountId, Balance> {
@@ -155,7 +165,18 @@ impl Default for ValidatorStatus {
 	}
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	RuntimeDebug,
+	TypeInfo,
+)]
 /// Snapshot of the validator state at the start of the round for which they are selected
 pub struct ValidatorSnapshot<AccountId, Balance> {
 	/// The self-bond of the active validator
@@ -343,6 +364,7 @@ impl<
 	Clone,
 	Encode,
 	Decode,
+	DecodeWithMemTracking,
 	RuntimeDebug,
 	TypeInfo,
 	MaxEncodedLen,
@@ -1465,7 +1487,17 @@ impl<
 
 /// Convey relevant information describing if a nominator was added to the top or bottom
 /// Nominations added to the top yield a new total
-#[derive(Clone, Copy, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(
+	Clone,
+	Copy,
+	PartialEq,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
 pub enum NominatorAdded<B> {
 	AddedToTop { new_total: B },
 	AddedToBottom,
@@ -1724,7 +1756,7 @@ impl<
 		BalanceOf<T>: Into<Balance> + From<Balance>,
 	{
 		// get nomination amount
-		return if let Some(amount) = self.nominations.get(&validator) {
+		if let Some(amount) = self.nominations.get(&validator) {
 			ensure!(*amount > less, Error::<T>::NominatorBondBelowMin);
 			let expected_amt: BalanceOf<T> = (*amount - less).into();
 			ensure!(expected_amt >= T::MinNomination::get(), Error::<T>::NominationBelowMin);
@@ -1738,7 +1770,7 @@ impl<
 			Ok(when)
 		} else {
 			Err(Error::<T>::NominationDNE.into())
-		};
+		}
 	}
 
 	/// Schedule revocation for the given validator
@@ -1750,7 +1782,7 @@ impl<
 		BalanceOf<T>: Into<Balance>,
 	{
 		// get nomination amount
-		return if let Some(amount) = self.nominations.get(&validator) {
+		if let Some(amount) = self.nominations.get(&validator) {
 			let now = <Round<T>>::get().current_round_index;
 			let when = now + T::RevokeNominationDelay::get();
 			// add revocation to pending requests
@@ -1758,7 +1790,7 @@ impl<
 			Ok((now, when))
 		} else {
 			Err(Error::<T>::NominationDNE.into())
-		};
+		}
 	}
 
 	/// Execute pending nomination change request
@@ -1822,8 +1854,8 @@ impl<
 				// remove from pending requests
 				self.requests.less_total = self.requests.less_total.saturating_sub(amount);
 				// decrease nomination
-				return if let Some(candidate_amount) = self.nominations.get_mut(&candidate) {
-					return if *candidate_amount > amount {
+				if let Some(candidate_amount) = self.nominations.get_mut(&candidate) {
+					if *candidate_amount > amount {
 						let amount_before = candidate_amount.clone();
 						*candidate_amount = candidate_amount.saturating_sub(amount);
 						self.total = self.total.saturating_sub(amount);
@@ -1861,10 +1893,10 @@ impl<
 					} else {
 						// must rm entire nomination if x.amount <= less or cancel request
 						Err(Error::<T>::NominationBelowMin.into())
-					};
+					}
 				} else {
 					Err(Error::<T>::NominationDNE.into())
-				};
+				}
 			},
 		}
 	}
@@ -1893,7 +1925,7 @@ impl<
 	}
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
 /// Changes requested by the nominator
 /// - limit of 1 ongoing change per nomination
 pub enum NominationChange {
@@ -1903,7 +1935,7 @@ pub enum NominationChange {
 	Decrease,
 }
 
-#[derive(Clone, Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(Clone, Eq, PartialEq, Encode, Decode, DecodeWithMemTracking, RuntimeDebug, TypeInfo)]
 /// The nomination unbonding request of a specific nominator
 pub struct NominationRequest<AccountId, Balance> {
 	/// The validator who owns this nomination

@@ -1,5 +1,5 @@
 import {
-  FrameSupportDispatchDispatchInfo, SpRuntimeDispatchError
+  FrameSupportDispatchPostDispatchInfo, SpRuntimeDispatchError
 } from '@polkadot/types/lookup';
 import { IEvent } from '@polkadot/types/types';
 
@@ -33,7 +33,7 @@ export async function getExtrinsicResult(
     return null;
   }
 
-  const event: IEvent<[SpRuntimeDispatchError, FrameSupportDispatchDispatchInfo]> =
+  const event: IEvent<[SpRuntimeDispatchError, FrameSupportDispatchPostDispatchInfo]> =
     failedEvent.event as any;
   const [dispatchError, _dispatchInfo] = event.data;
   if (dispatchError.isModule) {

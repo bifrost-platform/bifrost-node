@@ -1,28 +1,23 @@
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager},
-	Address, AddressState, Descriptor, Error as KeyError, MigrationSequence, MultiSigAccount,
-	Network, PublicKey, UnboundedBytes,
+	traits::PoolManager, Address, AddressState, Descriptor, FromSliceError as KeyError,
+	MigrationSequence, MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
-use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
 use sp_core::{Get, H256};
-use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::{Block, Header, Verify},
+	traits::Verify,
 	transaction_validity::{
 		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 	},
 	BoundedVec, DispatchError,
 };
-use sp_std::{fmt::Display, str, str::FromStr, vec::Vec};
+use sp_std::{str, str::FromStr, vec::Vec};
 
-use crate::{
-	BoundedBitcoinAddress, Public, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission,
-};
+use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
 
 use super::pallet::*;
 
@@ -40,6 +35,27 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 			match relay_target.vault.address {
 				AddressState::Pending => None,
 				AddressState::Generated(address) => Some(address),
+			}
+		} else {
+			None
+		}
+	}
+
+	fn get_bonded_descriptor(who: &BoundedBitcoinAddress) -> Option<Descriptor<PublicKey>> {
+		let round = if Self::get_service_state() == MigrationSequence::UTXOTransfer {
+			CurrentRound::<T>::get() + 1
+		} else {
+			CurrentRound::<T>::get()
+		};
+
+		if let Some(descriptor) = <BondedDescriptor<T>>::get(round, who) {
+			let descriptor_str = match str::from_utf8(&descriptor) {
+				Ok(str) => str,
+				Err(_) => return None,
+			};
+			match Descriptor::<PublicKey>::from_str(descriptor_str) {
+				Ok(descriptor) => Some(descriptor),
+				Err(_) => None,
 			}
 		} else {
 			None
@@ -114,6 +130,154 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 				relay_target.vault.replace_authority(old, new);
 			}
 		});
+	}
+
+	fn process_set_refunds() {
+		let round = <CurrentRound<T>>::get();
+		<PendingSetRefunds<T>>::iter_prefix(round).for_each(|(who, state)| {
+			let new = state.new;
+			if !<BondedVault<T>>::contains_key(round, &new) {
+				match <RegistrationPool<T>>::get(round, &who) {
+					Some(mut relay_target) => {
+						// remove from previous bond
+						<BondedRefund<T>>::mutate(round, &relay_target.refund_address, |users| {
+							users.retain(|u| *u != who);
+						});
+						// add to new bond
+						<BondedRefund<T>>::mutate(round, &new, |users| {
+							users.push(who.clone());
+						});
+
+						relay_target.set_refund_address(new.clone());
+						<RegistrationPool<T>>::insert(round, &who, relay_target);
+
+						Self::deposit_event(Event::RefundSetApproved {
+							who: who.clone(),
+							old: state.old,
+							new: new.clone(),
+						});
+					},
+					None => {
+						Self::deposit_event(Event::RefundSetDenied {
+							who: who.clone(),
+							old: state.old,
+							new: new.clone(),
+						});
+					},
+				}
+			} else {
+				Self::deposit_event(Event::RefundSetDenied {
+					who: who.clone(),
+					old: state.old,
+					new: new.clone(),
+				});
+			}
+		});
+
+		let _ = <PendingSetRefunds<T>>::clear_prefix(round, u32::MAX, None);
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_benchmark(
+		executives: &[T::AccountId],
+		user: &T::AccountId,
+	) -> Result<(), DispatchError> {
+		use crate::BitcoinRelayTarget;
+		use bp_btc_relay::{Descriptor, PublicKey};
+		use sp_runtime::BoundedBTreeMap;
+
+		<CurrentRound<T>>::put(1);
+
+		let pk1 = PublicKey::from_str(
+			"02ece3a9b4c4e42811c4b9d424d76ba4ffeda5e6590d9f6144be1175a0bd54dc0b",
+		)
+		.unwrap();
+		let pk2 = PublicKey::from_str(
+			"03547cb2686e9b53e81bdbe1b2b8a0b5b494cfa05223f5e105fe9364bfbb3aa05f",
+		)
+		.unwrap();
+		let pk3 = PublicKey::from_str(
+			"03b238f9c7bbee00e4e9b3df445ea751a77fe5e4d0eca0f74985676e4a93759c40",
+		)
+		.unwrap();
+
+		let desc_str = format!("wsh(sortedmulti(3,{},{},{}))", pk1, pk2, pk3);
+		let descriptor = desc_str.parse::<Descriptor<PublicKey>>().unwrap();
+		let address = descriptor.address(Network::Regtest).unwrap();
+
+		let mut pub_keys = BoundedBTreeMap::new();
+		pub_keys
+			.try_insert(executives[0].clone(), Public(pk1.inner.serialize()))
+			.unwrap();
+		pub_keys
+			.try_insert(executives[1].clone(), Public(pk2.inner.serialize()))
+			.unwrap();
+		pub_keys
+			.try_insert(executives[2].clone(), Public(pk3.inner.serialize()))
+			.unwrap();
+
+		let system_vault = MultiSigAccount::<T::AccountId> {
+			address: AddressState::Generated(
+				BoundedVec::try_from(address.to_string().as_bytes().to_vec()).unwrap(),
+			),
+			descriptor: descriptor.to_string().as_bytes().to_vec(),
+			pub_keys,
+			m: 3,
+			n: 3,
+		};
+		<SystemVault<T>>::insert(<CurrentRound<T>>::get(), system_vault.clone());
+		<SystemVault<T>>::insert(<CurrentRound<T>>::get() + 1, system_vault);
+
+		let pk1 = PublicKey::from_str(
+			"02f1484159b37084e3e9915a737ec59261e95cb3740f6da3afc73d7cceb18ec54e",
+		)
+		.unwrap();
+		let pk2 = PublicKey::from_str(
+			"0248b972a4d2497524f07e656072d01fd261e7bbb281e74dfad2495e771af97ab3",
+		)
+		.unwrap();
+		let pk3 = PublicKey::from_str(
+			"02cbe04f62e0b2ca17ddb520632ecc4d5673a443bd74b8f45eeb5c7c2b68da0554",
+		)
+		.unwrap();
+		let mut pub_keys = BoundedBTreeMap::new();
+		pub_keys
+			.try_insert(executives[0].clone(), Public(pk1.inner.serialize()))
+			.unwrap();
+		pub_keys
+			.try_insert(executives[1].clone(), Public(pk2.inner.serialize()))
+			.unwrap();
+		pub_keys
+			.try_insert(executives[2].clone(), Public(pk3.inner.serialize()))
+			.unwrap();
+		let user_vault = BitcoinRelayTarget::<T::AccountId> {
+			refund_address: BoundedBitcoinAddress::try_from(
+				b"bcrt1qsy2vasqmg02gl9f62qu53afxw9jm5a4dpa48un".to_vec(),
+			)
+			.unwrap(),
+			vault: MultiSigAccount::<T::AccountId> {
+				address: AddressState::Generated(
+					BoundedBitcoinAddress::try_from(
+						b"bcrt1qt93qw4q5mkeeq9k200tnj6ru6vshpcqvrxvkgeac77kvn7yncw2qm70gzn"
+							.to_vec(),
+					)
+					.unwrap(),
+				),
+				descriptor: format!("wsh(multi(3,{},{},{}))", pk1, pk2, pk3).as_bytes().to_vec(),
+				pub_keys,
+				m: 3,
+				n: 3,
+			},
+		};
+		<RegistrationPool<T>>::insert(<CurrentRound<T>>::get(), user, user_vault);
+
+		Ok(())
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_service_state(state: MigrationSequence) -> Result<(), DispatchError> {
+		<ServiceState<T>>::put(state);
+		Ok(())
 	}
 }
 
@@ -239,7 +403,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix(tag_prefix)
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, who))
+			.and_provides((authority_id, who, signature))
 			.propagate(true)
 			.build()
 	}
@@ -272,54 +436,7 @@ impl<T: Config> Pallet<T> {
 
 		ValidTransaction::with_tag_prefix("KeyPreSubmission")
 			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, pub_keys))
-			.propagate(true)
-			.build()
-	}
-
-	/// Verifies the refund set approval signature.
-	pub fn verify_set_refunds_approval(
-		approval: &SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
-		signature: &T::Signature,
-	) -> TransactionValidity
-	where
-		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
-		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
-	{
-		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
-
-		// verify if the authority matches with the `SocketQueue::Authority`.
-		T::SocketQueue::verify_authority(authority_id)?;
-
-		// verify if the deadline is not expired.
-		let now = <frame_system::Pallet<T>>::block_number();
-		if now > *deadline {
-			return Err(InvalidTransaction::Stale.into());
-		}
-
-		// verify if the signature was originated from the authority.
-		let message = [
-			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
-			format!(
-				"{}:{}:{}",
-				pool_round,
-				deadline,
-				refund_sets
-					.into_iter()
-					.map(|x| hex::encode(x.0.clone()))
-					.collect::<Vec<String>>()
-					.concat()
-			)
-			.as_bytes(),
-		]
-		.concat();
-		if !signature.verify(&*message, &authority_id) {
-			return Err(InvalidTransaction::BadProof.into());
-		}
-
-		ValidTransaction::with_tag_prefix("SetRefundsApproval")
-			.priority(TransactionPriority::MAX)
-			.and_provides((authority_id, refund_sets))
+			.and_provides((authority_id, pub_keys, signature))
 			.propagate(true)
 			.build()
 	}

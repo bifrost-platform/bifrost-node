@@ -1,6 +1,9 @@
 use crate::cli::{Cli, Subcommand};
 
-use bifrost_common_node::cli_opt::{BackendType, BackendTypeConfig, RpcConfig};
+use bifrost_common_node::{
+	cli_opt::{BackendType, BackendTypeConfig, RpcConfig},
+	service::HostFunctions,
+};
 
 use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 
@@ -294,9 +297,9 @@ pub fn run() -> sc_cli::Result<()> {
 							);
 						}
 
-						cmd.run_with_spec::<sp_runtime::traits::HashingFor<Block>, ()>(Some(
-							config.chain_spec,
-						))
+						cmd.run_with_spec::<sp_runtime::traits::HashingFor<Block>, HostFunctions>(
+							Some(config.chain_spec),
+						)
 					},
 					BenchmarkCmd::Block(cmd) => {
 						let PartialComponents { client, .. } =
@@ -310,12 +313,32 @@ pub fn run() -> sc_cli::Result<()> {
 					),
 					#[cfg(feature = "runtime-benchmarks")]
 					BenchmarkCmd::Storage(cmd) => {
-						let PartialComponents { client, backend, .. } =
-							service::new_partial(&config)?;
-						let db = backend.expose_db();
-						let storage = backend.expose_storage();
+						let chain_spec = &config.chain_spec;
 
-						cmd.run(config, client, db, storage)
+						match chain_spec {
+							_spec if chain_spec.is_dev() => {
+								use bifrost_dev_node::service;
+								let params = service::new_partial(&config, &rpc_config)?;
+								let db = params.backend.expose_db();
+								let storage = params.backend.expose_storage();
+								cmd.run(config, params.client, db, storage)
+							},
+							_spec if chain_spec.is_mainnet() => {
+								use bifrost_mainnet_node::service;
+								let params = service::new_partial(&config, &rpc_config)?;
+								let db = params.backend.expose_db();
+								let storage = params.backend.expose_storage();
+								cmd.run(config, params.client, db, storage)
+							},
+							_spec if chain_spec.is_testnet() => {
+								use bifrost_testnet_node::service;
+								let params = service::new_partial(&config, &rpc_config)?;
+								let db = params.backend.expose_db();
+								let storage = params.backend.expose_storage();
+								cmd.run(config, params.client, db, storage)
+							},
+							_ => panic!("Invalid chain spec"),
+						}
 					},
 					BenchmarkCmd::Machine(cmd) => {
 						cmd.run(&config, SUBSTRATE_REFERENCE_HARDWARE.clone())
