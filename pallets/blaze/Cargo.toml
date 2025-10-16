@@ -1,0 +1,60 @@
+[package]
+name = "pallet-blaze"
+version = "1.0.0"
+description = "A pallet for BLAZE (BRP Layer for Autonomous Zero-trust Execution)"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# General
+hex = { workspace = true }
+log = { workspace = true }
+array-bytes = { workspace = true }
+
+# Substrate
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-runtime = { workspace = true }
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+sp-io = { workspace = true }
+
+# Bifrost
+bp-btc-relay = { workspace = true }
+bp-staking = { workspace = true }
+
+[dev-dependencies]
+pallet-balances = { workspace = true }
+pallet-btc-registration-pool = { workspace = true }
+fp-account = { workspace = true }
+bp-core = { workspace = true }
+miniscript = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "sp-core/std",
+    "sp-io/std",
+    "bp-btc-relay/std",
+    "bp-staking/std",
+]
+try-runtime = ["frame-support/try-runtime"]
+runtime-benchmarks = [
+    "frame-benchmarking",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+    "bp-btc-relay/runtime-benchmarks",
+]

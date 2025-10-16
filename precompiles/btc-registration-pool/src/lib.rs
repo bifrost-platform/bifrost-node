@@ -36,6 +36,7 @@ where
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
 	Runtime::RuntimeCall: From<BtcRegistrationPoolCall<Runtime>>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	#[precompile::public("currentRound()")]
 	#[precompile::public("current_round()")]
@@ -401,7 +402,7 @@ where
 			refund_address: refund_address.to_vec(),
 		};
 		let origin = Runtime::AddressMapping::into_account_id(caller);
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		let event = log1(
 			handle.context().address,
@@ -434,7 +435,7 @@ where
 		let call =
 			BtcRegistrationPoolCall::<Runtime>::request_set_refund { new: refund_address.to_vec() };
 		let origin = Runtime::AddressMapping::into_account_id(caller);
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
 		Ok(())
 	}
@@ -455,6 +456,11 @@ where
 	/// Get the target round of the BTC registration pool.
 	fn target_round(input: u32) -> PoolRound {
 		if input == 0 {
+			if pallet_btc_registration_pool::ServiceState::<Runtime>::get()
+				== MigrationSequence::UTXOTransfer
+			{
+				return Self::get_current_round() + 1;
+			}
 			Self::get_current_round()
 		} else {
 			input

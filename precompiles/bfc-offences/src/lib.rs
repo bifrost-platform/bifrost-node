@@ -21,6 +21,7 @@ where
 	Runtime: pallet_bfc_offences::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::Hash: From<H256> + Into<H256>,
 	Runtime::AccountId: Into<H160>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	// Storage getters
 

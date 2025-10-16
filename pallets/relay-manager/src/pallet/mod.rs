@@ -33,8 +33,6 @@ pub mod pallet {
 	/// Configuration trait of this pallet
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Overarching event type
-		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Interface of Bitcoin Socket Queue pallet.
 		type SocketQueue: SocketQueueManager<Self::AccountId>;
 		/// Interface of Bitcoin Registration Pool pallet.
@@ -336,7 +334,7 @@ pub mod pallet {
 			let controller = ensure_signed(origin)?;
 			let relayer =
 				BondedController::<T>::get(&controller).ok_or(Error::<T>::ControllerDNE)?;
-			ensure!(Self::is_relayer_set_requested(controller.clone()), Error::<T>::RelayerSetDNE);
+			ensure!(Self::is_relayer_set_requested(relayer.clone()), Error::<T>::RelayerSetDNE);
 			Self::remove_relayer_set(&relayer)?;
 			Self::deposit_event(Event::RelayerSetCancelled { relayer });
 			Ok(().into())

@@ -2,8 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, BitcoinRelayTarget, BoundedBitcoinAddress, MultiSigAccount, PoolRound,
-	SetRefundState, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo,
-	ADDRESS_U64,
+	SetRefundState, VaultKeyPreSubmission, VaultKeySubmission, WeightInfo, ADDRESS_U64,
 };
 
 use frame_support::{
@@ -38,16 +37,10 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Overarching event type
-		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// The signature signed by the issuer.
 		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
 		/// The signer of the message.
-		type Signer: IdentifyAccount<AccountId = Self::AccountId>
-			+ Encode
-			+ Decode
-			+ Parameter
-			+ MaxEncodedLen;
+		type Signer: IdentifyAccount<AccountId = Self::AccountId> + Encode + Decode + MaxEncodedLen;
 		/// The relay executive members.
 		type Executives: SortedMembers<Self::AccountId>;
 		/// Interface of Bitcoin Socket Queue pallet.
@@ -125,6 +118,11 @@ pub mod pallet {
 		},
 		/// A user's refund address (re-)set has been approved.
 		RefundSetApproved {
+			who: T::AccountId,
+			old: BoundedBitcoinAddress,
+			new: BoundedBitcoinAddress,
+		},
+		RefundSetDenied {
 			who: T::AccountId,
 			old: BoundedBitcoinAddress,
 			new: BoundedBitcoinAddress,
@@ -281,7 +279,7 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::request_set_refund())]
 		/// Request to (re-)set the user's refund address.
 		pub fn request_set_refund(
 			origin: OriginFor<T>,
@@ -321,7 +319,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::request_vault())]
 		/// Request a vault address. Initially, the vault address will be in pending state.
 		pub fn request_vault(
 			origin: OriginFor<T>,
@@ -395,7 +393,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::request_system_vault())]
 		/// Request a system vault address. Initially, the vault address will be in pending state.
 		pub fn request_system_vault(
 			origin: OriginFor<T>,
@@ -429,7 +427,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_vault_key())]
 		/// Submit a public key for the given target. If the quorum reach, the vault address will be generated.
 		pub fn submit_vault_key(
 			origin: OriginFor<T>,
@@ -493,7 +491,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_system_vault_key())]
 		/// Submit a public key for the system vault. If the quorum reach, the vault address will be generated.
 		pub fn submit_system_vault_key(
 			origin: OriginFor<T>,
@@ -576,7 +574,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::vault_key_presubmission())]
 		/// Submit public keys for prepare for the fast registration.
 		pub fn vault_key_presubmission(
 			origin: OriginFor<T>,
@@ -630,7 +628,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::clear_vault())]
 		/// Clear a vault and all its related data.
 		pub fn clear_vault(
 			origin: OriginFor<T>,
@@ -675,7 +673,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(7)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::migration_control())]
 		/// Initiates and control the current state of the vault migration.
 		/// Every specific calls will be blocked (except submitting a public key for the next system vault)
 		/// until the migration successfully ends.
@@ -730,7 +728,7 @@ pub mod pallet {
 
 		#[allow(unused_must_use)]
 		#[pallet::call_index(8)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::drop_previous_round())]
 		/// Drop a previous round and all its related data.
 		pub fn drop_previous_round(
 			origin: OriginFor<T>,
@@ -761,7 +759,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(9)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_max_presubmission())]
 		/// Set the maximum number of public keys that can be presubmitted.
 		pub fn set_max_presubmission(origin: OriginFor<T>, max: u32) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -774,7 +772,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(10)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_multi_sig_ratio())]
 		/// Set the ratio of the multi-signature threshold.
 		pub fn set_multi_sig_ratio(
 			origin: OriginFor<T>,
@@ -790,62 +788,6 @@ pub mod pallet {
 
 			<MultiSigRatio<T>>::set(new);
 			Self::deposit_event(Event::MultiSigRatioSet { old, new });
-
-			Ok(().into())
-		}
-
-		#[pallet::call_index(11)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Approve the given pending set refund requests.
-		pub fn approve_set_refunds(
-			origin: OriginFor<T>,
-			approval: SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
-			_signature: T::Signature,
-		) -> DispatchResultWithPostInfo {
-			ensure_none(origin)?;
-
-			ensure!(
-				ServiceState::<T>::get() == MigrationSequence::Normal,
-				Error::<T>::UnderMaintenance
-			);
-
-			let SetRefundsApproval { refund_sets, pool_round, .. } = approval;
-
-			let current_round = CurrentRound::<T>::get();
-			ensure!(current_round == pool_round, Error::<T>::PoolRoundOutdated);
-
-			for refund_set in &refund_sets {
-				let who = refund_set.0.clone();
-				let pending = <PendingSetRefunds<T>>::get(current_round, &who)
-					.ok_or(Error::<T>::RefundSetDNE)?;
-				ensure!(pending.new == refund_set.1, Error::<T>::RefundSetDNE);
-
-				// check if the new refund address is already bonded as a vault
-				// if it is, then we just remove the pending refund set and do nothing
-				if !<BondedVault<T>>::contains_key(current_round, &pending.new) {
-					let mut relay_target = <RegistrationPool<T>>::get(current_round, &who)
-						.ok_or(Error::<T>::UserDNE)?;
-					// remove from previous bond
-					let old = relay_target.refund_address.clone();
-					<BondedRefund<T>>::mutate(current_round, &old, |users| {
-						users.retain(|u| *u != who);
-					});
-					// add to new bond
-					<BondedRefund<T>>::mutate(current_round, &pending.new, |users| {
-						users.push(who.clone());
-					});
-
-					relay_target.set_refund_address(pending.new.clone());
-					<RegistrationPool<T>>::insert(current_round, &who, relay_target);
-
-					Self::deposit_event(Event::RefundSetApproved {
-						who: who.clone(),
-						old,
-						new: pending.new,
-					});
-				}
-				<PendingSetRefunds<T>>::remove(current_round, &who);
-			}
 
 			Ok(().into())
 		}
@@ -870,9 +812,6 @@ pub mod pallet {
 				},
 				Call::vault_key_presubmission { key_submission, signature } => {
 					Self::verify_key_presubmission(key_submission, signature)
-				},
-				Call::approve_set_refunds { approval, signature } => {
-					Self::verify_set_refunds_approval(approval, signature)
 				},
 				_ => InvalidTransaction::Call.into(),
 			}

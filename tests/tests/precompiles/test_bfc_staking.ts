@@ -316,7 +316,7 @@ describeDevNode('precompile_bfc_staking - precompile view functions', (context) 
       max_nominations_per_candidate,
     );
     expect(decoded_max_nominations_per_candidate.__length__).equal(2);
-    expect(Number(decoded_max_nominations_per_candidate[0])).equal(10);
+    expect(Number(decoded_max_nominations_per_candidate[0])).equal(2);
     expect(Number(decoded_max_nominations_per_candidate[1])).equal(2);
 
     const candidate_bond_less_delay = await callPrecompile(

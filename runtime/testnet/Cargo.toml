@@ -17,6 +17,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 parity-scale-codec = { workspace = true }
 scale-info = { workspace = true }
 num_enum = { workspace = true }
+ethereum = { workspace = true }
+log = { workspace = true }
 
 # Bifrost
 bifrost-common-runtime = { workspace = true }
@@ -29,6 +31,7 @@ precompile-utils = { workspace = true }
 frame-system = { workspace = true }
 frame-support = { workspace = true }
 frame-executive = { workspace = true }
+frame-metadata-hash-extension = { workspace = true }
 frame-system-rpc-runtime-api = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 frame-system-benchmarking = { workspace = true, optional = true }
@@ -53,6 +56,7 @@ pallet-identity = { workspace = true }
 pallet-preimage = { workspace = true }
 pallet-safe-mode = { workspace = true }
 pallet-tx-pause = { workspace = true }
+pallet-migrations = { workspace = true }
 
 # substrate primitives
 sp-api = { workspace = true }
@@ -86,6 +90,7 @@ pallet-bfc-offences = { workspace = true }
 pallet-relay-manager = { workspace = true }
 pallet-btc-socket-queue = { workspace = true }
 pallet-btc-registration-pool = { workspace = true }
+pallet-blaze = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -101,6 +106,7 @@ precompile-collective = { workspace = true }
 precompile-balance = { workspace = true }
 precompile-btc-registration-pool = { workspace = true }
 precompile-btc-socket-queue = { workspace = true }
+precompile-blaze = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -141,6 +147,7 @@ std = [
 	"pallet-relay-manager/std",
 	"pallet-btc-socket-queue/std",
 	"pallet-btc-registration-pool/std",
+	"pallet-blaze/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
@@ -178,7 +185,9 @@ std = [
 	"precompile-balance/std",
 	"precompile-btc-registration-pool/std",
 	"precompile-btc-socket-queue/std",
+	"precompile-blaze/std",
 	"substrate-wasm-builder",
+	"pallet-migrations/std",
 ]
 evm-tracing = ["evm-tracer"]
 runtime-wasm = []
@@ -192,3 +201,4 @@ runtime-benchmarks = [
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-utility/runtime-benchmarks",
 ]
+metadata-hash = ["substrate-wasm-builder/metadata-hash"]

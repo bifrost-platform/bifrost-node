@@ -82,7 +82,7 @@ export function describeDevNode(
       node = init.runningNode;
       context.rpcPort = init.rpcPort;
 
-      // Context is given prior to this assignement, so doing
+      // Context is given prior to this assignment, so doing
       // context = init.context will fail because it replace the variable;
 
       context._polkadotApis = [];
@@ -204,7 +204,27 @@ export async function startSingleDevNode(overrideRpcPort?: number | null, multi:
     process.exit(1);
   });
 
+  // Wait for node to be ready by checking if RPC port accepts connections
+  await waitForNodeReady(rpcPort, 15000);
+
   return { p2pPort, rpcPort, wsPort, runningNode };
+}
+
+async function waitForNodeReady(port: number, timeoutMs: number = 15000): Promise<void> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const inUse = await tcpPortUsed.check(port, '127.0.0.1');
+      if (inUse) {
+        await sleep(1000); // Wait 1s more for node to fully initialize
+        return;
+      }
+    } catch (error) {
+      // Port check failed, continue waiting
+    }
+    await sleep(500); // Check every 500ms
+  }
+  throw new Error(`Node failed to start on port ${port} within ${timeoutMs}ms`);
 }
 
 export async function findAvailablePorts() {

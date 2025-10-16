@@ -1,35 +1,36 @@
 {
   "name": "@bifrost-platform/bifrost-node",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "author": "bifrost-platform",
   "scripts": {
-    "set_session_keys": "ts-node src/set_session_keys.ts",
-    "join_validator_candidates": "ts-node src/join_validator_candidates.ts",
-    "create_accounts": "ts-node src/create_accounts.ts",
-    "query_extrinsics": "ts-node src/query/query_extrinsics.ts",
-    "query_extrinsic": "ts-node src/query/query_extrinsic.ts",
-    "query_events": "ts-node src/query/query_events.ts",
-    "transfer": "ts-node src/transfer.ts"
+    "set_session_keys": "NODE_OPTIONS='--import=tsx/esm' tsx src/set_session_keys.ts",
+    "join_validator_candidates": "NODE_OPTIONS='--import=tsx/esm' tsx src/join_validator_candidates.ts",
+    "create_accounts": "NODE_OPTIONS='--import=tsx/esm' tsx src/create_accounts.ts",
+    "query_extrinsics": "NODE_OPTIONS='--import=tsx/esm' tsx src/query/query_extrinsics.ts",
+    "query_extrinsic": "NODE_OPTIONS='--import=tsx/esm' tsx src/query/query_extrinsic.ts",
+    "query_events": "NODE_OPTIONS='--import=tsx/esm' tsx src/query/query_events.ts",
+    "transfer": "NODE_OPTIONS='--import=tsx/esm' tsx src/transfer.ts"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bifrost-platform/bifrost-node.git"
   },
   "dependencies": {
-    "@polkadot/api": "10.11.2",
-    "axios": "1.7.8",
-    "bignumber.js": "9.1.2",
+    "@polkadot/api": "16.4.4",
+    "axios": "1.12.2",
+    "bignumber.js": "9.3.1",
     "gauge": "5.0.1",
-    "shelljs": "0.8.5",
-    "web3": "4.3.0",
-    "yargs": "17.7.2"
+    "shelljs": "0.10.0",
+    "web3": "4.16.0",
+    "yargs": "17.7.2",
+    "tsx": "4.20.4"
   },
   "devDependencies": {
     "@types/gauge": "5.0.4",
-    "@types/node": "20.11.0",
-    "@types/yargs": "17.0.32",
+    "@types/node": "24.3.0",
+    "@types/yargs": "17.0.33",
     "ts-node": "10.9.2",
     "ts-node-register": "1.0.0",
-    "typescript": "5.3.3"
+    "typescript": "5.9.2"
   }
 }
