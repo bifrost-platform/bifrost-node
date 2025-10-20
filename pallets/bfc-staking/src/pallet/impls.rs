@@ -87,6 +87,11 @@ impl<T: Config> Pallet<T> {
 		<DelayedControllerSets<T>>::try_mutate(
 			round.current_round_index,
 			|controller_sets| -> DispatchResult {
+				ensure!(
+					!controller_sets.into_iter().any(|c| c.old == old || c.new == new),
+					Error::<T>::AlreadyControllerSetRequested
+				);
+
 				Ok(controller_sets
 					.try_push(DelayedControllerSet::new(stash, old, new))
 					.map_err(|_| <Error<T>>::TooManyDelayedControllers)?)
