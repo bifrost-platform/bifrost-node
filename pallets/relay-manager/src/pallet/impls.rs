@@ -316,6 +316,11 @@ impl<T: Config> Pallet<T> {
 	pub fn add_to_relayer_sets(old: T::AccountId, new: T::AccountId) -> DispatchResult {
 		let round = Round::<T>::get();
 		<DelayedRelayerSets<T>>::try_mutate(round, |relayer_sets| -> DispatchResult {
+			ensure!(
+				!relayer_sets.into_iter().any(|r| r.old == old || r.new == new),
+				Error::<T>::AlreadyRelayerSetRequested
+			);
+
 			Ok(relayer_sets
 				.try_push(DelayedRelayerSet::new(old, new))
 				.map_err(|_| <Error<T>>::TooManyDelayedRelayers)?)
