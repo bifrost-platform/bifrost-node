@@ -112,20 +112,20 @@ following buttons :
 - Step over : Resume the execution until next line, or go one level up if the
   end of the current
   scope is reached.
-- Step into : Resume the execution to go inside the immediatly next function
+- Step into : Resume the execution to go inside the immediately next function
   call if any, otherwise
   step to next line.
 - Step out : Resume the execution until the end of the scope is reached.
-- Restart : Kill the program and start a new debuging session.
+- Restart : Kill the program and start a new debugging session.
 - Stop : Kill the program and end debugin session.
 
 Breakpoints stay between debugging sessions. When multiple function calls are
 made on the same line,
-multiple step into, step out, step into, ... can be requiered to go inside one
+multiple step into, step out, step into, ... can be required to go inside one
 of the chained
 calls.
 
-When paused, content of variables is showed in the debuging tab of VSCode. Some
+When paused, content of variables is showed in the debugging tab of VSCode. Some
 basic types are
 displayed correctly (primitive types, Vec, Arc) but more complex types such as
 HashMap/BTreeMap
