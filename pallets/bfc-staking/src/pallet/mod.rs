@@ -1167,6 +1167,14 @@ pub mod pallet {
 			ensure!(!<BondedStash<T>>::contains_key(&stash), Error::<T>::AlreadyBonded);
 			ensure!(!<CandidateInfo<T>>::contains_key(&controller), Error::<T>::AlreadyPaired);
 
+			// check if the controller account is already scheduled for update
+			let round = Round::<T>::get();
+			let controller_sets = DelayedControllerSets::<T>::get(round.current_round_index);
+			ensure!(
+				!controller_sets.into_iter().any(|c| c.new == controller),
+				Error::<T>::AlreadyControllerSetRequested
+			);
+
 			ensure!(!Self::is_nominator(&controller), Error::<T>::NominatorExists);
 			let mut candidates = <CandidatePool<T>>::get();
 			let old_count = candidates.len() as u32;
