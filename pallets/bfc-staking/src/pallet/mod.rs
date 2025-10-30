@@ -1085,7 +1085,7 @@ pub mod pallet {
 				T::RelayManager::leave_relayers(&controller);
 			}
 			state.tier = new;
-			state.reset_commission::<T>();
+			state.reset_commission::<T>(&controller);
 			<CandidateInfo<T>>::insert(&controller, state.clone());
 			Self::update_active(&controller, state.voting_power)?;
 			Ok(().into())
@@ -1166,6 +1166,14 @@ pub mod pallet {
 			// account duplicate check
 			ensure!(!<BondedStash<T>>::contains_key(&stash), Error::<T>::AlreadyBonded);
 			ensure!(!<CandidateInfo<T>>::contains_key(&controller), Error::<T>::AlreadyPaired);
+
+			// check if the controller account is already scheduled for update
+			let round = Round::<T>::get();
+			let controller_sets = DelayedControllerSets::<T>::get(round.current_round_index);
+			ensure!(
+				!controller_sets.into_iter().any(|c| c.new == controller),
+				Error::<T>::AlreadyControllerSetRequested
+			);
 
 			ensure!(!Self::is_nominator(&controller), Error::<T>::NominatorExists);
 			let mut candidates = <CandidatePool<T>>::get();

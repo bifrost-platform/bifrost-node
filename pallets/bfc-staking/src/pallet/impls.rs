@@ -465,8 +465,10 @@ impl<T: Config> Pallet<T> {
 					<BottomNominations<T>>::insert(&c.new, bottom_nominations);
 				}
 				// replace `AwardedPts`
-				let points = <AwardedPts<T>>::take(now, &c.old);
-				<AwardedPts<T>>::insert(now, &c.new, points);
+				let current_points = <AwardedPts<T>>::take(now, &c.old);
+				<AwardedPts<T>>::insert(now, &c.new, current_points);
+				let previous_points = <AwardedPts<T>>::take(delayed_round, &c.old);
+				<AwardedPts<T>>::insert(delayed_round, &c.new, previous_points);
 				// replace `AtStake`
 				let at_stake = <AtStake<T>>::take(now, &c.old);
 				<AtStake<T>>::insert(now, &c.new, at_stake);
@@ -951,9 +953,10 @@ impl<T: Config> Pallet<T> {
 		// snapshot total stake and storage state
 		<Staked<T>>::insert(now, Total::<T>::get());
 		<TotalAtStake<T>>::remove(now - 1);
+		// handle delayed commission update requests
+		Self::handle_delayed_commission_sets(now);
 		// handle delayed controller update requests
 		Self::handle_delayed_controller_sets(now);
-		Self::handle_delayed_commission_sets(now);
 
 		Self::deposit_event(Event::NewRound {
 			starting_block: round.first_round_block,
