@@ -1085,7 +1085,7 @@ pub mod pallet {
 				T::RelayManager::leave_relayers(&controller);
 			}
 			state.tier = new;
-			state.reset_commission::<T>();
+			state.reset_commission::<T>(&controller);
 			<CandidateInfo<T>>::insert(&controller, state.clone());
 			Self::update_active(&controller, state.voting_power)?;
 			Ok(().into())

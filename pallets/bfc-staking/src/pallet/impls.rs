@@ -951,9 +951,10 @@ impl<T: Config> Pallet<T> {
 		// snapshot total stake and storage state
 		<Staked<T>>::insert(now, Total::<T>::get());
 		<TotalAtStake<T>>::remove(now - 1);
+		// handle delayed commission update requests
+		Self::handle_delayed_commission_sets(now);
 		// handle delayed controller update requests
 		Self::handle_delayed_controller_sets(now);
-		Self::handle_delayed_commission_sets(now);
 
 		Self::deposit_event(Event::NewRound {
 			starting_block: round.first_round_block,
