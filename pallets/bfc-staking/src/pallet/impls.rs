@@ -465,8 +465,10 @@ impl<T: Config> Pallet<T> {
 					<BottomNominations<T>>::insert(&c.new, bottom_nominations);
 				}
 				// replace `AwardedPts`
-				let points = <AwardedPts<T>>::take(now, &c.old);
-				<AwardedPts<T>>::insert(now, &c.new, points);
+				let current_points = <AwardedPts<T>>::take(now, &c.old);
+				<AwardedPts<T>>::insert(now, &c.new, current_points);
+				let previous_points = <AwardedPts<T>>::take(delayed_round, &c.old);
+				<AwardedPts<T>>::insert(delayed_round, &c.new, previous_points);
 				// replace `AtStake`
 				let at_stake = <AtStake<T>>::take(now, &c.old);
 				<AtStake<T>>::insert(now, &c.new, at_stake);
