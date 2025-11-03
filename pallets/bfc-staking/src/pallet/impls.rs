@@ -444,6 +444,8 @@ impl<T: Config> Pallet<T> {
 				// replace `SelectedCandidates`
 				if candidate.is_selected {
 					Self::replace_from_selected_candidates(&c.old, &c.new, candidate.tier);
+				}
+				if candidate.tier == TierType::Full {
 					T::RelayManager::replace_bonded_controller(c.old.clone(), c.new.clone());
 				}
 				// replace `TopNominations`
