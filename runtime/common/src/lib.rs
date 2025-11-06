@@ -2,3 +2,5 @@
 
 mod apis;
 mod self_contained_call;
+
+pub mod extensions;

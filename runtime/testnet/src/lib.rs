@@ -99,6 +99,7 @@ pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
 /// The `TransactionExtension` to the basic transaction logic.
 pub type TxExtension = (
+	bifrost_common_runtime::extensions::CheckBlockedOrigin<Runtime, RuntimeCall>,
 	frame_system::CheckNonZeroSender<Runtime>,
 	frame_system::CheckSpecVersion<Runtime>,
 	frame_system::CheckTxVersion<Runtime>,
