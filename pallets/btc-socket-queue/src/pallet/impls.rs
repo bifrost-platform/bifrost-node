@@ -106,13 +106,15 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
 		// replace authority in pending requests
-		<PendingRequests<T>>::iter().for_each(|(_, mut request)| {
+		<PendingRequests<T>>::iter().for_each(|(txid, mut request)| {
 			request.replace_authority(old, new);
+			<PendingRequests<T>>::insert(&txid, request);
 		});
 		// replace authority in rollback requests (if not approved yet)
-		<RollbackRequests<T>>::iter().for_each(|(_, mut request)| {
+		<RollbackRequests<T>>::iter().for_each(|(txid, mut request)| {
 			if !request.is_approved {
 				request.replace_authority(old, new);
+				<RollbackRequests<T>>::insert(&txid, request);
 			}
 		});
 	}
