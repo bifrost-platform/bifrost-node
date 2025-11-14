@@ -1552,7 +1552,7 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleLeaveCandidates');
     expect(extrinsicResult).equal('CannotLeaveIfControllerSetRequested');
 
-    // cancel request for continueing tests
+    // cancel request for continuing tests
     await context.polkadotApi.tx.bfcStaking
       .cancelControllerSet()
       .signAndSend(baltathar, { nonce: -1 });
@@ -1576,7 +1576,7 @@ describeDevNode('pallet_bfc_staking - candidate leave', (context) => {
     const extrinsicResult = await getExtrinsicResult(context, 'bfcStaking', 'scheduleLeaveCandidates');
     expect(extrinsicResult).equal('CannotLeaveIfCommissionSetRequested');
 
-    // cancel request for continueing tests
+    // cancel request for continuing tests
     await context.polkadotApi.tx.bfcStaking
       .cancelValidatorCommissionSet()
       .signAndSend(baltathar, { nonce: -1 });

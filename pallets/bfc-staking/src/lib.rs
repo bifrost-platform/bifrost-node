@@ -739,7 +739,12 @@ impl<
 		self.commission = commission;
 	}
 
-	pub fn reset_commission<T: Config>(&mut self) {
+	pub fn reset_commission<T: Config>(&mut self, who: &T::AccountId) {
+		let round = <Round<T>>::get();
+		let mut commission_sets = <DelayedCommissionSets<T>>::get(round.current_round_index);
+		commission_sets.retain(|c| c.who != *who);
+		<DelayedCommissionSets<T>>::insert(round.current_round_index, commission_sets);
+
 		if self.tier == TierType::Full {
 			self.commission = <DefaultFullValidatorCommission<T>>::get();
 		} else {

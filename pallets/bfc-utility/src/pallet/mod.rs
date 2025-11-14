@@ -36,6 +36,10 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// The given amount is too low to process.
 		AmountTooLow,
+		/// The account is already blocked.
+		AccountAlreadyBlocked,
+		/// The account is not blocked.
+		AccountNotBlocked,
 	}
 
 	#[pallet::event]
@@ -55,6 +59,16 @@ pub mod pallet {
 	#[pallet::storage]
 	/// Storage for proposal index. Whenever proposal is accepted, index will be increased.
 	pub type ProposalIndex<T: Config> = StorageValue<_, PropIndex, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	pub type BlockedAccounts<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+
+	impl<T: Config> Pallet<T> {
+		pub fn is_blocked_account(account: &T::AccountId) -> bool {
+			BlockedAccounts::<T>::get().contains(account)
+		}
+	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -122,6 +136,36 @@ pub mod pallet {
 			let minted = T::Currency::deposit_creating(&beneficiary, mint);
 			Self::deposit_event(Event::MintNative { beneficiary, minted: minted.peek() });
 
+			Ok(().into())
+		}
+
+		#[pallet::call_index(2)]
+		#[pallet::weight((T::DbWeight::get().writes(1), DispatchClass::Operational,))]
+		/// Add an account to the blocked accounts list.
+		pub fn add_blocked_account(
+			origin: OriginFor<T>,
+			account: T::AccountId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			ensure!(!Self::is_blocked_account(&account), Error::<T>::AccountAlreadyBlocked);
+			let mut blocked_accounts = BlockedAccounts::<T>::get();
+			blocked_accounts.push(account);
+			BlockedAccounts::<T>::put(blocked_accounts);
+			Ok(().into())
+		}
+
+		#[pallet::call_index(3)]
+		#[pallet::weight((T::DbWeight::get().writes(1), DispatchClass::Operational,))]
+		/// Remove an account from the blocked accounts list.
+		pub fn remove_blocked_account(
+			origin: OriginFor<T>,
+			account: T::AccountId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			ensure!(Self::is_blocked_account(&account), Error::<T>::AccountNotBlocked);
+			let mut blocked_accounts = BlockedAccounts::<T>::get();
+			blocked_accounts.retain(|a| a != &account);
+			BlockedAccounts::<T>::put(blocked_accounts);
 			Ok(().into())
 		}
 	}

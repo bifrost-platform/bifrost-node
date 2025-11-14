@@ -15,11 +15,26 @@ macro_rules! impl_self_contained_call {
 			}
 
 			fn check_self_contained(&self) -> Option<Result<Self::SignedInfo, TransactionValidityError>> {
-				match self {
-					RuntimeCall::Ethereum(call) => call.check_self_contained(),
-					_ => None,
-				}
-			}
+                match self {
+                    RuntimeCall::Ethereum(call) => {
+                        match call.check_self_contained()? {
+                            Ok(signer) => {
+                                let signer_account: AccountId = signer.into();
+                                if pallet_bfc_utility::Pallet::<Runtime>::is_blocked_account(&signer_account) {
+                                    return Some(Err(TransactionValidityError::Invalid(
+                                        sp_runtime::transaction_validity::InvalidTransaction::BadSigner,
+                                    )));
+                                }
+                                Some(Ok(signer))
+                            },
+                            Err(error) => {
+                                Some(Err(error))
+                            }
+                        }
+                    },
+                    _ => None,
+                }
+            }
 
 			fn validate_self_contained(
 				&self,
