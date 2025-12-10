@@ -122,12 +122,17 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		if let Some(mut vault) = SystemVault::<T>::get(round) {
 			if vault.address == AddressState::Pending {
 				vault.replace_authority(old, new);
+				SystemVault::<T>::insert(round, vault);
 			}
 		}
 		// replace authority in all registration pools (if they are pending)
-		<RegistrationPool<T>>::iter_prefix(round).for_each(|(_, mut relay_target)| {
+		<RegistrationPool<T>>::iter_prefix(round).for_each(|(address, relay_target)| {
 			if relay_target.vault.address == AddressState::Pending {
-				relay_target.vault.replace_authority(old, new);
+				<RegistrationPool<T>>::mutate(round, &address, |relay_target| {
+					if let Some(relay_target) = relay_target {
+						relay_target.vault.replace_authority(old, new);
+					}
+				});
 			}
 		});
 	}
