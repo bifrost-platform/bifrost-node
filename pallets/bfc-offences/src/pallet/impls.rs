@@ -14,7 +14,7 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 		tier: TierType,
 		offence: Offence<BalanceOf<T>>,
 	) -> (bool, BalanceOf<T>) {
-		// offence check only if activated
+		// offense check only if activated
 		if IsOffenceActive::<T>::get() {
 			return Self::handle_offence(who, stash, tier, offence);
 		}
@@ -28,10 +28,10 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 		offence: Offence<BalanceOf<T>>,
 	) -> (bool, BalanceOf<T>) {
 		let mut slash_amount = BalanceOf::<T>::zero();
-		// Check if the validator had offenced before.
+		// Check if the validator has offended before.
 		if let Some(mut offences) = ValidatorOffences::<T>::get(who) {
 			if Self::is_offence_count_exceeds(offences.offence_count + 1, tier) {
-				// apply offence penalty to this validator
+				// apply offense penalty to this validator
 				slash_amount = Self::try_slash(
 					who,
 					stash,
@@ -42,13 +42,13 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 				return (true, slash_amount);
 			}
 
-			// add a new offence and increase offence count to this validator
+			// add a new offense and increase offense count to this validator
 			offences.add_offence(offence);
 			ValidatorOffences::<T>::insert(who, offences);
 
 			(false, slash_amount)
 		} else {
-			// add the initial offence to this validator
+			// add the initial offense to this validator
 			ValidatorOffences::<T>::insert(who, ValidatorOffenceInfo::new(offence));
 			return (false, slash_amount);
 		}
@@ -84,7 +84,7 @@ impl<T: Config> OffenceHandler<T::AccountId, BalanceOf<T>> for Pallet<T> {
 	}
 
 	fn is_offence_count_exceeds(count: u32, tier: TierType) -> bool {
-		// if offence count exceeds the configured limit
+		// if offense count exceeds the configured limit
 		return match tier {
 			TierType::Full => count > FullMaximumOffenceCount::<T>::get(),
 			_ => count > BasicMaximumOffenceCount::<T>::get(),
