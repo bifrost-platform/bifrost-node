@@ -1,0 +1,57 @@
+[package]
+name = "pallet-bifrost-evm-tx-payment"
+version = "0.1.0"
+authors = ["Bifrost Network"]
+edition = "2021"
+license = "Apache-2.0"
+description = "Pallet for ERC20 token gas fee payment in EVM transactions"
+repository = "https://github.com/bifrost-platform/bifrost-node"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+# Parity codec
+parity-scale-codec = { workspace = true, features = ["derive"] }
+scale-info = { workspace = true, features = ["derive"] }
+
+# Substrate
+frame-benchmarking = { workspace = true, optional = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+log = { workspace = true }
+
+# Frontier
+pallet-evm = { workspace = true }
+
+[dev-dependencies]
+pallet-balances = { workspace = true, features = ["std"] }
+pallet-timestamp = { workspace = true, features = ["std"] }
+
+[features]
+default = ["std"]
+std = [
+	"parity-scale-codec/std",
+	"scale-info/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"sp-core/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"pallet-evm/std",
+]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"pallet-evm/runtime-benchmarks",
+]
+try-runtime = [
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+	"pallet-evm/try-runtime",
+]

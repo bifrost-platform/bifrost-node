@@ -51,9 +51,10 @@ use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
 use pallet_evm::{
-	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
+	IdentityAddressMapping, Runner,
 };
+use pallet_bifrost_evm_tx_payment::ERC20FeeAdapter;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -1006,7 +1007,7 @@ impl pallet_evm::Config for Runtime {
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
-	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
+	type OnChargeTransaction = ERC20FeeAdapter<Self, Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
@@ -1098,6 +1099,30 @@ impl pallet_blaze::Config for Runtime {
 	type FeeRateExpiration = FeeRateExpiration;
 	type ToleranceThreshold = ToleranceThreshold;
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	/// Treasury EVM address to receive fee tokens
+	/// This is the H160 representation of the treasury account
+	pub TreasuryEVMAddress: H160 = {
+		// Convert treasury account to H160
+		// AccountId on Bifrost is AccountId20 (20 bytes EVM-compatible)
+		let treasury_account: AccountId = Treasury::account_id();
+		H160::from(treasury_account.0)
+	};
+	/// Maximum number of accepted fee tokens
+	pub const MaxAcceptedFeeTokens: u32 = 20;
+	/// Gas limit for ERC20 transferFrom calls
+	pub const ERC20TransferGasLimit: u64 = 100_000;
+}
+
+/// EVM Fee Token pallet configuration
+impl pallet_bifrost_evm_tx_payment::Config for Runtime {
+	type AdminOrigin = EnsureRoot<AccountId>;
+	type FeeCollectorAddress = TreasuryEVMAddress;
+	type MaxAcceptedTokens = MaxAcceptedFeeTokens;
+	type ERC20TransferGasLimit = ERC20TransferGasLimit;
+	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1237,11 +1262,25 @@ mod runtime {
 	#[runtime::pallet_index(62)]
 	pub type Blaze = pallet_blaze;
 
+	#[runtime::pallet_index(63)]
+	pub type EVMFeeToken = pallet_bifrost_evm_tx_payment;
+
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
 
 	#[runtime::pallet_index(100)]
 	pub type MultiBlockMigrations = pallet_migrations;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benches {
+	frame_benchmarking::define_benchmarks!(
+		[frame_system, SystemBench::<Runtime>]
+		[pallet_relay_manager, RelayManager]
+		[pallet_blaze, Blaze]
+		[pallet_btc_registration_pool, BtcRegistrationPool]
+		[pallet_btc_socket_queue, BtcSocketQueue]
+	);
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();

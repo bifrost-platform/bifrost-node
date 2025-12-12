@@ -1,0 +1,39 @@
+[package]
+name = "precompile-bifrost-evm-tx-payment"
+version = "1.0.0"
+description = "A precompile for EVM fee token management"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# Bifrost
+precompile-utils = { workspace = true }
+pallet-bifrost-evm-tx-payment = { workspace = true }
+
+# Substrate
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+sp-runtime = { workspace = true }
+
+# Frontier
+fp-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
+
+[features]
+default = ["std"]
+std = [
+    "fp-evm/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-evm/std",
+    "pallet-bifrost-evm-tx-payment/std",
+    "precompile-utils/std",
+    "sp-core/std",
+    "sp-std/std",
+    "sp-runtime/std",
+]
