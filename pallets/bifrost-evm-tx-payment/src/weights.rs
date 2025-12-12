@@ -16,6 +16,7 @@ pub trait WeightInfo {
 	fn remove_fee_token() -> Weight;
 	fn update_fee_token() -> Weight;
 	fn set_user_fee_token() -> Weight;
+	fn withdraw_collected_fees() -> Weight;
 }
 
 /// Weights for pallet_bifrost_evm_tx_payment using the Substrate node and recommended hardware.
@@ -50,6 +51,12 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
+
+	/// EVM call to transfer ERC20 tokens
+	fn withdraw_collected_fees() -> Weight {
+		// EVM call weight is higher due to ERC20 transfer execution
+		Weight::from_parts(100_000_000, 0)
+	}
 }
 
 impl WeightInfo for () {
@@ -75,5 +82,9 @@ impl WeightInfo for () {
 		Weight::from_parts(15_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1))
 			.saturating_add(RocksDbWeight::get().writes(1))
+	}
+
+	fn withdraw_collected_fees() -> Weight {
+		Weight::from_parts(100_000_000, 0)
 	}
 }

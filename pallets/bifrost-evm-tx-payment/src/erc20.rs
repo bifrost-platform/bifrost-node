@@ -3,10 +3,13 @@
 //! This module provides functions to interact with ERC20 contracts
 //! from within the Substrate runtime using pallet-evm's Runner::call.
 
-use frame_support::traits::Get;
 use pallet_evm::{ExitReason, Runner};
 use sp_core::{H160, U256};
 use sp_std::vec::Vec;
+
+/// Gas limit for ERC20 transfer calls.
+/// 100,000 gas is sufficient for standard ERC20 transfers.
+const ERC20_TRANSFER_GAS_LIMIT: u64 = 100_000;
 
 /// ERC20 function selectors.
 mod selectors {
@@ -49,11 +52,11 @@ pub fn transfer_from_user<T: crate::Config>(
 	// Use call_bypassing_reentrancy to avoid reentrancy protection
 	// User is the msg.sender, transferring their own tokens
 	let result = T::Runner::call_bypassing_reentrancy(
-		from,                                    // source (msg.sender = user)
-		token,                                   // target (ERC20 contract)
-		calldata,                                // input
-		T::ERC20TransferGasLimit::get(),         // gas_limit
-		true,                                    // is_transactional = true (persist state changes)
+		from,                     // source (msg.sender = user)
+		token,                    // target (ERC20 contract)
+		calldata,                 // input
+		ERC20_TRANSFER_GAS_LIMIT, // gas_limit
+		true,                     // is_transactional = true (persist state changes)
 		T::config(),
 	);
 
@@ -131,25 +134,46 @@ pub fn transfer_to_user<T: crate::Config>(
 	);
 
 	// Execute from precompile address using bypass to avoid reentrancy
-	let result = T::Runner::call_bypassing_reentrancy(
-		from,                                    // source (precompile address)
-		token,                                   // target (ERC20 contract)
-		calldata,                                // input
-		T::ERC20TransferGasLimit::get(),         // gas_limit
-		true,                                    // is_transactional = true (persist state changes)
+	let result = match T::Runner::call_bypassing_reentrancy(
+		from,                     // source (precompile address)
+		token,                    // target (ERC20 contract)
+		calldata,                 // input
+		ERC20_TRANSFER_GAS_LIMIT, // gas_limit
+		true,                     // is_transactional = true (persist state changes)
 		T::config(),
-	)
-	.map_err(|_| ())?;
+	) {
+		Ok(r) => r,
+		Err(e) => {
+			log::error!(
+				target: "evm-fee-token",
+				"transfer_to_user: Runner::call failed ({:?})",
+				e.error.into()
+			);
+			return Err(());
+		},
+	};
 
 	match result.exit_reason {
 		ExitReason::Succeed(_) => {
 			if !check_bool_return(&result.value) {
+				log::warn!(
+					target: "evm-fee-token",
+					"transfer_to_user: ERC20 returned false or invalid data: {:?}",
+					result.value
+				);
 				return Err(());
 			}
 			log::debug!(target: "evm-fee-token", "transfer_to_user: SUCCESS");
 			Ok(())
 		},
-		_ => Err(()),
+		ref reason => {
+			log::warn!(
+				target: "evm-fee-token",
+				"transfer_to_user: EVM execution failed with reason: {:?}",
+				reason
+			);
+			Err(())
+		},
 	}
 }
 
