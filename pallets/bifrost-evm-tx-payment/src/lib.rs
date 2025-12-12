@@ -61,18 +61,10 @@ pub mod pallet {
 		/// Origin that can manage accepted fee tokens (typically governance).
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
-		/// Fee collector address (precompile address) to receive and hold fee tokens.
-		/// This should be the precompile address (e.g., 0x0810).
+		/// Fee collector address to receive and hold fee tokens.
+		/// Must be an EOA address (not a precompile) to allow outgoing transfers for refunds.
 		#[pallet::constant]
 		type FeeCollectorAddress: Get<H160>;
-
-		/// Maximum number of accepted fee tokens.
-		#[pallet::constant]
-		type MaxAcceptedTokens: Get<u32>;
-
-		/// Gas limit for ERC20 transfer call.
-		#[pallet::constant]
-		type ERC20TransferGasLimit: Get<u64>;
 
 		/// Weight information for extrinsics.
 		type WeightInfo: WeightInfo;
@@ -123,6 +115,8 @@ pub mod pallet {
 		FeeRefundInToken { user: H160, token: H160, amount: U256 },
 		/// Tip was paid to block author in ERC20 token.
 		TipPaymentInToken { author: H160, token: H160, amount: U256 },
+		/// Collected fees were withdrawn from fee collector.
+		CollectedFeesWithdrawn { token: H160, to: H160, amount: U256 },
 	}
 
 	#[pallet::error]
@@ -131,8 +125,6 @@ pub mod pallet {
 		TokenNotAccepted,
 		/// Token is already in the accepted list.
 		TokenAlreadyAccepted,
-		/// Maximum number of accepted tokens reached.
-		TooManyTokens,
 		/// Oracle address is invalid.
 		InvalidOracle,
 		/// Failed to get price from oracle.
@@ -141,8 +133,6 @@ pub mod pallet {
 		PriceOverflow,
 		/// ERC20 transfer failed.
 		ERC20TransferFailed,
-		/// Insufficient token balance or allowance.
-		InsufficientTokenBalance,
 		/// Invalid token configuration.
 		InvalidTokenConfig,
 		/// Token is disabled.
@@ -283,6 +273,39 @@ pub mod pallet {
 
 			Ok(())
 		}
+
+		/// Withdraw collected fee tokens from the fee collector address.
+		///
+		/// Only callable by AdminOrigin (sudo/governance).
+		/// This allows withdrawing ERC20 tokens that have been collected as gas fees
+		/// from the fee collector (precompile) address to a specified destination.
+		///
+		/// Parameters:
+		/// - `token`: ERC20 token contract address to withdraw
+		/// - `to`: Destination address to receive the tokens
+		/// - `amount`: Amount of tokens to withdraw
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::withdraw_collected_fees())]
+		pub fn withdraw_collected_fees(
+			origin: OriginFor<T>,
+			token: H160,
+			to: H160,
+			amount: U256,
+		) -> DispatchResult {
+			T::AdminOrigin::ensure_origin(origin)?;
+
+			ensure!(!amount.is_zero(), Error::<T>::InvalidTokenConfig);
+			ensure!(to != H160::zero(), Error::<T>::InvalidTokenConfig);
+
+			// Transfer from fee collector to destination
+			let fee_collector = T::FeeCollectorAddress::get();
+			crate::erc20::transfer_to_user::<T>(fee_collector, token, to, amount)
+				.map_err(|_| Error::<T>::ERC20TransferFailed)?;
+
+			Self::deposit_event(Event::CollectedFeesWithdrawn { token, to, amount });
+
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -381,8 +404,8 @@ pub mod pallet {
 
 		/// Get BFC/USD price from the native token oracle.
 		fn get_bfc_usd_price() -> Result<U256, Error<T>> {
-			let oracle_address = NativeTokenOracle::<T>::get()
-				.ok_or(Error::<T>::NativeOracleNotSet)?;
+			let oracle_address =
+				NativeTokenOracle::<T>::get().ok_or(Error::<T>::NativeOracleNotSet)?;
 
 			Self::get_oracle_price(oracle_address)
 		}
@@ -403,7 +426,7 @@ pub mod pallet {
 						price
 					);
 					Ok(price)
-				}
+				},
 				Err(_) => {
 					log::error!(
 						target: "evm-fee-token",
@@ -411,7 +434,7 @@ pub mod pallet {
 						oracle_address
 					);
 					Err(Error::<T>::OraclePriceFailed)
-				}
+				},
 			}
 		}
 
