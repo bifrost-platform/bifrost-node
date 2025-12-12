@@ -29,8 +29,9 @@ pub use sp_runtime::BuildStorage;
 use sp_runtime::{
 	generic, impl_opaque_keys,
 	traits::{
-		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		AccountIdConversion, BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf,
+		Dispatchable, IdentityLookup, NumberFor, OpaqueKeys, PostDispatchInfoOf,
+		UniqueSaturatedInto,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
@@ -1102,10 +1103,13 @@ impl pallet_blaze::Config for Runtime {
 }
 
 parameter_types! {
+	/// Pallet ID for ERC20 gas fee collection.
+	/// Used to derive a deterministic EOA address outside the precompile range.
+	pub const EVMTxPaymentPalletId: PalletId = PalletId(*b"bfc/txpy");
 	/// Fee collector address for ERC20 gas fee payments.
-	/// This is a dedicated EOA address (not a precompile) that holds collected fee tokens.
-	/// Using 0x0811 (precompile + 1) to keep it adjacent to the precompile address.
-	pub FeeCollectorAddress: H160 = H160::from_low_u64_be(0x0811);
+	/// Derived from PalletId to ensure it's outside the precompile range (0x0800-0x0FFF).
+	/// AccountId (AccountId20) directly converts to H160.
+	pub FeeCollectorAddress: H160 = EVMTxPaymentPalletId::get().into_account_truncating();
 }
 
 /// EVM Fee Token pallet configuration
