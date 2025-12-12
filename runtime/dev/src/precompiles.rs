@@ -12,6 +12,7 @@ use precompile_blaze::BlazePrecompile;
 use precompile_btc_registration_pool::BtcRegistrationPoolPrecompile;
 use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
+use precompile_bifrost_evm_tx_payment::EVMFeeTokenPrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
 
@@ -57,6 +58,8 @@ pub type BifrostPrecompilesAt<R> = (
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
+	// EVM Fee Token Precompile at 0x0810 (2064)
+	PrecompileAt<AddressU64<2064>, EVMFeeTokenPrecompile<R>, BifrostPrecompilesChecks>,
 );
 
 /// The PrecompileSet installed in the BIFROST runtime.
