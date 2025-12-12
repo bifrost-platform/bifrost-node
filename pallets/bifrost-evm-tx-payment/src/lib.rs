@@ -250,7 +250,7 @@ pub mod pallet {
 		/// - `oracle`: BFC/USD oracle address (None to disable)
 		/// - `decimals`: Oracle price decimals (e.g., 8 for Chainlink standard)
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_user_fee_token())]
+		#[pallet::weight(<T as Config>::WeightInfo::set_native_oracle())]
 		pub fn set_native_oracle(
 			origin: OriginFor<T>,
 			oracle: Option<H160>,
