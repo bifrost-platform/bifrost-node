@@ -55,3 +55,18 @@ impl OraclePriceData {
 		U256::from(self.answer.unsigned_abs())
 	}
 }
+
+/// Reason why ERC20 fee payment fell back to native token.
+#[derive(
+	Clone, Copy, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq,
+)]
+pub enum FallbackReason {
+	/// Token is not registered in accepted fee tokens.
+	TokenNotRegistered,
+	/// Token is disabled.
+	TokenDisabled,
+	/// Oracle price conversion failed.
+	PriceConversionFailed,
+	/// ERC20 transfer failed (e.g., insufficient balance).
+	TransferFailed,
+}
