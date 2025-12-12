@@ -62,7 +62,9 @@ pub mod pallet {
 		type AdminOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
 		/// Fee collector address to receive and hold fee tokens.
-		/// Must be an EOA address (not a precompile) to allow outgoing transfers for refunds.
+		/// Must be an address outside the precompile range (0x0800-0x0FFF) to allow
+		/// outgoing EVM calls for refunds and tip payments.
+		/// Recommended: derive from a PalletId using `into_account_truncating()`.
 		#[pallet::constant]
 		type FeeCollectorAddress: Get<H160>;
 
