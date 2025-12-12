@@ -47,6 +47,7 @@ use parity_scale_codec::{Decode, Encode};
 
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
+use pallet_bifrost_evm_tx_payment::ERC20FeeAdapter;
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
@@ -54,7 +55,6 @@ use pallet_evm::{
 	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
 	IdentityAddressMapping, Runner,
 };
-use pallet_bifrost_evm_tx_payment::ERC20FeeAdapter;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -1102,26 +1102,16 @@ impl pallet_blaze::Config for Runtime {
 }
 
 parameter_types! {
-	/// Treasury EVM address to receive fee tokens
-	/// This is the H160 representation of the treasury account
-	pub TreasuryEVMAddress: H160 = {
-		// Convert treasury account to H160
-		// AccountId on Bifrost is AccountId20 (20 bytes EVM-compatible)
-		let treasury_account: AccountId = Treasury::account_id();
-		H160::from(treasury_account.0)
-	};
-	/// Maximum number of accepted fee tokens
-	pub const MaxAcceptedFeeTokens: u32 = 20;
-	/// Gas limit for ERC20 transferFrom calls
-	pub const ERC20TransferGasLimit: u64 = 100_000;
+	/// Fee collector address for ERC20 gas fee payments.
+	/// This is a dedicated EOA address (not a precompile) that holds collected fee tokens.
+	/// Using 0x0811 (precompile + 1) to keep it adjacent to the precompile address.
+	pub FeeCollectorAddress: H160 = H160::from_low_u64_be(0x0811);
 }
 
 /// EVM Fee Token pallet configuration
 impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type AdminOrigin = EnsureRoot<AccountId>;
-	type FeeCollectorAddress = TreasuryEVMAddress;
-	type MaxAcceptedTokens = MaxAcceptedFeeTokens;
-	type ERC20TransferGasLimit = ERC20TransferGasLimit;
+	type FeeCollectorAddress = FeeCollectorAddress;
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 

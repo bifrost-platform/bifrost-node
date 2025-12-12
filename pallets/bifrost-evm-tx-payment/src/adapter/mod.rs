@@ -209,7 +209,7 @@ where
 	/// Withdraw fee in ERC20 token.
 	///
 	/// 1. Converts native fee to token amount using oracle
-	/// 2. Executes ERC20 transferFrom to treasury
+	/// 2. Executes ERC20 transfer to fee collector
 	/// 3. Falls back to native token on any failure
 	fn withdraw_erc20_fee(
 		who: &H160,
@@ -254,10 +254,9 @@ where
 			},
 		};
 
-		// Execute ERC20 transferFrom
-		// User must have approved treasury to spend their tokens
+		// Execute ERC20 transfer from user to fee collector
 		if let Err(e) = Pallet::<T>::execute_fee_transfer(*who, token, token_amount) {
-			// ERC20 transfer failed (insufficient balance/allowance), fallback to native
+			// ERC20 transfer failed (insufficient balance), fallback to native
 			log::warn!(
 				target: "evm-fee-token",
 				"ERC20 fee payment failed: transfer error {:?} for user {:?}, amount {:?}, falling back to native",
@@ -331,9 +330,16 @@ where
 		withdrawn_amount: U256,
 		native_equivalent: U256,
 	) -> LiquidityInfo<T, C> {
+		log::debug!(
+			target: "evm-fee-token",
+			"correct_erc20_fee called: who={:?}, corrected_fee={}, base_fee={}, withdrawn={}, native_equiv={}",
+			who, corrected_fee, base_fee, withdrawn_amount, native_equivalent
+		);
+
 		// Calculate the ratio of actual fee to initially estimated fee
 		// corrected_fee / native_equivalent gives us the utilization ratio
 		if native_equivalent.is_zero() {
+			log::warn!(target: "evm-fee-token", "native_equivalent is zero, skipping correction");
 			return LiquidityInfo::None;
 		}
 
@@ -347,16 +353,43 @@ where
 		// Calculate refund
 		let refund_amount = withdrawn_amount.saturating_sub(actual_token_amount);
 
+		log::debug!(
+			target: "evm-fee-token",
+			"Fee correction: actual_token={}, refund_amount={}",
+			actual_token_amount, refund_amount
+		);
+
 		// Refund excess tokens to user
 		if !refund_amount.is_zero() {
-			if Pallet::<T>::refund_token(*who, token, refund_amount).is_ok() {
-				// Emit refund event
-				Pallet::<T>::deposit_event(crate::Event::FeeRefundInToken {
-					user: *who,
-					token,
-					amount: refund_amount,
-				});
+			log::debug!(
+				target: "evm-fee-token",
+				"Attempting refund: {} tokens to {:?}",
+				refund_amount, who
+			);
+			match Pallet::<T>::refund_token(*who, token, refund_amount) {
+				Ok(()) => {
+					log::info!(
+						target: "evm-fee-token",
+						"Refund SUCCESS: {} tokens to {:?}",
+						refund_amount, who
+					);
+					// Emit refund event
+					Pallet::<T>::deposit_event(crate::Event::FeeRefundInToken {
+						user: *who,
+						token,
+						amount: refund_amount,
+					});
+				},
+				Err(e) => {
+					log::error!(
+						target: "evm-fee-token",
+						"Refund FAILED: {:?} - {} tokens to {:?}",
+						e, refund_amount, who
+					);
+				},
 			}
+		} else {
+			log::debug!(target: "evm-fee-token", "No refund needed (refund_amount is zero)");
 		}
 
 		// Calculate tip portion based on corrected_fee (not native_equivalent)
