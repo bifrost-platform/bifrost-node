@@ -119,6 +119,8 @@ pub mod pallet {
 		TipPaymentInToken { author: H160, token: H160, amount: U256 },
 		/// Collected fees were withdrawn from fee collector.
 		CollectedFeesWithdrawn { token: H160, to: H160, amount: U256 },
+		/// ERC20 fee payment failed, fell back to native token.
+		FeePaymentFallbackToNative { user: H160, token: H160, reason: FallbackReason },
 	}
 
 	#[pallet::error]

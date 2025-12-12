@@ -210,7 +210,7 @@ where
 	///
 	/// 1. Converts native fee to token amount using oracle
 	/// 2. Executes ERC20 transfer to fee collector
-	/// 3. Falls back to native token on any failure
+	/// 3. Falls back to native token on any failure (with event emission)
 	fn withdraw_erc20_fee(
 		who: &H160,
 		native_fee: U256,
@@ -226,7 +226,7 @@ where
 					"ERC20 fee payment failed: token {:?} not registered, falling back to native",
 					token
 				);
-				return Self::withdraw_native_fee(who, native_fee);
+				return Self::fallback_to_native(who, native_fee, token, crate::FallbackReason::TokenNotRegistered);
 			},
 		};
 
@@ -237,7 +237,7 @@ where
 				"ERC20 fee payment failed: token {:?} is disabled, falling back to native",
 				token
 			);
-			return Self::withdraw_native_fee(who, native_fee);
+			return Self::fallback_to_native(who, native_fee, token, crate::FallbackReason::TokenDisabled);
 		}
 
 		// Convert native fee to token amount
@@ -250,7 +250,7 @@ where
 					"ERC20 fee payment failed: price conversion error {:?}, falling back to native",
 					e
 				);
-				return Self::withdraw_native_fee(who, native_fee);
+				return Self::fallback_to_native(who, native_fee, token, crate::FallbackReason::PriceConversionFailed);
 			},
 		};
 
@@ -262,7 +262,7 @@ where
 				"ERC20 fee payment failed: transfer error {:?} for user {:?}, amount {:?}, falling back to native",
 				e, who, token_amount
 			);
-			return Self::withdraw_native_fee(who, native_fee);
+			return Self::fallback_to_native(who, native_fee, token, crate::FallbackReason::TransferFailed);
 		}
 
 		log::info!(
@@ -419,5 +419,22 @@ where
 
 		// Return tip info for pay_priority_fee
 		LiquidityInfo::ERC20Tip { token, tip_amount: tip_token_amount }
+	}
+
+	/// Fall back to native token payment and emit fallback event.
+	fn fallback_to_native(
+		who: &H160,
+		fee: U256,
+		token: H160,
+		reason: crate::FallbackReason,
+	) -> Result<LiquidityInfo<T, C>, Error<T>> {
+		// Emit fallback event so users/monitoring can track these occurrences
+		Pallet::<T>::deposit_event(crate::Event::FeePaymentFallbackToNative {
+			user: *who,
+			token,
+			reason,
+		});
+
+		Self::withdraw_native_fee(who, fee)
 	}
 }
