@@ -141,6 +141,8 @@ pub mod pallet {
 		TokenDisabled,
 		/// Native token oracle is not set (ERC20 fee payment disabled).
 		NativeOracleNotSet,
+		/// AccountId could not be converted to H160 (invalid format).
+		InvalidAccountFormat,
 	}
 
 	#[pallet::call]
@@ -228,7 +230,7 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::set_user_fee_token())]
 		pub fn set_user_fee_token(origin: OriginFor<T>, token: Option<H160>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let user_address = Self::account_to_h160(&who);
+			let user_address = Self::account_to_h160(&who)?;
 
 			if let Some(t) = token {
 				let config = AcceptedFeeTokens::<T>::get(t).ok_or(Error::<T>::TokenNotAccepted)?;
@@ -311,17 +313,22 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		/// Convert AccountId to H160 address using the runtime's AddressMapping.
-		/// This uses the reverse of the AddressMapping to get the H160 from AccountId.
-		/// For IdentityAddressMapping, AccountId is already H160-compatible.
-		pub fn account_to_h160(account: &T::AccountId) -> H160 {
-			// Use parity_scale_codec to get bytes from AccountId
+		/// Convert AccountId to H160 address.
+		///
+		/// For Bifrost (AccountId20), AccountId is already H160-compatible (20 bytes).
+		/// Returns an error if the AccountId encoding is less than 20 bytes.
+		pub fn account_to_h160(account: &T::AccountId) -> Result<H160, Error<T>> {
 			use parity_scale_codec::Encode;
 			let account_bytes = account.encode();
 			if account_bytes.len() >= 20 {
-				H160::from_slice(&account_bytes[0..20])
+				Ok(H160::from_slice(&account_bytes[0..20]))
 			} else {
-				H160::zero()
+				log::error!(
+					target: "evm-fee-token",
+					"account_to_h160: AccountId encoding too short ({} bytes, expected >= 20)",
+					account_bytes.len()
+				);
+				Err(Error::<T>::InvalidAccountFormat)
 			}
 		}
 
