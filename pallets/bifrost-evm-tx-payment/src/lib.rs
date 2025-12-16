@@ -68,6 +68,12 @@ pub mod pallet {
 		#[pallet::constant]
 		type FeeCollectorAddress: Get<H160>;
 
+		/// Cooldown period (in blocks) between fee token preference changes.
+		/// Users must wait this many blocks before changing their fee token again.
+		/// Set to 0 to disable rate limiting.
+		#[pallet::constant]
+		type FeeTokenUpdateCooldown: Get<BlockNumberFor<Self>>;
+
 		/// Weight information for extrinsics.
 		type WeightInfo: WeightInfo;
 	}
@@ -97,6 +103,13 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn native_oracle_decimals)]
 	pub type NativeOracleDecimals<T: Config> = StorageValue<_, u8, ValueQuery>;
+
+	/// Last block number when user updated their fee token preference.
+	/// Used for rate limiting fee token changes.
+	#[pallet::storage]
+	#[pallet::getter(fn last_fee_token_update)]
+	pub type LastFeeTokenUpdate<T: Config> =
+		StorageMap<_, Blake2_128Concat, H160, BlockNumberFor<T>, OptionQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -145,6 +158,8 @@ pub mod pallet {
 		NativeOracleNotSet,
 		/// AccountId could not be converted to H160 (invalid format).
 		InvalidAccountFormat,
+		/// Rate limited: must wait before changing fee token again.
+		RateLimited,
 	}
 
 	#[pallet::call]

@@ -1110,12 +1110,17 @@ parameter_types! {
 	/// Derived from PalletId to ensure it's outside the precompile range (0x0800-0x0FFF).
 	/// AccountId (AccountId20) directly converts to H160.
 	pub FeeCollectorAddress: H160 = EVMTxPaymentPalletId::get().into_account_truncating();
+	/// Cooldown period (in blocks) between fee token preference changes.
+	/// 100 blocks ≈ 5 minutes (3 second block time).
+	/// Set to 0 to disable rate limiting.
+	pub const FeeTokenUpdateCooldown: BlockNumber = 100;
 }
 
-/// EVM Fee Token pallet configuration
+/// Bifrost Transaction Payment pallet configuration
 impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type AdminOrigin = EnsureRoot<AccountId>;
 	type FeeCollectorAddress = FeeCollectorAddress;
+	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 
