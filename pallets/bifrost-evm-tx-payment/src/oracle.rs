@@ -4,8 +4,10 @@
 //! `latestRoundData()` interface.
 
 use crate::types::OraclePriceData;
+use frame_support::traits::Time;
 use pallet_evm::{ExitReason, Runner};
 use sp_core::{H160, U256};
+use sp_runtime::traits::UniqueSaturatedInto;
 
 /// Chainlink AggregatorV3 function selectors.
 mod selectors {
@@ -13,7 +15,84 @@ mod selectors {
 	pub const LATEST_ROUND_DATA: [u8; 4] = [0xfe, 0xaf, 0x96, 0x8c];
 }
 
-/// Get price from Chainlink-style oracle.
+/// Error types for oracle operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OracleError {
+	/// Oracle call failed (EVM execution error).
+	CallFailed,
+	/// Invalid return data from oracle.
+	InvalidData,
+	/// Price is zero or negative.
+	InvalidPrice,
+	/// Price data is stale (updated_at too old).
+	StalePrice,
+}
+
+/// Get price from Chainlink-style oracle with staleness check.
+///
+/// Calls `latestRoundData()` on the oracle contract and validates the response,
+/// including checking that the price data is not stale.
+///
+/// # Arguments
+/// * `oracle_address` - Address of the oracle contract
+/// * `max_staleness_seconds` - Maximum allowed age of price data in seconds (0 to disable)
+///
+/// # Returns
+/// * `Ok(U256)` - Price as U256 (with oracle decimals)
+/// * `Err(OracleError)` - If oracle call fails, returns invalid data, or price is stale
+pub fn get_oracle_price_with_staleness<T: crate::Config>(
+	oracle_address: H160,
+	max_staleness_seconds: u64,
+) -> Result<U256, OracleError> {
+	let price_data = call_latest_round_data::<T>(oracle_address)?;
+
+	// Validate price data - must be positive
+	if price_data.answer <= 0 {
+		log::warn!(
+			target: "bifrost-tx-payment",
+			"Oracle price invalid: answer={} (must be positive)",
+			price_data.answer
+		);
+		return Err(OracleError::InvalidPrice);
+	}
+
+	// Check staleness if enabled (max_staleness_seconds > 0)
+	if max_staleness_seconds > 0 {
+		// Get current timestamp from pallet-evm's Timestamp (in milliseconds)
+		// Convert to seconds for comparison with oracle's updated_at
+		let now_ms: u128 =
+			<T as pallet_evm::Config>::Timestamp::now().unique_saturated_into();
+		let current_timestamp = (now_ms / 1000) as u64;
+
+		if price_data.updated_at == 0 {
+			log::warn!(
+				target: "bifrost-tx-payment",
+				"Oracle price has zero updated_at timestamp"
+			);
+			return Err(OracleError::StalePrice);
+		}
+
+		let age = current_timestamp.saturating_sub(price_data.updated_at);
+		if age > max_staleness_seconds {
+			log::warn!(
+				target: "bifrost-tx-payment",
+				"Oracle price stale: updated_at={}, current={}, age={}s, max_staleness={}s",
+				price_data.updated_at, current_timestamp, age, max_staleness_seconds
+			);
+			return Err(OracleError::StalePrice);
+		}
+
+		log::debug!(
+			target: "bifrost-tx-payment",
+			"Oracle price freshness OK: age={}s, max_staleness={}s",
+			age, max_staleness_seconds
+		);
+	}
+
+	Ok(price_data.price_u256())
+}
+
+/// Get price from Chainlink-style oracle (legacy, no staleness check).
 ///
 /// Calls `latestRoundData()` on the oracle contract and parses the response.
 ///
@@ -24,20 +103,15 @@ mod selectors {
 /// * `Ok(U256)` - Price as U256 (with oracle decimals)
 /// * `Err(())` - If oracle call fails or returns invalid data
 pub fn get_oracle_price<T: crate::Config>(oracle_address: H160) -> Result<U256, ()> {
-	let price_data = call_latest_round_data::<T>(oracle_address)?;
-
-	// Validate price data
-	if price_data.answer <= 0 {
-		return Err(());
-	}
-
-	Ok(price_data.price_u256())
+	get_oracle_price_with_staleness::<T>(oracle_address, 0).map_err(|_| ())
 }
 
 /// Call `latestRoundData()` on oracle contract.
 ///
 /// Returns parsed OraclePriceData struct.
-fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<OraclePriceData, ()> {
+fn call_latest_round_data<T: crate::Config>(
+	oracle_address: H160,
+) -> Result<OraclePriceData, OracleError> {
 	// Prepare calldata: just the function selector
 	let calldata = selectors::LATEST_ROUND_DATA.to_vec();
 
@@ -64,7 +138,7 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 				target: "bifrost-tx-payment",
 				"Oracle call failed: Runner::call returned error"
 			);
-			return Err(());
+			return Err(OracleError::CallFailed);
 		},
 		Ok(r) => {
 			log::debug!(
@@ -85,7 +159,7 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 				"Oracle call reverted: {:?}",
 				reason
 			);
-			return Err(());
+			return Err(OracleError::CallFailed);
 		},
 	}
 
@@ -99,10 +173,11 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 			"Oracle call failed: return data too short, expected 160 bytes, got {}",
 			return_data.len()
 		);
-		return Err(());
+		return Err(OracleError::InvalidData);
 	}
 
-	let price_data = parse_latest_round_data(&return_data)?;
+	let price_data =
+		parse_latest_round_data(&return_data).map_err(|_| OracleError::InvalidData)?;
 
 	log::debug!(
 		target: "bifrost-tx-payment",

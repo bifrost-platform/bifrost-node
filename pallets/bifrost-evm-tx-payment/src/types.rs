@@ -21,6 +21,12 @@ pub struct FeeTokenConfig {
 	/// Oracle price decimals (e.g., 8 for Chainlink standard).
 	/// Used in price conversion calculation.
 	pub oracle_decimals: u8,
+
+	/// Maximum allowed staleness for oracle price data in seconds.
+	/// If the oracle's `updated_at` timestamp is older than `now - max_staleness_seconds`,
+	/// the price is considered stale and will be rejected.
+	/// Set to 0 to disable staleness check (not recommended for production).
+	pub max_staleness_seconds: u64,
 }
 
 impl Default for FeeTokenConfig {
@@ -29,7 +35,8 @@ impl Default for FeeTokenConfig {
 			enabled: true,
 			oracle_address: H160::zero(),
 			decimals: 18,
-			oracle_decimals: 8, // Chainlink standard
+			oracle_decimals: 8,          // Chainlink standard
+			max_staleness_seconds: 3600, // 1 hour default
 		}
 	}
 }
@@ -69,4 +76,6 @@ pub enum FallbackReason {
 	PriceConversionFailed,
 	/// ERC20 transfer failed (e.g., insufficient balance).
 	TransferFailed,
+	/// Oracle price data is stale (updated_at too old).
+	OraclePriceStale,
 }
