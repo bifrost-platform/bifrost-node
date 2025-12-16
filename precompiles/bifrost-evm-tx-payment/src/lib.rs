@@ -65,7 +65,7 @@ where
 	/// Rate limited: users must wait `FeeTokenUpdateCooldown` blocks between changes.
 	///
 	/// Selector: `setUserFeeToken(address)`
-	/// Signature: `0x8a5fb3e4`
+	/// Signature: `0x47dee8ee`
 	#[precompile::public("setUserFeeToken(address)")]
 	fn set_user_fee_token(handle: &mut impl PrecompileHandle, token: Address) -> EvmResult {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost() * 2)?; // token config + last update
@@ -108,7 +108,7 @@ where
 	/// Rate limited: users must wait `FeeTokenUpdateCooldown` blocks between changes.
 	///
 	/// Selector: `clearUserFeeToken()`
-	/// Signature: `0x3e6e0a18`
+	/// Signature: `0xc1e1da08`
 	#[precompile::public("clearUserFeeToken()")]
 	fn clear_user_fee_token(handle: &mut impl PrecompileHandle) -> EvmResult {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?; // last update check
@@ -144,7 +144,7 @@ where
 	/// Returns zero address if user uses native token.
 	///
 	/// Selector: `getUserFeeToken(address)`
-	/// Signature: `0x5c7a5562`
+	/// Signature: `0x37e8e5d1`
 	#[precompile::public("getUserFeeToken(address)")]
 	#[precompile::view]
 	fn get_user_fee_token(handle: &mut impl PrecompileHandle, user: Address) -> EvmResult<Address> {
@@ -159,7 +159,7 @@ where
 	/// Estimate the fee amount in a specific token.
 	///
 	/// Selector: `estimateFeeInToken(address,uint256)`
-	/// Signature: `0x7e7c0a5e`
+	/// Signature: `0x6da6a16e`
 	#[precompile::public("estimateFeeInToken(address,uint256)")]
 	#[precompile::view]
 	fn estimate_fee_in_token(
@@ -188,7 +188,7 @@ where
 	/// Check if a token is accepted for fee payment.
 	///
 	/// Selector: `isAcceptedToken(address)`
-	/// Signature: `0x5186d86f`
+	/// Signature: `0x3b6e750f`
 	#[precompile::public("isAcceptedToken(address)")]
 	#[precompile::view]
 	fn is_accepted_token(handle: &mut impl PrecompileHandle, token: Address) -> EvmResult<bool> {
@@ -203,7 +203,7 @@ where
 	/// Get the configuration for a fee token.
 	///
 	/// Selector: `getTokenConfig(address)`
-	/// Signature: `0xc7e074c3`
+	/// Signature: `0xcb67e3b1`
 	///
 	/// Returns: (enabled, oracle, decimals, oracleDecimals)
 	#[precompile::public("getTokenConfig(address)")]
@@ -230,7 +230,7 @@ where
 	/// Get the current oracle price for a token.
 	///
 	/// Selector: `getTokenPrice(address)`
-	/// Signature: `0xc495f2ea`
+	/// Signature: `0xd02641a0`
 	#[precompile::public("getTokenPrice(address)")]
 	#[precompile::view]
 	fn get_token_price(handle: &mut impl PrecompileHandle, token: Address) -> EvmResult<U256> {
@@ -253,7 +253,7 @@ where
 	/// Get the native token fee for a given gas amount.
 	///
 	/// Selector: `getNativeFee(uint256)`
-	/// Signature: `0x5a0a6e2d`
+	/// Signature: `0x06465844`
 	#[precompile::public("getNativeFee(uint256)")]
 	#[precompile::view]
 	fn get_native_fee(handle: &mut impl PrecompileHandle, gas_amount: U256) -> EvmResult<U256> {

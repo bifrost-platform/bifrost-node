@@ -2,6 +2,7 @@
 macro_rules! impl_common_runtime_apis {
 	{$($custom:tt)*} => {
 		use ethereum::AuthorizationList;
+		use pallet_evm::FeelessCallFilter;
 
 		impl_runtime_apis! {
 			$($custom)*
@@ -509,6 +510,13 @@ macro_rules! impl_common_runtime_apis {
 					Some(pallet_base_fee::Elasticity::<Runtime>::get())
 				}
 				fn gas_limit_multiplier_support() {}
+				fn is_zero_balance_callable(caller: H160, target: Option<H160>, input: Vec<u8>) -> bool {
+					<Runtime as pallet_evm::Config>::FeelessCallFilter::is_zero_balance_callable(
+						caller,
+						target,
+						&input,
+					)
+				}
 				fn pending_block(
 					xts: Vec<<Block as BlockT>::Extrinsic>,
 				) -> (Option<pallet_ethereum::Block>, Option<Vec<TransactionStatus>>) {
