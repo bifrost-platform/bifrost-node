@@ -1,4 +1,4 @@
-//! EVM Fee Token Precompile
+//! Bifrost Transaction Payment Precompile
 //!
 //! This precompile provides a Solidity-accessible interface for:
 //! - Setting user's preferred fee token
@@ -10,7 +10,7 @@
 //!
 //! ## Solidity Interface
 //! ```solidity
-//! interface IEVMFeeToken {
+//! interface IBifrostTransactionPayment {
 //!     function setUserFeeToken(address token) external;
 //!     function clearUserFeeToken() external;
 //!     function getUserFeeToken(address user) external view returns (address);
@@ -36,14 +36,14 @@ use sp_core::{H160, U256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::marker::PhantomData;
 
-/// The precompile for EVM fee token management.
+/// The precompile for Bifrost transaction payment management.
 ///
 /// Provides functions for users to manage their fee token preferences
 /// and query fee-related information.
-pub struct EVMFeeTokenPrecompile<Runtime>(PhantomData<Runtime>);
+pub struct BifrostTransactionPaymentPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
-impl<Runtime> EVMFeeTokenPrecompile<Runtime>
+impl<Runtime> BifrostTransactionPaymentPrecompile<Runtime>
 where
 	Runtime: pallet_bifrost_evm_tx_payment::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
