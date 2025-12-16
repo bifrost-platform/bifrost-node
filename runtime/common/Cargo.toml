@@ -21,6 +21,12 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 pallet-bfc-utility = { workspace = true }
 
+# Frontier
+pallet-evm = { workspace = true }
+
+# Bifrost
+pallet-bifrost-evm-tx-payment = { path = "../../pallets/bifrost-evm-tx-payment", default-features = false }
+
 [features]
 default = ["std"]
 std = [
@@ -33,5 +39,7 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"pallet-bfc-utility/std",
+	"pallet-evm/std",
+	"pallet-bifrost-evm-tx-payment/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
