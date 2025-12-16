@@ -160,6 +160,8 @@ pub mod pallet {
 		InvalidAccountFormat,
 		/// Rate limited: must wait before changing fee token again.
 		RateLimited,
+		/// Oracle price data is stale (updated_at too old).
+		OraclePriceStale,
 	}
 
 	#[pallet::call]
@@ -372,6 +374,7 @@ pub mod pallet {
 		/// Convert native fee amount to token amount.
 		///
 		/// Uses BFC/USD and Token/USD oracles to calculate the conversion.
+		/// Includes staleness check for the token's oracle price.
 		///
 		/// Formula (with oracle decimals):
 		/// ```text
@@ -380,22 +383,26 @@ pub mod pallet {
 		/// ```
 		///
 		/// Returns Err(NativeOracleNotSet) if BFC/USD oracle is not configured.
+		/// Returns Err(OraclePriceStale) if the token's oracle price is stale.
 		pub fn convert_native_to_token(native_fee: U256, token: H160) -> Result<U256, Error<T>> {
 			let config = AcceptedFeeTokens::<T>::get(token).ok_or(Error::<T>::TokenNotAccepted)?;
 			ensure!(config.enabled, Error::<T>::TokenDisabled);
 
-			// Get BFC/USD price (required for conversion)
+			// Get BFC/USD price (required for conversion) - no staleness check for native oracle
 			let bfc_usd_price = Self::get_bfc_usd_price()?;
 			let native_oracle_decimals = NativeOracleDecimals::<T>::get();
 
-			// Get Token/USD price
-			let token_usd_price = Self::get_oracle_price(config.oracle_address)?;
+			// Get Token/USD price with staleness check
+			let token_usd_price = Self::get_oracle_price_with_staleness(
+				config.oracle_address,
+				config.max_staleness_seconds,
+			)?;
 			let token_oracle_decimals = config.oracle_decimals;
 
 			log::debug!(
 				target: "bifrost-tx-payment",
-				"Price conversion: native_fee={}, bfc_usd={} (dec={}), token_usd={} (dec={}), token_decimals={}",
-				native_fee, bfc_usd_price, native_oracle_decimals, token_usd_price, token_oracle_decimals, config.decimals
+				"Price conversion: native_fee={}, bfc_usd={} (dec={}), token_usd={} (dec={}), token_decimals={}, max_staleness={}s",
+				native_fee, bfc_usd_price, native_oracle_decimals, token_usd_price, token_oracle_decimals, config.decimals, config.max_staleness_seconds
 			);
 
 			// Conversion formula:
@@ -433,10 +440,12 @@ pub mod pallet {
 			let oracle_address =
 				NativeTokenOracle::<T>::get().ok_or(Error::<T>::NativeOracleNotSet)?;
 
+			// Native oracle uses legacy function (no staleness check) for simplicity
+			// If staleness check is needed for native oracle, add NativeOracleStaleness config
 			Self::get_oracle_price(oracle_address)
 		}
 
-		/// Get price from a Chainlink-style oracle (decimal 8).
+		/// Get price from a Chainlink-style oracle (no staleness check).
 		fn get_oracle_price(oracle_address: H160) -> Result<U256, Error<T>> {
 			log::debug!(
 				target: "bifrost-tx-payment",
@@ -458,6 +467,48 @@ pub mod pallet {
 						target: "bifrost-tx-payment",
 						"Oracle call failed for oracle {:?}",
 						oracle_address
+					);
+					Err(Error::<T>::OraclePriceFailed)
+				},
+			}
+		}
+
+		/// Get price from a Chainlink-style oracle with staleness check.
+		fn get_oracle_price_with_staleness(
+			oracle_address: H160,
+			max_staleness_seconds: u64,
+		) -> Result<U256, Error<T>> {
+			log::debug!(
+				target: "bifrost-tx-payment",
+				"Fetching price from oracle {:?} with max_staleness={}s",
+				oracle_address, max_staleness_seconds
+			);
+
+			match crate::oracle::get_oracle_price_with_staleness::<T>(
+				oracle_address,
+				max_staleness_seconds,
+			) {
+				Ok(price) => {
+					log::debug!(
+						target: "bifrost-tx-payment",
+						"Oracle price fetched: {}",
+						price
+					);
+					Ok(price)
+				},
+				Err(crate::oracle::OracleError::StalePrice) => {
+					log::error!(
+						target: "bifrost-tx-payment",
+						"Oracle price stale for oracle {:?}",
+						oracle_address
+					);
+					Err(Error::<T>::OraclePriceStale)
+				},
+				Err(e) => {
+					log::error!(
+						target: "bifrost-tx-payment",
+						"Oracle call failed for oracle {:?}: {:?}",
+						oracle_address, e
 					);
 					Err(Error::<T>::OraclePriceFailed)
 				},
