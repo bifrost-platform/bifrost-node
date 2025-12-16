@@ -13,7 +13,7 @@
 //! ## Architecture
 //!
 //! ```text
-//! [User EVM Tx] → [OnChargeEVMTransaction] → [ERC20FeeAdapter]
+//! [User EVM Tx] → [OnChargeEVMTransaction] → [BifrostFeeAdapter]
 //!                                                    ↓
 //!                                           Check fee token preference
 //!                                                    ↓
@@ -35,7 +35,7 @@ pub mod oracle;
 pub mod types;
 pub mod weights;
 
-pub use adapter::ERC20FeeAdapter;
+pub use adapter::BifrostFeeAdapter;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;

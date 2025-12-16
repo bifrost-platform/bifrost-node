@@ -1,6 +1,6 @@
 //! Custom OnChargeEVMTransaction implementation for ERC20 fee payment.
 //!
-//! This module provides `ERC20FeeAdapter` which implements the `OnChargeEVMTransaction`
+//! This module provides `BifrostFeeAdapter` which implements the `OnChargeEVMTransaction`
 //! trait from pallet-evm, enabling users to pay gas fees in ERC20 tokens.
 
 use crate::{Config, Pallet, UserFeeToken};
@@ -59,9 +59,9 @@ pub enum LiquidityInfo<T: pallet_evm::Config, C: Currency<AccountIdOf<T>>> {
 /// * `T` - Runtime configuration (must implement both `pallet_evm::Config` and `pallet_bifrost_evm_tx_payment::Config`)
 /// * `C` - Currency type for native token operations
 /// * `OU` - OnUnbalanced handler for fee distribution (burn/treasury)
-pub struct ERC20FeeAdapter<T, C, OU>(PhantomData<(T, C, OU)>);
+pub struct BifrostFeeAdapter<T, C, OU>(PhantomData<(T, C, OU)>);
 
-impl<T, C, OU> OnChargeEVMTransaction<T> for ERC20FeeAdapter<T, C, OU>
+impl<T, C, OU> OnChargeEVMTransaction<T> for BifrostFeeAdapter<T, C, OU>
 where
 	T: pallet_evm::Config + Config,
 	C: Currency<AccountIdOf<T>>,
@@ -180,7 +180,7 @@ where
 	}
 }
 
-impl<T, C, OU> ERC20FeeAdapter<T, C, OU>
+impl<T, C, OU> BifrostFeeAdapter<T, C, OU>
 where
 	T: pallet_evm::Config + Config,
 	C: Currency<AccountIdOf<T>>,
