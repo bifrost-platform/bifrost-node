@@ -30,6 +30,8 @@ mod selectors {
 ///
 /// # Note
 /// User is the msg.sender, so no approval is needed.
+/// This uses `call_as_internal_call` to avoid incrementing the user's nonce,
+/// as this transfer is part of the main transaction's fee payment.
 pub fn transfer_from_user<T: crate::Config>(
 	from: H160,
 	token: H160,
@@ -49,14 +51,14 @@ pub fn transfer_from_user<T: crate::Config>(
 		from, to, token, amount
 	);
 
-	// Use call_bypassing_reentrancy to avoid reentrancy protection
-	// User is the msg.sender, transferring their own tokens
-	let result = T::Runner::call_bypassing_reentrancy(
+	// Use call_as_internal_call to execute the transfer without incrementing nonce.
+	// This is an internal call that is part of the fee payment, not a separate transaction.
+	// User is the msg.sender, transferring their own tokens.
+	let result = T::Runner::call_as_internal_call(
 		from,                     // source (msg.sender = user)
 		token,                    // target (ERC20 contract)
 		calldata,                 // input
 		ERC20_TRANSFER_GAS_LIMIT, // gas_limit
-		true,                     // is_transactional = true (persist state changes)
 		T::config(),
 	);
 
@@ -107,13 +109,17 @@ pub fn transfer_from_user<T: crate::Config>(
 
 /// Execute ERC20 `transfer(to, amount)` from fee collector (precompile) to user.
 ///
-/// Used for refunds - transfers tokens from precompile back to user.
+/// Used for refunds and tip payments - transfers tokens from precompile to user/author.
 ///
 /// # Arguments
 /// * `from` - Address to transfer from (precompile address, msg.sender)
 /// * `token` - ERC20 token contract address
-/// * `to` - Address to transfer to (user)
+/// * `to` - Address to transfer to (user or block author)
 /// * `amount` - Amount of tokens to transfer
+///
+/// # Note
+/// This uses `call_as_internal_call` to avoid incrementing the precompile's nonce,
+/// as this transfer is part of the main transaction's fee correction/tip payment.
 pub fn transfer_to_user<T: crate::Config>(
 	from: H160,
 	token: H160,
@@ -133,13 +139,13 @@ pub fn transfer_to_user<T: crate::Config>(
 		from, to, token, amount
 	);
 
-	// Execute from precompile address using bypass to avoid reentrancy
-	let result = match T::Runner::call_bypassing_reentrancy(
+	// Use call_as_internal_call to execute the transfer without incrementing nonce.
+	// This is an internal call that is part of the fee refund/tip, not a separate transaction.
+	let result = match T::Runner::call_as_internal_call(
 		from,                     // source (precompile address)
 		token,                    // target (ERC20 contract)
 		calldata,                 // input
 		ERC20_TRANSFER_GAS_LIMIT, // gas_limit
-		true,                     // is_transactional = true (persist state changes)
 		T::config(),
 	) {
 		Ok(r) => r,
