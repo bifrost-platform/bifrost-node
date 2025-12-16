@@ -1019,6 +1019,7 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
 }
 
 parameter_types! {
