@@ -1257,7 +1257,7 @@ mod runtime {
 	pub type Blaze = pallet_blaze;
 
 	#[runtime::pallet_index(63)]
-	pub type EVMFeeToken = pallet_bifrost_evm_tx_payment;
+	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

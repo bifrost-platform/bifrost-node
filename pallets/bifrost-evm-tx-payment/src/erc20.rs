@@ -44,7 +44,7 @@ pub fn transfer_from_user<T: crate::Config>(
 	let calldata = encode_transfer(to, amount);
 
 	log::debug!(
-		target: "evm-fee-token",
+		target: "bifrost-tx-payment",
 		"transfer_from_user: from={:?}, to={:?}, token={:?}, amount={}",
 		from, to, token, amount
 	);
@@ -63,7 +63,7 @@ pub fn transfer_from_user<T: crate::Config>(
 	let result = match result {
 		Ok(r) => {
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"transfer_from_user: Runner::call succeeded, exit_reason={:?}, return_data={:?}",
 				r.exit_reason, r.value
 			);
@@ -71,7 +71,7 @@ pub fn transfer_from_user<T: crate::Config>(
 		},
 		Err(e) => {
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"transfer_from_user: Runner::call failed ({:?})",
 				e.error.into()
 			);
@@ -85,18 +85,18 @@ pub fn transfer_from_user<T: crate::Config>(
 			// Check return value - ERC20 returns true on success
 			if !check_bool_return(&result.value) {
 				log::warn!(
-					target: "evm-fee-token",
+					target: "bifrost-tx-payment",
 					"transfer_from_user: ERC20 returned false or invalid data: {:?}",
 					result.value
 				);
 				return Err(());
 			}
-			log::debug!(target: "evm-fee-token", "transfer_from_user: SUCCESS");
+			log::debug!(target: "bifrost-tx-payment", "transfer_from_user: SUCCESS");
 			Ok(())
 		},
 		ref reason => {
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"transfer_from_user: EVM execution failed with reason: {:?}",
 				reason
 			);
@@ -128,7 +128,7 @@ pub fn transfer_to_user<T: crate::Config>(
 	let calldata = encode_transfer(to, amount);
 
 	log::debug!(
-		target: "evm-fee-token",
+		target: "bifrost-tx-payment",
 		"transfer_to_user: from={:?}, to={:?}, token={:?}, amount={}",
 		from, to, token, amount
 	);
@@ -145,7 +145,7 @@ pub fn transfer_to_user<T: crate::Config>(
 		Ok(r) => r,
 		Err(e) => {
 			log::error!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"transfer_to_user: Runner::call failed ({:?})",
 				e.error.into()
 			);
@@ -157,18 +157,18 @@ pub fn transfer_to_user<T: crate::Config>(
 		ExitReason::Succeed(_) => {
 			if !check_bool_return(&result.value) {
 				log::warn!(
-					target: "evm-fee-token",
+					target: "bifrost-tx-payment",
 					"transfer_to_user: ERC20 returned false or invalid data: {:?}",
 					result.value
 				);
 				return Err(());
 			}
-			log::debug!(target: "evm-fee-token", "transfer_to_user: SUCCESS");
+			log::debug!(target: "bifrost-tx-payment", "transfer_to_user: SUCCESS");
 			Ok(())
 		},
 		ref reason => {
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"transfer_to_user: EVM execution failed with reason: {:?}",
 				reason
 			);
