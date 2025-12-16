@@ -28,12 +28,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
-use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
-use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, Pallet, UserFeeToken};
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	traits::Get,
+};
+use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, LastFeeTokenUpdate, Pallet, UserFeeToken};
 use pallet_evm::FeeCalculator;
 use precompile_utils::prelude::*;
 use sp_core::{H160, U256};
-use sp_runtime::traits::Dispatchable;
+use sp_runtime::{traits::Dispatchable, Saturating};
 use sp_std::marker::PhantomData;
 
 /// The precompile for Bifrost transaction payment management.
@@ -59,15 +62,20 @@ where
 	/// The user must have approved the treasury address to spend their tokens
 	/// before setting a fee token.
 	///
+	/// Rate limited: users must wait `FeeTokenUpdateCooldown` blocks between changes.
+	///
 	/// Selector: `setUserFeeToken(address)`
 	/// Signature: `0x8a5fb3e4`
 	#[precompile::public("setUserFeeToken(address)")]
 	fn set_user_fee_token(handle: &mut impl PrecompileHandle, token: Address) -> EvmResult {
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost())?;
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost() * 2)?; // token config + last update
+		handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost() * 2)?; // user token + last update
 
 		let caller = handle.context().caller;
 		let token_h160: H160 = token.into();
+
+		// Rate limit check
+		Self::check_rate_limit(caller)?;
 
 		// Check if token is accepted
 		let config = AcceptedFeeTokens::<Runtime>::get(token_h160)
@@ -79,6 +87,10 @@ where
 
 		// Store user preference
 		UserFeeToken::<Runtime>::insert(caller, token_h160);
+
+		// Update last change timestamp
+		let current_block = frame_system::Pallet::<Runtime>::block_number();
+		LastFeeTokenUpdate::<Runtime>::insert(caller, current_block);
 
 		// Emit log event
 		log1(
@@ -93,15 +105,25 @@ where
 
 	/// Clear the caller's fee token preference (use native token).
 	///
+	/// Rate limited: users must wait `FeeTokenUpdateCooldown` blocks between changes.
+	///
 	/// Selector: `clearUserFeeToken()`
 	/// Signature: `0x3e6e0a18`
 	#[precompile::public("clearUserFeeToken()")]
 	fn clear_user_fee_token(handle: &mut impl PrecompileHandle) -> EvmResult {
-		handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost())?;
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?; // last update check
+		handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost() * 2)?; // user token + last update
 
 		let caller = handle.context().caller;
 
+		// Rate limit check
+		Self::check_rate_limit(caller)?;
+
 		UserFeeToken::<Runtime>::remove(caller);
+
+		// Update last change timestamp
+		let current_block = frame_system::Pallet::<Runtime>::block_number();
+		LastFeeTokenUpdate::<Runtime>::insert(caller, current_block);
 
 		log1(
 			handle.context().address,
@@ -197,7 +219,12 @@ where
 		let config =
 			AcceptedFeeTokens::<Runtime>::get(token_h160).ok_or(revert("Token not found"))?;
 
-		Ok((config.enabled, Address(config.oracle_address), config.decimals, config.oracle_decimals))
+		Ok((
+			config.enabled,
+			Address(config.oracle_address),
+			config.decimals,
+			config.oracle_decimals,
+		))
 	}
 
 	/// Get the current oracle price for a token.
@@ -215,9 +242,10 @@ where
 		let config =
 			AcceptedFeeTokens::<Runtime>::get(token_h160).ok_or(revert("Token not found"))?;
 
-		let price =
-			pallet_bifrost_evm_tx_payment::oracle::get_oracle_price::<Runtime>(config.oracle_address)
-				.map_err(|_| revert("Failed to get oracle price"))?;
+		let price = pallet_bifrost_evm_tx_payment::oracle::get_oracle_price::<Runtime>(
+			config.oracle_address,
+		)
+		.map_err(|_| revert("Failed to get oracle price"))?;
 
 		Ok(price)
 	}
@@ -237,6 +265,36 @@ where
 			base_fee.checked_mul(gas_amount).ok_or(revert("Fee calculation overflow"))?;
 
 		Ok(native_fee)
+	}
+
+	// ========================================================================
+	// Internal Helpers
+	// ========================================================================
+
+	/// Check if the caller is rate limited from changing their fee token.
+	///
+	/// Returns Ok(()) if not rate limited, Err with revert message otherwise.
+	fn check_rate_limit(caller: H160) -> EvmResult {
+		use sp_runtime::traits::Zero;
+
+		let cooldown =
+			<Runtime as pallet_bifrost_evm_tx_payment::Config>::FeeTokenUpdateCooldown::get();
+
+		// If cooldown is 0, rate limiting is disabled
+		if cooldown.is_zero() {
+			return Ok(());
+		}
+
+		let current_block = frame_system::Pallet::<Runtime>::block_number();
+
+		if let Some(last_update) = LastFeeTokenUpdate::<Runtime>::get(caller) {
+			let earliest_allowed = last_update.saturating_add(cooldown);
+			if current_block < earliest_allowed {
+				return Err(revert("Rate limited: please wait before changing fee token"));
+			}
+		}
+
+		Ok(())
 	}
 }
 
