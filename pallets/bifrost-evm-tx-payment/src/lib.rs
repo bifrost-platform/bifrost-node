@@ -326,7 +326,7 @@ pub mod pallet {
 				Ok(H160::from_slice(&account_bytes[0..20]))
 			} else {
 				log::error!(
-					target: "evm-fee-token",
+					target: "bifrost-tx-payment",
 					"account_to_h160: AccountId encoding too short ({} bytes, expected >= 20)",
 					account_bytes.len()
 				);
@@ -378,7 +378,7 @@ pub mod pallet {
 			let token_oracle_decimals = config.oracle_decimals;
 
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Price conversion: native_fee={}, bfc_usd={} (dec={}), token_usd={} (dec={}), token_decimals={}",
 				native_fee, bfc_usd_price, native_oracle_decimals, token_usd_price, token_oracle_decimals, config.decimals
 			);
@@ -405,7 +405,7 @@ pub mod pallet {
 				.ok_or(Error::<T>::PriceOverflow)?;
 
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Converted token_amount: {}",
 				token_amount
 			);
@@ -424,7 +424,7 @@ pub mod pallet {
 		/// Get price from a Chainlink-style oracle (decimal 8).
 		fn get_oracle_price(oracle_address: H160) -> Result<U256, Error<T>> {
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Fetching price from oracle {:?}",
 				oracle_address
 			);
@@ -432,7 +432,7 @@ pub mod pallet {
 			match crate::oracle::get_oracle_price::<T>(oracle_address) {
 				Ok(price) => {
 					log::debug!(
-						target: "evm-fee-token",
+						target: "bifrost-tx-payment",
 						"Oracle price fetched: {}",
 						price
 					);
@@ -440,7 +440,7 @@ pub mod pallet {
 				},
 				Err(_) => {
 					log::error!(
-						target: "evm-fee-token",
+						target: "bifrost-tx-payment",
 						"Oracle call failed for oracle {:?}",
 						oracle_address
 					);

@@ -42,33 +42,33 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 	let calldata = selectors::LATEST_ROUND_DATA.to_vec();
 
 	log::debug!(
-		target: "evm-fee-token",
+		target: "bifrost-tx-payment",
 		"Oracle call: calling latestRoundData() on {:?}",
 		oracle_address
 	);
 
-	// Execute call via pallet-evm Runner using bypass to avoid reentrancy
-	// This is safe because Oracle calls are read-only (view calls)
-	let result = T::Runner::call_bypassing_reentrancy(
-		H160::zero(),   // source (system call)
+	// Execute call via pallet-evm Runner using view_call to avoid state changes.
+	// view_call wraps execution in a storage transaction that gets rolled back,
+	// ensuring no state changes persist (including nonce increments).
+	let result = T::Runner::view_call(
+		H160::zero(),   // source (context only, no state changes)
 		oracle_address, // target (oracle contract)
 		calldata,       // input (function selector)
 		100_000u64,     // gas_limit (enough for view call)
-		false,          // is_transactional (view call)
 		T::config(),
 	);
 
 	let result = match result {
 		Err(_) => {
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Oracle call failed: Runner::call returned error"
 			);
 			return Err(());
 		},
 		Ok(r) => {
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Oracle call result: exit_reason={:?}, return_data_len={}",
 				r.exit_reason, r.value.len()
 			);
@@ -81,7 +81,7 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 		ExitReason::Succeed(_) => {},
 		ref reason => {
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Oracle call reverted: {:?}",
 				reason
 			);
@@ -95,7 +95,7 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 	let return_data = result.value;
 	if return_data.len() < 160 {
 		log::warn!(
-			target: "evm-fee-token",
+			target: "bifrost-tx-payment",
 			"Oracle call failed: return data too short, expected 160 bytes, got {}",
 			return_data.len()
 		);
@@ -105,7 +105,7 @@ fn call_latest_round_data<T: crate::Config>(oracle_address: H160) -> Result<Orac
 	let price_data = parse_latest_round_data(&return_data)?;
 
 	log::debug!(
-		target: "evm-fee-token",
+		target: "bifrost-tx-payment",
 		"Oracle price data: answer={}, updated_at={}",
 		price_data.answer, price_data.updated_at
 	);

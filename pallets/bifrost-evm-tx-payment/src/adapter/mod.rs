@@ -83,7 +83,7 @@ where
 		// Check if ERC20 fee payment is enabled (native oracle must be set)
 		if !Pallet::<T>::is_erc20_fee_enabled() {
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"ERC20 fee payment disabled (native oracle not set), using native"
 			);
 			return Self::withdraw_native_fee(who, fee);
@@ -93,7 +93,7 @@ where
 		let fee_token = UserFeeToken::<T>::get(who);
 
 		log::debug!(
-			target: "evm-fee-token",
+			target: "bifrost-tx-payment",
 			"withdraw_fee called: who={:?}, fee={:?}, user_fee_token={:?}",
 			who, fee, fee_token
 		);
@@ -101,12 +101,12 @@ where
 		match fee_token {
 			None => {
 				// Use native token (existing behavior)
-				log::debug!(target: "evm-fee-token", "No fee token set, using native");
+				log::debug!(target: "bifrost-tx-payment", "No fee token set, using native");
 				Self::withdraw_native_fee(who, fee)
 			},
 			Some(token) => {
 				// Use ERC20 token
-				log::debug!(target: "evm-fee-token", "Using ERC20 token {:?}", token);
+				log::debug!(target: "bifrost-tx-payment", "Using ERC20 token {:?}", token);
 				Self::withdraw_erc20_fee(who, fee, token)
 			},
 		}
@@ -222,7 +222,7 @@ where
 			None => {
 				// Token not registered, fallback to native
 				log::warn!(
-					target: "evm-fee-token",
+					target: "bifrost-tx-payment",
 					"ERC20 fee payment failed: token {:?} not registered, falling back to native",
 					token
 				);
@@ -233,7 +233,7 @@ where
 		if !config.enabled {
 			// Fallback to native token if token is disabled
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"ERC20 fee payment failed: token {:?} is disabled, falling back to native",
 				token
 			);
@@ -246,7 +246,7 @@ where
 			Err(e) => {
 				// Oracle/conversion failed, fallback to native
 				log::warn!(
-					target: "evm-fee-token",
+					target: "bifrost-tx-payment",
 					"ERC20 fee payment failed: price conversion error {:?}, falling back to native",
 					e
 				);
@@ -258,7 +258,7 @@ where
 		if let Err(e) = Pallet::<T>::execute_fee_transfer(*who, token, token_amount) {
 			// ERC20 transfer failed (insufficient balance), fallback to native
 			log::warn!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"ERC20 fee payment failed: transfer error {:?} for user {:?}, amount {:?}, falling back to native",
 				e, who, token_amount
 			);
@@ -266,7 +266,7 @@ where
 		}
 
 		log::info!(
-			target: "evm-fee-token",
+			target: "bifrost-tx-payment",
 			"ERC20 fee payment success: user {:?}, token {:?}, amount {:?}",
 			who, token, token_amount
 		);
@@ -331,7 +331,7 @@ where
 		native_equivalent: U256,
 	) -> LiquidityInfo<T, C> {
 		log::debug!(
-			target: "evm-fee-token",
+			target: "bifrost-tx-payment",
 			"correct_erc20_fee called: who={:?}, corrected_fee={}, base_fee={}, withdrawn={}, native_equiv={}",
 			who, corrected_fee, base_fee, withdrawn_amount, native_equivalent
 		);
@@ -339,7 +339,7 @@ where
 		// Calculate the ratio of actual fee to initially estimated fee
 		// corrected_fee / native_equivalent gives us the utilization ratio
 		if native_equivalent.is_zero() {
-			log::warn!(target: "evm-fee-token", "native_equivalent is zero, skipping correction");
+			log::warn!(target: "bifrost-tx-payment", "native_equivalent is zero, skipping correction");
 			return LiquidityInfo::None;
 		}
 
@@ -354,7 +354,7 @@ where
 		let refund_amount = withdrawn_amount.saturating_sub(actual_token_amount);
 
 		log::debug!(
-			target: "evm-fee-token",
+			target: "bifrost-tx-payment",
 			"Fee correction: actual_token={}, refund_amount={}",
 			actual_token_amount, refund_amount
 		);
@@ -362,14 +362,14 @@ where
 		// Refund excess tokens to user
 		if !refund_amount.is_zero() {
 			log::debug!(
-				target: "evm-fee-token",
+				target: "bifrost-tx-payment",
 				"Attempting refund: {} tokens to {:?}",
 				refund_amount, who
 			);
 			match Pallet::<T>::refund_token(*who, token, refund_amount) {
 				Ok(()) => {
 					log::info!(
-						target: "evm-fee-token",
+						target: "bifrost-tx-payment",
 						"Refund SUCCESS: {} tokens to {:?}",
 						refund_amount, who
 					);
@@ -382,14 +382,14 @@ where
 				},
 				Err(e) => {
 					log::error!(
-						target: "evm-fee-token",
+						target: "bifrost-tx-payment",
 						"Refund FAILED: {:?} - {} tokens to {:?}",
 						e, refund_amount, who
 					);
 				},
 			}
 		} else {
-			log::debug!(target: "evm-fee-token", "No refund needed (refund_amount is zero)");
+			log::debug!(target: "bifrost-tx-payment", "No refund needed (refund_amount is zero)");
 		}
 
 		// Calculate tip portion based on corrected_fee (not native_equivalent)
@@ -409,7 +409,7 @@ where
 		};
 
 		log::debug!(
-			target: "evm-fee-token",
+			target: "bifrost-tx-payment",
 			"correct_erc20_fee: corrected_fee={}, base_fee={}, actual_token={}, tip_token={}, refund={}",
 			corrected_fee, base_fee, actual_token_amount, tip_token_amount, refund_amount
 		);
