@@ -48,7 +48,7 @@ use parity_scale_codec::{Decode, Encode};
 
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
-use pallet_bifrost_evm_tx_payment::ERC20FeeAdapter;
+use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
@@ -1008,7 +1008,7 @@ impl pallet_evm::Config for Runtime {
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
-	type OnChargeTransaction = ERC20FeeAdapter<Self, Balances, DealWithFees<Runtime>>;
+	type OnChargeTransaction = BifrostFeeAdapter<Self, Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
