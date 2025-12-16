@@ -6,45 +6,55 @@ mod self_contained_call;
 pub mod extensions;
 
 use frame_support::traits::Get;
-use pallet_bifrost_evm_tx_payment::LastFeeTokenUpdate;
+use pallet_bifrost_evm_tx_payment::{LastFeeTokenUpdate, UserFeeToken};
 use sp_core::H160;
 use sp_runtime::traits::{Saturating, Zero};
 use sp_std::marker::PhantomData;
 
 /// Filter for feeless EVM calls.
 ///
-/// Allows certain precompile calls (like setting/clearing fee tokens) to be
-/// executed without paying gas fees. This prevents a chicken-and-egg problem
-/// where users need to pay fees to set up their fee token preference.
+/// **IMPORTANT**: This filter has two different effects depending on where it's used:
 ///
-/// If the caller is rate-limited, the call is NOT feeless (they must pay gas).
-/// This prevents spam attacks where attackers repeatedly call feeless functions
-/// that would revert anyway.
+/// 1. **Pool validation** (`validate_transaction_in_pool`):
+///    - `is_zero_balance_callable`: Skips native balance check for gas fees
+///    - Used for: ERC20 fee users (they pay in ERC20, not native) and fee setup calls
+///
+/// 2. **Runner execution** (`call`/`create`):
+///    - `is_feeless`: Sets `effective_max_fee_per_gas = 0` (truly free call)
+///    - Used for: Only fee setup calls (`setUserFeeToken`, `clearUserFeeToken`)
+///
+/// # Security
+/// - Rate limiting prevents spam on fee token setup calls
+/// - ERC20 fee payment validation happens in `BifrostFeeAdapter::withdraw_fee()`
+/// - DoS is prevented because invalid ERC20 payments will fail during execution
 pub struct BifrostFeelessCalls<T>(PhantomData<T>);
 
 impl<T> pallet_evm::FeelessCallFilter for BifrostFeelessCalls<T>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
 {
-	fn is_feeless(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
-		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
-		const TX_PAYMENT_PRECOMPILE: H160 =
-			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x10]);
-
-		// Function selectors for feeless calls
-		const SET_USER_FEE_TOKEN: [u8; 4] = [0x8a, 0x5f, 0xb3, 0xe4]; // setUserFeeToken(address)
-		const CLEAR_USER_FEE_TOKEN: [u8; 4] = [0x3e, 0x6e, 0x0a, 0x18]; // clearUserFeeToken()
-
-		if let Some(target) = target {
-			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
-				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
-				if selector == SET_USER_FEE_TOKEN || selector == CLEAR_USER_FEE_TOKEN {
-					// Check rate limit - if rate limited, NOT feeless (must pay gas)
-					return !Self::is_rate_limited(caller);
-				}
-			}
+	/// Returns `true` if the call can be submitted with zero native balance.
+	///
+	/// This includes:
+	/// - Users with ERC20 fee token set (they pay in ERC20)
+	/// - Fee token setup calls (truly feeless, rate-limited)
+	fn is_zero_balance_callable(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
+		// Case 1: Check if user has ERC20 fee token set
+		// Skip native balance check - they'll pay in ERC20 via BifrostFeeAdapter
+		if UserFeeToken::<T>::contains_key(caller) {
+			return true;
 		}
-		false
+
+		// Case 2: Fee token setup calls (truly feeless)
+		Self::is_feeless_internal(caller, target, input)
+	}
+
+	/// Returns `true` if the call should have zero gas fee (truly free).
+	///
+	/// Only fee token setup calls are truly feeless. ERC20 fee users
+	/// will pay fees via BifrostFeeAdapter, so they are NOT truly feeless.
+	fn is_feeless(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
+		Self::is_feeless_internal(caller, target, input)
 	}
 }
 
@@ -52,6 +62,36 @@ impl<T> BifrostFeelessCalls<T>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
 {
+	/// Returns `true` if this call should have zero gas fee (feeless).
+	///
+	/// Only the fee token setup calls are feeless:
+	/// - `setUserFeeToken(address)` - to set up ERC20 fee payment
+	/// - `clearUserFeeToken()` - to clear fee preference
+	///
+	/// This is called internally and by the trait implementation.
+	fn is_feeless_internal(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
+		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
+		const TX_PAYMENT_PRECOMPILE: H160 =
+			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x10]);
+
+		// Function selectors for feeless calls (keccak256 of function signature, first 4 bytes)
+		// setUserFeeToken(address) => 0x47dee8ee
+		const SET_USER_FEE_TOKEN: [u8; 4] = [0x47, 0xde, 0xe8, 0xee];
+		// clearUserFeeToken() => 0xc1e1da08
+		const CLEAR_USER_FEE_TOKEN: [u8; 4] = [0xc1, 0xe1, 0xda, 0x08];
+
+		if let Some(target) = target {
+			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
+				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
+				if selector == SET_USER_FEE_TOKEN || selector == CLEAR_USER_FEE_TOKEN {
+					// Check rate limit - if rate limited, NOT feeless
+					return !Self::is_rate_limited(caller);
+				}
+			}
+		}
+		false
+	}
+
 	/// Check if the caller is currently rate-limited.
 	fn is_rate_limited(caller: H160) -> bool {
 		let cooldown = T::FeeTokenUpdateCooldown::get();
