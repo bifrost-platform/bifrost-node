@@ -1023,6 +1023,8 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
+	// TODO: Enable BifrostFeelessCalls<Runtime> when pallet_bifrost_evm_tx_payment is added
+	type FeelessCallFilter = ();
 }
 
 parameter_types! {
