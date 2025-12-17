@@ -14,6 +14,7 @@
 //!     function setUserFeeToken(address token) external;
 //!     function clearUserFeeToken() external;
 //!     function getUserFeeToken(address user) external view returns (address);
+//!     function getUsersFeeToken() external view returns (address[] memory users, address[] memory tokens);
 //!     function estimateFeeInToken(address token, uint256 gasAmount) external view returns (uint256);
 //!     function isAcceptedToken(address token) external view returns (bool);
 //!     function getTokenConfig(address token) external view returns (
@@ -37,7 +38,7 @@ use pallet_evm::FeeCalculator;
 use precompile_utils::prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::{traits::Dispatchable, Saturating};
-use sp_std::marker::PhantomData;
+use sp_std::{marker::PhantomData, vec::Vec};
 
 /// The precompile for Bifrost transaction payment management.
 ///
@@ -154,6 +155,39 @@ where
 		let token = UserFeeToken::<Runtime>::get(user_h160).unwrap_or(H160::zero());
 
 		Ok(Address(token))
+	}
+
+	/// Get all users who have set a fee token preference.
+	///
+	/// Returns two arrays: users and their corresponding tokens.
+	/// Only includes users who have explicitly set a token preference (non-native).
+	///
+	/// WARNING: This function iterates over all storage entries and may be expensive
+	/// with a large number of users. Use with caution.
+	///
+	/// Selector: `getUsersFeeToken()`
+	/// Signature: `0x56ebb34c`
+	#[precompile::public("getUsersFeeToken()")]
+	#[precompile::view]
+	fn get_users_fee_token(
+		handle: &mut impl PrecompileHandle,
+	) -> EvmResult<(Vec<Address>, Vec<Address>)> {
+		// Charge base cost plus per-entry cost
+		// We don't know the count upfront, so charge a reasonable base
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost() * 10)?;
+
+		let mut users: Vec<Address> = Vec::new();
+		let mut tokens: Vec<Address> = Vec::new();
+
+		for (user, token) in UserFeeToken::<Runtime>::iter() {
+			users.push(Address(user));
+			tokens.push(Address(token));
+
+			// Charge additional gas per entry to prevent DoS
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		}
+
+		Ok((users, tokens))
 	}
 
 	/// Estimate the fee amount in a specific token.

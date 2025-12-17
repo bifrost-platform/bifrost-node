@@ -44,7 +44,7 @@ pub use pallet::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
-use frame_support::pallet_prelude::*;
+use frame_support::{pallet_prelude::*, traits::Hooks, weights::Weight};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 
@@ -55,6 +55,23 @@ pub mod pallet {
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+			// Clear previous block's fee payment data at the start of new block.
+			//
+			// Why on_initialize instead of on_finalize?
+			// - RPC queries use historical state at specific block hash
+			// - Block hash state = state AFTER on_finalize
+			// - If we clear in on_finalize, the data is gone when RPC queries that block
+			// - By clearing in on_initialize, the data persists in the previous block's state
+			let _ = PendingFeePayments::<T>::clear(u32::MAX, None);
+			// Reset transaction index counter for this block.
+			CurrentTxIndex::<T>::kill();
+			Weight::zero()
+		}
+	}
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + pallet_evm::Config {
@@ -110,6 +127,32 @@ pub mod pallet {
 	#[pallet::getter(fn last_fee_token_update)]
 	pub type LastFeeTokenUpdate<T: Config> =
 		StorageMap<_, Blake2_128Concat, H160, BlockNumberFor<T>, OptionQuery>;
+
+	/// Counter for tracking current transaction index within a block.
+	/// This is incremented each time `withdraw_fee` is called (for any fee payment type).
+	/// Cleared at the start of each block via `on_initialize`.
+	#[pallet::storage]
+	pub type CurrentTxIndex<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	/// Fee payment information indexed by user address and transaction index.
+	///
+	/// This storage is populated when a transaction pays fees in ERC20 tokens.
+	/// Since `withdraw_fee` is called before the transaction hash is known,
+	/// we index by user address and transaction index within the block.
+	///
+	/// The RPC layer queries this by (from_address, tx_index) to get fee payment info.
+	/// This storage is cleared at the start of each block via `on_initialize`.
+	#[pallet::storage]
+	#[pallet::getter(fn pending_fee_payments)]
+	pub type PendingFeePayments<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		H160, // user address (from)
+		Blake2_128Concat,
+		u32, // transaction index within block
+		FeePaymentInfo,
+		OptionQuery,
+	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -385,6 +428,19 @@ pub mod pallet {
 		/// Returns Err(NativeOracleNotSet) if BFC/USD oracle is not configured.
 		/// Returns Err(OraclePriceStale) if the token's oracle price is stale.
 		pub fn convert_native_to_token(native_fee: U256, token: H160) -> Result<U256, Error<T>> {
+			Self::convert_native_to_token_with_prices(native_fee, token).map(|(amount, _, _)| amount)
+		}
+
+		/// Convert native fee amount to token amount and return oracle prices.
+		///
+		/// Same as `convert_native_to_token` but also returns the oracle prices used
+		/// for the conversion, which can be included in fee payment receipts.
+		///
+		/// Returns: (token_amount, token_price, native_price)
+		pub fn convert_native_to_token_with_prices(
+			native_fee: U256,
+			token: H160,
+		) -> Result<(U256, U256, U256), Error<T>> {
 			let config = AcceptedFeeTokens::<T>::get(token).ok_or(Error::<T>::TokenNotAccepted)?;
 			ensure!(config.enabled, Error::<T>::TokenDisabled);
 
@@ -432,7 +488,7 @@ pub mod pallet {
 				token_amount
 			);
 
-			Ok(token_amount)
+			Ok((token_amount, token_usd_price, bfc_usd_price))
 		}
 
 		/// Get BFC/USD price from the native token oracle.
