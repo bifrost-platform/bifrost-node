@@ -3,7 +3,7 @@
 //! This module provides `BifrostFeeAdapter` which implements the `OnChargeEVMTransaction`
 //! trait from pallet-evm, enabling users to pay gas fees in ERC20 tokens.
 
-use crate::{Config, Pallet, UserFeeToken};
+use crate::{Config, CurrentTxIndex, FeePaymentInfo, Pallet, PendingFeePayments, UserFeeToken};
 use frame_support::traits::{
 	tokens::{
 		currency::Currency,
@@ -39,6 +39,12 @@ pub enum LiquidityInfo<T: pallet_evm::Config, C: Currency<AccountIdOf<T>>> {
 		amount: U256,
 		/// Equivalent amount in native token (for price calculation).
 		native_equivalent: U256,
+		/// Transaction index within the block (for updating storage after correction).
+		tx_index: u32,
+		/// Oracle price of the ERC20 token (Token/USD) at the time of withdrawal.
+		token_price: U256,
+		/// Oracle price of the native token (Native/USD) at the time of withdrawal.
+		native_price: U256,
 	},
 	/// Tip to be paid in ERC20 token (returned from correct_and_deposit_fee).
 	ERC20Tip {
@@ -76,6 +82,12 @@ where
 	///
 	/// This is called before transaction execution to secure the fee payment.
 	fn withdraw_fee(who: &H160, fee: U256) -> Result<Self::LiquidityInfo, Error<T>> {
+		// Get and increment transaction index for this block.
+		// This must be done for every transaction (including zero-fee ones)
+		// to keep the index in sync with pallet-ethereum's Pending storage.
+		let tx_index = CurrentTxIndex::<T>::get();
+		CurrentTxIndex::<T>::put(tx_index.saturating_add(1));
+
 		if fee.is_zero() {
 			return Ok(LiquidityInfo::None);
 		}
@@ -94,8 +106,8 @@ where
 
 		log::debug!(
 			target: "bifrost-tx-payment",
-			"withdraw_fee called: who={:?}, fee={:?}, user_fee_token={:?}",
-			who, fee, fee_token
+			"withdraw_fee called: who={:?}, fee={:?}, user_fee_token={:?}, tx_index={}",
+			who, fee, fee_token, tx_index
 		);
 
 		match fee_token {
@@ -107,7 +119,7 @@ where
 			Some(token) => {
 				// Use ERC20 token
 				log::debug!(target: "bifrost-tx-payment", "Using ERC20 token {:?}", token);
-				Self::withdraw_erc20_fee(who, fee, token)
+				Self::withdraw_erc20_fee(who, fee, token, tx_index)
 			},
 		}
 	}
@@ -128,7 +140,7 @@ where
 				Self::correct_native_fee(who, corrected_fee, base_fee, imbalance)
 			},
 
-			LiquidityInfo::ERC20Withdrawn { token, amount, native_equivalent } => {
+			LiquidityInfo::ERC20Withdrawn { token, amount, native_equivalent, tx_index, token_price, native_price } => {
 				Self::correct_erc20_fee(
 					who,
 					corrected_fee,
@@ -136,6 +148,9 @@ where
 					token,
 					amount,
 					native_equivalent,
+					tx_index,
+					token_price,
+					native_price,
 				)
 			},
 
@@ -215,6 +230,7 @@ where
 		who: &H160,
 		native_fee: U256,
 		token: H160,
+		tx_index: u32,
 	) -> Result<LiquidityInfo<T, C>, Error<T>> {
 		// Check if token is still accepted and enabled
 		let config = match crate::AcceptedFeeTokens::<T>::get(token) {
@@ -240,9 +256,9 @@ where
 			return Self::fallback_to_native(who, native_fee, token, crate::FallbackReason::TokenDisabled);
 		}
 
-		// Convert native fee to token amount
-		let token_amount = match Pallet::<T>::convert_native_to_token(native_fee, token) {
-			Ok(amount) => amount,
+		// Convert native fee to token amount and get oracle prices
+		let (token_amount, token_price, native_price) = match Pallet::<T>::convert_native_to_token_with_prices(native_fee, token) {
+			Ok(result) => result,
 			Err(e) => {
 				// Oracle/conversion failed, fallback to native
 				log::warn!(
@@ -267,8 +283,22 @@ where
 
 		log::info!(
 			target: "bifrost-tx-payment",
-			"ERC20 fee payment success: user {:?}, token {:?}, amount {:?}",
-			who, token, token_amount
+			"ERC20 fee payment success: user {:?}, token {:?}, amount {:?}, tx_index {}",
+			who, token, token_amount, tx_index
+		);
+
+		// Store fee payment info for RPC layer to query
+		// Indexed by (user_address, tx_index) for precise matching in receipts
+		PendingFeePayments::<T>::insert(
+			who,
+			tx_index,
+			FeePaymentInfo {
+				token,
+				amount: token_amount,
+				native_equivalent: native_fee,
+				token_price,
+				native_price,
+			},
 		);
 
 		// Emit event
@@ -283,6 +313,9 @@ where
 			token,
 			amount: token_amount,
 			native_equivalent: native_fee,
+			tx_index,
+			token_price,
+			native_price,
 		})
 	}
 
@@ -329,6 +362,9 @@ where
 		token: H160,
 		withdrawn_amount: U256,
 		native_equivalent: U256,
+		tx_index: u32,
+		token_price: U256,
+		native_price: U256,
 	) -> LiquidityInfo<T, C> {
 		log::debug!(
 			target: "bifrost-tx-payment",
@@ -391,6 +427,20 @@ where
 		} else {
 			log::debug!(target: "bifrost-tx-payment", "No refund needed (refund_amount is zero)");
 		}
+
+		// Update PendingFeePayments with actual amount paid (after refund)
+		// This ensures eth_getTransactionReceipt shows the correct final amount
+		PendingFeePayments::<T>::insert(
+			who,
+			tx_index,
+			FeePaymentInfo {
+				token,
+				amount: actual_token_amount,
+				native_equivalent: corrected_fee, // Use corrected_fee as the actual native equivalent
+				token_price,
+				native_price,
+			},
+		);
 
 		// Calculate tip portion based on corrected_fee (not native_equivalent)
 		// tip_ratio = (corrected_fee - base_fee) / corrected_fee

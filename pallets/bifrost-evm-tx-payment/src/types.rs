@@ -79,3 +79,25 @@ pub enum FallbackReason {
 	/// Oracle price data is stale (updated_at too old).
 	OraclePriceStale,
 }
+
+/// Fee payment information for a transaction.
+///
+/// This is stored per-transaction to allow Ethereum RPC to expose
+/// ERC20 fee payment details in transaction receipts.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq,
+)]
+pub struct FeePaymentInfo {
+	/// The ERC20 token used for fee payment.
+	pub token: H160,
+	/// Amount of ERC20 tokens paid as fee.
+	pub amount: U256,
+	/// Equivalent amount in native token (BFC).
+	pub native_equivalent: U256,
+	/// Oracle price of the ERC20 token (Token/USD) at the time of payment.
+	/// The number of decimals is defined in the token's oracle configuration.
+	pub token_price: U256,
+	/// Oracle price of the native token (Native/USD) at the time of payment.
+	/// The number of decimals is defined in the native oracle configuration.
+	pub native_price: U256,
+}
