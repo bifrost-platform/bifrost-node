@@ -54,6 +54,14 @@ interface IBifrostTxPayment {
     function getUserFeeToken(address user) external view returns (address);
 
     /**
+     * @notice Get all users who have set a fee token preference
+     * @return users Array of user addresses
+     * @return tokens Array of corresponding token addresses
+     * @dev WARNING: This iterates over all storage entries and may be expensive with many users
+     */
+    function getUsersFeeToken() external view returns (address[] memory users, address[] memory tokens);
+
+    /**
      * @notice Estimate the fee amount in a specific token
      * @param token The ERC20 token address
      * @param gasAmount The gas amount to estimate for
