@@ -99,6 +99,7 @@ pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
 /// The `TransactionExtension` to the basic transaction logic.
 pub type TxExtension = (
+	bifrost_common_runtime::extensions::CheckBlockedOrigin<Runtime, RuntimeCall>,
 	frame_system::CheckNonZeroSender<Runtime>,
 	frame_system::CheckSpecVersion<Runtime>,
 	frame_system::CheckTxVersion<Runtime>,
@@ -156,7 +157,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 414,
+	spec_version: 415,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.

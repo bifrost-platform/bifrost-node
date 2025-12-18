@@ -214,23 +214,24 @@ where
 		let delayed_round = now - 1;
 		let relayer_sets = <DelayedRelayerSets<T>>::take(delayed_round);
 		relayer_sets.into_iter().for_each(|r| {
-			Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success");
-			T::SocketQueue::replace_authority(&r.old, &r.new);
-			T::RegistrationPool::replace_authority(&r.old, &r.new);
+			if Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success") {
+				T::SocketQueue::replace_authority(&r.old, &r.new);
+				T::RegistrationPool::replace_authority(&r.old, &r.new);
 
-			// replace member of RelayExecutive (only if it's the old member)
-			let mut members = Members::<T, Instance3>::get();
-			if let Some(location) = members.binary_search(&r.old).ok() {
-				if members.binary_search(&r.new).is_err() {
-					members[location] = r.new.clone();
-					members.sort();
+				// replace member of RelayExecutive (only if it's the old member)
+				let mut members = Members::<T, Instance3>::get();
+				if let Some(location) = members.binary_search(&r.old).ok() {
+					if members.binary_search(&r.new).is_err() {
+						members[location] = r.new.clone();
+						members.sort();
 
-					Members::<T, Instance3>::put(members.clone());
-					T::MembershipChanged::change_members_sorted(&[r.new.clone()], &[r.old.clone()], &members[..]);
+						Members::<T, Instance3>::put(members.clone());
+						T::MembershipChanged::change_members_sorted(&[r.new.clone()], &[r.old.clone()], &members[..]);
 
-					if Prime::<T, Instance3>::get() == Some(r.old) {
-						Prime::<T, Instance3>::put(&r.new);
-						T::MembershipChanged::set_prime(Some(r.new));
+						if Prime::<T, Instance3>::get() == Some(r.old) {
+							Prime::<T, Instance3>::put(&r.new);
+							T::MembershipChanged::set_prime(Some(r.new));
+						}
 					}
 				}
 			}
@@ -277,6 +278,14 @@ impl<T: Config> Pallet<T> {
 	) -> Result<(), DispatchError> {
 		ensure!(!Self::is_relayer(relayer), Error::<T>::RelayerAlreadyJoined);
 		ensure!(!<BondedController<T>>::contains_key(controller), Error::<T>::RelayerAlreadyBonded);
+
+		let round = Round::<T>::get();
+		let relayer_sets = DelayedRelayerSets::<T>::get(round);
+		ensure!(
+			!relayer_sets.into_iter().any(|r| r.new == *relayer),
+			Error::<T>::AlreadyRelayerSetRequested
+		);
+
 		Ok(().into())
 	}
 
@@ -316,6 +325,11 @@ impl<T: Config> Pallet<T> {
 	pub fn add_to_relayer_sets(old: T::AccountId, new: T::AccountId) -> DispatchResult {
 		let round = Round::<T>::get();
 		<DelayedRelayerSets<T>>::try_mutate(round, |relayer_sets| -> DispatchResult {
+			ensure!(
+				!relayer_sets.into_iter().any(|r| r.old == old || r.new == new),
+				Error::<T>::AlreadyRelayerSetRequested
+			);
+
 			Ok(relayer_sets
 				.try_push(DelayedRelayerSet::new(old, new))
 				.map_err(|_| <Error<T>>::TooManyDelayedRelayers)?)
