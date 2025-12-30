@@ -1204,6 +1204,45 @@ where
 		Ok(())
 	}
 
+	#[precompile::public("cancelValidatorCommissionSet()")]
+	#[precompile::public("cancel_validator_commission_set()")]
+	fn cancel_validator_commission_set(handle: &mut impl PrecompileHandle) -> EvmResult {
+		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		let call = StakingCall::<Runtime>::cancel_validator_commission_set {};
+
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
+
+		Ok(())
+	}
+
+	#[precompile::public("setValidatorTier(uint256,uint256,address)")]
+	#[precompile::public("set_validator_tier(uint256,uint256,address)")]
+	fn set_validator_tier(
+		handle: &mut impl PrecompileHandle,
+		more: U256,
+		tier: u32,
+		relayer: Address,
+	) -> EvmResult {
+		let more = Self::u256_to_amount(more).in_field("more")?;
+		let tier = match tier {
+			1 => TierType::Basic,
+			2 => TierType::Full,
+			_ => return Err(RevertReason::read_out_of_bounds("tier").into()),
+		};
+		let relayer = if tier == TierType::Full {
+			Some(Runtime::AddressMapping::into_account_id(relayer.0))
+		} else {
+			None
+		};
+
+		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		let call = StakingCall::<Runtime>::set_validator_tier { more, new: tier, relayer };
+
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
+
+		Ok(())
+	}
+
 	#[precompile::public("setController(address)")]
 	#[precompile::public("set_controller(address)")]
 	fn set_controller(handle: &mut impl PrecompileHandle, new: Address) -> EvmResult {
@@ -1211,6 +1250,17 @@ where
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::set_controller { new };
+
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
+
+		Ok(())
+	}
+
+	#[precompile::public("cancelControllerSet()")]
+	#[precompile::public("cancel_controller_set()")]
+	fn cancel_controller_set(handle: &mut impl PrecompileHandle) -> EvmResult {
+		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		let call = StakingCall::<Runtime>::cancel_controller_set {};
 
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
