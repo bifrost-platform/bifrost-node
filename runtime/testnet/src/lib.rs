@@ -46,6 +46,7 @@ use sp_version::RuntimeVersion;
 
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
+use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
@@ -53,7 +54,6 @@ use pallet_evm::{
 	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
 	IdentityAddressMapping, Runner,
 };
-use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -160,7 +160,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 497,
+	spec_version: 498,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -1025,7 +1025,7 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
-	type FeelessCallFilter = ();
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
 }
 
 parameter_types! {
