@@ -29,8 +29,9 @@ pub use sp_runtime::BuildStorage;
 use sp_runtime::{
 	generic, impl_opaque_keys,
 	traits::{
-		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		AccountIdConversion, BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf,
+		Dispatchable, IdentityLookup, NumberFor, OpaqueKeys, PostDispatchInfoOf,
+		UniqueSaturatedInto,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
@@ -49,9 +50,10 @@ use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
 use pallet_evm::{
-	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
+	IdentityAddressMapping, Runner,
 };
+use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -158,7 +160,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2038,
+	spec_version: 2039,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -1006,7 +1008,7 @@ impl pallet_evm::Config for Runtime {
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
-	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
+	type OnChargeTransaction = BifrostFeeAdapter<Self, Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
@@ -1016,6 +1018,8 @@ impl pallet_evm::Config for Runtime {
 	type Timestamp = Timestamp;
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
+	// TODO: Enable BifrostFeelessCalls<Runtime> when pallet_bifrost_evm_tx_payment is added
+	type FeelessCallFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1098,6 +1102,28 @@ impl pallet_blaze::Config for Runtime {
 	type FeeRateExpiration = FeeRateExpiration;
 	type ToleranceThreshold = ToleranceThreshold;
 	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	/// Pallet ID for ERC20 gas fee collection.
+	/// Used to derive a deterministic EOA address outside the precompile range.
+	pub const EVMTxPaymentPalletId: PalletId = PalletId(*b"bfc/txpy");
+	/// Fee collector address for ERC20 gas fee payments.
+	/// Derived from PalletId to ensure it's outside the precompile range (0x0800-0x0FFF).
+	/// AccountId (AccountId20) directly converts to H160.
+	pub FeeCollectorAddress: H160 = EVMTxPaymentPalletId::get().into_account_truncating();
+	/// Cooldown period (in blocks) between fee token preference changes.
+	/// 100 blocks ≈ 5 minutes (3 second block time).
+	/// Set to 0 to disable rate limiting.
+	pub const FeeTokenUpdateCooldown: BlockNumber = 100;
+}
+
+/// Bifrost Transaction Payment pallet configuration
+impl pallet_bifrost_evm_tx_payment::Config for Runtime {
+	type AdminOrigin = EnsureRoot<AccountId>;
+	type FeeCollectorAddress = FeeCollectorAddress;
+	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
+	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1197,6 +1223,9 @@ mod runtime {
 
 	#[runtime::pallet_index(42)]
 	pub type BaseFee = pallet_base_fee;
+
+	#[runtime::pallet_index(43)]
+	pub type BifrostEVMTxPayment = pallet_bifrost_evm_tx_payment;
 
 	#[runtime::pallet_index(50)]
 	pub type Scheduler = pallet_scheduler;
