@@ -45,7 +45,7 @@ pub use pallet::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
-use frame_support::{pallet_prelude::*, traits::Hooks, weights::Weight};
+use frame_support::{pallet_prelude::*, traits::{Hooks, OnRuntimeUpgrade}, weights::Weight};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 
@@ -75,6 +75,10 @@ pub mod pallet {
 			// Reset transaction index counter for this block.
 			CurrentTxIndex::<T>::kill();
 			Weight::zero()
+		}
+
+		fn on_runtime_upgrade() -> Weight {
+			crate::migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 		}
 	}
 
