@@ -21,7 +21,8 @@
 //!         bool enabled,
 //!         address oracle,
 //!         uint8 decimals,
-//!         uint8 oracleDecimals
+//!         uint8 oracleDecimals,
+//!         uint256 minBalance
 //!     );
 //! }
 //! ```
@@ -239,13 +240,13 @@ where
 	/// Selector: `getTokenConfig(address)`
 	/// Signature: `0xcb67e3b1`
 	///
-	/// Returns: (enabled, oracle, decimals, oracleDecimals)
+	/// Returns: (enabled, oracle, decimals, oracleDecimals, minBalance)
 	#[precompile::public("getTokenConfig(address)")]
 	#[precompile::view]
 	fn get_token_config(
 		handle: &mut impl PrecompileHandle,
 		token: Address,
-	) -> EvmResult<(bool, Address, u8, u8)> {
+	) -> EvmResult<(bool, Address, u8, u8, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let token_h160: H160 = token.into();
@@ -258,6 +259,7 @@ where
 			Address(config.oracle_address),
 			config.decimals,
 			config.oracle_decimals,
+			config.min_balance,
 		))
 	}
 

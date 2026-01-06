@@ -6,7 +6,7 @@ mod self_contained_call;
 pub mod extensions;
 
 use frame_support::traits::Get;
-use pallet_bifrost_evm_tx_payment::{LastFeeTokenUpdate, UserFeeToken};
+use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, LastFeeTokenUpdate, UserFeeToken};
 use sp_core::H160;
 use sp_runtime::traits::{Saturating, Zero};
 use sp_std::marker::PhantomData;
@@ -83,13 +83,75 @@ where
 		if let Some(target) = target {
 			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
 				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
-				if selector == SET_USER_FEE_TOKEN || selector == CLEAR_USER_FEE_TOKEN {
-					// Check rate limit - if rate limited, NOT feeless
-					return !Self::is_rate_limited(caller);
-				}
+				return match selector {
+					SET_USER_FEE_TOKEN => {
+						// Rate limit check first
+						if Self::is_rate_limited(caller) {
+							return false;
+						}
+
+						// Extract a token address from input and validate
+						if let Some(token) = Self::extract_token_from_input(input) {
+							// Check if the token is accepted and caller has minimum balance
+							return Self::validate_feeless_set_token(caller, token);
+						}
+
+						// Invalid input format
+						false
+					},
+					CLEAR_USER_FEE_TOKEN => !Self::is_rate_limited(caller),
+					_ => false,
+				};
 			}
 		}
 		false
+	}
+
+	/// Extract token address from `setUserFeeToken(address)` input data.
+	///
+	/// Input format: 4 bytes selector + 32 bytes address (left-padded)
+	fn extract_token_from_input(input: &[u8]) -> Option<H160> {
+		// setUserFeeToken(address) requires 4 + 32 = 36 bytes
+		if input.len() < 36 {
+			return None;
+		}
+
+		// Address is in bytes 16..36 (after 4 bytes selector + 12 bytes padding)
+		Some(H160::from_slice(&input[16..36]))
+	}
+
+	/// Validate that the caller can use feeless setUserFeeToken for the given token.
+	///
+	/// Checks:
+	/// 1. Token is registered in AcceptedFeeTokens
+	/// 2. Token is enabled
+	/// 3. Caller holds at least `min_balance` of the token (if min_balance > 0)
+	fn validate_feeless_set_token(caller: H160, token: H160) -> bool {
+		// Get token configuration
+		let config = match AcceptedFeeTokens::<T>::get(token) {
+			Some(c) => c,
+			None => return false,
+		};
+
+		// Check if token is enabled
+		if !config.enabled {
+			return false;
+		}
+
+		// Check minimum balance requirement
+		if !config.min_balance.is_zero() {
+			let balance =
+				match pallet_bifrost_evm_tx_payment::erc20::get_token_balance::<T>(caller, token) {
+					Ok(b) => b,
+					Err(_) => return false,
+				};
+
+			if balance < config.min_balance {
+				return false;
+			}
+		}
+
+		true
 	}
 
 	/// Check if the caller is currently rate-limited.

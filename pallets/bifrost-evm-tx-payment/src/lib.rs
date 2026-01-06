@@ -31,6 +31,7 @@
 
 pub mod adapter;
 pub mod erc20;
+pub mod migrations;
 pub mod oracle;
 pub mod types;
 pub mod weights;
@@ -48,12 +49,16 @@ use frame_support::{pallet_prelude::*, traits::Hooks, weights::Weight};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 
+/// The current storage version.
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::hooks]
