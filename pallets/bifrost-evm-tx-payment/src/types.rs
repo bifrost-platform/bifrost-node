@@ -4,6 +4,19 @@ use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{H160, U256};
 
+/// Configuration for an accepted fee token (V1 - for migration).
+///
+/// This is the original version without `min_balance` field.
+/// Used only for storage migration from V0 to V1.
+#[derive(Clone, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq)]
+pub struct FeeTokenConfigV0 {
+	pub enabled: bool,
+	pub oracle_address: H160,
+	pub decimals: u8,
+	pub oracle_decimals: u8,
+	pub max_staleness_seconds: u64,
+}
+
 /// Configuration for an accepted fee token.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq,
@@ -27,6 +40,13 @@ pub struct FeeTokenConfig {
 	/// the price is considered stale and will be rejected.
 	/// Set to 0 to disable staleness check (not recommended for production).
 	pub max_staleness_seconds: u64,
+
+	/// Minimum token balance required for feeless `setUserFeeToken` calls.
+	/// Users must hold at least this amount of the token to set it as their
+	/// fee token without paying gas fees. This prevents spam attacks where
+	/// attackers create many addresses and set fee tokens without cost.
+	/// Set to 0 to disable the minimum balance check.
+	pub min_balance: U256,
 }
 
 impl Default for FeeTokenConfig {
@@ -37,6 +57,20 @@ impl Default for FeeTokenConfig {
 			decimals: 18,
 			oracle_decimals: 8,          // Chainlink standard
 			max_staleness_seconds: 3600, // 1 hour default
+			min_balance: U256::zero(),   // No minimum by default
+		}
+	}
+}
+
+impl From<FeeTokenConfigV0> for FeeTokenConfig {
+	fn from(v0: FeeTokenConfigV0) -> Self {
+		Self {
+			enabled: v0.enabled,
+			oracle_address: v0.oracle_address,
+			decimals: v0.decimals,
+			oracle_decimals: v0.oracle_decimals,
+			max_staleness_seconds: v0.max_staleness_seconds,
+			min_balance: U256::zero(), // Default to no minimum for migrated tokens
 		}
 	}
 }
