@@ -6,8 +6,8 @@ mod self_contained_call;
 pub mod extensions;
 
 use frame_support::traits::Get;
-use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, LastFeeTokenUpdate, UserFeeToken};
-use sp_core::H160;
+use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, LastFeeTokenUpdate, Pallet, UserFeeToken};
+use sp_core::{H160, U256};
 use sp_runtime::traits::{Saturating, Zero};
 use sp_std::marker::PhantomData;
 
@@ -18,6 +18,7 @@ use sp_std::marker::PhantomData;
 /// 1. **Pool validation** (`validate_transaction_in_pool`):
 ///    - `is_zero_balance_callable`: Skips native balance check for gas fees
 ///    - Used for: ERC20 fee users (they pay in ERC20, not native) and fee setup calls
+///    - For ERC20 fee users, validates they have sufficient token balance to cover fees
 ///
 /// 2. **Runner execution** (`call`/`create`):
 ///    - `is_feeless`: Sets `effective_max_fee_per_gas = 0` (truly free call)
@@ -25,8 +26,8 @@ use sp_std::marker::PhantomData;
 ///
 /// # Security
 /// - Rate limiting prevents spam on fee token setup calls
-/// - ERC20 fee payment validation happens in `BifrostFeeAdapter::withdraw_fee()`
-/// - DoS is prevented because invalid ERC20 payments will fail during execution
+/// - ERC20 fee payment validation happens both here (pool) and in `BifrostFeeAdapter::withdraw_fee()`
+/// - DoS is prevented by checking token balance at pool validation time
 pub struct BifrostFeelessCalls<T>(PhantomData<T>);
 
 impl<T> pallet_evm::FeelessCallFilter for BifrostFeelessCalls<T>
@@ -36,13 +37,18 @@ where
 	/// Returns `true` if the call can be submitted with zero native balance.
 	///
 	/// This includes:
-	/// - Users with ERC20 fee token set (they pay in ERC20)
+	/// - Users with ERC20 fee token set who have sufficient token balance
 	/// - Fee token setup calls (truly feeless, rate-limited)
-	fn is_zero_balance_callable(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
+	fn is_zero_balance_callable(
+		caller: H160,
+		target: Option<H160>,
+		input: &[u8],
+		gas_limit: U256,
+		base_fee: U256,
+	) -> bool {
 		// Case 1: Check if user has ERC20 fee token set
-		// Skip native balance check - they'll pay in ERC20 via BifrostFeeAdapter
-		if UserFeeToken::<T>::contains_key(caller) {
-			return true;
+		if let Some(token) = UserFeeToken::<T>::get(caller) {
+			return Self::validate_erc20_fee_user(caller, token, gas_limit, base_fee);
 		}
 
 		// Case 2: Fee token setup calls (truly feeless)
@@ -62,6 +68,61 @@ impl<T> BifrostFeelessCalls<T>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
 {
+	/// Validate that an ERC20 fee token user has sufficient balance to pay for the transaction.
+	///
+	/// This is called during pool validation to prevent transactions from users who
+	/// don't have enough tokens to cover the estimated fee.
+	///
+	/// # Arguments
+	/// * `caller` - The user's address
+	/// * `token` - The ERC20 token address they want to use for fees
+	/// * `gas_limit` - The transaction's gas limit
+	/// * `base_fee` - The current base fee per gas
+	///
+	/// # Returns
+	/// `true` if the user has sufficient token balance to cover estimated fees
+	fn validate_erc20_fee_user(caller: H160, token: H160, gas_limit: U256, base_fee: U256) -> bool {
+		// Check if ERC20 fee payment is enabled (native oracle must be set)
+		if !Pallet::<T>::is_erc20_fee_enabled() {
+			// ERC20 fee payment not enabled, user will fall back to native
+			// In this case, don't allow zero-balance callable for ERC20 users
+			return false;
+		}
+
+		// Check if token is still accepted and enabled
+		let config = match AcceptedFeeTokens::<T>::get(token) {
+			Some(c) => c,
+			None => return false,
+		};
+
+		if !config.enabled {
+			return false;
+		}
+
+		// Calculate estimated native fee: gas_limit * base_fee
+		let estimated_native_fee = match gas_limit.checked_mul(base_fee) {
+			Some(fee) => fee,
+			None => return false, // Overflow
+		};
+
+		// Convert native fee to token amount
+		let required_token_amount = match Pallet::<T>::convert_native_to_token(estimated_native_fee, token)
+		{
+			Ok(amount) => amount,
+			Err(_) => return false, // Oracle/conversion failure
+		};
+
+		// Get user's token balance
+		let balance =
+			match pallet_bifrost_evm_tx_payment::erc20::get_token_balance::<T>(caller, token) {
+				Ok(b) => b,
+				Err(_) => return false,
+			};
+
+		// Check if user has enough tokens
+		balance >= required_token_amount
+	}
+
 	/// Returns `true` if this call should have zero gas fee (feeless).
 	///
 	/// Only the fee token setup calls are feeless:
