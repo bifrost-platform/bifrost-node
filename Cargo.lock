@@ -7880,6 +7880,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-cccp-fast-transfer"
+version = "1.0.0"
+dependencies = [
+ "array-bytes 6.2.3",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "hex",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-collective"
 version = "41.0.0"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2506#274c6de083c03538d95af453bc53814106550b15"
