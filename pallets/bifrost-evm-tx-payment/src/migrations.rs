@@ -23,8 +23,9 @@ pub mod v1 {
 	use super::*;
 
 	/// Old storage type for `AcceptedFeeTokens` using `FeeTokenConfigV0`.
+	/// This is only used for pre_upgrade count check.
 	#[storage_alias]
-	pub type AcceptedFeeTokens<T: Config> =
+	pub type AcceptedFeeTokensV0<T: Config> =
 		StorageMap<Pallet<T>, Blake2_128Concat, H160, FeeTokenConfigV0, OptionQuery>;
 
 	pub struct MigrateToV1<T>(sp_std::marker::PhantomData<T>);
@@ -51,17 +52,16 @@ pub mod v1 {
 
 				let mut count: u32 = 0;
 
-				// Iterate over all AcceptedFeeTokens entries
-				for (token, old_config) in AcceptedFeeTokens::<T>::iter() {
-					// Convert V0 to V1 (adds min_balance = 0)
-					let new_config: FeeTokenConfig = old_config.into();
+				// Use translate to safely convert old storage format to new format in-place
+				crate::pallet::AcceptedFeeTokens::<T>::translate::<FeeTokenConfigV0, _>(
+					|_token, old_config| {
+						count += 1;
+						// Convert V0 to V1 (adds min_balance = 0)
+						Some(old_config.into())
+					},
+				);
 
-					// Write the new config using the pallet's storage
-					crate::pallet::AcceptedFeeTokens::<T>::insert(token, new_config);
-
-					count += 1;
-					weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
-				}
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(count as u64, count as u64));
 
 				// Update storage version
 				current.put::<Pallet<T>>();
@@ -69,13 +69,13 @@ pub mod v1 {
 
 				log::info!(
 					target: "bifrost-tx-payment",
-					"Migration V0 -> V1 completed: migrated {} fee token configs ✅",
+					"Migration V0 -> V1 completed: migrated {} fee token configs",
 					count
 				);
 			} else {
 				log::info!(
 					target: "bifrost-tx-payment",
-					"Skipping migration V0 -> V1 (on-chain={:?}, in-code={:?}) 💤",
+					"Skipping migration V0 -> V1 (on-chain={:?}, in-code={:?})",
 					onchain, current
 				);
 				weight = weight.saturating_add(T::DbWeight::get().reads(1));
@@ -88,8 +88,8 @@ pub mod v1 {
 		fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
 			let onchain = Pallet::<T>::on_chain_storage_version();
 
-			// Count existing entries
-			let count = AcceptedFeeTokens::<T>::iter().count() as u32;
+			// Count existing entries using old storage alias
+			let count = AcceptedFeeTokensV0::<T>::iter().count() as u32;
 
 			log::info!(
 				target: "bifrost-tx-payment",
@@ -130,7 +130,7 @@ pub mod v1 {
 
 			log::info!(
 				target: "bifrost-tx-payment",
-				"post_upgrade: migration V0 -> V1 verified successfully ✅"
+				"post_upgrade: migration V0 -> V1 verified successfully"
 			);
 
 			Ok(())
