@@ -1,16 +1,19 @@
 use super::pallet::*;
 use crate::{
-	HashKeyRequest, RequestInfo, RequestType, SocketMessage, TxInfo, UserRequest,
-	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+	HashKeyRequest, RequestType, TxInfo, BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT,
 };
 use bp_btc_relay::{
 	blaze::{SelectionStrategy, UtxoInfoWithSize},
-	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	utils::estimate_finalized_input_size,
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
+use bp_cccp::{
+	traits::SocketVerifier, RequestInfo, SocketMessage, UserRequest,
+	SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+};
 use bp_staking::traits::Authorities;
-use ethabi_decode::{ParamKind, Token};
+use ethabi_decode::ParamKind;
 use frame_support::ensure;
 use miniscript::{
 	bitcoin::{
@@ -41,7 +44,7 @@ where
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError> {
 		// the bytes should be a valid socket message
 		let msg =
-			Self::try_decode_socket_message(msg).map_err(|_| Error::<T>::InvalidSocketMessage)?;
+			SocketMessage::try_from(msg.clone()).map_err(|_| Error::<T>::InvalidSocketMessage)?;
 		// the socket message should be valid onchain
 		let msg_hash =
 			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
@@ -379,7 +382,7 @@ where
 					// verify socket messages
 					let mut amount = U256::default();
 					for serialized_msg in socket_messages {
-						let msg = Self::try_decode_socket_message(serialized_msg)
+						let msg = SocketMessage::try_from(serialized_msg.clone())
 							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 
 						if msg_sequences.contains(&msg.req_id.sequence) {
@@ -426,7 +429,7 @@ where
 
 		let outbound_requests = outbound_pool
 			.iter()
-			.filter_map(|x| match Self::try_decode_socket_message(x) {
+			.filter_map(|x| match SocketMessage::try_from(x.clone()) {
 				Ok(msg) => match T::RegistrationPool::get_refund_address(&msg.params.to.into()) {
 					Some(refund) => {
 						let script_pubkey =
@@ -598,7 +601,7 @@ where
 
 		#[cfg(not(feature = "runtime-benchmarks"))]
 		{
-			Ok(Self::try_decode_request_info(&Self::try_evm_call(caller, socket, &calldata)?)
+			Ok(RequestInfo::try_from(Self::try_evm_call(caller, socket, &calldata)?)
 				.map_err(|_| Error::<T>::InvalidRequestInfo)?)
 		}
 
@@ -671,54 +674,6 @@ where
 			info,
 		) {
 			Ok(token) => Ok(token.clone().try_into()?),
-			Err(_) => Err(()),
-		}
-	}
-
-	/// Try to decode the given `RequestInfo`.
-	pub fn try_decode_request_info(info: &UnboundedBytes) -> Result<RequestInfo, ()> {
-		match ethabi_decode::decode(
-			&[
-				ParamKind::FixedArray(Box::new(ParamKind::Uint(8)), 32),
-				ParamKind::FixedBytes(32),
-				ParamKind::Uint(256),
-			],
-			info,
-		) {
-			Ok(token) => Ok(token.clone().try_into()?),
-			Err(_) => Err(()),
-		}
-	}
-
-	/// Try to decode the given `SocketMessage`.
-	pub fn try_decode_socket_message(msg: &UnboundedBytes) -> Result<SocketMessage, ()> {
-		match ethabi_decode::decode(
-			&[ParamKind::Tuple(vec![
-				Box::new(ParamKind::Tuple(vec![
-					Box::new(ParamKind::FixedBytes(4)),
-					Box::new(ParamKind::Uint(64)),
-					Box::new(ParamKind::Uint(128)),
-				])),
-				Box::new(ParamKind::Uint(8)),
-				Box::new(ParamKind::Tuple(vec![
-					Box::new(ParamKind::FixedBytes(4)),
-					Box::new(ParamKind::FixedBytes(16)),
-				])),
-				Box::new(ParamKind::Tuple(vec![
-					Box::new(ParamKind::FixedBytes(32)),
-					Box::new(ParamKind::FixedBytes(32)),
-					Box::new(ParamKind::Address),
-					Box::new(ParamKind::Address),
-					Box::new(ParamKind::Uint(256)),
-					Box::new(ParamKind::Bytes),
-				])),
-			])],
-			msg,
-		) {
-			Ok(socket) => match &socket[0] {
-				Token::Tuple(msg) => Ok(msg.clone().try_into()?),
-				_ => Err(()),
-			},
 			Err(_) => Err(()),
 		}
 	}

@@ -29,6 +29,7 @@ sp-io = { workspace = true }
 # Bifrost
 bp-btc-relay = { workspace = true }
 bp-staking = { workspace = true }
+bp-cccp = { workspace = true }
 
 [dev-dependencies]
 pallet-balances = { workspace = true }
@@ -50,6 +51,7 @@ std = [
 	"sp-io/std",
 	"bp-btc-relay/std",
 	"bp-staking/std",
+	"bp-cccp/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [

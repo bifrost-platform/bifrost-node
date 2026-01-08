@@ -2,8 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage,
-	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
-	WeightInfo,
+	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -17,6 +16,7 @@ use bp_btc_relay::{
 	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
+use bp_cccp::SocketMessage;
 use bp_staking::traits::Authorities;
 use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
@@ -297,7 +297,7 @@ pub mod pallet {
 								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
 								for msg in filtered_outbound_pool.iter() {
-									let msg = Self::try_decode_socket_message(msg).unwrap();
+									let msg = SocketMessage::try_from(msg.clone()).unwrap();
 									<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
 								}
 
@@ -826,7 +826,7 @@ pub mod pallet {
 				RequestType::Normal => {
 					// replace stored `SocketMessages` to pair with the new txid
 					for socket_message in old_request.socket_messages.clone() {
-						let msg = Self::try_decode_socket_message(&socket_message)
+						let msg = SocketMessage::try_from(socket_message.clone())
 							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 						<SocketMessages<T>>::insert(msg.req_id.sequence, (new_txid, msg));
 					}
