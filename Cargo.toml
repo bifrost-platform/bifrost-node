@@ -19,7 +19,7 @@ members = [
 	"pallets/blaze",
 	"pallets/bifrost-evm-tx-payment",
 	"pallets/oracle-registry",
-	"pallets/cccp-fast-transfer",
+	"pallets/cccp-transfer-manager",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
