@@ -1730,6 +1730,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bp-cccp"
+version = "0.0.1"
+dependencies = [
+ "ethabi-decode",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "bp-core"
 version = "0.0.1"
 dependencies = [
@@ -7801,6 +7813,7 @@ version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
  "bp-btc-relay",
+ "bp-cccp",
  "bp-core",
  "bp-staking",
  "ethabi-decode",
@@ -7865,6 +7878,7 @@ version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
  "bp-btc-relay",
+ "bp-cccp",
  "bp-core",
  "bp-staking",
  "ethabi-decode",

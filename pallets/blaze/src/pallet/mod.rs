@@ -13,10 +13,11 @@ use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
 	blaze::{UtxoInfo, UtxoInfoWithSize},
-	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	utils::estimate_finalized_input_size,
 	UnboundedBytes,
 };
+use bp_cccp::traits::SocketVerifier;
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use parity_scale_codec::{alloc::string::ToString, Encode};
 use sp_core::{H256, U256};

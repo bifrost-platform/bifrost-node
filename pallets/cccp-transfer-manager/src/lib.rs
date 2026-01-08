@@ -9,7 +9,7 @@ pub use weights::WeightInfo;
 
 use bp_staking::MAX_AUTHORITIES;
 use frame_support::traits::Currency;
-use parity_scale_codec::{Decode, Encode};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256};
 use sp_runtime::BoundedVec;
@@ -54,4 +54,13 @@ pub struct TransferInfo<Balance, AccountId> {
 	/// The voting status of the transfer.
 	/// It'll only be approved when the majority of relayers voted for the request. (for inbound requests)
 	pub is_approved: bool,
+}
+
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// A submission of Socket messages.
+pub struct SocketMessagesSubmission<AccountId> {
+	/// The authority id.
+	pub authority_id: AccountId,
+	/// The Socket messages.
+	pub messages: Vec<UnboundedBytes>,
 }
