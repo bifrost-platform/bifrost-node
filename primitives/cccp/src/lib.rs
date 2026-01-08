@@ -155,13 +155,26 @@ impl SocketMessage {
 		])
 	}
 
+	/// Check if the message status is in `Requested`.
+	pub fn is_requested(&self) -> bool {
+		self.status == U256::from(1)
+	}
+
 	/// Check if the message status is in `Accepted`.
 	pub fn is_accepted(&self) -> bool {
 		self.status == U256::from(5)
 	}
 
+	/// Check if the message is an outbound request.
+	pub fn is_outbound(&self, bifrost_chain_id: u32) -> bool {
+		if self.req_id.chain.clone().as_slice() != bifrost_chain_id.to_be_bytes() {
+			return false;
+		}
+		true
+	}
+
 	/// Check if the message is a Bifrost to Bitcoin outbound request.
-	pub fn is_outbound(&self, bifrost_chain_id: u32, bitcoin_chain_id: u32) -> bool {
+	pub fn is_bitcoin_outbound(&self, bifrost_chain_id: u32, bitcoin_chain_id: u32) -> bool {
 		if self.req_id.chain.clone().as_slice() != bifrost_chain_id.to_be_bytes() {
 			return false;
 		}
@@ -248,6 +261,11 @@ impl RequestInfo {
 	/// Check if the given hash matches with `msg_hash`.
 	pub fn is_msg_hash(&self, hash: H256) -> bool {
 		self.msg_hash == hash
+	}
+
+	/// Check if the status is in `Requested`.
+	pub fn is_requested(&self) -> bool {
+		self.field[0] == U256::from(1)
 	}
 
 	/// Check if the status is in `Accepted`.
