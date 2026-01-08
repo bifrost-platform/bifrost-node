@@ -60,7 +60,7 @@ where
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
 		// the socket message should be outbound
-		if !msg.is_outbound(
+		if !msg.is_bitcoin_outbound(
 			<T as pallet_evm::Config>::ChainId::get() as u32,
 			T::RegistrationPool::get_bitcoin_chain_id(),
 		) {

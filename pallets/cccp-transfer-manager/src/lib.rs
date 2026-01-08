@@ -7,6 +7,7 @@ pub mod weights;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
+use bp_cccp::UnboundedBytes;
 use bp_staking::MAX_AUTHORITIES;
 use frame_support::traits::Currency;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
@@ -14,16 +15,15 @@ use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256};
 use sp_runtime::BoundedVec;
 
-/// Length unbounded bytes type.
-pub type UnboundedBytes = Vec<u8>;
-
 /// Asset address type.
 pub type AssetId = H160;
 
 /// Asset index hash type.
 pub type AssetIndexHash = H256;
 
-#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+#[derive(
+	Decode, Encode, TypeInfo, Clone, Copy, PartialEq, Eq, RuntimeDebug, DecodeWithMemTracking,
+)]
 pub enum TransferOption {
 	Fast,
 	Standard,
@@ -57,10 +57,10 @@ pub struct TransferInfo<Balance, AccountId> {
 }
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
-/// A submission of Socket messages.
-pub struct SocketMessagesSubmission<AccountId> {
+/// A submission of Socket message.
+pub struct SocketMessageSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
-	/// The Socket messages.
-	pub messages: Vec<UnboundedBytes>,
+	/// The Socket message.
+	pub message: UnboundedBytes,
 }
