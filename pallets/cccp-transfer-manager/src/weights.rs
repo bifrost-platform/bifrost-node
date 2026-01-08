@@ -7,12 +7,12 @@ use frame_support::{
 };
 use sp_std::marker::PhantomData;
 
-/// Weight functions needed for `pallet_cccp_fast_transfer`.
+/// Weight functions needed for `pallet_cccp_transfer_manager`.
 pub trait WeightInfo {
 	fn default() -> Weight;
 }
 
-/// Weights for `pallet_cccp_fast_transfer` using the Substrate node and recommended hardware.
+/// Weights for `pallet_cccp_transfer_manager` using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn default() -> Weight {
