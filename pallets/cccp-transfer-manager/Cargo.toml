@@ -10,7 +10,6 @@ repository = { workspace = true }
 
 [dependencies]
 # General
-hex = { workspace = true }
 log = { workspace = true }
 array-bytes = { workspace = true }
 
@@ -27,6 +26,10 @@ sp-io = { workspace = true }
 
 # Bifrost
 bp-staking = { workspace = true }
+bp-cccp = { workspace = true }
+
+# Frontier
+pallet-evm = { workspace = true }
 
 [features]
 default = ["std"]
@@ -39,6 +42,8 @@ std = [
 	"sp-std/std",
 	"sp-core/std",
 	"sp-io/std",
+	"bp-cccp/std",
+	"pallet-evm/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [

@@ -7936,12 +7936,13 @@ name = "pallet-cccp-transfer-manager"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
+ "bp-cccp",
  "bp-staking",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "hex",
  "log",
+ "pallet-evm",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
