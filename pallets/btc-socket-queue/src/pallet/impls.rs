@@ -61,7 +61,7 @@ where
 		}
 		// the socket message should be outbound
 		let chain_id = <T as pallet_evm::Config>::ChainId::get() as u32;
-		if !msg.is_outbound(chain_id, T::RegistrationPool::get_bitcoin_chain_id()) {
+		if !msg.is_bitcoin_outbound(chain_id, T::RegistrationPool::get_bitcoin_chain_id()) {
 			#[cfg(not(feature = "runtime-benchmarks"))]
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
