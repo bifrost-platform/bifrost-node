@@ -18,7 +18,7 @@ members = [
 	"pallets/btc-socket-queue",
 	"pallets/blaze",
 	"pallets/bifrost-evm-tx-payment",
-	"pallets/cccp-fast-transfer",
+	"pallets/cccp-transfer-manager",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
