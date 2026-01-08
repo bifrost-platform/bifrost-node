@@ -1,4 +1,7 @@
-use crate::{weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, TransferInfo};
+use crate::{
+	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf,
+	SocketMessagesSubmission, TransferInfo,
+};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -24,12 +27,19 @@ pub mod pallet {
 	pub trait Config: frame_system::Config {
 		/// The currency type
 		type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
+		/// The signature signed by the issuer.
+		type Signature: Verify<Signer = Self::Signer> + Encode + Decode + Parameter;
+		/// The signer of the message.
+		type Signer: IdentifyAccount<AccountId = Self::AccountId> + Encode + Decode + MaxEncodedLen;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
 
 	#[pallet::error]
-	pub enum Error<T> {}
+	pub enum Error<T> {
+		/// The submission is empty.
+		EmptySubmission,
+	}
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
@@ -86,7 +96,16 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		pub fn poll(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+		pub fn poll(
+			origin: OriginFor<T>,
+			socket_messages_submission: SocketMessagesSubmission<T::AccountId>,
+			_signature: T::Signature,
+		) -> DispatchResultWithPostInfo {
+			ensure_none(origin)?;
+
+			let SocketMessagesSubmission { authority_id, messages } = socket_messages_submission;
+			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
+
 			// TODO: SocketMessage validation
 			// 			1. Bridge asset must be in AssetIndexes & AssetCaps
 			// 			2. SocketMessage bytes must be valid onchain (`get_request` method)

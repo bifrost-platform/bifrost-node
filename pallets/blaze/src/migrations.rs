@@ -36,12 +36,12 @@ pub mod init_v1 {
 
 pub mod v2 {
 	use super::*;
+	use bp_cccp::traits::SocketVerifier;
 	use core::marker::PhantomData;
 	use frame_support::{
 		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
 		weights::Weight,
 	};
-	use bp_btc_relay::traits::SocketVerifier;
 
 	pub struct V2<T>(PhantomData<T>);
 
