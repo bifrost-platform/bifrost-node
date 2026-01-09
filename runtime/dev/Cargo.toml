@@ -92,7 +92,7 @@ pallet-btc-socket-queue = { workspace = true }
 pallet-btc-registration-pool = { workspace = true }
 pallet-blaze = { workspace = true }
 pallet-bifrost-evm-tx-payment = { workspace = true }
-pallet-cccp-transfer-manager = { workspace = true }
+pallet-cccp-relay-queue = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -152,7 +152,7 @@ std = [
 	"pallet-btc-registration-pool/std",
 	"pallet-blaze/std",
 	"pallet-bifrost-evm-tx-payment/std",
-	"pallet-cccp-transfer-manager/std",
+	"pallet-cccp-relay-queue/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",

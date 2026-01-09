@@ -7,7 +7,7 @@ pub trait SocketVerifier<AccountId> {
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
 }
 
-pub trait TransferManager<AccountId> {
+pub trait RelayQueueManager<AccountId> {
 	/// Replace an authority ID in all pending transfers.
 	///
 	/// This updates the authority ID in voter lists for:
@@ -19,6 +19,6 @@ pub trait TransferManager<AccountId> {
 	fn replace_authority(old: &AccountId, new: &AccountId);
 }
 
-impl<AccountId> TransferManager<AccountId> for () {
+impl<AccountId> RelayQueueManager<AccountId> for () {
 	fn replace_authority(_old: &AccountId, _new: &AccountId) {}
 }

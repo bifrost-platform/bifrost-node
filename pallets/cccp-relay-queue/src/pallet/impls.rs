@@ -5,7 +5,7 @@ use frame_support::{
 use pallet_evm::Runner;
 
 use bp_cccp::{
-	traits::TransferManager, RequestInfo, SocketMessage, UnboundedBytes, UserRequest,
+	traits::RelayQueueManager, RequestInfo, SocketMessage, UnboundedBytes, UserRequest,
 	SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
@@ -264,7 +264,7 @@ impl<T: Config> Pallet<T> {
 	}
 }
 
-impl<T: Config> TransferManager<T::AccountId> for Pallet<T> {
+impl<T: Config> RelayQueueManager<T::AccountId> for Pallet<T> {
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
 		// Replace authority in all on-flight transfers
 		OnFlightTransfers::<T>::translate::<TransferInfo<BalanceOf<T>, T::AccountId>, _>(

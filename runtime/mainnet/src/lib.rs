@@ -831,7 +831,7 @@ parameter_types! {
 impl pallet_relay_manager::Config for Runtime {
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
-	type TransferManager = ();
+	type RelayQueue = ();
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
