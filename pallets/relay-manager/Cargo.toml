@@ -25,6 +25,7 @@ pallet-membership = { workspace = true }
 # Bifrost
 bp-btc-relay = { workspace = true }
 bp-staking = { workspace = true }
+bp-cccp = { workspace = true }
 
 [dev-dependencies]
 sp-core = { workspace = true }
@@ -45,6 +46,7 @@ std = [
 	"pallet-membership/std",
 	"bp-staking/std",
 	"bp-btc-relay/std",
+	"bp-cccp/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [
