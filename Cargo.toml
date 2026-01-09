@@ -18,8 +18,8 @@ members = [
 	"pallets/btc-socket-queue",
 	"pallets/blaze",
 	"pallets/bifrost-evm-tx-payment",
-	"pallets/cccp-transfer-manager",
 	"pallets/oracle-registry",
+	"pallets/cccp-relay-queue",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -110,7 +110,7 @@ pallet-btc-socket-queue = { default-features = false, path = "pallets/btc-socket
 pallet-blaze = { default-features = false, path = "pallets/blaze" }
 pallet-bifrost-evm-tx-payment = { default-features = false, path = "pallets/bifrost-evm-tx-payment" }
 pallet-oracle-registry = { default-features = false, path = "pallets/oracle-registry" }
-pallet-cccp-transfer-manager = { default-features = false, path = "pallets/cccp-transfer-manager" }
+pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay-queue" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
