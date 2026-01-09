@@ -29,6 +29,15 @@ pub enum TransferOption {
 	Standard,
 }
 
+#[derive(
+	Decode, Encode, TypeInfo, Clone, Copy, PartialEq, Eq, RuntimeDebug, DecodeWithMemTracking,
+)]
+pub enum TransferStatus {
+	Pending,
+	OnFlight,
+	Finalized,
+}
+
 pub type BalanceOf<T> =
 	<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
@@ -46,14 +55,18 @@ pub struct TransferInfo<Balance, AccountId> {
 	pub amount: Balance,
 	/// The option of the transfer.
 	pub option: TransferOption,
+	/// The status of the transfer.
+	pub status: TransferStatus,
 	/// The initial socket message of the transfer. (status: REQUESTED)
 	pub socket_message: UnboundedBytes,
-	/// Voters of the transfer. Voting are only required for inbound requests since the source chain are non-bifrost chains.
-	/// Socket messages originated by outbound requests are internally validated by the pallet itself. (=immediately approved)
-	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
-	/// The voting status of the transfer.
-	/// It'll only be approved when the majority of relayers voted for the request. (for inbound requests)
-	pub is_approved: bool,
+	/// Voters of the transfer.
+	/// Voting is only required for inbound requests since the source chain are non-bifrost chains.
+	/// Socket messages originated by outbound requests are internally validated by the pallet itself. (=immediately on-flight)
+	pub on_flight_voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
+	/// Voters of the finalization.
+	/// Voting is only required for inbound requests since the source chain are non-bifrost chains.
+	/// Socket messages originated by outbound requests are internally validated by the pallet itself. (=immediately finalized)
+	pub finalization_voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
