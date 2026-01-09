@@ -165,6 +165,21 @@ impl SocketMessage {
 		self.status == U256::from(5)
 	}
 
+	/// Check if the message status is in `Rejected`.
+	pub fn is_rejected(&self) -> bool {
+		self.status == U256::from(6)
+	}
+
+	/// Check if the message status is in `Committed`.
+	pub fn is_committed(&self) -> bool {
+		self.status == U256::from(7)
+	}
+
+	/// Check if the message status is in `Rollbacked`.
+	pub fn is_rollbacked(&self) -> bool {
+		self.status == U256::from(8)
+	}
+
 	/// Check if the message is an outbound request.
 	pub fn is_outbound(&self, bifrost_chain_id: u32) -> bool {
 		if self.req_id.chain.clone().as_slice() != bifrost_chain_id.to_be_bytes() {
@@ -271,6 +286,21 @@ impl RequestInfo {
 	/// Check if the status is in `Accepted`.
 	pub fn is_accepted(&self) -> bool {
 		self.field[0] == U256::from(5)
+	}
+
+	/// Check if the status is in `Rejected`.
+	pub fn is_rejected(&self) -> bool {
+		self.field[0] == U256::from(6)
+	}
+
+	/// Check if the status is in `Committed`.
+	pub fn is_committed(&self) -> bool {
+		self.field[0] == U256::from(7)
+	}
+
+	/// Check if the status is in `Rollbacked`.
+	pub fn is_rollbacked(&self) -> bool {
+		self.field[0] == U256::from(8)
 	}
 }
 
