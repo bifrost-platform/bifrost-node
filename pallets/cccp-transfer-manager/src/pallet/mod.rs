@@ -94,32 +94,77 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	/// The `Socket` contract address.
+	/// The Socket contract address for CCCP message validation.
+	///
+	/// This stores the on-chain address of the Socket contract that handles cross-chain
+	/// message validation. All transfer requests are validated against this contract's state
+	/// to ensure authenticity and proper execution status.
+	///
+	/// - **Type**: `Option<T::AccountId>` - The Socket contract account ID
+	/// - **Query**: Returns `None` if not configured, `Some(address)` otherwise
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// Asset indexes.
-	/// key: The asset index hash (bytes32). A predefined hash in CCCP.
-	/// 	- e.g. `BFC_ON_BFC_MAIN`: `0x000000010000000100000bfcffffffffffffffffffffffffffffffffffffffff`
+	/// Mapping from CCCP asset index hashes to asset addresses.
 	///
-	/// value: The asset address. (Unified Token, Native BFC: `0xffffffffffffffffffffffffffffffffffffffff`)
+	/// This storage maps predefined CCCP asset index identifiers to their corresponding
+	/// on-chain asset addresses. Asset indexes are standardized identifiers used across
+	/// the CCCP protocol to uniquely identify assets in cross-chain transfers.
+	///
+	/// - **Key**: `AssetIndexHash` (H256) - A predefined 32-byte hash identifying the asset in CCCP
+	///   - Example: `BFC_ON_BFC_MAIN` = `0x000000010000000100000bfcffffffffffffffffffffffffffffffffffffffff`
+	///   - Format: Combines chain ID, asset type, and asset identifier
+	/// - **Value**: `AssetId` (H160) - The EVM-compatible asset contract address
+	///   - For native BFC: `0xffffffffffffffffffffffffffffffffffffffff`
+	///   - For ERC20 tokens: The actual token contract address (unified token address)
+	/// - **Purpose**: Enables validation of cross-chain transfer requests by resolving
+	///   CCCP asset indexes to blockchain-specific asset addresses
 	pub type AssetIndexes<T: Config> = StorageMap<_, Twox64Concat, AssetIndexHash, AssetId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// Asset on-flight caps.
-	/// key: The asset address. (Unified Token, Native BFC: `0xffffffffffffffffffffffffffffffffffffffff`)
-	/// value: The asset on-flight cap information. The permitted amount of the asset that can be fast-transferred.
+	/// On-flight capacity limits for Fast transfer mode per asset.
+	///
+	/// This storage tracks the maximum and current on-flight capacity for each asset,
+	/// which determines whether a transfer can use Fast mode (immediate bridging) or
+	/// must use Standard mode (delayed with additional validation).
+	///
+	/// - **Key**: `AssetId` (H160) - The asset contract address
+	///   - For native BFC: `0xffffffffffffffffffffffffffffffffffffffff`
+	///   - For ERC20 tokens: The actual token contract address (unified token address)
+	/// - **Value**: `AssetCapInfo<Balance>` containing:
+	///   - `max_on_flight_cap`: The maximum total amount allowed in Fast transfers simultaneously
+	///   - `on_flight_cap`: Current total amount locked in active Fast transfers
+	/// - **Purpose**: Implements risk management by limiting Fast transfer exposure
+	///   - When `on_flight_cap + new_transfer_amount <= max_on_flight_cap`: Transfer uses Fast mode
+	///   - When capacity exceeded: Transfer automatically falls back to Standard mode
+	///   - Cap decreases when Fast transfers are finalized (committed or rolled back)
 	pub type AssetCaps<T: Config> =
 		StorageMap<_, Twox64Concat, AssetId, AssetCapInfo<BalanceOf<T>>>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// On-flight CCCP transfers.
-	/// key: The asset index hash.
-	/// key: The sequence ID.
-	/// value: The CCCP transfer information.
+	/// Active cross-chain transfers awaiting finalization.
+	///
+	/// This storage tracks all transfers that have been approved for execution but not yet
+	/// finalized (committed or rolled back). Transfers remain in this storage from approval
+	/// until finalization, when they are moved to `FinalizedTransfers`.
+	///
+	/// - **Key 1**: `AssetIndexHash` (H256) - The CCCP asset index identifying the transferred asset
+	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer within the asset
+	/// - **Value**: `TransferInfo<Balance, AccountId>` containing:
+	///   - `amount`: Transfer amount in the asset's units
+	///   - `option`: Fast or Standard transfer mode
+	///   - `status`: Current status (Pending → OnFlight → Finalized)
+	///   - `socket_message`: Original CCCP message from the transfer request
+	///   - `on_flight_voters`: Relayers who voted to approve the transfer (inbound only)
+	///   - `finalization_voters`: Relayers who voted to finalize the transfer (inbound only)
+	///
+	/// **Transfer Lifecycle**:
+	/// 1. **Outbound** (Bifrost → External): Immediately OnFlight upon first submission
+	/// 2. **Inbound** (External → Bifrost): Pending → OnFlight when majority consensus reached
+	/// 3. Both paths: Removed from this storage and moved to `FinalizedTransfers` upon finalization
 	pub type OnFlightTransfers<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
@@ -131,10 +176,27 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// Finalized CCCP transfers.
-	/// key: The asset index hash.
-	/// key: The sequence ID.
-	/// value: The CCCP transfer information.
+	/// Historical record of completed cross-chain transfers.
+	///
+	/// This storage maintains a permanent record of all transfers that have been finalized,
+	/// either committed (successfully executed) or rolled back (cancelled). Transfers are
+	/// moved here from `OnFlightTransfers` upon reaching final consensus.
+	///
+	/// - **Key 1**: `AssetIndexHash` (H256) - The CCCP asset index identifying the transferred asset
+	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer within the asset
+	/// - **Value**: `TransferInfo<Balance, AccountId>` with `status = Finalized` and final state:
+	///   - `amount`: Transfer amount in the asset's units
+	///   - `option`: Fast or Standard transfer mode used
+	///   - `status`: Always `Finalized` in this storage
+	///   - `socket_message`: Final CCCP message showing committed or rolled back status
+	///   - `on_flight_voters`: Complete list of relayers who approved the transfer
+	///   - `finalization_voters`: Complete list of relayers who confirmed finalization
+	///
+	/// **Purpose**:
+	/// - Prevents duplicate transfer processing by checking if a sequence ID already exists
+	/// - Provides historical audit trail for cross-chain transfer operations
+	/// - Enables queries for transfer outcomes (committed vs rolled back)
+	/// - Never removed (unbounded storage for permanent record-keeping)
 	pub type FinalizedTransfers<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
