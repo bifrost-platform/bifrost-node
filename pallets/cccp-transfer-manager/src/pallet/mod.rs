@@ -11,7 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_cccp::{SocketMessage, UserRequest};
+use bp_cccp::SocketMessage;
 use bp_staking::traits::Authorities;
 use sp_core::{H160, U256};
 use sp_io::hashing::keccak_256;
@@ -54,8 +54,6 @@ pub mod pallet {
 		UnknownAssetIndex,
 		/// The asset address is unknown.
 		UnknownAssetAddress,
-		/// The asset cap is insufficient.
-		InsufficientAssetCap,
 		/// The socket contract does not exist.
 		SocketDNE,
 		/// The transfer is already finalized.
@@ -150,6 +148,38 @@ pub mod pallet {
 		T::AccountId: Into<H160>,
 		BalanceOf<T>: Into<U256> + TryFrom<U256>,
 	{
+		/// Submit a transfer request for on-flight approval voting.
+		///
+		/// This extrinsic handles the initial validation and approval of CCCP transfer requests.
+		/// The behavior differs based on whether the transfer is outbound or inbound:
+		///
+		/// **Outbound transfers (Bifrost → External chain):**
+		/// - Validated against on-chain Socket contract state
+		/// - Immediately approved without voting (Bifrost is authoritative source)
+		/// - Status: Directly to `OnFlight`
+		///
+		/// **Inbound transfers (External chain → Bifrost):**
+		/// - Requires majority consensus from relayers
+		/// - First vote creates transfer with `Pending` status
+		/// - Subsequent votes update voter list
+		/// - Status: `Pending` → `OnFlight` when majority reached
+		///
+		/// **Fast vs Standard transfers:**
+		/// - Transfer option is determined based on available on-flight cap
+		/// - If on-flight cap would be exceeded, automatically uses Standard
+		/// - Fast transfers update the on-flight cap; Standard transfers do not
+		///
+		/// **Dynamic cap re-checking (inbound only):**
+		/// - Asset cap is re-evaluated when majority is reached
+		/// - Cap can change during voting due to other transfers finalizing or approving
+		/// - Transfer option (Fast/Standard) is updated based on current cap at majority point
+		/// - Example: Standard → Fast if other Fast transfers freed up cap during voting
+		/// - Example: Fast → Standard if cap was consumed by other transfers during voting
+		///
+		/// # Arguments
+		/// * `origin` - Must be `None` (unsigned transaction, validated in `validate_unsigned`)
+		/// * `socket_message_submission` - Contains authority ID and socket message bytes
+		/// * `_signature` - Signature over the message (validated in `validate_unsigned`)
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn on_flight_poll(
@@ -160,32 +190,16 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			let SocketMessageSubmission { authority_id, message } = socket_message_submission;
-			ensure!(!message.is_empty(), Error::<T>::EmptySubmission);
 
-			// the bytes should be a valid socket message
-			let msg = SocketMessage::try_from(message.clone())
-				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-			ensure!(msg.is_requested(), Error::<T>::InvalidSocketMessage);
+			// Parse and validate socket message (must be in REQUESTED status)
+			let msg = Self::validate_and_parse_socket_message(&message, |m| m.is_requested())?;
 			let amount = msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
 
-			// the bridge asset must be in AssetIndexes & AssetCaps
+			// Get and validate asset information
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
-			let asset_id =
-				AssetIndexes::<T>::get(asset_index_hash).ok_or(Error::<T>::UnknownAssetIndex)?;
-			let mut asset_cap =
-				AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::UnknownAssetAddress)?;
+			let (asset_id, asset_cap) = Self::get_and_validate_asset(asset_index_hash)?;
 
-			// the asset cap must be greater than zero
-			ensure!(asset_cap.max_on_flight_cap > Zero::zero(), Error::<T>::InsufficientAssetCap);
-
-			// calculate the new on-flight cap
-			let cap_after = asset_cap
-				.on_flight_cap
-				.into()
-				.checked_add(msg.params.amount)
-				.ok_or(Error::<T>::OutOfRange)?;
-
-			// the transfer must not be finalized yet
+			// Ensure transfer hasn't been finalized already
 			ensure!(
 				!FinalizedTransfers::<T>::contains_key(asset_index_hash, msg.req_id.sequence),
 				Error::<T>::TransferAlreadyFinalized
@@ -193,29 +207,28 @@ pub mod pallet {
 			let on_flight_transfer =
 				OnFlightTransfers::<T>::get(asset_index_hash, msg.req_id.sequence);
 
+			// Determine transfer option based on current cap: Fast if cap allows, otherwise Standard
+			let transfer_option = Self::determine_transfer_option(&asset_cap, msg.params.amount);
+
 			if msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
-				// the message must be valid onchain (only for outbound)
-				let msg_hash = Self::hash_bytes(
-					&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
-				);
-				let request_info = Self::try_get_request(&msg.encode_req_id())?;
-				ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::InvalidSocketMessage);
+				// ============================================================
+				// OUTBOUND PATH: Immediate approval (Bifrost is source)
+				// ============================================================
+
+				// Validate against on-chain Socket contract state
+				let request_info = Self::validate_on_chain_existence(&msg)?;
 				ensure!(request_info.is_requested(), Error::<T>::InvalidSocketMessage);
+
+				// Ensure transfer does not exist yet
 				ensure!(on_flight_transfer.is_none(), Error::<T>::TransferAlreadyOnFlight);
 
-				// if the asset cap is exceeded, the transfer will fallback to standard-transfer.
-				let option = if cap_after > asset_cap.max_on_flight_cap.into() {
-					TransferOption::Standard
-				} else {
-					TransferOption::Fast
-				};
-
+				// Create transfer with OnFlight status (immediate approval)
 				OnFlightTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
 					TransferInfo {
 						amount,
-						option,
+						option: transfer_option,
 						status: TransferStatus::OnFlight,
 						socket_message: message.clone(),
 						on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
@@ -224,24 +237,35 @@ pub mod pallet {
 					},
 				);
 
-				// increase the asset cap if fast transfer
-				if option == TransferOption::Fast {
-					asset_cap.on_flight_cap =
-						cap_after.try_into().map_err(|_| Error::<T>::OutOfRange)?;
-					AssetCaps::<T>::insert(asset_id, asset_cap);
+				// Update cap for Fast transfers
+				if transfer_option == TransferOption::Fast {
+					Self::update_fast_transfer_cap(asset_id, asset_cap, msg.params.amount, true)?;
 				}
 
 				Self::deposit_event(Event::TransferPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
 					authority_id,
-					option,
+					option: transfer_option,
 					amount,
 					status: TransferStatus::OnFlight,
 				});
 			} else {
-				// for inbound requests, we require voting
+				// ============================================================
+				// INBOUND PATH: Requires voting consensus
+				// ============================================================
+				//
+				// IMPORTANT: Asset cap is dynamically re-checked when majority is reached.
+				// During the voting period, the asset cap can change due to:
+				// - Other Fast transfers being finalized (freeing cap)
+				// - New Fast transfers being approved (consuming cap)
+				//
+				// Therefore, a transfer initially determined as Standard might become
+				// eligible for Fast (or vice versa) by the time majority is reached.
+				// The actual transfer option is re-determined at the majority checkpoint.
+
 				if let Some(mut on_flight_transfer) = on_flight_transfer {
+					// Subsequent vote on existing transfer
 					ensure!(
 						on_flight_transfer.status == TransferStatus::Pending,
 						Error::<T>::TransferAlreadyOnFlight
@@ -250,26 +274,36 @@ pub mod pallet {
 						on_flight_transfer.socket_message == message,
 						Error::<T>::InvalidSocketMessage
 					);
-					ensure!(
-						!on_flight_transfer.on_flight_voters.contains(&authority_id),
-						Error::<T>::AlreadyVoted
-					);
-					on_flight_transfer
-						.on_flight_voters
-						.try_push(authority_id.clone())
-						.map_err(|_| Error::<T>::OutOfRange)?;
 
-					// check if the transfer is approved
+					// Add voter with double-vote prevention
+					Self::add_voter_to_list(
+						&mut on_flight_transfer.on_flight_voters,
+						&authority_id,
+					)?;
+
+					// Check if majority reached → transition to OnFlight
 					if on_flight_transfer.on_flight_voters.len() as u32 >= T::Relayers::majority() {
+						// Re-check asset cap with latest state to handle cap changes during voting
+						let current_asset_cap =
+							AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::UnknownAssetAddress)?;
+						let actual_transfer_option =
+							Self::determine_transfer_option(&current_asset_cap, msg.params.amount);
+
+						// Update transfer option if cap availability changed during voting
+						on_flight_transfer.option = actual_transfer_option;
 						on_flight_transfer.status = TransferStatus::OnFlight;
 
-						// increase the asset cap if fast transfer
-						if on_flight_transfer.option == TransferOption::Fast {
-							asset_cap.on_flight_cap =
-								cap_after.try_into().map_err(|_| Error::<T>::OutOfRange)?;
-							AssetCaps::<T>::insert(asset_id, asset_cap);
+						// Update cap for Fast transfers
+						if actual_transfer_option == TransferOption::Fast {
+							Self::update_fast_transfer_cap(
+								asset_id,
+								current_asset_cap,
+								msg.params.amount,
+								true,
+							)?;
 						}
 					}
+
 					Self::deposit_event(Event::TransferPolled {
 						asset_index_hash,
 						sequence_id: msg.req_id.sequence,
@@ -278,24 +312,20 @@ pub mod pallet {
 						amount: on_flight_transfer.amount,
 						status: on_flight_transfer.status,
 					});
+
 					OnFlightTransfers::<T>::insert(
 						asset_index_hash,
 						msg.req_id.sequence,
 						on_flight_transfer,
 					);
 				} else {
-					// if the asset cap is exceeded, the transfer will fallback to standard-transfer.
-					let option = if cap_after > asset_cap.max_on_flight_cap.into() {
-						TransferOption::Standard
-					} else {
-						TransferOption::Fast
-					};
+					// First vote: create transfer with Pending status
 					OnFlightTransfers::<T>::insert(
 						asset_index_hash,
 						msg.req_id.sequence,
 						TransferInfo {
 							amount,
-							option,
+							option: transfer_option,
 							status: TransferStatus::Pending,
 							socket_message: message.clone(),
 							on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
@@ -303,11 +333,12 @@ pub mod pallet {
 							finalization_voters: BoundedVec::new(),
 						},
 					);
+
 					Self::deposit_event(Event::TransferPolled {
 						asset_index_hash,
 						sequence_id: msg.req_id.sequence,
 						authority_id,
-						option,
+						option: transfer_option,
 						amount,
 						status: TransferStatus::Pending,
 					});
@@ -317,6 +348,49 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		/// Finalize a transfer by polling finalization status from relayers.
+		/// This function must be called after committed/rollbacked status met consensus on the source chain.
+		///
+		/// This function implements dual-path finalization logic:
+		/// - **Outbound transfers** (Bifrost → External): Finalized immediately upon first commit/rollback vote
+		/// - **Inbound transfers** (External → Bifrost): Require majority consensus for finalization
+		///
+		/// # Dual-Path Finalization Architecture
+		///
+		/// ## Outbound Path (Immediate Finalization)
+		/// When a transfer originates from Bifrost to an external chain:
+		/// 1. First relayer submits commit/rollback status
+		/// 2. Validate status matches on-chain Socket contract state
+		/// 3. Immediately finalize without waiting for majority
+		/// 4. Update asset cap if Fast transfer
+		/// 5. Move to FinalizedTransfers
+		///
+		/// **Rationale**: Bifrost is the source chain, so the transfer execution is trusted.
+		/// Only the final status (committed/rollbacked) needs to be recorded.
+		///
+		/// ## Inbound Path (Voting-Based Finalization)
+		/// When a transfer originates from an external chain to Bifrost:
+		/// 1. Each relayer submits commit/rollback vote
+		/// 2. Votes are accumulated in `finalization_voters`
+		/// 3. When majority is reached, finalize the transfer
+		/// 4. Update asset cap if Fast transfer
+		/// 5. Move to FinalizedTransfers
+		///
+		/// **Rationale**: External chains are not trusted, so majority consensus
+		/// is required to confirm the transfer was properly committed/rollbacked.
+		///
+		/// # Validation Steps
+		/// 1. Parse and validate socket message (must be COMMITTED or ROLLBACKED)
+		/// 2. Verify asset exists and has configured cap
+		/// 3. Ensure transfer is in OnFlight status (not Pending or already Finalized)
+		/// 4. Verify submitted message matches initial message (except status field)
+		/// 5. Validate against on-chain Socket contract state
+		/// 6. Prevent double-voting by checking finalization_voters list
+		///
+		/// # Fast Transfer Cap Management
+		/// For Fast transfers, the on-flight cap is decremented when finalized:
+		/// - `on_flight_cap -= transfer_amount`
+		/// - This frees up capacity for new Fast transfers
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn finalize_poll(
@@ -327,27 +401,23 @@ pub mod pallet {
 			ensure_none(origin)?;
 
 			let SocketMessageSubmission { authority_id, message } = socket_message_submission;
-			ensure!(!message.is_empty(), Error::<T>::EmptySubmission);
 
-			// the bytes should be a valid socket message
-			let msg = SocketMessage::try_from(message.clone())
-				.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-			ensure!(msg.is_committed() || msg.is_rollbacked(), Error::<T>::InvalidSocketMessage);
-			let amount = msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+			// Parse and validate socket message (must be COMMITTED or ROLLBACKED)
+			let msg = Self::validate_and_parse_socket_message(&message, |msg| {
+				msg.is_committed() || msg.is_rollbacked()
+			})?;
 
-			// the bridge asset must be in AssetIndexes & AssetCaps
+			// Get and validate asset information
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
-			let asset_id =
-				AssetIndexes::<T>::get(asset_index_hash).ok_or(Error::<T>::UnknownAssetIndex)?;
-			let mut asset_cap =
-				AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::UnknownAssetAddress)?;
+			let (asset_id, asset_cap) = Self::get_and_validate_asset(asset_index_hash)?;
 
-			// the transfer must not be finalized yet
+			// Ensure transfer is not already finalized
 			ensure!(
 				!FinalizedTransfers::<T>::contains_key(asset_index_hash, msg.req_id.sequence),
 				Error::<T>::TransferAlreadyFinalized
 			);
-			// the transfer must exist in OnFlightTransfers and approved
+
+			// Get transfer and ensure it's in OnFlight status
 			let mut on_flight_transfer =
 				OnFlightTransfers::<T>::get(asset_index_hash, msg.req_id.sequence)
 					.ok_or(Error::<T>::TransferDNE)?;
@@ -355,56 +425,49 @@ pub mod pallet {
 				on_flight_transfer.status == TransferStatus::OnFlight,
 				Error::<T>::TransferNotOnFlight
 			);
-			// the submitted socket message must be the same as the one in OnFlightTransfers (except for the status)
+
+			// Verify submitted message matches initial message (except status field)
 			let mut initial_socket_message =
 				SocketMessage::try_from(on_flight_transfer.socket_message.clone())
 					.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 			initial_socket_message.status = msg.status;
 			ensure!(initial_socket_message.encode() == message, Error::<T>::InvalidSocketMessage);
 
-			// the message must be valid onchain
-			let msg_hash = Self::hash_bytes(
-				&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode(),
-			);
-			let request_info = Self::try_get_request(&msg.encode_req_id())?;
-			ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::InvalidSocketMessage);
+			// Validate against on-chain Socket contract state
+			let request_info = Self::validate_on_chain_existence(&msg)?;
 
-			ensure!(
-				!on_flight_transfer.finalization_voters.contains(&authority_id),
-				Error::<T>::AlreadyVoted
-			);
-			on_flight_transfer
-				.finalization_voters
-				.try_push(authority_id.clone())
-				.map_err(|_| Error::<T>::OutOfRange)?;
+			// Add voter to finalization voters list (prevents double-voting)
+			Self::add_voter_to_list(&mut on_flight_transfer.finalization_voters, &authority_id)?;
 
+			// Outbound path: Immediate finalization
 			if msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
-				// for outbound requests, after commit/rollback, the status on Bifrost must be Committed|Rollbacked
+				// For outbound, Socket contract must show Committed|Rollbacked status
 				ensure!(
 					(request_info.is_committed() && msg.is_committed())
 						|| (request_info.is_rollbacked() && msg.is_rollbacked()),
 					Error::<T>::InvalidSocketMessage
 				);
 
-				// for outbound requests, if the socket message status on Bifrost is committed, the transfer will be finalized immediately.
+				// Extract transfer option before moving
+				let is_fast_transfer = on_flight_transfer.option == TransferOption::Fast;
+
+				// Finalize immediately
 				on_flight_transfer.status = TransferStatus::Finalized;
 				FinalizedTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
-					on_flight_transfer.clone(),
+					on_flight_transfer,
 				);
 				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
 
-				if on_flight_transfer.option == TransferOption::Fast {
-					// calculate the new on-flight cap
-					let cap_after = asset_cap
-						.on_flight_cap
-						.into()
-						.checked_sub(amount)
-						.ok_or(Error::<T>::OutOfRange)?;
-					asset_cap.on_flight_cap =
-						cap_after.try_into().map_err(|_| Error::<T>::OutOfRange)?;
-					AssetCaps::<T>::insert(asset_id, asset_cap);
+				// Update cap for Fast transfers
+				if is_fast_transfer {
+					Self::update_fast_transfer_cap(
+						asset_id,
+						asset_cap,
+						msg.params.amount,
+						false, // subtract from cap
+					)?;
 				}
 
 				Self::deposit_event(Event::FinalizationPolled {
@@ -413,35 +476,40 @@ pub mod pallet {
 					authority_id,
 					is_finalized: true,
 				});
+
 				return Ok(().into());
-			} else {
-				// for inbound requests, after commit/rollback, the status on Bifrost must be Accepted|Rejected
-				ensure!(
-					(request_info.is_accepted() && msg.is_committed())
-						|| (request_info.is_rejected() && msg.is_rollbacked()),
-					Error::<T>::InvalidSocketMessage
-				);
 			}
 
+			// Inbound path: Voting-based finalization
+			// For inbound, Socket contract must show Accepted|Rejected status
+			ensure!(
+				(request_info.is_accepted() && msg.is_committed())
+					|| (request_info.is_rejected() && msg.is_rollbacked()),
+				Error::<T>::InvalidSocketMessage
+			);
+
+			// Check if majority is reached
 			if on_flight_transfer.finalization_voters.len() as u32 >= T::Relayers::majority() {
+				// Extract transfer option before moving
+				let is_fast_transfer = on_flight_transfer.option == TransferOption::Fast;
+
+				// Finalize with majority consensus
 				on_flight_transfer.status = TransferStatus::Finalized;
 				FinalizedTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
-					on_flight_transfer.clone(),
+					on_flight_transfer,
 				);
 				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
 
-				if on_flight_transfer.option == TransferOption::Fast {
-					// calculate the new on-flight cap
-					let cap_after = asset_cap
-						.on_flight_cap
-						.into()
-						.checked_sub(amount)
-						.ok_or(Error::<T>::OutOfRange)?;
-					asset_cap.on_flight_cap =
-						cap_after.try_into().map_err(|_| Error::<T>::OutOfRange)?;
-					AssetCaps::<T>::insert(asset_id, asset_cap);
+				// Update cap for Fast transfers
+				if is_fast_transfer {
+					Self::update_fast_transfer_cap(
+						asset_id,
+						asset_cap,
+						msg.params.amount,
+						false, // subtract from cap
+					)?;
 				}
 
 				Self::deposit_event(Event::FinalizationPolled {
@@ -451,11 +519,13 @@ pub mod pallet {
 					is_finalized: true,
 				});
 			} else {
+				// Majority not yet reached - persist vote and wait for more voters
 				OnFlightTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
-					on_flight_transfer.clone(),
+					on_flight_transfer,
 				);
+
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
