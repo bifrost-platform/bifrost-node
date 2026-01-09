@@ -1060,6 +1060,7 @@ dependencies = [
  "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
+ "pallet-cccp-transfer-manager",
  "pallet-collective",
  "pallet-democracy",
  "pallet-ethereum",
@@ -8249,6 +8250,7 @@ name = "pallet-relay-manager"
 version = "1.0.0"
 dependencies = [
  "bp-btc-relay",
+ "bp-cccp",
  "bp-core",
  "bp-staking",
  "frame-benchmarking",

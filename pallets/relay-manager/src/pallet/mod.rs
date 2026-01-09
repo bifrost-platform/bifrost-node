@@ -13,6 +13,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::traits::{PoolManager, SocketQueueManager};
+use bp_cccp::traits::TransferManager;
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
@@ -37,6 +38,8 @@ pub mod pallet {
 		type SocketQueue: SocketQueueManager<Self::AccountId>;
 		/// Interface of Bitcoin Registration Pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
+		/// Interface of CCCP Transfer Manager pallet.
+		type TransferManager: TransferManager<Self::AccountId>;
 		/// A type for retrieving the validators supposed to be well-behaved in a session.
 		type ValidatorSet: ValidatorSetWithIdentification<Self::AccountId>;
 		/// A type that gives us the ability to submit unresponsiveness offence reports.
