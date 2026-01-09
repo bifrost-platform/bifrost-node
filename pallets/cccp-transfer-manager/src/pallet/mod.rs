@@ -87,6 +87,8 @@ pub mod pallet {
 			asset_index_hash: AssetIndexHash,
 			sequence_id: U256,
 			authority_id: T::AccountId,
+			option: TransferOption,
+			amount: BalanceOf<T>,
 			is_finalized: bool,
 		},
 	}
@@ -456,7 +458,7 @@ pub mod pallet {
 				FinalizedTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
-					on_flight_transfer,
+					on_flight_transfer.clone(),
 				);
 				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
 
@@ -474,6 +476,8 @@ pub mod pallet {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
 					authority_id,
+					option: on_flight_transfer.option,
+					amount: on_flight_transfer.amount,
 					is_finalized: true,
 				});
 
@@ -498,7 +502,7 @@ pub mod pallet {
 				FinalizedTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
-					on_flight_transfer,
+					on_flight_transfer.clone(),
 				);
 				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
 
@@ -516,6 +520,8 @@ pub mod pallet {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
 					authority_id,
+					option: on_flight_transfer.option,
+					amount: on_flight_transfer.amount,
 					is_finalized: true,
 				});
 			} else {
@@ -523,13 +529,15 @@ pub mod pallet {
 				OnFlightTransfers::<T>::insert(
 					asset_index_hash,
 					msg.req_id.sequence,
-					on_flight_transfer,
+					on_flight_transfer.clone(),
 				);
 
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
 					authority_id,
+					option: on_flight_transfer.option,
+					amount: on_flight_transfer.amount,
 					is_finalized: false,
 				});
 			}
