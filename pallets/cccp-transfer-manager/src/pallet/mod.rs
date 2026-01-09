@@ -50,10 +50,6 @@ pub mod pallet {
 		InvalidSocketMessage,
 		/// The request information is invalid.
 		InvalidRequestInfo,
-		/// The asset index is unknown.
-		UnknownAssetIndex,
-		/// The asset address is unknown.
-		UnknownAssetAddress,
 		/// The socket contract does not exist.
 		SocketDNE,
 		/// The transfer is already finalized.
@@ -259,9 +255,9 @@ pub mod pallet {
 			let msg = Self::validate_and_parse_socket_message(&message, |m| m.is_requested())?;
 			let amount = msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
 
-			// Get and validate asset information
+			// Get asset information (if registered)
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
-			let (asset_id, asset_cap) = Self::get_and_validate_asset(asset_index_hash)?;
+			let asset_info = Self::get_asset_info(asset_index_hash);
 
 			// Ensure transfer hasn't been finalized already
 			ensure!(
@@ -271,8 +267,14 @@ pub mod pallet {
 			let on_flight_transfer =
 				OnFlightTransfers::<T>::get(asset_index_hash, msg.req_id.sequence);
 
-			// Determine transfer option based on current cap: Fast if cap allows, otherwise Standard
-			let transfer_option = Self::determine_transfer_option(&asset_cap, msg.params.amount);
+			// Determine transfer option based on current cap:
+			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
+			// - If asset is not registered: Always Standard (no Fast transfer support)
+			let transfer_option = if let Some((_, ref asset_cap)) = asset_info {
+				Self::determine_transfer_option(asset_cap, msg.params.amount)
+			} else {
+				TransferOption::Standard
+			};
 
 			if msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
 				// ============================================================
@@ -301,9 +303,16 @@ pub mod pallet {
 					},
 				);
 
-				// Update cap for Fast transfers
+				// Update cap for Fast transfers (only if asset is registered)
 				if transfer_option == TransferOption::Fast {
-					Self::update_fast_transfer_cap(asset_id, asset_cap, msg.params.amount, true)?;
+					if let Some((asset_id, asset_cap)) = asset_info {
+						Self::update_fast_transfer_cap(
+							asset_id,
+							asset_cap,
+							msg.params.amount,
+							true,
+						)?;
+					}
 				}
 
 				Self::deposit_event(Event::TransferPolled {
@@ -348,24 +357,33 @@ pub mod pallet {
 					// Check if majority reached → transition to OnFlight
 					if on_flight_transfer.on_flight_voters.len() as u32 >= T::Relayers::majority() {
 						// Re-check asset cap with latest state to handle cap changes during voting
-						let current_asset_cap =
-							AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::UnknownAssetAddress)?;
-						let actual_transfer_option =
-							Self::determine_transfer_option(&current_asset_cap, msg.params.amount);
+						// If asset is not registered, always use Standard mode
+						let actual_transfer_option = if let Some((asset_id, current_asset_cap)) =
+							Self::get_asset_info(asset_index_hash)
+						{
+							let option = Self::determine_transfer_option(
+								&current_asset_cap,
+								msg.params.amount,
+							);
+
+							// Update cap for Fast transfers
+							if option == TransferOption::Fast {
+								Self::update_fast_transfer_cap(
+									asset_id,
+									current_asset_cap,
+									msg.params.amount,
+									true,
+								)?;
+							}
+
+							option
+						} else {
+							TransferOption::Standard
+						};
 
 						// Update transfer option if cap availability changed during voting
 						on_flight_transfer.option = actual_transfer_option;
 						on_flight_transfer.status = TransferStatus::OnFlight;
-
-						// Update cap for Fast transfers
-						if actual_transfer_option == TransferOption::Fast {
-							Self::update_fast_transfer_cap(
-								asset_id,
-								current_asset_cap,
-								msg.params.amount,
-								true,
-							)?;
-						}
 					}
 
 					Self::deposit_event(Event::TransferPolled {
@@ -471,9 +489,9 @@ pub mod pallet {
 				msg.is_committed() || msg.is_rollbacked()
 			})?;
 
-			// Get and validate asset information
+			// Get asset information (if registered)
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
-			let (asset_id, asset_cap) = Self::get_and_validate_asset(asset_index_hash)?;
+			let asset_info = Self::get_asset_info(asset_index_hash);
 
 			// Ensure transfer is not already finalized
 			ensure!(
@@ -524,14 +542,16 @@ pub mod pallet {
 				);
 				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
 
-				// Update cap for Fast transfers
+				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
-					Self::update_fast_transfer_cap(
-						asset_id,
-						asset_cap,
-						msg.params.amount,
-						false, // subtract from cap
-					)?;
+					if let Some((asset_id, asset_cap)) = asset_info {
+						Self::update_fast_transfer_cap(
+							asset_id,
+							asset_cap,
+							msg.params.amount,
+							false, // subtract from cap
+						)?;
+					}
 				}
 
 				Self::deposit_event(Event::FinalizationPolled {
@@ -568,14 +588,16 @@ pub mod pallet {
 				);
 				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
 
-				// Update cap for Fast transfers
+				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
-					Self::update_fast_transfer_cap(
-						asset_id,
-						asset_cap,
-						msg.params.amount,
-						false, // subtract from cap
-					)?;
+					if let Some((asset_id, asset_cap)) = asset_info {
+						Self::update_fast_transfer_cap(
+							asset_id,
+							asset_cap,
+							msg.params.amount,
+							false, // subtract from cap
+						)?;
+					}
 				}
 
 				Self::deposit_event(Event::FinalizationPolled {
