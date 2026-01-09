@@ -1,11 +1,18 @@
-use frame_support::pallet_prelude::{InvalidTransaction, TransactionValidityError};
+use frame_support::{
+	ensure,
+	pallet_prelude::{InvalidTransaction, TransactionValidityError},
+};
 use pallet_evm::Runner;
 
-use bp_cccp::{RequestInfo, UnboundedBytes, SOCKET_GET_REQUEST_FUNCTION_SELECTOR};
-use bp_staking::traits::Authorities;
-use sp_core::{H160, H256};
+use bp_cccp::{
+	RequestInfo, SocketMessage, UnboundedBytes, UserRequest, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+};
+use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
+use sp_core::{ConstU32, H160, H256, U256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::DispatchError;
+use sp_runtime::{BoundedVec, DispatchError};
+
+use crate::{AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, TransferOption};
 
 use super::pallet::*;
 
@@ -108,5 +115,142 @@ impl<T: Config> Pallet<T> {
 		);
 
 		Ok(request_info)
+	}
+
+	/// Parse and validate a socket message from raw bytes.
+	///
+	/// # Arguments
+	/// * `message` - Raw message bytes to parse
+	/// * `expected_status_check` - Optional closure to validate the message status
+	///
+	/// # Returns
+	/// Parsed `SocketMessage` if valid, otherwise an error
+	pub fn validate_and_parse_socket_message(
+		message: &UnboundedBytes,
+		expected_status_check: impl FnOnce(&SocketMessage) -> bool,
+	) -> Result<SocketMessage, DispatchError> {
+		ensure!(!message.is_empty(), Error::<T>::EmptySubmission);
+
+		let msg = SocketMessage::try_from(message.clone())
+			.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+
+		ensure!(expected_status_check(&msg), Error::<T>::InvalidSocketMessage);
+
+		Ok(msg)
+	}
+
+	/// Get and validate asset information.
+	///
+	/// # Arguments
+	/// * `asset_index_hash` - The asset index hash to look up
+	///
+	/// # Returns
+	/// Tuple of (asset_id, asset_cap_info) if found and valid
+	pub fn get_and_validate_asset(
+		asset_index_hash: AssetIndexHash,
+	) -> Result<(AssetId, AssetCapInfo<BalanceOf<T>>), DispatchError> {
+		let asset_id =
+			AssetIndexes::<T>::get(asset_index_hash).ok_or(Error::<T>::UnknownAssetIndex)?;
+		let asset_cap = AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::UnknownAssetAddress)?;
+
+		Ok((asset_id, asset_cap))
+	}
+
+	/// Validate on-chain status of a transfer request.
+	///
+	/// # Arguments
+	/// * `msg` - The socket message to validate
+	///
+	/// # Returns
+	/// The validated `RequestInfo` from on-chain state
+	pub fn validate_on_chain_existence(msg: &SocketMessage) -> Result<RequestInfo, DispatchError>
+	where
+		T::AccountId: Into<H160>,
+	{
+		let msg_hash =
+			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
+		let request_info = Self::try_get_request(&msg.encode_req_id())?;
+
+		ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::InvalidSocketMessage);
+
+		Ok(request_info)
+	}
+
+	/// Add a voter to a voter list with double-vote prevention.
+	///
+	/// # Arguments
+	/// * `voters` - The voter list to add to
+	/// * `authority_id` - The authority to add
+	///
+	/// # Returns
+	/// Ok if voter added successfully, error if already voted or list full
+	pub fn add_voter_to_list(
+		voters: &mut BoundedVec<T::AccountId, ConstU32<MAX_AUTHORITIES>>,
+		authority_id: &T::AccountId,
+	) -> Result<(), DispatchError> {
+		ensure!(!voters.contains(authority_id), Error::<T>::AlreadyVoted);
+		voters.try_push(authority_id.clone()).map_err(|_| Error::<T>::OutOfRange)?;
+		Ok(())
+	}
+
+	/// Determine transfer option based on current asset cap availability.
+	///
+	/// # Arguments
+	/// * `asset_cap` - Current asset cap info
+	/// * `amount` - Transfer amount to check
+	///
+	/// # Returns
+	/// TransferOption::Fast if cap allows, otherwise TransferOption::Standard
+	///
+	/// # Note
+	/// This should be called with the LATEST asset cap from storage to ensure
+	/// accurate determination, especially during voting when caps can change.
+	pub fn determine_transfer_option(
+		asset_cap: &AssetCapInfo<BalanceOf<T>>,
+		amount: U256,
+	) -> TransferOption
+	where
+		BalanceOf<T>: Into<U256>,
+	{
+		let cap_after = asset_cap.on_flight_cap.into().saturating_add(amount);
+
+		if cap_after > asset_cap.max_on_flight_cap.into() {
+			TransferOption::Standard
+		} else {
+			TransferOption::Fast
+		}
+	}
+
+	/// Update asset cap for fast transfers.
+	///
+	/// # Arguments
+	/// * `asset_id` - The asset to update
+	/// * `asset_cap` - Current asset cap info
+	/// * `amount` - Amount to add (positive) or subtract (negative as U256)
+	/// * `is_addition` - true to add, false to subtract
+	///
+	/// # Returns
+	/// Updated asset cap info
+	pub fn update_fast_transfer_cap(
+		asset_id: AssetId,
+		mut asset_cap: AssetCapInfo<BalanceOf<T>>,
+		amount: U256,
+		is_addition: bool,
+	) -> Result<AssetCapInfo<BalanceOf<T>>, DispatchError>
+	where
+		BalanceOf<T>: Into<U256> + TryFrom<U256>,
+	{
+		let current_cap: U256 = asset_cap.on_flight_cap.into();
+
+		let new_cap = if is_addition {
+			current_cap.checked_add(amount).ok_or(Error::<T>::OutOfRange)?
+		} else {
+			current_cap.checked_sub(amount).ok_or(Error::<T>::OutOfRange)?
+		};
+
+		asset_cap.on_flight_cap = new_cap.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+		AssetCaps::<T>::insert(asset_id, asset_cap.clone());
+
+		Ok(asset_cap)
 	}
 }
