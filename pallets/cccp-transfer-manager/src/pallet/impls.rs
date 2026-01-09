@@ -5,14 +5,18 @@ use frame_support::{
 use pallet_evm::Runner;
 
 use bp_cccp::{
-	RequestInfo, SocketMessage, UnboundedBytes, UserRequest, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+	traits::TransferManager, RequestInfo, SocketMessage, UnboundedBytes, UserRequest,
+	SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
 };
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
+use scale_info::prelude::format;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::{BoundedVec, DispatchError};
 
-use crate::{AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, TransferOption};
+use crate::{
+	AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, TransferInfo, TransferOption, TransferStatus,
+};
 
 use super::pallet::*;
 
@@ -257,5 +261,52 @@ impl<T: Config> Pallet<T> {
 		AssetCaps::<T>::insert(asset_id, asset_cap.clone());
 
 		Ok(asset_cap)
+	}
+}
+
+impl<T: Config> TransferManager<T::AccountId> for Pallet<T> {
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// Replace authority in all on-flight transfers
+		OnFlightTransfers::<T>::translate::<TransferInfo<BalanceOf<T>, T::AccountId>, _>(
+			|_asset_index, _sequence_id, mut transfer_info| {
+				// Replace in on_flight_voters (only for Pending status)
+				if transfer_info.status == TransferStatus::Pending {
+					if let Some(pos) =
+						transfer_info.on_flight_voters.iter().position(|voter| voter == old)
+					{
+						// Remove old authority and add new one at the same position
+						transfer_info.on_flight_voters.remove(pos);
+						if transfer_info.on_flight_voters.try_insert(pos, new.clone()).is_err() {
+							log::warn!(
+								target: "pallet-cccp-transfer-manager",
+								"Failed to replace authority in on_flight_voters: {:?} -> {:?}",
+								old,
+								new
+							);
+						}
+					}
+				}
+
+				// Replace in finalization_voters (only for OnFlight status)
+				if transfer_info.status == TransferStatus::OnFlight {
+					if let Some(pos) =
+						transfer_info.finalization_voters.iter().position(|voter| voter == old)
+					{
+						// Remove old authority and add new one at the same position
+						transfer_info.finalization_voters.remove(pos);
+						if transfer_info.finalization_voters.try_insert(pos, new.clone()).is_err() {
+							log::warn!(
+								target: "pallet-cccp-transfer-manager",
+								"Failed to replace authority in finalization_voters: {:?} -> {:?}",
+								old,
+								new
+							);
+						}
+					}
+				}
+
+				Some(transfer_info)
+			},
+		);
 	}
 }
