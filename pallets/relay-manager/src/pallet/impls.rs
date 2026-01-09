@@ -217,7 +217,7 @@ where
 			if Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success") {
 				T::SocketQueue::replace_authority(&r.old, &r.new);
 				T::RegistrationPool::replace_authority(&r.old, &r.new);
-				T::TransferManager::replace_authority(&r.old, &r.new);
+				T::RelayQueue::replace_authority(&r.old, &r.new);
 
 				// replace member of RelayExecutive (only if it's the old member)
 				let mut members = Members::<T, Instance3>::get();
