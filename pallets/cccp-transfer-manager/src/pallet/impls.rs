@@ -56,7 +56,7 @@ impl<T: Config> Pallet<T> {
 			H160::zero(),  // source (context only, no state changes)
 			socket.into(), // target (socket contract)
 			calldata,      // input (function selector + req_id)
-			100_000u64,    // gas_limit (enough for view call)
+			1_000_000u64,  // gas_limit (1M for view call)
 			T::config(),
 		);
 
