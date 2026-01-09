@@ -139,21 +139,26 @@ impl<T: Config> Pallet<T> {
 		Ok(msg)
 	}
 
-	/// Get and validate asset information.
+	/// Get asset information.
 	///
 	/// # Arguments
 	/// * `asset_index_hash` - The asset index hash to look up
 	///
 	/// # Returns
-	/// Tuple of (asset_id, asset_cap_info) if found and valid
-	pub fn get_and_validate_asset(
+	/// `Some((asset_id, asset_cap_info))` if both asset ID and cap are registered,
+	/// `None` if either is missing (causes transfer to use Standard mode)
+	///
+	/// # Note
+	/// When this returns `None`, the transfer will always use Standard mode regardless
+	/// of amount, since Fast transfers are only supported for registered assets with
+	/// configured capacity limits.
+	pub fn get_asset_info(
 		asset_index_hash: AssetIndexHash,
-	) -> Result<(AssetId, AssetCapInfo<BalanceOf<T>>), DispatchError> {
-		let asset_id =
-			AssetIndexes::<T>::get(asset_index_hash).ok_or(Error::<T>::UnknownAssetIndex)?;
-		let asset_cap = AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::UnknownAssetAddress)?;
+	) -> Option<(AssetId, AssetCapInfo<BalanceOf<T>>)> {
+		let asset_id = AssetIndexes::<T>::get(asset_index_hash)?;
+		let asset_cap = AssetCaps::<T>::get(asset_id)?;
 
-		Ok((asset_id, asset_cap))
+		Some((asset_id, asset_cap))
 	}
 
 	/// Validate on-chain status of a transfer request.
