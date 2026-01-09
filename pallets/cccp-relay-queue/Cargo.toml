@@ -1,7 +1,7 @@
 [package]
-name = "pallet-cccp-transfer-manager"
+name = "pallet-cccp-relay-queue"
 version = "1.0.0"
-description = "A pallet for CCCP-V2 (Cross-Chain Communication Protocol) Transfer Manager"
+description = "A pallet for CCCP-V2 (Cross-Chain Communication Protocol) transfer management"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
