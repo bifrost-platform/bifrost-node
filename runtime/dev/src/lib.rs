@@ -831,12 +831,21 @@ parameter_types! {
 impl pallet_relay_manager::Config for Runtime {
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type TransferManager = CCCPTransferManager;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
 	type IsHeartbeatOffenceActive = IsHeartbeatOffenceActive;
 	type DefaultHeartbeatSlashFraction = DefaultHeartbeatSlashFraction;
 	type WeightInfo = pallet_relay_manager::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_cccp_transfer_manager::Config for Runtime {
+	type Currency = Balances;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type WeightInfo = pallet_cccp_transfer_manager::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1264,6 +1273,9 @@ mod runtime {
 
 	#[runtime::pallet_index(63)]
 	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
+
+	#[runtime::pallet_index(64)]
+	pub type CCCPTransferManager = pallet_cccp_transfer_manager;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

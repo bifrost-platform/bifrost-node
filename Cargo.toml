@@ -106,7 +106,7 @@ pallet-btc-registration-pool = { default-features = false, path = "pallets/btc-r
 pallet-btc-socket-queue = { default-features = false, path = "pallets/btc-socket-queue" }
 pallet-blaze = { default-features = false, path = "pallets/blaze" }
 pallet-bifrost-evm-tx-payment = { default-features = false, path = "pallets/bifrost-evm-tx-payment" }
-pallet-cccp-fast-transfer = { default-features = false, path = "pallets/cccp-fast-transfer" }
+pallet-cccp-transfer-manager = { default-features = false, path = "pallets/cccp-transfer-manager" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
