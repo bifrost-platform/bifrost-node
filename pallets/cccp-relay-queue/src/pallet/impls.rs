@@ -217,16 +217,20 @@ impl<T: Config> Pallet<T> {
 	pub fn determine_transfer_option(
 		asset_cap: &AssetCapInfo<BalanceOf<T>>,
 		amount: U256,
-	) -> TransferOption
+	) -> Result<TransferOption, DispatchError>
 	where
 		BalanceOf<T>: Into<U256>,
 	{
-		let cap_after = asset_cap.on_flight_cap.into().saturating_add(amount);
+		let cap_after = asset_cap
+			.on_flight_cap
+			.into()
+			.checked_add(amount)
+			.ok_or(Error::<T>::OutOfRange)?;
 
 		if cap_after > asset_cap.max_on_flight_cap.into() {
-			TransferOption::Standard
+			Ok(TransferOption::Standard)
 		} else {
-			TransferOption::Fast
+			Ok(TransferOption::Fast)
 		}
 	}
 
