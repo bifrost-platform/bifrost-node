@@ -7927,6 +7927,7 @@ name = "pallet-cccp-relay-queue"
 version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
+ "bifrost-common-constants",
  "bp-cccp",
  "bp-staking",
  "frame-benchmarking",
