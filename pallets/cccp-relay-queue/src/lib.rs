@@ -41,6 +41,15 @@ pub enum TransferStatus {
 pub type BalanceOf<T> =
 	<<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
+/// Maximum allowed on-flight cap per asset (100 million in base units).
+/// This limit prevents excessive Fast transfer exposure and potential overflow issues.
+/// Value: 100,000,000 * 10^18 (assuming 18 decimals like BFC)
+pub const MAX_ON_FLIGHT_CAP: u128 = 100_000_000 * bifrost_common_constants::currency::BFC; // 100M with 18 decimals
+
+/// Maximum number of asset indexes per call.
+/// This limit prevents excessive asset index operations and DoS attacks.
+pub const MAX_ASSET_INDEXES_PER_CALL: usize = 100;
+
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct AssetCapInfo<Balance> {
 	/// The maximum on-flight cap of the asset.

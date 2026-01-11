@@ -16,7 +16,7 @@ use bp_staking::traits::Authorities;
 use sp_core::{H160, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
-use sp_std::{fmt::Display, vec};
+use sp_std::{fmt::Display, vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -64,6 +64,34 @@ pub mod pallet {
 		AlreadyVoted,
 		/// The value is out of range.
 		OutOfRange,
+		/// Cannot set the value as identical to the previous value.
+		NoWritingSameValue,
+		/// The asset already exists.
+		AssetAlreadyExists,
+		/// The asset index already exists.
+		AssetIndexAlreadyExists,
+		/// The asset does not exist.
+		AssetDNE,
+		/// The asset index does not exist.
+		AssetIndexDNE,
+		/// The asset index does not belong to the asset.
+		AssetIndexNotBelongToAsset,
+		/// The asset has active on-flight transfers and cannot be removed.
+		AssetHasActiveTransfers,
+		/// Cannot reduce max_on_flight_cap below current on_flight_cap.
+		CapReductionBelowCurrentUsage,
+		/// The asset indexes vector is empty.
+		EmptyAssetIndexes,
+		/// Too many asset indexes in a single call.
+		TooManyAssetIndexes,
+		/// Duplicate asset index within the same transaction.
+		DuplicateAssetIndex,
+		/// Conflicting operations on the same asset index (add and remove).
+		ConflictingAssetIndexOperation,
+		/// Max on-flight cap must be greater than zero.
+		InvalidMaxCap,
+		/// Max on-flight cap exceeds maximum allowed value.
+		CapTooLarge,
 	}
 
 	#[pallet::event]
@@ -87,6 +115,23 @@ pub mod pallet {
 			amount: BalanceOf<T>,
 			is_finalized: bool,
 		},
+		/// An asset has been added.
+		AssetAdded {
+			asset_id: AssetId,
+			max_on_flight_cap: BalanceOf<T>,
+			asset_indexes: Vec<AssetIndexHash>,
+		},
+		/// An asset has been removed.
+		AssetRemoved { asset_id: AssetId, asset_indexes: Vec<AssetIndexHash> },
+		/// An asset has been updated.
+		AssetUpdated {
+			asset_id: AssetId,
+			new_max_on_flight_cap: Option<BalanceOf<T>>,
+			add_asset_indexes: Option<Vec<AssetIndexHash>>,
+			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
+		},
+		/// The socket has been set.
+		SocketSet { new: T::AccountId },
 	}
 
 	#[pallet::storage]
@@ -625,6 +670,348 @@ pub mod pallet {
 					is_finalized: false,
 				});
 			}
+
+			Ok(().into())
+		}
+
+		/// Set or update the Socket contract address for CCCP message validation.
+		///
+		/// This extrinsic configures the on-chain Socket contract address used to validate
+		/// all cross-chain transfer requests. The Socket contract maintains the authoritative
+		/// state of transfer requests and their execution status.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `new` - The new Socket contract account ID to set
+		///
+		/// # Errors
+		/// * `NoWritingSameValue` - If the new address is identical to the current address
+		///
+		/// # Events
+		/// * `SocketSet { new }` - Emitted when the Socket address is successfully updated
+		///
+		/// # Important
+		/// - This is a critical configuration parameter affecting all transfer validations
+		/// - Changing the Socket address will redirect all future validations to the new contract
+		/// - Ensure the new contract is properly deployed and initialized before setting
+		#[pallet::call_index(2)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn set_socket(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			if let Some(old) = <Socket<T>>::get() {
+				ensure!(old != new, Error::<T>::NoWritingSameValue);
+			}
+			<Socket<T>>::put(new.clone());
+			Self::deposit_event(Event::SocketSet { new });
+
+			Ok(().into())
+		}
+
+		/// Register a new asset with Fast transfer mode support.
+		///
+		/// This extrinsic registers an asset for cross-chain transfers, configuring its
+		/// maximum on-flight capacity and associating CCCP asset indexes with it. Assets
+		/// registered through this extrinsic can utilize Fast transfer mode when capacity
+		/// allows.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `asset_id` - The EVM-compatible asset contract address (H160)
+		///   - For native BFC: `0xffffffffffffffffffffffffffffffffffffffff`
+		///   - For ERC20 tokens: The unified token contract address
+		/// * `max_on_flight_cap` - Maximum total amount allowed in Fast transfers simultaneously
+		///   - Must be > 0 (cannot create non-functional assets)
+		///   - Must be ≤ 100,000,000 * 10^18 (100M cap limit)
+		///   - When exceeded, transfers automatically fall back to Standard mode
+		/// * `asset_indexes` - Vector of CCCP asset index hashes (H256) to associate with this asset
+		///   - Must contain at least 1 index (cannot be empty)
+		///   - Maximum 100 indexes per call (DoS protection)
+		///   - No duplicates allowed within the call
+		///   - Format: Combines chain ID, asset type, and asset identifier
+		///   - Example: `BFC_ON_BFC_MAIN` = `0x000000010000000100000bfcffffffffffffffffffffffffffffffffffffffff`
+		///
+		/// # Errors
+		/// * `EmptyAssetIndexes` - If `asset_indexes` vector is empty
+		/// * `TooManyAssetIndexes` - If more than 100 asset indexes provided
+		/// * `InvalidMaxCap` - If `max_on_flight_cap` is zero
+		/// * `CapTooLarge` - If `max_on_flight_cap` exceeds 100M limit
+		/// * `DuplicateAssetIndex` - If duplicate indexes exist within the call
+		/// * `AssetAlreadyExists` - If the asset_id is already registered
+		/// * `AssetIndexAlreadyExists` - If any asset index is already associated with another asset
+		///
+		/// # Events
+		/// * `AssetAdded { asset_id, max_on_flight_cap, asset_indexes }` - Emitted on successful registration
+		///
+		/// # Storage Modifications
+		/// - `AssetCaps`: Inserts new entry with `max_on_flight_cap` and `on_flight_cap = 0`
+		/// - `AssetIndexes`: Inserts mapping from each asset index to the asset_id
+		///
+		/// # Important
+		/// - All validations are performed BEFORE any storage modifications (atomic operation)
+		/// - The `on_flight_cap` is initialized to 0 and increases/decreases with Fast transfers
+		/// - Asset indexes enable CCCP protocol to resolve cross-chain transfer requests
+		/// - Once registered, use `update_asset` to modify capacity or indexes
+		#[pallet::call_index(3)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn add_asset(
+			origin: OriginFor<T>,
+			asset_id: AssetId,
+			max_on_flight_cap: BalanceOf<T>,
+			asset_indexes: Vec<AssetIndexHash>,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			// Validate asset_indexes is not empty
+			ensure!(!asset_indexes.is_empty(), Error::<T>::EmptyAssetIndexes);
+
+			ensure!(
+				asset_indexes.len() <= crate::MAX_ASSET_INDEXES_PER_CALL,
+				Error::<T>::TooManyAssetIndexes
+			);
+
+			// Validate max_on_flight_cap > 0
+			ensure!(max_on_flight_cap > Default::default(), Error::<T>::InvalidMaxCap);
+
+			// Upper bound validation (100M cap limit)
+			let max_cap_u128: u128 =
+				max_on_flight_cap.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+			ensure!(max_cap_u128 <= crate::MAX_ON_FLIGHT_CAP, Error::<T>::CapTooLarge);
+
+			// Check for duplicates within same call
+			let mut seen = sp_std::collections::btree_set::BTreeSet::new();
+			for asset_index in &asset_indexes {
+				ensure!(seen.insert(asset_index), Error::<T>::DuplicateAssetIndex);
+			}
+
+			// Validate asset doesn't already exist
+			ensure!(!AssetCaps::<T>::contains_key(asset_id), Error::<T>::AssetAlreadyExists);
+
+			// Validate ALL indexes before ANY storage modifications (atomicity)
+			for asset_index in &asset_indexes {
+				ensure!(
+					!AssetIndexes::<T>::contains_key(asset_index),
+					Error::<T>::AssetIndexAlreadyExists
+				);
+			}
+
+			// All validations passed - now safe to insert
+			AssetCaps::<T>::insert(
+				asset_id,
+				AssetCapInfo { max_on_flight_cap, on_flight_cap: Default::default() },
+			);
+			for asset_index in &asset_indexes {
+				AssetIndexes::<T>::insert(asset_index, asset_id);
+			}
+
+			Self::deposit_event(Event::AssetAdded { asset_id, max_on_flight_cap, asset_indexes });
+
+			Ok(().into())
+		}
+
+		/// Unregister an asset and its associated CCCP asset indexes.
+		///
+		/// This extrinsic removes an asset from the cross-chain transfer registry. It also
+		/// removes all CCCP asset indexes that were mapped to this asset.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `asset_id` - The EVM-compatible asset contract address (H160) to remove
+		///
+		/// # Errors
+		/// * `AssetDNE` - If the asset is not registered
+		/// * `AssetHasActiveTransfers` - If any of the associated asset indexes have active on-flight transfers
+		///
+		/// # Events
+		/// * `AssetRemoved { asset_id, asset_indexes }` - Emitted on successful removal
+		///
+		/// # Storage Modifications
+		/// - `AssetCaps`: Entry for `asset_id` is removed
+		/// - `AssetIndexes`: All mappings for the associated asset indexes are removed
+		///
+		/// # Important
+		/// - An asset cannot be removed if it has any active on-flight transfers. This ensures
+		///   system consistency and prevents orphaned transfers.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn remove_asset(origin: OriginFor<T>, asset_id: AssetId) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(AssetCaps::<T>::contains_key(asset_id), Error::<T>::AssetDNE);
+
+			// Collect all asset indexes for this asset
+			let asset_indexes: Vec<AssetIndexHash> = AssetIndexes::<T>::iter()
+				.filter(|(_, v)| *v == asset_id)
+				.map(|(k, _)| k)
+				.collect();
+
+			// Check if any of the asset indexes have active on-flight transfers
+			for asset_index in &asset_indexes {
+				let has_active_transfers =
+					OnFlightTransfers::<T>::iter_prefix(asset_index).next().is_some();
+				ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
+			}
+
+			// Safe to remove asset and its indexes
+			AssetCaps::<T>::remove(asset_id);
+			for asset_index in &asset_indexes {
+				AssetIndexes::<T>::remove(asset_index);
+			}
+
+			Self::deposit_event(Event::AssetRemoved { asset_id, asset_indexes });
+
+			Ok(().into())
+		}
+
+		/// Update an existing asset's configuration and CCCP asset indexes.
+		///
+		/// This extrinsic allows modifying the maximum on-flight capacity of a registered
+		/// asset and managing its associated CCCP asset indexes by adding or removing them.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `asset_id` - The EVM-compatible asset contract address (H160) to update
+		/// * `new_max_on_flight_cap` - (Optional) New maximum total amount allowed in Fast transfers
+		///   - Must be > 0
+		///   - Must be ≤ 100M cap limit
+		///   - Cannot be less than the current `on_flight_cap`
+		/// * `add_asset_indexes` - (Optional) Vector of new CCCP asset index hashes to associate
+		///   - Maximum 100 indexes per call
+		///   - No duplicates allowed within the call
+		///   - Each index must not already be registered
+		/// * `remove_asset_indexes` - (Optional) Vector of CCCP asset index hashes to disassociate
+		///   - Maximum 100 indexes per call
+		///   - Each index must belong to the specified `asset_id`
+		///   - Index must not have active on-flight transfers
+		///
+		/// # Errors
+		/// * `EmptySubmission` - If no update fields are provided
+		/// * `AssetDNE` - If the asset is not registered
+		/// * `TooManyAssetIndexes` - If more than 100 asset indexes provided in add or remove lists
+		/// * `DuplicateAssetIndex` - If duplicate indexes exist within the add or remove lists
+		/// * `ConflictingAssetIndexOperation` - If an index is present in both add and remove lists
+		/// * `NoWritingSameValue` - If the new cap is identical to the current cap
+		/// * `InvalidMaxCap` - If the new cap is zero
+		/// * `CapTooLarge` - If the new cap exceeds 100M limit
+		/// * `CapReductionBelowCurrentUsage` - If the new cap is less than the current on-flight usage
+		/// * `AssetIndexAlreadyExists` - If a new index to add is already registered
+		/// * `AssetIndexDNE` - If an index to remove is not registered
+		/// * `AssetIndexNotBelongToAsset` - If an index to remove belongs to a different asset
+		/// * `AssetHasActiveTransfers` - If an index to remove has active on-flight transfers
+		///
+		/// # Events
+		/// * `AssetUpdated { asset_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
+		///
+		/// # Storage Modifications
+		/// - `AssetCaps`: Updates `max_on_flight_cap` for the asset
+		/// - `AssetIndexes`: Inserts new mappings and removes specified mappings
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn update_asset(
+			origin: OriginFor<T>,
+			asset_id: AssetId,
+			new_max_on_flight_cap: Option<BalanceOf<T>>,
+			add_asset_indexes: Option<Vec<AssetIndexHash>>,
+			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			// Ensure at least one of the fields is provided
+			ensure!(
+				new_max_on_flight_cap.is_some()
+					|| add_asset_indexes.is_some()
+					|| remove_asset_indexes.is_some(),
+				Error::<T>::EmptySubmission
+			);
+
+			// Bounded vector sizes (DoS protection)
+			if let Some(ref indexes) = add_asset_indexes {
+				ensure!(
+					indexes.len() <= crate::MAX_ASSET_INDEXES_PER_CALL,
+					Error::<T>::TooManyAssetIndexes
+				);
+			}
+			if let Some(ref indexes) = remove_asset_indexes {
+				ensure!(
+					indexes.len() <= crate::MAX_ASSET_INDEXES_PER_CALL,
+					Error::<T>::TooManyAssetIndexes
+				);
+			}
+
+			// Check for duplicates within add_asset_indexes
+			if let Some(ref indexes) = add_asset_indexes {
+				let mut seen = sp_std::collections::btree_set::BTreeSet::new();
+				for asset_index in indexes {
+					ensure!(seen.insert(asset_index), Error::<T>::DuplicateAssetIndex);
+				}
+			}
+
+			// Check for duplicates within remove_asset_indexes
+			if let Some(ref indexes) = remove_asset_indexes {
+				let mut seen = sp_std::collections::btree_set::BTreeSet::new();
+				for asset_index in indexes {
+					ensure!(seen.insert(asset_index), Error::<T>::DuplicateAssetIndex);
+				}
+			}
+
+			// Check for conflicts between add and remove
+			if let (Some(ref add), Some(ref remove)) = (&add_asset_indexes, &remove_asset_indexes) {
+				for add_idx in add {
+					ensure!(!remove.contains(add_idx), Error::<T>::ConflictingAssetIndexOperation);
+				}
+			}
+
+			let mut asset_cap = AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::AssetDNE)?;
+			if let Some(new_max_on_flight_cap) = new_max_on_flight_cap {
+				if asset_cap.max_on_flight_cap == new_max_on_flight_cap {
+					return Err(Error::<T>::NoWritingSameValue.into());
+				}
+				// Validate max_on_flight_cap > 0
+				ensure!(new_max_on_flight_cap > Default::default(), Error::<T>::InvalidMaxCap);
+
+				// Upper bound validation (100M cap limit)
+				let max_cap_u128: u128 =
+					new_max_on_flight_cap.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+				ensure!(max_cap_u128 <= crate::MAX_ON_FLIGHT_CAP, Error::<T>::CapTooLarge);
+
+				// Prevent reducing cap below current usage
+				ensure!(
+					new_max_on_flight_cap >= asset_cap.on_flight_cap,
+					Error::<T>::CapReductionBelowCurrentUsage
+				);
+				asset_cap.max_on_flight_cap = new_max_on_flight_cap;
+				AssetCaps::<T>::insert(asset_id, asset_cap);
+			}
+			if let Some(add_asset_indexes) = &add_asset_indexes {
+				for asset_index in add_asset_indexes {
+					ensure!(
+						!AssetIndexes::<T>::contains_key(asset_index),
+						Error::<T>::AssetIndexAlreadyExists
+					);
+					AssetIndexes::<T>::insert(asset_index, asset_id);
+				}
+			}
+			if let Some(remove_asset_indexes) = &remove_asset_indexes {
+				for asset_index in remove_asset_indexes {
+					let found_asset_id =
+						AssetIndexes::<T>::get(asset_index).ok_or(Error::<T>::AssetIndexDNE)?;
+					ensure!(found_asset_id == asset_id, Error::<T>::AssetIndexNotBelongToAsset);
+
+					// Prevent removing asset indexes with active transfers
+					let has_active_transfers =
+						OnFlightTransfers::<T>::iter_prefix(asset_index).next().is_some();
+					ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
+
+					AssetIndexes::<T>::remove(asset_index);
+				}
+			}
+
+			Self::deposit_event(Event::AssetUpdated {
+				asset_id,
+				new_max_on_flight_cap,
+				add_asset_indexes,
+				remove_asset_indexes,
+			});
 
 			Ok(().into())
 		}
