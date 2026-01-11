@@ -215,9 +215,9 @@ where
 		let relayer_sets = <DelayedRelayerSets<T>>::take(delayed_round);
 		relayer_sets.into_iter().for_each(|r| {
 			if Self::replace_bonded_relayer(&r.old, &r.new).expect("Replacement must success") {
+				T::RelayQueue::replace_authority(&r.old, &r.new);
 				T::SocketQueue::replace_authority(&r.old, &r.new);
 				T::RegistrationPool::replace_authority(&r.old, &r.new);
-				T::RelayQueue::replace_authority(&r.old, &r.new);
 
 				// replace member of RelayExecutive (only if it's the old member)
 				let mut members = Members::<T, Instance3>::get();
