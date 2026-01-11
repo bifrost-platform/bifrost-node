@@ -316,7 +316,7 @@ pub mod pallet {
 			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
 			// - If asset is not registered: Always Standard (no Fast transfer support)
 			let transfer_option = if let Some((_, ref asset_cap)) = asset_info {
-				Self::determine_transfer_option(asset_cap, msg.params.amount)
+				Self::determine_transfer_option(asset_cap, msg.params.amount)?
 			} else {
 				TransferOption::Standard
 			};
@@ -409,7 +409,7 @@ pub mod pallet {
 							let option = Self::determine_transfer_option(
 								&current_asset_cap,
 								msg.params.amount,
-							);
+							)?;
 
 							// Update cap for Fast transfers
 							if option == TransferOption::Fast {
