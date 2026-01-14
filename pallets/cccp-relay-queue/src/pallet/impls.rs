@@ -48,7 +48,7 @@ impl<T: Config> Pallet<T> {
 			array_bytes::hex2bytes(&calldata_hex).map_err(|_| Error::<T>::InvalidRequestInfo)?;
 
 		log::debug!(
-			target: "pallet-cccp-transfer-manager",
+			target: "pallet-cccp-relay-queue",
 			"Socket call: calling get_request() on {:?}",
 			socket
 		);
@@ -67,14 +67,14 @@ impl<T: Config> Pallet<T> {
 		let result = match result {
 			Err(_) => {
 				log::warn!(
-					target: "pallet-cccp-transfer-manager",
+					target: "pallet-cccp-relay-queue",
 					"Socket call failed: Runner::view_call returned error"
 				);
 				return Err(Error::<T>::InvalidRequestInfo.into());
 			},
 			Ok(r) => {
 				log::debug!(
-					target: "pallet-cccp-transfer-manager",
+					target: "pallet-cccp-relay-queue",
 					"Socket call result: exit_reason={:?}, return_data_len={}",
 					r.exit_reason, r.value.len()
 				);
@@ -87,7 +87,7 @@ impl<T: Config> Pallet<T> {
 			pallet_evm::ExitReason::Succeed(_) => {},
 			ref reason => {
 				log::warn!(
-					target: "pallet-cccp-transfer-manager",
+					target: "pallet-cccp-relay-queue",
 					"Socket call reverted: {:?}",
 					reason
 				);
@@ -101,7 +101,7 @@ impl<T: Config> Pallet<T> {
 		let return_data = result.value;
 		if return_data.len() < 1088 {
 			log::warn!(
-				target: "pallet-cccp-transfer-manager",
+				target: "pallet-cccp-relay-queue",
 				"Socket call failed: return data too short, expected 1088 bytes, got {}",
 				return_data.len()
 			);
@@ -113,7 +113,7 @@ impl<T: Config> Pallet<T> {
 			RequestInfo::try_from(return_data).map_err(|_| Error::<T>::InvalidRequestInfo)?;
 
 		log::debug!(
-			target: "pallet-cccp-transfer-manager",
+			target: "pallet-cccp-relay-queue",
 			"Request info: msg_hash={:?}, registered_time={}",
 			request_info.msg_hash, request_info.registered_time
 		);
@@ -282,7 +282,7 @@ impl<T: Config> RelayQueueManager<T::AccountId> for Pallet<T> {
 						transfer_info.on_flight_voters.remove(pos);
 						if transfer_info.on_flight_voters.try_insert(pos, new.clone()).is_err() {
 							log::warn!(
-								target: "pallet-cccp-transfer-manager",
+								target: "pallet-cccp-relay-queue",
 								"Failed to replace authority in on_flight_voters: {:?} -> {:?}",
 								old,
 								new
@@ -300,7 +300,7 @@ impl<T: Config> RelayQueueManager<T::AccountId> for Pallet<T> {
 						transfer_info.finalization_voters.remove(pos);
 						if transfer_info.finalization_voters.try_insert(pos, new.clone()).is_err() {
 							log::warn!(
-								target: "pallet-cccp-transfer-manager",
+								target: "pallet-cccp-relay-queue",
 								"Failed to replace authority in finalization_voters: {:?} -> {:?}",
 								old,
 								new
