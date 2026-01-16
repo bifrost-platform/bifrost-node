@@ -18,6 +18,9 @@ use sp_runtime::BoundedVec;
 /// Asset address type.
 pub type AssetId = H160;
 
+/// Asset oracle address type.
+pub type AssetOracleId = H160;
+
 /// Asset index hash type.
 pub type AssetIndexHash = H256;
 
