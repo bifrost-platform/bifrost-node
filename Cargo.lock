@@ -1096,6 +1096,7 @@ dependencies = [
  "precompile-blaze",
  "precompile-btc-registration-pool",
  "precompile-btc-socket-queue",
+ "precompile-cccp-relay-queue",
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
@@ -9351,6 +9352,22 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-btc-socket-queue",
+ "pallet-evm",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-cccp-relay-queue"
+version = "1.0.0"
+dependencies = [
+ "fp-account",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-cccp-relay-queue",
  "pallet-evm",
  "precompile-utils",
  "sp-core",
