@@ -29,6 +29,7 @@ members = [
 	"precompiles/btc-socket-queue",
 	"precompiles/blaze",
 	"precompiles/bifrost-evm-tx-payment",
+	"precompiles/cccp-relay-queue",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
@@ -119,6 +120,7 @@ precompile-btc-registration-pool = { default-features = false, path = "precompil
 precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
+precompile-cccp-relay-queue = { default-features = false, path = "precompiles/cccp-relay-queue" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2506" }
