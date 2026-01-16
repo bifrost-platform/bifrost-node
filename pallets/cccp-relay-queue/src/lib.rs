@@ -15,6 +15,9 @@ use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256};
 use sp_runtime::BoundedVec;
 
+/// Chain ID type.
+pub type ChainId = u32;
+
 /// Asset address type.
 pub type AssetId = H160;
 
@@ -52,6 +55,11 @@ pub const MAX_ON_FLIGHT_CAP: u128 = 100_000_000 * bifrost_common_constants::curr
 /// Maximum number of asset indexes per call.
 /// This limit prevents excessive asset index operations and DoS attacks.
 pub const MAX_ASSET_INDEXES_PER_CALL: usize = 100;
+
+/// Maximum native currency chains per asset (50).
+/// Rationale: Realistically, no asset will be native on >50 chains.
+/// This prevents storage bloat while allowing future chain growth.
+pub const MAX_NATIVE_CURRENCY_CHAINS: usize = 50;
 
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct AssetCapInfo<Balance> {
