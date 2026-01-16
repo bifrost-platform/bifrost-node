@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, SocketMessageSubmission,
-	TransferInfo, TransferOption, TransferStatus,
+	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf,
+	SocketMessageSubmission, TransferInfo, TransferOption, TransferStatus,
 };
 
 use frame_support::{
@@ -118,6 +118,7 @@ pub mod pallet {
 		/// An asset has been added.
 		AssetAdded {
 			asset_id: AssetId,
+			asset_oracle_id: AssetOracleId,
 			max_on_flight_cap: BalanceOf<T>,
 			asset_indexes: Vec<AssetIndexHash>,
 		},
@@ -126,6 +127,7 @@ pub mod pallet {
 		/// An asset has been updated.
 		AssetUpdated {
 			asset_id: AssetId,
+			new_asset_oracle_id: Option<AssetOracleId>,
 			new_max_on_flight_cap: Option<BalanceOf<T>>,
 			add_asset_indexes: Option<Vec<AssetIndexHash>>,
 			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
@@ -183,6 +185,18 @@ pub mod pallet {
 	///   - Cap decreases when Fast transfers are finalized (committed or rolled back)
 	pub type AssetCaps<T: Config> =
 		StorageMap<_, Twox64Concat, AssetId, AssetCapInfo<BalanceOf<T>>>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Mapping from asset addresses to their oracle addresses.
+	///
+	/// This storage maps EVM-compatible asset contract addresses to their corresponding
+	/// oracle addresses. Oracle addresses are used to fetch the price of the asset from the
+	/// price oracle.
+	///
+	/// - **Key**: `AssetId` (H160) - The EVM-compatible asset contract address
+	/// - **Value**: `AssetOracleId` (H160) - The oracle address
+	pub type AssetOracles<T: Config> = StorageMap<_, Twox64Concat, AssetId, AssetOracleId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -720,6 +734,7 @@ pub mod pallet {
 		/// * `asset_id` - The EVM-compatible asset contract address (H160)
 		///   - For native BFC: `0xffffffffffffffffffffffffffffffffffffffff`
 		///   - For ERC20 tokens: The unified token contract address
+		/// * `asset_oracle_id` - The oracle address (H160) for price feed of this asset
 		/// * `max_on_flight_cap` - Maximum total amount allowed in Fast transfers simultaneously
 		///   - Must be > 0 (cannot create non-functional assets)
 		///   - Must be ≤ 100,000,000 * 10^18 (100M cap limit)
@@ -741,10 +756,11 @@ pub mod pallet {
 		/// * `AssetIndexAlreadyExists` - If any asset index is already associated with another asset
 		///
 		/// # Events
-		/// * `AssetAdded { asset_id, max_on_flight_cap, asset_indexes }` - Emitted on successful registration
+		/// * `AssetAdded { asset_id, asset_oracle_id, max_on_flight_cap, asset_indexes }` - Emitted on successful registration
 		///
 		/// # Storage Modifications
 		/// - `AssetCaps`: Inserts new entry with `max_on_flight_cap` and `on_flight_cap = 0`
+		/// - `AssetOracles`: Inserts mapping from asset_id to asset_oracle_id
 		/// - `AssetIndexes`: Inserts mapping from each asset index to the asset_id
 		///
 		/// # Important
@@ -757,6 +773,7 @@ pub mod pallet {
 		pub fn add_asset(
 			origin: OriginFor<T>,
 			asset_id: AssetId,
+			asset_oracle_id: AssetOracleId,
 			max_on_flight_cap: BalanceOf<T>,
 			asset_indexes: Vec<AssetIndexHash>,
 		) -> DispatchResultWithPostInfo {
@@ -800,11 +817,17 @@ pub mod pallet {
 				asset_id,
 				AssetCapInfo { max_on_flight_cap, on_flight_cap: Default::default() },
 			);
+			AssetOracles::<T>::insert(asset_id, asset_oracle_id);
 			for asset_index in &asset_indexes {
 				AssetIndexes::<T>::insert(asset_index, asset_id);
 			}
 
-			Self::deposit_event(Event::AssetAdded { asset_id, max_on_flight_cap, asset_indexes });
+			Self::deposit_event(Event::AssetAdded {
+				asset_id,
+				asset_oracle_id,
+				max_on_flight_cap,
+				asset_indexes,
+			});
 
 			Ok(().into())
 		}
@@ -827,6 +850,7 @@ pub mod pallet {
 		///
 		/// # Storage Modifications
 		/// - `AssetCaps`: Entry for `asset_id` is removed
+		/// - `AssetOracles`: Entry for `asset_id` is removed
 		/// - `AssetIndexes`: All mappings for the associated asset indexes are removed
 		///
 		/// # Important
@@ -854,6 +878,7 @@ pub mod pallet {
 
 			// Safe to remove asset and its indexes
 			AssetCaps::<T>::remove(asset_id);
+			AssetOracles::<T>::remove(asset_id);
 			for asset_index in &asset_indexes {
 				AssetIndexes::<T>::remove(asset_index);
 			}
@@ -865,12 +890,14 @@ pub mod pallet {
 
 		/// Update an existing asset's configuration and CCCP asset indexes.
 		///
-		/// This extrinsic allows modifying the maximum on-flight capacity of a registered
+		/// This extrinsic allows modifying the oracle address, maximum on-flight capacity of a registered
 		/// asset and managing its associated CCCP asset indexes by adding or removing them.
 		///
 		/// # Parameters
 		/// * `origin` - Must be `Root` (sudo access required)
 		/// * `asset_id` - The EVM-compatible asset contract address (H160) to update
+		/// * `new_asset_oracle_id` - (Optional) New oracle address for price feed of this asset
+		///   - Cannot be the same as the current oracle address
 		/// * `new_max_on_flight_cap` - (Optional) New maximum total amount allowed in Fast transfers
 		///   - Must be > 0
 		///   - Must be ≤ 100M cap limit
@@ -900,16 +927,18 @@ pub mod pallet {
 		/// * `AssetHasActiveTransfers` - If an index to remove has active on-flight transfers
 		///
 		/// # Events
-		/// * `AssetUpdated { asset_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
+		/// * `AssetUpdated { asset_id, new_asset_oracle_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
 		///
 		/// # Storage Modifications
-		/// - `AssetCaps`: Updates `max_on_flight_cap` for the asset
+		/// - `AssetOracles`: Updates oracle address for the asset if provided
+		/// - `AssetCaps`: Updates `max_on_flight_cap` for the asset if provided
 		/// - `AssetIndexes`: Inserts new mappings and removes specified mappings
 		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn update_asset(
 			origin: OriginFor<T>,
 			asset_id: AssetId,
+			new_asset_oracle_id: Option<AssetOracleId>,
 			new_max_on_flight_cap: Option<BalanceOf<T>>,
 			add_asset_indexes: Option<Vec<AssetIndexHash>>,
 			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
@@ -918,7 +947,8 @@ pub mod pallet {
 
 			// Ensure at least one of the fields is provided
 			ensure!(
-				new_max_on_flight_cap.is_some()
+				new_asset_oracle_id.is_some()
+					|| new_max_on_flight_cap.is_some()
 					|| add_asset_indexes.is_some()
 					|| remove_asset_indexes.is_some(),
 				Error::<T>::EmptySubmission
@@ -962,6 +992,19 @@ pub mod pallet {
 			}
 
 			let mut asset_cap = AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::AssetDNE)?;
+
+			// Update oracle address if provided
+			if let Some(new_asset_oracle_id) = new_asset_oracle_id {
+				let current_oracle_id = AssetOracles::<T>::get(asset_id);
+				if let Some(current_oracle_id) = current_oracle_id {
+					ensure!(
+						current_oracle_id != new_asset_oracle_id,
+						Error::<T>::NoWritingSameValue
+					);
+				}
+				AssetOracles::<T>::insert(asset_id, new_asset_oracle_id);
+			}
+
 			if let Some(new_max_on_flight_cap) = new_max_on_flight_cap {
 				if asset_cap.max_on_flight_cap == new_max_on_flight_cap {
 					return Err(Error::<T>::NoWritingSameValue.into());
@@ -1008,6 +1051,7 @@ pub mod pallet {
 
 			Self::deposit_event(Event::AssetUpdated {
 				asset_id,
+				new_asset_oracle_id,
 				new_max_on_flight_cap,
 				add_asset_indexes,
 				remove_asset_indexes,
