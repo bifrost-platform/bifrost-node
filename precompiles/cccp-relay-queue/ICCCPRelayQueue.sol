@@ -15,4 +15,11 @@ interface ICCCPRelayQueue {
     function get_asset_oracle_by_hash(
         bytes32 asset_index_hash
     ) external view returns (address);
+
+    /// @dev Returns the native currency oracle address for a chain.
+    /// @custom:selector 58e49607
+    /// @return The native currency oracle address
+    function get_native_currency_oracle(
+        uint32 chain_id
+    ) external view returns (address);
 }

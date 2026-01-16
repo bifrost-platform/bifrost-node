@@ -78,4 +78,36 @@ where
 
 		Ok(Address(oracle_id))
 	}
+
+	/// Get the native currency oracle address for a chain.
+	///
+	/// This function retrieves the native currency oracle address for a given chain ID from the
+	/// `NativeCurrencyOracles` storage.
+	///
+	/// # Parameters
+	/// - `chain_id`: The chain ID (u32)
+	///
+	/// # Returns
+	/// - `Address`: The native currency oracle address (H160) if found, zero address otherwise
+	///
+	/// # Gas Cost
+	/// - 1 database read (for NativeCurrencyOracles)
+	#[precompile::public("getNativeCurrencyOracle(uint32)")]
+	#[precompile::public("get_native_currency_oracle(uint32)")]
+	#[precompile::view]
+	fn get_native_currency_oracle(
+		handle: &mut impl PrecompileHandle,
+		chain_id: u32,
+	) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let native_currency_oracle = if let Some(native_currency_oracle) =
+			pallet_cccp_relay_queue::NativeCurrencyOracles::<Runtime>::get(chain_id)
+		{
+			native_currency_oracle
+		} else {
+			return Ok(Address(H160::zero()));
+		};
+		Ok(Address(native_currency_oracle))
+	}
 }
