@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf,
+	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf, ChainId,
 	SocketMessageSubmission, TransferInfo, TransferOption, TransferStatus,
 };
 
@@ -92,6 +92,10 @@ pub mod pallet {
 		InvalidMaxCap,
 		/// Max on-flight cap exceeds maximum allowed value.
 		CapTooLarge,
+		/// Native currency chain already exists.
+		NativeCurrencyChainAlreadyExists,
+		/// Native currency chain does not exist.
+		NativeCurrencyChainDNE,
 	}
 
 	#[pallet::event]
@@ -197,6 +201,18 @@ pub mod pallet {
 	/// - **Key**: `AssetId` (H160) - The EVM-compatible asset contract address
 	/// - **Value**: `AssetOracleId` (H160) - The oracle address
 	pub type AssetOracles<T: Config> = StorageMap<_, Twox64Concat, AssetId, AssetOracleId>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Mapping from chain IDs to their native currency oracle addresses.
+	///
+	/// This storage maps chain IDs to their corresponding native currency oracle addresses.
+	/// Native currency oracle addresses are used to fetch the price of the native currency from the
+	/// price oracle.
+	///
+	/// - **Key**: `ChainId` (u32) - The chain ID
+	/// - **Value**: `AssetOracleId` (H160) - The oracle address
+	pub type NativeCurrencyOracles<T: Config> = StorageMap<_, Twox64Concat, ChainId, AssetOracleId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -1056,6 +1072,65 @@ pub mod pallet {
 				add_asset_indexes,
 				remove_asset_indexes,
 			});
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn set_native_currency_oracle(
+			origin: OriginFor<T>,
+			chain_id: ChainId,
+			native_currency_oracle_id: AssetOracleId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				!NativeCurrencyOracles::<T>::contains_key(chain_id),
+				Error::<T>::NativeCurrencyChainAlreadyExists
+			);
+			NativeCurrencyOracles::<T>::insert(chain_id, native_currency_oracle_id);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn update_native_currency_oracle(
+			origin: OriginFor<T>,
+			chain_id: ChainId,
+			native_currency_oracle_id: AssetOracleId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				NativeCurrencyOracles::<T>::contains_key(chain_id),
+				Error::<T>::NativeCurrencyChainDNE
+			);
+			if let Some(current_oracle_id) = NativeCurrencyOracles::<T>::get(chain_id) {
+				ensure!(
+					current_oracle_id != native_currency_oracle_id,
+					Error::<T>::NoWritingSameValue
+				);
+			}
+			NativeCurrencyOracles::<T>::insert(chain_id, native_currency_oracle_id);
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn remove_native_currency_oracle(
+			origin: OriginFor<T>,
+			chain_id: ChainId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				NativeCurrencyOracles::<T>::contains_key(chain_id),
+				Error::<T>::NativeCurrencyChainDNE
+			);
+			NativeCurrencyOracles::<T>::remove(chain_id);
 
 			Ok(().into())
 		}
