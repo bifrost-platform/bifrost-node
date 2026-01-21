@@ -73,6 +73,14 @@ pub struct AssetCapInfo<Balance> {
 pub struct TransferInfo<Balance, AccountId> {
 	/// The amount of the transfer.
 	pub amount: Balance,
+	/// The source transaction id. The transaction which initiated the transfer.
+	pub src_tx_id: H256,
+	/// The source chain id.
+	pub src_chain_id: ChainId,
+	/// The destination chain id.
+	pub dst_chain_id: ChainId,
+	/// The asset index hash.
+	pub asset_index_hash: AssetIndexHash,
 	/// The option of the transfer.
 	pub option: TransferOption,
 	/// The status of the transfer.
@@ -94,6 +102,8 @@ pub struct TransferInfo<Balance, AccountId> {
 pub struct SocketMessageSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
+	/// The source transaction id. The transaction which initiated the transfer.
+	pub src_tx_id: H256,
 	/// The Socket message.
 	pub message: UnboundedBytes,
 }
