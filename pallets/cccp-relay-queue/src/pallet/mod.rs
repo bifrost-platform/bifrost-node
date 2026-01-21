@@ -13,7 +13,7 @@ use frame_system::pallet_prelude::*;
 
 use bp_cccp::SocketMessage;
 use bp_staking::traits::Authorities;
-use sp_core::{H160, U256};
+use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
 use sp_std::{fmt::Display, vec, vec::Vec};
@@ -105,6 +105,9 @@ pub mod pallet {
 		TransferPolled {
 			asset_index_hash: AssetIndexHash,
 			sequence_id: U256,
+			src_tx_id: H256,
+			src_chain_id: ChainId,
+			dst_chain_id: ChainId,
 			authority_id: T::AccountId,
 			option: TransferOption,
 			amount: BalanceOf<T>,
@@ -114,6 +117,9 @@ pub mod pallet {
 		FinalizationPolled {
 			asset_index_hash: AssetIndexHash,
 			sequence_id: U256,
+			src_tx_id: H256,
+			src_chain_id: ChainId,
+			dst_chain_id: ChainId,
 			authority_id: T::AccountId,
 			option: TransferOption,
 			amount: BalanceOf<T>,
@@ -222,10 +228,11 @@ pub mod pallet {
 	/// finalized (committed or rolled back). Transfers remain in this storage from approval
 	/// until finalization, when they are moved to `FinalizedTransfers`.
 	///
-	/// - **Key 1**: `AssetIndexHash` (H256) - The CCCP asset index identifying the transferred asset
-	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer within the asset
+	/// - **Key 1**: `ChainId` (u32) - The source chain ID where the transfer originated
+	/// - **Key 2**: `H256` - The source transaction ID uniquely identifying this transfer
 	/// - **Value**: `TransferInfo<Balance, AccountId>` containing:
 	///   - `amount`: Transfer amount in the asset's units
+	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
 	///   - `option`: Fast or Standard transfer mode
 	///   - `status`: Current status (Pending → OnFlight → Finalized)
 	///   - `socket_message`: Original CCCP message from the transfer request
@@ -239,9 +246,9 @@ pub mod pallet {
 	pub type OnFlightTransfers<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
-		AssetIndexHash,
+		ChainId,
 		Twox64Concat,
-		U256,
+		H256,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
 	>;
 
@@ -253,10 +260,11 @@ pub mod pallet {
 	/// either committed (successfully executed) or rolled back (cancelled). Transfers are
 	/// moved here from `OnFlightTransfers` upon reaching final consensus.
 	///
-	/// - **Key 1**: `AssetIndexHash` (H256) - The CCCP asset index identifying the transferred asset
-	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer within the asset
+	/// - **Key 1**: `ChainId` (u32) - The source chain ID where the transfer originated
+	/// - **Key 2**: `H256` - The source transaction ID uniquely identifying this transfer
 	/// - **Value**: `TransferInfo<Balance, AccountId>` with `status = Finalized` and final state:
 	///   - `amount`: Transfer amount in the asset's units
+	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
 	///   - `option`: Fast or Standard transfer mode used
 	///   - `status`: Always `Finalized` in this storage
 	///   - `socket_message`: Final CCCP message showing committed or rolled back status
@@ -264,16 +272,16 @@ pub mod pallet {
 	///   - `finalization_voters`: Complete list of relayers who confirmed finalization
 	///
 	/// **Purpose**:
-	/// - Prevents duplicate transfer processing by checking if a sequence ID already exists
+	/// - Prevents duplicate transfer processing by checking if a source tx ID already exists
 	/// - Provides historical audit trail for cross-chain transfer operations
 	/// - Enables queries for transfer outcomes (committed vs rolled back)
 	/// - Never removed (unbounded storage for permanent record-keeping)
 	pub type FinalizedTransfers<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
-		AssetIndexHash,
+		ChainId,
 		Twox64Concat,
-		U256,
+		H256,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
 	>;
 
@@ -324,11 +332,18 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SocketMessageSubmission { authority_id, message } = socket_message_submission;
+			let SocketMessageSubmission { authority_id, src_tx_id, message } =
+				socket_message_submission;
 
 			// Parse and validate socket message (must be in REQUESTED status)
 			let msg = Self::validate_and_parse_socket_message(&message, |m| m.is_requested())?;
 			let amount = msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+			let src_chain_id: ChainId = u32::from_be_bytes(
+				msg.req_id.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
+			);
+			let dst_chain_id: ChainId = u32::from_be_bytes(
+				msg.ins_code.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
+			);
 
 			// Get asset information (if registered)
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
@@ -336,11 +351,10 @@ pub mod pallet {
 
 			// Ensure transfer hasn't been finalized already
 			ensure!(
-				!FinalizedTransfers::<T>::contains_key(asset_index_hash, msg.req_id.sequence),
+				!FinalizedTransfers::<T>::contains_key(src_chain_id, src_tx_id),
 				Error::<T>::TransferAlreadyFinalized
 			);
-			let on_flight_transfer =
-				OnFlightTransfers::<T>::get(asset_index_hash, msg.req_id.sequence);
+			let on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, src_tx_id);
 
 			// Determine transfer option based on current cap:
 			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
@@ -365,10 +379,14 @@ pub mod pallet {
 
 				// Create transfer with OnFlight status (immediate approval)
 				OnFlightTransfers::<T>::insert(
-					asset_index_hash,
-					msg.req_id.sequence,
+					src_chain_id,
+					src_tx_id,
 					TransferInfo {
 						amount,
+						src_tx_id,
+						src_chain_id,
+						dst_chain_id,
+						asset_index_hash,
 						option: transfer_option,
 						status: TransferStatus::OnFlight,
 						socket_message: message.clone(),
@@ -393,6 +411,9 @@ pub mod pallet {
 				Self::deposit_event(Event::TransferPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
+					src_tx_id,
+					src_chain_id,
+					dst_chain_id,
 					authority_id,
 					option: transfer_option,
 					amount,
@@ -464,24 +485,27 @@ pub mod pallet {
 					Self::deposit_event(Event::TransferPolled {
 						asset_index_hash,
 						sequence_id: msg.req_id.sequence,
+						src_tx_id,
+						src_chain_id,
+						dst_chain_id,
 						authority_id,
 						option: on_flight_transfer.option,
 						amount: on_flight_transfer.amount,
 						status: on_flight_transfer.status,
 					});
 
-					OnFlightTransfers::<T>::insert(
-						asset_index_hash,
-						msg.req_id.sequence,
-						on_flight_transfer,
-					);
+					OnFlightTransfers::<T>::insert(src_chain_id, src_tx_id, on_flight_transfer);
 				} else {
 					// First vote: create transfer with Pending status
 					OnFlightTransfers::<T>::insert(
-						asset_index_hash,
-						msg.req_id.sequence,
+						src_chain_id,
+						src_tx_id,
 						TransferInfo {
 							amount,
+							src_tx_id,
+							src_chain_id,
+							dst_chain_id,
+							asset_index_hash,
 							option: transfer_option,
 							status: TransferStatus::Pending,
 							socket_message: message.clone(),
@@ -494,6 +518,9 @@ pub mod pallet {
 					Self::deposit_event(Event::TransferPolled {
 						asset_index_hash,
 						sequence_id: msg.req_id.sequence,
+						src_tx_id,
+						src_chain_id,
+						dst_chain_id,
 						authority_id,
 						option: transfer_option,
 						amount,
@@ -557,12 +584,20 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SocketMessageSubmission { authority_id, message } = socket_message_submission;
+			let SocketMessageSubmission { authority_id, src_tx_id, message } =
+				socket_message_submission;
 
 			// Parse and validate socket message (must be COMMITTED or ROLLBACKED)
 			let msg = Self::validate_and_parse_socket_message(&message, |msg| {
 				msg.is_committed() || msg.is_rollbacked()
 			})?;
+
+			let src_chain_id: ChainId = u32::from_be_bytes(
+				msg.req_id.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
+			);
+			let dst_chain_id: ChainId = u32::from_be_bytes(
+				msg.ins_code.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
+			);
 
 			// Get asset information (if registered)
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
@@ -570,14 +605,13 @@ pub mod pallet {
 
 			// Ensure transfer is not already finalized
 			ensure!(
-				!FinalizedTransfers::<T>::contains_key(asset_index_hash, msg.req_id.sequence),
+				!FinalizedTransfers::<T>::contains_key(src_chain_id, src_tx_id),
 				Error::<T>::TransferAlreadyFinalized
 			);
 
 			// Get transfer and ensure it's in OnFlight status
-			let mut on_flight_transfer =
-				OnFlightTransfers::<T>::get(asset_index_hash, msg.req_id.sequence)
-					.ok_or(Error::<T>::TransferDNE)?;
+			let mut on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, src_tx_id)
+				.ok_or(Error::<T>::TransferDNE)?;
 			ensure!(
 				on_flight_transfer.status == TransferStatus::OnFlight,
 				Error::<T>::TransferNotOnFlight
@@ -611,11 +645,11 @@ pub mod pallet {
 				// Finalize immediately
 				on_flight_transfer.status = TransferStatus::Finalized;
 				FinalizedTransfers::<T>::insert(
-					asset_index_hash,
-					msg.req_id.sequence,
+					src_chain_id,
+					src_tx_id,
 					on_flight_transfer.clone(),
 				);
-				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
+				OnFlightTransfers::<T>::remove(src_chain_id, src_tx_id);
 
 				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
@@ -632,6 +666,9 @@ pub mod pallet {
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
+					src_tx_id,
+					src_chain_id,
+					dst_chain_id,
 					authority_id,
 					option: on_flight_transfer.option,
 					amount: on_flight_transfer.amount,
@@ -657,11 +694,11 @@ pub mod pallet {
 				// Finalize with majority consensus
 				on_flight_transfer.status = TransferStatus::Finalized;
 				FinalizedTransfers::<T>::insert(
-					asset_index_hash,
-					msg.req_id.sequence,
+					src_chain_id,
+					src_tx_id,
 					on_flight_transfer.clone(),
 				);
-				OnFlightTransfers::<T>::remove(asset_index_hash, msg.req_id.sequence);
+				OnFlightTransfers::<T>::remove(src_chain_id, src_tx_id);
 
 				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
@@ -678,6 +715,9 @@ pub mod pallet {
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
+					src_tx_id,
+					src_chain_id,
+					dst_chain_id,
 					authority_id,
 					option: on_flight_transfer.option,
 					amount: on_flight_transfer.amount,
@@ -685,15 +725,14 @@ pub mod pallet {
 				});
 			} else {
 				// Majority not yet reached - persist vote and wait for more voters
-				OnFlightTransfers::<T>::insert(
-					asset_index_hash,
-					msg.req_id.sequence,
-					on_flight_transfer.clone(),
-				);
+				OnFlightTransfers::<T>::insert(src_chain_id, src_tx_id, on_flight_transfer.clone());
 
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
+					src_tx_id,
+					src_chain_id,
+					dst_chain_id,
 					authority_id,
 					option: on_flight_transfer.option,
 					amount: on_flight_transfer.amount,
@@ -886,11 +925,13 @@ pub mod pallet {
 				.collect();
 
 			// Check if any of the asset indexes have active on-flight transfers
-			for asset_index in &asset_indexes {
-				let has_active_transfers =
-					OnFlightTransfers::<T>::iter_prefix(asset_index).next().is_some();
-				ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
-			}
+			let asset_index_set: sp_std::collections::btree_set::BTreeSet<_> =
+				asset_indexes.iter().collect();
+			let has_active_transfers =
+				OnFlightTransfers::<T>::iter().any(|(_, _, transfer_info)| {
+					asset_index_set.contains(&transfer_info.asset_index_hash)
+				});
+			ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
 
 			// Safe to remove asset and its indexes
 			AssetCaps::<T>::remove(asset_id);
@@ -1055,12 +1096,18 @@ pub mod pallet {
 					let found_asset_id =
 						AssetIndexes::<T>::get(asset_index).ok_or(Error::<T>::AssetIndexDNE)?;
 					ensure!(found_asset_id == asset_id, Error::<T>::AssetIndexNotBelongToAsset);
+				}
 
-					// Prevent removing asset indexes with active transfers
-					let has_active_transfers =
-						OnFlightTransfers::<T>::iter_prefix(asset_index).next().is_some();
-					ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
+				// Prevent removing asset indexes with active transfers
+				let remove_index_set: sp_std::collections::btree_set::BTreeSet<_> =
+					remove_asset_indexes.iter().collect();
+				let has_active_transfers =
+					OnFlightTransfers::<T>::iter().any(|(_, _, transfer_info)| {
+						remove_index_set.contains(&transfer_info.asset_index_hash)
+					});
+				ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
 
+				for asset_index in remove_asset_indexes {
 					AssetIndexes::<T>::remove(asset_index);
 				}
 			}
@@ -1148,7 +1195,7 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::on_flight_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission { authority_id, message } =
+					let SocketMessageSubmission { authority_id, message, .. } =
 						socket_message_submission;
 					Self::verify_authority(authority_id)?;
 
@@ -1166,7 +1213,7 @@ pub mod pallet {
 						.build()
 				},
 				Call::finalize_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission { authority_id, message } =
+					let SocketMessageSubmission { authority_id, message, .. } =
 						socket_message_submission;
 					Self::verify_authority(authority_id)?;
 
