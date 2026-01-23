@@ -11,10 +11,16 @@ use sp_std::vec::Vec;
 /// 100,000 gas is sufficient for standard ERC20 transfers.
 const ERC20_TRANSFER_GAS_LIMIT: u64 = 100_000;
 
+/// Gas limit for ERC20 view calls (balanceOf, etc.).
+/// 30,000 gas is sufficient for standard ERC20 view functions.
+const ERC20_VIEW_GAS_LIMIT: u64 = 30_000;
+
 /// ERC20 function selectors.
 mod selectors {
 	/// `transfer(address,uint256)` selector: 0xa9059cbb
 	pub const TRANSFER: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];
+	/// `balanceOf(address)` selector: 0x70a08231
+	pub const BALANCE_OF: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
 }
 
 /// Execute ERC20 `transfer(to, amount)` from user to fee collector (precompile address).
@@ -183,9 +189,94 @@ pub fn transfer_to_user<T: crate::Config>(
 	}
 }
 
+/// Get ERC20 token balance for an account.
+///
+/// Calls the `balanceOf(address)` function on the token contract
+/// using `Runner::view_call` which does not modify state.
+///
+/// # Arguments
+/// * `account` - Address to check balance for
+/// * `token` - ERC20 token contract address
+///
+/// # Returns
+/// * `Ok(U256)` - The token balance
+/// * `Err(())` - If the call fails or returns invalid data
+pub fn get_token_balance<T: crate::Config>(account: H160, token: H160) -> Result<U256, ()> {
+	// Encode calldata: balanceOf(address account)
+	let calldata = encode_balance_of(account);
+
+	log::debug!(
+		target: "bifrost-tx-payment",
+		"get_token_balance: account={:?}, token={:?}",
+		account, token
+	);
+
+	// Use view_call for read-only operation (no state changes, no nonce increment)
+	let result = match T::Runner::view_call(
+		account,                // source (used for context only)
+		token,                  // target (ERC20 contract)
+		calldata,               // input
+		ERC20_VIEW_GAS_LIMIT,   // gas_limit
+		T::config(),
+	) {
+		Ok(r) => {
+			log::debug!(
+				target: "bifrost-tx-payment",
+				"get_token_balance: view_call succeeded, exit_reason={:?}",
+				r.exit_reason
+			);
+			r
+		},
+		Err(e) => {
+			log::warn!(
+				target: "bifrost-tx-payment",
+				"get_token_balance: view_call failed ({:?})",
+				e.error.into()
+			);
+			return Err(());
+		},
+	};
+
+	// Check execution result
+	match result.exit_reason {
+		ExitReason::Succeed(_) => {
+			// Decode U256 from return data
+			decode_u256_return(&result.value).ok_or_else(|| {
+				log::warn!(
+					target: "bifrost-tx-payment",
+					"get_token_balance: failed to decode balance from return data: {:?}",
+					result.value
+				);
+			})
+		},
+		ref reason => {
+			log::warn!(
+				target: "bifrost-tx-payment",
+				"get_token_balance: EVM execution failed with reason: {:?}",
+				reason
+			);
+			Err(())
+		},
+	}
+}
+
 // ============================================================================
 // ABI Encoding Functions
 // ============================================================================
+
+/// Encode `balanceOf(address account)` calldata.
+fn encode_balance_of(account: H160) -> Vec<u8> {
+	let mut calldata = Vec::with_capacity(4 + 32);
+
+	// Function selector
+	calldata.extend_from_slice(&selectors::BALANCE_OF);
+
+	// account address (32 bytes, left-padded)
+	calldata.extend_from_slice(&[0u8; 12]);
+	calldata.extend_from_slice(account.as_bytes());
+
+	calldata
+}
 
 /// Encode `transfer(address to, uint256 amount)` calldata.
 fn encode_transfer(to: H160, amount: U256) -> Vec<u8> {
@@ -208,6 +299,18 @@ fn encode_transfer(to: H160, amount: U256) -> Vec<u8> {
 // ============================================================================
 // ABI Decoding Functions
 // ============================================================================
+
+/// Decode a U256 value from EVM return data.
+///
+/// EVM returns U256 as 32 bytes in big-endian format.
+fn decode_u256_return(data: &[u8]) -> Option<U256> {
+	if data.len() < 32 {
+		return None;
+	}
+
+	// U256 is returned as 32 bytes big-endian
+	Some(U256::from_big_endian(&data[0..32]))
+}
 
 /// Check if ERC20 call returned true.
 ///

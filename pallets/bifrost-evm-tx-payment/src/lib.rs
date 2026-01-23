@@ -31,6 +31,7 @@
 
 pub mod adapter;
 pub mod erc20;
+pub mod migrations;
 pub mod oracle;
 pub mod types;
 pub mod weights;
@@ -44,9 +45,12 @@ pub use pallet::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
-use frame_support::{pallet_prelude::*, traits::Hooks, weights::Weight};
+use frame_support::{pallet_prelude::*, traits::{Hooks, OnRuntimeUpgrade}, weights::Weight};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
+
+/// The current storage version.
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -54,6 +58,7 @@ pub mod pallet {
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::hooks]
@@ -70,6 +75,10 @@ pub mod pallet {
 			// Reset transaction index counter for this block.
 			CurrentTxIndex::<T>::kill();
 			Weight::zero()
+		}
+
+		fn on_runtime_upgrade() -> Weight {
+			crate::migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 		}
 	}
 
