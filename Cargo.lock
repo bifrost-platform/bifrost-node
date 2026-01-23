@@ -1058,6 +1058,7 @@ dependencies = [
  "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
+ "pallet-cccp-relay-queue",
  "pallet-collective",
  "pallet-democracy",
  "pallet-ethereum",
@@ -1092,6 +1093,7 @@ dependencies = [
  "precompile-blaze",
  "precompile-btc-registration-pool",
  "precompile-btc-socket-queue",
+ "precompile-cccp-relay-queue",
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
@@ -1720,6 +1722,18 @@ version = "0.0.1"
 dependencies = [
  "frame-system",
  "miniscript",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "bp-cccp"
+version = "0.0.1"
+dependencies = [
+ "ethabi-decode",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
@@ -7792,6 +7806,7 @@ version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
  "bp-btc-relay",
+ "bp-cccp",
  "bp-core",
  "bp-staking",
  "fp-account",
@@ -7857,6 +7872,7 @@ version = "1.0.0"
 dependencies = [
  "array-bytes 6.2.3",
  "bp-btc-relay",
+ "bp-cccp",
  "bp-core",
  "bp-staking",
  "ethabi-decode",
@@ -7870,6 +7886,27 @@ dependencies = [
  "pallet-balances",
  "pallet-evm",
  "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-cccp-relay-queue"
+version = "1.0.0"
+dependencies = [
+ "array-bytes 6.2.3",
+ "bifrost-common-constants",
+ "bp-cccp",
+ "bp-staking",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-evm",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
@@ -8166,6 +8203,7 @@ name = "pallet-relay-manager"
 version = "1.0.0"
 dependencies = [
  "bp-btc-relay",
+ "bp-cccp",
  "bp-core",
  "bp-staking",
  "frame-benchmarking",
@@ -9220,6 +9258,22 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-btc-socket-queue",
+ "pallet-evm",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-cccp-relay-queue"
+version = "1.0.0"
+dependencies = [
+ "fp-account",
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-cccp-relay-queue",
  "pallet-evm",
  "precompile-utils",
  "sp-core",

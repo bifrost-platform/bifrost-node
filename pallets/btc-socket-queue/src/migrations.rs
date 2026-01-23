@@ -33,6 +33,7 @@ pub mod init_v2 {
 
 pub mod v2 {
 	use super::*;
+	use bp_cccp::SocketMessage;
 	use core::marker::PhantomData;
 	use frame_support::{
 		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
@@ -72,7 +73,7 @@ pub mod v2 {
 
 				let mut insert_txid =
 					|raw_msg: UnboundedBytes, txid: H256, mut weight: Weight| -> Weight {
-						match Pallet::<T>::try_decode_socket_message(&raw_msg) {
+						match SocketMessage::try_from(raw_msg.clone()) {
 							Ok(msg) => {
 								if let Some(translated) =
 									<SocketMessages<T>>::get(&msg.req_id.sequence)
