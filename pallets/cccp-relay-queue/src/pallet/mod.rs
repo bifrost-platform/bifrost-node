@@ -1195,13 +1195,17 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::on_flight_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission { authority_id, message, .. } =
+					let SocketMessageSubmission { authority_id, src_tx_id, message } =
 						socket_message_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message =
-						[keccak_256("OnFlightPoll".as_bytes()).as_slice(), message].concat();
+					let message = [
+						keccak_256("OnFlightPoll".as_bytes()).as_slice(),
+						src_tx_id.as_ref(),
+						message,
+					]
+					.concat();
 					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
@@ -1213,13 +1217,17 @@ pub mod pallet {
 						.build()
 				},
 				Call::finalize_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission { authority_id, message, .. } =
+					let SocketMessageSubmission { authority_id, src_tx_id, message } =
 						socket_message_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message =
-						[keccak_256("FinalizePoll".as_bytes()).as_slice(), message].concat();
+					let message = [
+						keccak_256("FinalizePoll".as_bytes()).as_slice(),
+						src_tx_id.as_ref(),
+						message,
+					]
+					.concat();
 					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
