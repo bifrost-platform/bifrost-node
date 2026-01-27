@@ -4,7 +4,7 @@
 mod pallet;
 pub mod weights;
 
-// pub mod migrations;
+pub mod migrations;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
