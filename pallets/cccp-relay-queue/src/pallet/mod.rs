@@ -13,7 +13,7 @@ use frame_system::pallet_prelude::*;
 
 use bp_cccp::SocketMessage;
 use bp_staking::traits::Authorities;
-use sp_core::{H160, H256, U256};
+use sp_core::{H160, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
 use sp_std::{fmt::Display, vec, vec::Vec};
@@ -22,7 +22,7 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -105,7 +105,6 @@ pub mod pallet {
 		TransferPolled {
 			asset_index_hash: AssetIndexHash,
 			sequence_id: U256,
-			src_tx_id: H256,
 			src_chain_id: ChainId,
 			dst_chain_id: ChainId,
 			authority_id: T::AccountId,
@@ -117,7 +116,6 @@ pub mod pallet {
 		FinalizationPolled {
 			asset_index_hash: AssetIndexHash,
 			sequence_id: U256,
-			src_tx_id: H256,
 			src_chain_id: ChainId,
 			dst_chain_id: ChainId,
 			authority_id: T::AccountId,
@@ -248,7 +246,7 @@ pub mod pallet {
 		Twox64Concat,
 		ChainId,
 		Twox64Concat,
-		H256,
+		U256,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
 	>;
 
@@ -281,7 +279,7 @@ pub mod pallet {
 		Twox64Concat,
 		ChainId,
 		Twox64Concat,
-		H256,
+		U256,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
 	>;
 
@@ -332,18 +330,27 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SocketMessageSubmission { authority_id, src_tx_id, message } =
+			let SocketMessageSubmission { authority_id, src_chain_id, sequence_id, message } =
 				socket_message_submission;
 
 			// Parse and validate socket message (must be in REQUESTED status)
 			let msg = Self::validate_and_parse_socket_message(&message, |m| m.is_requested())?;
 			let amount = msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
-			let src_chain_id: ChainId = u32::from_be_bytes(
-				msg.req_id.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
-			);
 			let dst_chain_id: ChainId = u32::from_be_bytes(
 				msg.ins_code.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
 			);
+			ensure!(
+				src_chain_id
+					== u32::from_be_bytes(
+						msg.req_id
+							.chain
+							.as_slice()
+							.try_into()
+							.map_err(|_| Error::<T>::OutOfRange)?,
+					),
+				Error::<T>::InvalidSocketMessage
+			);
+			ensure!(sequence_id == msg.req_id.sequence, Error::<T>::InvalidSocketMessage);
 
 			// Get asset information (if registered)
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
@@ -351,10 +358,10 @@ pub mod pallet {
 
 			// Ensure transfer hasn't been finalized already
 			ensure!(
-				!FinalizedTransfers::<T>::contains_key(src_chain_id, src_tx_id),
+				!FinalizedTransfers::<T>::contains_key(src_chain_id, sequence_id),
 				Error::<T>::TransferAlreadyFinalized
 			);
-			let on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, src_tx_id);
+			let on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, sequence_id);
 
 			// Determine transfer option based on current cap:
 			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
@@ -380,10 +387,10 @@ pub mod pallet {
 				// Create transfer with OnFlight status (immediate approval)
 				OnFlightTransfers::<T>::insert(
 					src_chain_id,
-					src_tx_id,
+					sequence_id,
 					TransferInfo {
 						amount,
-						src_tx_id,
+						sequence_id,
 						src_chain_id,
 						dst_chain_id,
 						asset_index_hash,
@@ -410,8 +417,7 @@ pub mod pallet {
 
 				Self::deposit_event(Event::TransferPolled {
 					asset_index_hash,
-					sequence_id: msg.req_id.sequence,
-					src_tx_id,
+					sequence_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -485,7 +491,6 @@ pub mod pallet {
 					Self::deposit_event(Event::TransferPolled {
 						asset_index_hash,
 						sequence_id: msg.req_id.sequence,
-						src_tx_id,
 						src_chain_id,
 						dst_chain_id,
 						authority_id,
@@ -494,15 +499,15 @@ pub mod pallet {
 						status: on_flight_transfer.status,
 					});
 
-					OnFlightTransfers::<T>::insert(src_chain_id, src_tx_id, on_flight_transfer);
+					OnFlightTransfers::<T>::insert(src_chain_id, sequence_id, on_flight_transfer);
 				} else {
 					// First vote: create transfer with Pending status
 					OnFlightTransfers::<T>::insert(
 						src_chain_id,
-						src_tx_id,
+						sequence_id,
 						TransferInfo {
 							amount,
-							src_tx_id,
+							sequence_id,
 							src_chain_id,
 							dst_chain_id,
 							asset_index_hash,
@@ -518,7 +523,6 @@ pub mod pallet {
 					Self::deposit_event(Event::TransferPolled {
 						asset_index_hash,
 						sequence_id: msg.req_id.sequence,
-						src_tx_id,
 						src_chain_id,
 						dst_chain_id,
 						authority_id,
@@ -584,20 +588,28 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SocketMessageSubmission { authority_id, src_tx_id, message } =
+			let SocketMessageSubmission { authority_id, src_chain_id, sequence_id, message } =
 				socket_message_submission;
 
 			// Parse and validate socket message (must be COMMITTED or ROLLBACKED)
 			let msg = Self::validate_and_parse_socket_message(&message, |msg| {
 				msg.is_committed() || msg.is_rollbacked()
 			})?;
-
-			let src_chain_id: ChainId = u32::from_be_bytes(
-				msg.req_id.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
-			);
 			let dst_chain_id: ChainId = u32::from_be_bytes(
 				msg.ins_code.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
 			);
+			ensure!(
+				src_chain_id
+					== u32::from_be_bytes(
+						msg.req_id
+							.chain
+							.as_slice()
+							.try_into()
+							.map_err(|_| Error::<T>::OutOfRange)?,
+					),
+				Error::<T>::InvalidSocketMessage
+			);
+			ensure!(sequence_id == msg.req_id.sequence, Error::<T>::InvalidSocketMessage);
 
 			// Get asset information (if registered)
 			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
@@ -605,12 +617,12 @@ pub mod pallet {
 
 			// Ensure transfer is not already finalized
 			ensure!(
-				!FinalizedTransfers::<T>::contains_key(src_chain_id, src_tx_id),
+				!FinalizedTransfers::<T>::contains_key(src_chain_id, sequence_id),
 				Error::<T>::TransferAlreadyFinalized
 			);
 
 			// Get transfer and ensure it's in OnFlight status
-			let mut on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, src_tx_id)
+			let mut on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, sequence_id)
 				.ok_or(Error::<T>::TransferDNE)?;
 			ensure!(
 				on_flight_transfer.status == TransferStatus::OnFlight,
@@ -646,10 +658,10 @@ pub mod pallet {
 				on_flight_transfer.status = TransferStatus::Finalized;
 				FinalizedTransfers::<T>::insert(
 					src_chain_id,
-					src_tx_id,
+					sequence_id,
 					on_flight_transfer.clone(),
 				);
-				OnFlightTransfers::<T>::remove(src_chain_id, src_tx_id);
+				OnFlightTransfers::<T>::remove(src_chain_id, sequence_id);
 
 				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
@@ -666,7 +678,6 @@ pub mod pallet {
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
-					src_tx_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -695,10 +706,10 @@ pub mod pallet {
 				on_flight_transfer.status = TransferStatus::Finalized;
 				FinalizedTransfers::<T>::insert(
 					src_chain_id,
-					src_tx_id,
+					sequence_id,
 					on_flight_transfer.clone(),
 				);
-				OnFlightTransfers::<T>::remove(src_chain_id, src_tx_id);
+				OnFlightTransfers::<T>::remove(src_chain_id, sequence_id);
 
 				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
@@ -715,7 +726,6 @@ pub mod pallet {
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
-					src_tx_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -725,12 +735,15 @@ pub mod pallet {
 				});
 			} else {
 				// Majority not yet reached - persist vote and wait for more voters
-				OnFlightTransfers::<T>::insert(src_chain_id, src_tx_id, on_flight_transfer.clone());
+				OnFlightTransfers::<T>::insert(
+					src_chain_id,
+					sequence_id,
+					on_flight_transfer.clone(),
+				);
 
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
 					sequence_id: msg.req_id.sequence,
-					src_tx_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -1195,14 +1208,18 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::on_flight_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission { authority_id, src_tx_id, message } =
-						socket_message_submission;
+					let SocketMessageSubmission {
+						authority_id,
+						src_chain_id,
+						sequence_id,
+						message,
+					} = socket_message_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = [
 						keccak_256("OnFlightPoll".as_bytes()).as_slice(),
-						src_tx_id.as_ref(),
+						Encode::encode(&(src_chain_id, sequence_id)).as_slice(),
 						message,
 					]
 					.concat();
@@ -1217,14 +1234,18 @@ pub mod pallet {
 						.build()
 				},
 				Call::finalize_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission { authority_id, src_tx_id, message } =
-						socket_message_submission;
+					let SocketMessageSubmission {
+						authority_id,
+						src_chain_id,
+						sequence_id,
+						message,
+					} = socket_message_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = [
 						keccak_256("FinalizePoll".as_bytes()).as_slice(),
-						src_tx_id.as_ref(),
+						Encode::encode(&(src_chain_id, sequence_id)).as_slice(),
 						message,
 					]
 					.concat();
