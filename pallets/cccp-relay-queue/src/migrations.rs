@@ -41,10 +41,7 @@ pub mod init_v2 {
 
 	pub struct InitV2<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for InitV2<T>
-	where
-		BalanceOf<T>: Into<sp_core::U256> + TryFrom<sp_core::U256>,
-	{
+	impl<T: Config> OnRuntimeUpgrade for InitV2<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -76,10 +73,7 @@ pub mod init_v2 {
 	}
 
 	/// Migrate OnFlightTransfers from (ChainId, H256) to (ChainId, U256) key structure
-	fn migrate_on_flight_transfers<T: Config>(weight: &mut Weight) -> u32
-	where
-		BalanceOf<T>: Into<sp_core::U256> + TryFrom<sp_core::U256>,
-	{
+	fn migrate_on_flight_transfers<T: Config>(weight: &mut Weight) -> u32 {
 		let mut count = 0u32;
 
 		for ((src_chain_id, _src_tx_id), old_transfer) in storage_key_iter::<
@@ -97,6 +91,7 @@ pub mod init_v2 {
 				let new_transfer = TransferInfo {
 					amount: old_transfer.amount,
 					sequence_id,
+					src_tx_id: old_transfer.src_tx_id,
 					src_chain_id: old_transfer.src_chain_id,
 					dst_chain_id: old_transfer.dst_chain_id,
 					asset_index_hash: old_transfer.asset_index_hash,
@@ -127,10 +122,7 @@ pub mod init_v2 {
 	}
 
 	/// Migrate FinalizedTransfers from (ChainId, H256) to (ChainId, U256) key structure
-	fn migrate_finalized_transfers<T: Config>(weight: &mut Weight) -> u32
-	where
-		BalanceOf<T>: Into<sp_core::U256> + TryFrom<sp_core::U256>,
-	{
+	fn migrate_finalized_transfers<T: Config>(weight: &mut Weight) -> u32 {
 		let mut count = 0u32;
 
 		for ((src_chain_id, _src_tx_id), old_transfer) in storage_key_iter::<
@@ -148,6 +140,7 @@ pub mod init_v2 {
 				let new_transfer = TransferInfo {
 					amount: old_transfer.amount,
 					sequence_id,
+					src_tx_id: old_transfer.src_tx_id,
 					src_chain_id: old_transfer.src_chain_id,
 					dst_chain_id: old_transfer.dst_chain_id,
 					asset_index_hash: old_transfer.asset_index_hash,
