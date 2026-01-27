@@ -1,5 +1,59 @@
 use super::*;
 
+pub mod init_v3 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	pub struct InitV3<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for InitV3<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 3 && onchain == 2 {
+				weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
+				current.put::<Pallet<T>>();
+
+				// cleanup OnFlightTransfers
+				for (src_chain_id, sequence_id, _transfer) in <OnFlightTransfers<T>>::iter() {
+					<OnFlightTransfers<T>>::remove(src_chain_id, sequence_id);
+				}
+
+				// cleanup FinalizedTransfers
+				for (src_chain_id, sequence_id, _transfer) in <FinalizedTransfers<T>>::iter() {
+					<FinalizedTransfers<T>>::remove(src_chain_id, sequence_id);
+				}
+
+				// reset AssetCaps
+				for (asset_id, asset_cap) in <AssetCaps<T>>::iter() {
+					<AssetCaps<T>>::insert(
+						asset_id,
+						AssetCapInfo {
+							max_on_flight_cap: asset_cap.max_on_flight_cap,
+							on_flight_cap: Default::default(),
+						},
+					);
+				}
+
+				log!(info, "cccp-relay-queue storage migration passes init::v3 update ✅");
+			} else {
+				log!(warn, "Skipping cccp-relay-queue storage init::v3 💤");
+				weight = weight.saturating_add(T::DbWeight::get().reads(1));
+			}
+
+			weight
+		}
+	}
+}
+
 pub mod init_v2 {
 	use super::*;
 	use crate::pallet::pallet as current_pallet;
