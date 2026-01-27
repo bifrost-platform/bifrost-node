@@ -4,6 +4,7 @@
 mod pallet;
 pub mod weights;
 
+pub mod migrations;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
@@ -12,8 +13,21 @@ use bp_staking::MAX_AUTHORITIES;
 use frame_support::traits::Currency;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, RuntimeDebug, H160, H256};
+use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedVec;
+
+pub(crate) const LOG_TARGET: &'static str = "runtime::cccp-relay-queue";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
 
 /// Chain ID type.
 pub type ChainId = u32;
@@ -73,8 +87,8 @@ pub struct AssetCapInfo<Balance> {
 pub struct TransferInfo<Balance, AccountId> {
 	/// The amount of the transfer.
 	pub amount: Balance,
-	/// The source transaction id. The transaction which initiated the transfer.
-	pub src_tx_id: H256,
+	/// The sequence id. The sequence id which initiated the transfer.
+	pub sequence_id: U256,
 	/// The source chain id.
 	pub src_chain_id: ChainId,
 	/// The destination chain id.
@@ -102,8 +116,10 @@ pub struct TransferInfo<Balance, AccountId> {
 pub struct SocketMessageSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
-	/// The source transaction id. The transaction which initiated the transfer.
-	pub src_tx_id: H256,
+	/// The source chain id.
+	pub src_chain_id: ChainId,
+	/// The sequence id.
+	pub sequence_id: U256,
 	/// The Socket message.
 	pub message: UnboundedBytes,
 }
