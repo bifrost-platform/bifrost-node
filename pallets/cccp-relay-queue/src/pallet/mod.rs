@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf, ChainId,
-	SocketMessageSubmission, TransferInfo, TransferOption, TransferStatus,
+	FinalizePollSubmission, OnFlightPollSubmission, TransferInfo, TransferOption, TransferStatus,
 };
 
 use frame_support::{
@@ -227,9 +227,12 @@ pub mod pallet {
 	/// until finalization, when they are moved to `FinalizedTransfers`.
 	///
 	/// - **Key 1**: `ChainId` (u32) - The source chain ID where the transfer originated
-	/// - **Key 2**: `H256` - The source transaction ID uniquely identifying this transfer
+	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer (from `msg.req_id.sequence`)
 	/// - **Value**: `TransferInfo<Balance, AccountId>` containing:
 	///   - `amount`: Transfer amount in the asset's units
+	///   - `sequence_id`: The sequence ID from the socket message request
+	///   - `src_chain_id`: The source chain ID where the transfer originated
+	///   - `dst_chain_id`: The destination chain ID for the transfer
 	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
 	///   - `option`: Fast or Standard transfer mode
 	///   - `status`: Current status (Pending → OnFlight → Finalized)
@@ -259,9 +262,12 @@ pub mod pallet {
 	/// moved here from `OnFlightTransfers` upon reaching final consensus.
 	///
 	/// - **Key 1**: `ChainId` (u32) - The source chain ID where the transfer originated
-	/// - **Key 2**: `H256` - The source transaction ID uniquely identifying this transfer
+	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer (from `msg.req_id.sequence`)
 	/// - **Value**: `TransferInfo<Balance, AccountId>` with `status = Finalized` and final state:
 	///   - `amount`: Transfer amount in the asset's units
+	///   - `sequence_id`: The sequence ID from the socket message request
+	///   - `src_chain_id`: The source chain ID where the transfer originated
+	///   - `dst_chain_id`: The destination chain ID for the transfer
 	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
 	///   - `option`: Fast or Standard transfer mode used
 	///   - `status`: Always `Finalized` in this storage
@@ -270,7 +276,7 @@ pub mod pallet {
 	///   - `finalization_voters`: Complete list of relayers who confirmed finalization
 	///
 	/// **Purpose**:
-	/// - Prevents duplicate transfer processing by checking if a source tx ID already exists
+	/// - Prevents duplicate transfer processing by checking if a sequence ID already exists
 	/// - Provides historical audit trail for cross-chain transfer operations
 	/// - Enables queries for transfer outcomes (committed vs rolled back)
 	/// - Never removed (unbounded storage for permanent record-keeping)
@@ -325,13 +331,18 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn on_flight_poll(
 			origin: OriginFor<T>,
-			socket_message_submission: SocketMessageSubmission<T::AccountId>,
+			on_flight_poll_submission: OnFlightPollSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SocketMessageSubmission { authority_id, src_chain_id, sequence_id, message } =
-				socket_message_submission;
+			let OnFlightPollSubmission {
+				authority_id,
+				src_tx_id,
+				src_chain_id,
+				sequence_id,
+				message,
+			} = on_flight_poll_submission;
 
 			// Parse and validate socket message (must be in REQUESTED status)
 			let msg = Self::validate_and_parse_socket_message(&message, |m| m.is_requested())?;
@@ -391,6 +402,7 @@ pub mod pallet {
 					TransferInfo {
 						amount,
 						sequence_id,
+						src_tx_id,
 						src_chain_id,
 						dst_chain_id,
 						asset_index_hash,
@@ -508,6 +520,7 @@ pub mod pallet {
 						TransferInfo {
 							amount,
 							sequence_id,
+							src_tx_id,
 							src_chain_id,
 							dst_chain_id,
 							asset_index_hash,
@@ -583,13 +596,13 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn finalize_poll(
 			origin: OriginFor<T>,
-			socket_message_submission: SocketMessageSubmission<T::AccountId>,
+			finalize_poll_submission: FinalizePollSubmission<T::AccountId>,
 			_signature: T::Signature,
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let SocketMessageSubmission { authority_id, src_chain_id, sequence_id, message } =
-				socket_message_submission;
+			let FinalizePollSubmission { authority_id, src_chain_id, sequence_id, message } =
+				finalize_poll_submission;
 
 			// Parse and validate socket message (must be COMMITTED or ROLLBACKED)
 			let msg = Self::validate_and_parse_socket_message(&message, |msg| {
@@ -1207,20 +1220,20 @@ pub mod pallet {
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
-				Call::on_flight_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission {
+				Call::on_flight_poll { on_flight_poll_submission, signature } => {
+					let OnFlightPollSubmission {
 						authority_id,
+						src_tx_id,
 						src_chain_id,
 						sequence_id,
 						message,
-					} = socket_message_submission;
+					} = on_flight_poll_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = [
 						keccak_256("OnFlightPoll".as_bytes()).as_slice(),
-						Encode::encode(&(src_chain_id, sequence_id)).as_slice(),
-						message,
+						Encode::encode(&(src_tx_id, src_chain_id, sequence_id, message)).as_slice(),
 					]
 					.concat();
 					if !signature.verify(&*message, authority_id) {
@@ -1233,20 +1246,15 @@ pub mod pallet {
 						.propagate(true)
 						.build()
 				},
-				Call::finalize_poll { socket_message_submission, signature } => {
-					let SocketMessageSubmission {
-						authority_id,
-						src_chain_id,
-						sequence_id,
-						message,
-					} = socket_message_submission;
+				Call::finalize_poll { finalize_poll_submission, signature } => {
+					let FinalizePollSubmission { authority_id, src_chain_id, sequence_id, message } =
+						finalize_poll_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = [
 						keccak_256("FinalizePoll".as_bytes()).as_slice(),
-						Encode::encode(&(src_chain_id, sequence_id)).as_slice(),
-						message,
+						Encode::encode(&(src_chain_id, sequence_id, message)).as_slice(),
 					]
 					.concat();
 					if !signature.verify(&*message, authority_id) {
