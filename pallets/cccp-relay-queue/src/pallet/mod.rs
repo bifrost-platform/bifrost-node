@@ -1,13 +1,14 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf, ChainId,
-	FinalizePollSubmission, OnFlightPollSubmission, TransferInfo, TransferOption, TransferStatus,
+	migrations, weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId,
+	BalanceOf, ChainId, FinalizePollSubmission, OnFlightPollSubmission, TransferInfo,
+	TransferOption, TransferStatus,
 };
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, ReservableCurrency, StorageVersion},
+	traits::{Currency, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -288,6 +289,13 @@ pub mod pallet {
 		U256,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
 	>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::init_v2::InitV2::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T>
