@@ -4,7 +4,7 @@
 mod pallet;
 pub mod weights;
 
-pub mod migrations;
+// pub mod migrations;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
@@ -89,6 +89,8 @@ pub struct TransferInfo<Balance, AccountId> {
 	pub amount: Balance,
 	/// The sequence id. The sequence id which initiated the transfer.
 	pub sequence_id: U256,
+	/// The source transaction id.
+	pub src_tx_id: H256,
 	/// The source chain id.
 	pub src_chain_id: ChainId,
 	/// The destination chain id.
@@ -113,7 +115,22 @@ pub struct TransferInfo<Balance, AccountId> {
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
 /// A submission of Socket message.
-pub struct SocketMessageSubmission<AccountId> {
+pub struct OnFlightPollSubmission<AccountId> {
+	/// The authority id.
+	pub authority_id: AccountId,
+	/// The source transaction id.
+	pub src_tx_id: H256,
+	/// The source chain id.
+	pub src_chain_id: ChainId,
+	/// The sequence id.
+	pub sequence_id: U256,
+	/// The Socket message.
+	pub message: UnboundedBytes,
+}
+
+#[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+/// A submission of Socket message.
+pub struct FinalizePollSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
 	/// The source chain id.

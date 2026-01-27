@@ -2,9 +2,10 @@ use super::*;
 
 pub mod init_v2 {
 	use super::*;
+	use crate::pallet::pallet as current_pallet;
 	use core::marker::PhantomData;
 	use frame_support::{
-		storage_alias,
+		storage::migration::storage_key_iter,
 		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
 		weights::Weight,
 		Twox64Concat,
@@ -34,55 +35,9 @@ pub mod init_v2 {
 		pub finalization_voters: BoundedVec<AccountId, ConstU32<{ bp_staking::MAX_AUTHORITIES }>>,
 	}
 
-	/// Old storage types (key2: H256, value: OldTransferInfo)
-	mod old {
-		use super::*;
-
-		#[storage_alias]
-		pub type OnFlightTransfers<T: Config> = StorageDoubleMap<
-			Pallet<T>,
-			Twox64Concat,
-			ChainId,
-			Twox64Concat,
-			H256,
-			OldTransferInfo<BalanceOf<T>, <T as frame_system::Config>::AccountId>,
-		>;
-
-		#[storage_alias]
-		pub type FinalizedTransfers<T: Config> = StorageDoubleMap<
-			Pallet<T>,
-			Twox64Concat,
-			ChainId,
-			Twox64Concat,
-			H256,
-			OldTransferInfo<BalanceOf<T>, <T as frame_system::Config>::AccountId>,
-		>;
-	}
-
-	/// New storage types (key2: U256, value: TransferInfo)
-	mod new {
-		use super::*;
-
-		#[storage_alias]
-		pub type OnFlightTransfers<T: Config> = StorageDoubleMap<
-			Pallet<T>,
-			Twox64Concat,
-			ChainId,
-			Twox64Concat,
-			sp_core::U256,
-			TransferInfo<BalanceOf<T>, <T as frame_system::Config>::AccountId>,
-		>;
-
-		#[storage_alias]
-		pub type FinalizedTransfers<T: Config> = StorageDoubleMap<
-			Pallet<T>,
-			Twox64Concat,
-			ChainId,
-			Twox64Concat,
-			sp_core::U256,
-			TransferInfo<BalanceOf<T>, <T as frame_system::Config>::AccountId>,
-		>;
-	}
+	/// Pallet prefix for storage.
+	/// This must match the pallet name in construct_runtime! (CCCPRelayQueue).
+	const PALLET_NAME: &[u8] = b"CCCPRelayQueue";
 
 	pub struct InitV2<T>(PhantomData<T>);
 
@@ -99,90 +54,12 @@ pub mod init_v2 {
 			if current == 2 && onchain == 1 {
 				log!(info, "Starting cccp-relay-queue storage migration v1 → v2");
 
-				// Migrate OnFlightTransfers: key2 changes from H256 (src_tx_id) to U256 (sequence_id)
-				let on_flight_entries: sp_std::vec::Vec<_> =
-					old::OnFlightTransfers::<T>::drain().collect();
-				weight =
-					weight.saturating_add(T::DbWeight::get().reads_writes(
-						on_flight_entries.len() as u64,
-						on_flight_entries.len() as u64,
-					));
-
-				let mut on_flight_count = 0u32;
-				for (src_chain_id, _src_tx_id, old_transfer) in on_flight_entries {
-					if let Some(sequence_id) =
-						extract_sequence_id_from_socket_message(&old_transfer.socket_message)
-					{
-						let new_transfer = TransferInfo {
-							amount: old_transfer.amount,
-							sequence_id,
-							src_chain_id: old_transfer.src_chain_id,
-							dst_chain_id: old_transfer.dst_chain_id,
-							asset_index_hash: old_transfer.asset_index_hash,
-							option: old_transfer.option,
-							status: old_transfer.status,
-							socket_message: old_transfer.socket_message,
-							on_flight_voters: old_transfer.on_flight_voters,
-							finalization_voters: old_transfer.finalization_voters,
-						};
-						new::OnFlightTransfers::<T>::insert(
-							src_chain_id,
-							sequence_id,
-							new_transfer,
-						);
-						on_flight_count += 1;
-					} else {
-						log!(
-							warn,
-							"Failed to parse socket message for OnFlight transfer src_chain_id={}, skipping",
-							src_chain_id
-						);
-					}
-				}
-				weight = weight.saturating_add(T::DbWeight::get().writes(on_flight_count as u64));
+				// Migrate OnFlightTransfers
+				let on_flight_count = migrate_on_flight_transfers::<T>(&mut weight);
 				log!(info, "Migrated {} OnFlightTransfers entries", on_flight_count);
 
-				// Migrate FinalizedTransfers: key2 changes from H256 (src_tx_id) to U256 (sequence_id)
-				let finalized_entries: sp_std::vec::Vec<_> =
-					old::FinalizedTransfers::<T>::drain().collect();
-				weight =
-					weight.saturating_add(T::DbWeight::get().reads_writes(
-						finalized_entries.len() as u64,
-						finalized_entries.len() as u64,
-					));
-
-				let mut finalized_count = 0u32;
-				for (src_chain_id, _src_tx_id, old_transfer) in finalized_entries {
-					if let Some(sequence_id) =
-						extract_sequence_id_from_socket_message(&old_transfer.socket_message)
-					{
-						let new_transfer = TransferInfo {
-							amount: old_transfer.amount,
-							sequence_id,
-							src_chain_id: old_transfer.src_chain_id,
-							dst_chain_id: old_transfer.dst_chain_id,
-							asset_index_hash: old_transfer.asset_index_hash,
-							option: old_transfer.option,
-							status: old_transfer.status,
-							socket_message: old_transfer.socket_message,
-							on_flight_voters: old_transfer.on_flight_voters,
-							finalization_voters: old_transfer.finalization_voters,
-						};
-						new::FinalizedTransfers::<T>::insert(
-							src_chain_id,
-							sequence_id,
-							new_transfer,
-						);
-						finalized_count += 1;
-					} else {
-						log!(
-							warn,
-							"Failed to parse socket message for Finalized transfer src_chain_id={}, skipping",
-							src_chain_id
-						);
-					}
-				}
-				weight = weight.saturating_add(T::DbWeight::get().writes(finalized_count as u64));
+				// Migrate FinalizedTransfers
+				let finalized_count = migrate_finalized_transfers::<T>(&mut weight);
 				log!(info, "Migrated {} FinalizedTransfers entries", finalized_count);
 
 				// Update storage version
@@ -196,6 +73,108 @@ pub mod init_v2 {
 			}
 			weight
 		}
+	}
+
+	/// Migrate OnFlightTransfers from (ChainId, H256) to (ChainId, U256) key structure
+	fn migrate_on_flight_transfers<T: Config>(weight: &mut Weight) -> u32
+	where
+		BalanceOf<T>: Into<sp_core::U256> + TryFrom<sp_core::U256>,
+	{
+		let mut count = 0u32;
+
+		for ((src_chain_id, _src_tx_id), old_transfer) in storage_key_iter::<
+			(ChainId, H256),
+			OldTransferInfo<BalanceOf<T>, T::AccountId>,
+			Twox64Concat,
+		>(PALLET_NAME, b"OnFlightTransfers")
+		.drain()
+		{
+			*weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
+			if let Some(sequence_id) =
+				extract_sequence_id_from_socket_message(&old_transfer.socket_message)
+			{
+				let new_transfer = TransferInfo {
+					amount: old_transfer.amount,
+					sequence_id,
+					src_chain_id: old_transfer.src_chain_id,
+					dst_chain_id: old_transfer.dst_chain_id,
+					asset_index_hash: old_transfer.asset_index_hash,
+					option: old_transfer.option,
+					status: old_transfer.status,
+					socket_message: old_transfer.socket_message,
+					on_flight_voters: old_transfer.on_flight_voters,
+					finalization_voters: old_transfer.finalization_voters,
+				};
+
+				current_pallet::OnFlightTransfers::<T>::insert(
+					src_chain_id,
+					sequence_id,
+					new_transfer,
+				);
+				*weight = weight.saturating_add(T::DbWeight::get().writes(1));
+				count += 1;
+			} else {
+				log!(
+					warn,
+					"Failed to parse socket message for OnFlight transfer src_chain_id={}, skipping",
+					src_chain_id
+				);
+			}
+		}
+
+		count
+	}
+
+	/// Migrate FinalizedTransfers from (ChainId, H256) to (ChainId, U256) key structure
+	fn migrate_finalized_transfers<T: Config>(weight: &mut Weight) -> u32
+	where
+		BalanceOf<T>: Into<sp_core::U256> + TryFrom<sp_core::U256>,
+	{
+		let mut count = 0u32;
+
+		for ((src_chain_id, _src_tx_id), old_transfer) in storage_key_iter::<
+			(ChainId, H256),
+			OldTransferInfo<BalanceOf<T>, T::AccountId>,
+			Twox64Concat,
+		>(PALLET_NAME, b"FinalizedTransfers")
+		.drain()
+		{
+			*weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
+
+			if let Some(sequence_id) =
+				extract_sequence_id_from_socket_message(&old_transfer.socket_message)
+			{
+				let new_transfer = TransferInfo {
+					amount: old_transfer.amount,
+					sequence_id,
+					src_chain_id: old_transfer.src_chain_id,
+					dst_chain_id: old_transfer.dst_chain_id,
+					asset_index_hash: old_transfer.asset_index_hash,
+					option: old_transfer.option,
+					status: old_transfer.status,
+					socket_message: old_transfer.socket_message,
+					on_flight_voters: old_transfer.on_flight_voters,
+					finalization_voters: old_transfer.finalization_voters,
+				};
+
+				current_pallet::FinalizedTransfers::<T>::insert(
+					src_chain_id,
+					sequence_id,
+					new_transfer,
+				);
+				*weight = weight.saturating_add(T::DbWeight::get().writes(1));
+				count += 1;
+			} else {
+				log!(
+					warn,
+					"Failed to parse socket message for Finalized transfer src_chain_id={}, skipping",
+					src_chain_id
+				);
+			}
+		}
+
+		count
 	}
 
 	/// Extract sequence_id from the socket message bytes.
