@@ -41,21 +41,18 @@ pub type AssetOracleId = H160;
 /// Asset index hash type.
 pub type AssetIndexHash = H256;
 
+/// Socket message hash type. (status: REQUESTED)
+pub type SocketMessageHash = H256;
+
+/// Source transaction id type. The transaction ID of the source chain that emitted REQUESTED socket message.
+pub type SourceTransactionId = H256;
+
 #[derive(
 	Decode, Encode, TypeInfo, Clone, Copy, PartialEq, Eq, RuntimeDebug, DecodeWithMemTracking,
 )]
 pub enum TransferOption {
 	Fast,
 	Standard,
-}
-
-#[derive(
-	Decode, Encode, TypeInfo, Clone, Copy, PartialEq, Eq, RuntimeDebug, DecodeWithMemTracking,
-)]
-pub enum TransferStatus {
-	Pending,
-	OnFlight,
-	Finalized,
 }
 
 pub type BalanceOf<T> =
@@ -89,8 +86,6 @@ pub struct TransferInfo<Balance, AccountId> {
 	pub amount: Balance,
 	/// The sequence id. The sequence id which initiated the transfer.
 	pub sequence_id: U256,
-	/// The source transaction id.
-	pub src_tx_id: H256,
 	/// The source chain id.
 	pub src_chain_id: ChainId,
 	/// The destination chain id.
@@ -99,18 +94,57 @@ pub struct TransferInfo<Balance, AccountId> {
 	pub asset_index_hash: AssetIndexHash,
 	/// The option of the transfer.
 	pub option: TransferOption,
-	/// The status of the transfer.
-	pub status: TransferStatus,
 	/// The initial socket message of the transfer. (status: REQUESTED)
 	pub socket_message: UnboundedBytes,
 	/// Voters of the transfer.
-	/// Voting is only required for inbound requests since the source chain are non-bifrost chains.
-	/// Socket messages originated by outbound requests are internally validated by the pallet itself. (=immediately on-flight)
+	pub on_flight_voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
+}
+
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
+pub struct TransferInfoWithTxId<Balance, AccountId> {
+	/// The amount of the transfer.
+	pub amount: Balance,
+	/// The sequence id. The sequence id which initiated the transfer.
+	pub sequence_id: U256,
+	/// The source chain id.
+	pub src_chain_id: ChainId,
+	/// The destination chain id.
+	pub dst_chain_id: ChainId,
+	/// The asset index hash.
+	pub asset_index_hash: AssetIndexHash,
+	/// The option of the transfer.
+	pub option: TransferOption,
+	/// The initial socket message of the transfer. (status: REQUESTED)
+	pub socket_message: UnboundedBytes,
+	/// Voters of the transfer.
 	pub on_flight_voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 	/// Voters of the finalization.
 	/// Voting is only required for inbound requests since the source chain are non-bifrost chains.
 	/// Socket messages originated by outbound requests are internally validated by the pallet itself. (=immediately finalized)
 	pub finalization_voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
+	/// The source transaction id.
+	pub src_tx_id: SourceTransactionId,
+}
+
+impl<Balance, AccountId> TransferInfoWithTxId<Balance, AccountId> {
+	/// Create a new TransferInfoWithTxId from an existing TransferInfo and source transaction id.
+	pub fn from_transfer_info(
+		info: TransferInfo<Balance, AccountId>,
+		src_tx_id: SourceTransactionId,
+	) -> Self {
+		Self {
+			amount: info.amount,
+			sequence_id: info.sequence_id,
+			src_chain_id: info.src_chain_id,
+			dst_chain_id: info.dst_chain_id,
+			asset_index_hash: info.asset_index_hash,
+			option: info.option,
+			socket_message: info.socket_message,
+			on_flight_voters: info.on_flight_voters,
+			finalization_voters: BoundedVec::new(),
+			src_tx_id,
+		}
+	}
 }
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -118,14 +152,12 @@ pub struct TransferInfo<Balance, AccountId> {
 pub struct OnFlightPollSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
+	/// The original Socket message. (status: REQUESTED)
+	pub msg: UnboundedBytes,
+	/// The Socket message hash. (keccak256 of the Socket message)
+	pub msg_hash: H256,
 	/// The source transaction id.
 	pub src_tx_id: H256,
-	/// The source chain id.
-	pub src_chain_id: ChainId,
-	/// The sequence id.
-	pub sequence_id: U256,
-	/// The Socket message.
-	pub message: UnboundedBytes,
 }
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]
@@ -133,10 +165,6 @@ pub struct OnFlightPollSubmission<AccountId> {
 pub struct FinalizePollSubmission<AccountId> {
 	/// The authority id.
 	pub authority_id: AccountId,
-	/// The source chain id.
-	pub src_chain_id: ChainId,
-	/// The sequence id.
-	pub sequence_id: U256,
-	/// The Socket message.
-	pub message: UnboundedBytes,
+	/// The original Socket message. (status: COMMITTED or ROLLBACKED)
+	pub msg: UnboundedBytes,
 }

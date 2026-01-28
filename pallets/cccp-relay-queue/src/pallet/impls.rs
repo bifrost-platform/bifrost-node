@@ -15,7 +15,8 @@ use sp_io::hashing::keccak_256;
 use sp_runtime::{BoundedVec, DispatchError};
 
 use crate::{
-	AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, TransferInfo, TransferOption, TransferStatus,
+	AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, TransferInfo, TransferInfoWithTxId,
+	TransferOption,
 };
 
 use super::pallet::*;
@@ -138,7 +139,7 @@ impl<T: Config> Pallet<T> {
 		let msg = SocketMessage::try_from(message.clone())
 			.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 
-		ensure!(expected_status_check(&msg), Error::<T>::InvalidSocketMessage);
+		ensure!(expected_status_check(&msg), Error::<T>::MessageStatusMismatch);
 
 		Ok(msg)
 	}
@@ -180,7 +181,7 @@ impl<T: Config> Pallet<T> {
 			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
 		let request_info = Self::try_get_request(&msg.encode_req_id())?;
 
-		ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::InvalidSocketMessage);
+		ensure!(request_info.is_msg_hash(msg_hash), Error::<T>::OnChainExistenceMismatch);
 
 		Ok(request_info)
 	}
@@ -270,42 +271,42 @@ impl<T: Config> Pallet<T> {
 
 impl<T: Config> RelayQueueManager<T::AccountId> for Pallet<T> {
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
-		// Replace authority in all on-flight transfers
-		OnFlightTransfers::<T>::translate::<TransferInfo<BalanceOf<T>, T::AccountId>, _>(
-			|_asset_index, _sequence_id, mut transfer_info| {
-				// Replace in on_flight_voters (only for Pending status)
-				if transfer_info.status == TransferStatus::Pending {
-					if let Some(pos) =
-						transfer_info.on_flight_voters.iter().position(|voter| voter == old)
-					{
-						// Remove old authority and add new one at the same position
-						transfer_info.on_flight_voters.remove(pos);
-						if transfer_info.on_flight_voters.try_insert(pos, new.clone()).is_err() {
-							log::warn!(
-								target: "pallet-cccp-relay-queue",
-								"Failed to replace authority in on_flight_voters: {:?} -> {:?}",
-								old,
-								new
-							);
-						}
+		// Replace authority in all pending transfers (only handle on-flight voters. since finalization voters are handled in OnFlightTransfers)
+		PendingTransfers::<T>::translate::<TransferInfo<BalanceOf<T>, T::AccountId>, _>(
+			|_msg_hash, _src_tx_id, mut transfer_info| {
+				if let Some(pos) =
+					transfer_info.on_flight_voters.iter().position(|voter| voter == old)
+				{
+					// Remove old authority and add new one at the same position
+					transfer_info.on_flight_voters.remove(pos);
+					if transfer_info.on_flight_voters.try_insert(pos, new.clone()).is_err() {
+						log::warn!(
+							target: "pallet-cccp-relay-queue",
+							"Failed to replace authority in on_flight_voters: {:?} -> {:?}",
+							old,
+							new
+						);
 					}
 				}
+				Some(transfer_info)
+			},
+		);
 
-				// Replace in finalization_voters (only for OnFlight status)
-				if transfer_info.status == TransferStatus::OnFlight {
-					if let Some(pos) =
-						transfer_info.finalization_voters.iter().position(|voter| voter == old)
-					{
-						// Remove old authority and add new one at the same position
-						transfer_info.finalization_voters.remove(pos);
-						if transfer_info.finalization_voters.try_insert(pos, new.clone()).is_err() {
-							log::warn!(
-								target: "pallet-cccp-relay-queue",
-								"Failed to replace authority in finalization_voters: {:?} -> {:?}",
-								old,
-								new
-							);
-						}
+		// Replace authority in all on-flight transfers (only handle finalization voters. since on-flight voters are handled in PendingTransfers)
+		OnFlightTransfers::<T>::translate::<TransferInfoWithTxId<BalanceOf<T>, T::AccountId>, _>(
+			|_msg_hash, mut transfer_info| {
+				if let Some(pos) =
+					transfer_info.finalization_voters.iter().position(|voter| voter == old)
+				{
+					// Remove old authority and add new one at the same position
+					transfer_info.finalization_voters.remove(pos);
+					if transfer_info.finalization_voters.try_insert(pos, new.clone()).is_err() {
+						log::warn!(
+							target: "pallet-cccp-relay-queue",
+							"Failed to replace authority in finalization_voters: {:?} -> {:?}",
+							old,
+							new
+						);
 					}
 				}
 
