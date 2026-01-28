@@ -5,7 +5,7 @@ pragma solidity >=0.8.0;
  * @title The interface through which solidity contracts will interact with CCCP Relay Queue
  * We follow this same interface including four-byte function selectors, in the precompile that
  * wraps the pallet
- * Address :    0x0000000000000000000000000000000000002001
+ * Address :    0x0000000000000000000000000000000000001111
  */
 
 interface ICCCPRelayQueue {
