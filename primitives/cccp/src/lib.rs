@@ -146,6 +146,31 @@ pub struct SocketMessage {
 }
 
 impl SocketMessage {
+	/// Encodes the full socket message into ABI-encoded bytes.
+	/// This matches the Socket event ABI structure for proper hash computation.
+	pub fn encode(&self) -> UnboundedBytes {
+		ethabi_decode::encode(&[Token::Tuple(vec![
+			Token::Tuple(vec![
+				Token::FixedBytes(self.req_id.chain.clone()),
+				Token::Uint(self.req_id.round_id),
+				Token::Uint(self.req_id.sequence),
+			]),
+			Token::Uint(self.status),
+			Token::Tuple(vec![
+				Token::FixedBytes(self.ins_code.chain.clone()),
+				Token::FixedBytes(self.ins_code.method.clone()),
+			]),
+			Token::Tuple(vec![
+				Token::FixedBytes(self.params.token_idx0.clone()),
+				Token::FixedBytes(self.params.token_idx1.clone()),
+				Token::Address(self.params.refund),
+				Token::Address(self.params.to),
+				Token::Uint(self.params.amount),
+				Token::Bytes(self.params.variants.clone()),
+			]),
+		])])
+	}
+
 	/// Encodes the request ID into bytes.
 	pub fn encode_req_id(&self) -> UnboundedBytes {
 		ethabi_decode::encode(&[
