@@ -58,8 +58,8 @@ pub type BifrostPrecompilesAt<R> = (
 		BifrostPrecompilesChecks,
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<4369>, CCCPRelayQueuePrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
-	PrecompileAt<AddressU64<8193>, CCCPRelayQueuePrecompile<R>, BifrostPrecompilesChecks>,
 	// Bifrost Transaction Payment Precompile at 0x0810 (2064)
 	PrecompileAt<
 		AddressU64<2064>,
