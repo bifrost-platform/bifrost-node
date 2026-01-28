@@ -2,7 +2,8 @@ mod impls;
 
 use crate::{
 	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf, ChainId,
-	FinalizePollSubmission, OnFlightPollSubmission, TransferInfo, TransferOption, TransferStatus,
+	FinalizePollSubmission, OnFlightPollSubmission, SocketMessageHash, SourceTransactionId,
+	TransferInfo, TransferInfoWithTxId, TransferOption,
 };
 
 use frame_support::{
@@ -11,7 +12,6 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_cccp::SocketMessage;
 use bp_staking::traits::Authorities;
 use sp_core::{H160, U256};
 use sp_io::hashing::keccak_256;
@@ -22,7 +22,7 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -48,6 +48,12 @@ pub mod pallet {
 		EmptySubmission,
 		/// The socket message is invalid.
 		InvalidSocketMessage,
+		/// The on-chain existence does not match.
+		OnChainExistenceMismatch,
+		/// The message hash does not match.
+		MessageHashMismatch,
+		/// The message status does not match.
+		MessageStatusMismatch,
 		/// The request information is invalid.
 		InvalidRequestInfo,
 		/// The socket contract does not exist.
@@ -58,8 +64,6 @@ pub mod pallet {
 		TransferAlreadyOnFlight,
 		/// The transfer is not on flight.
 		TransferNotOnFlight,
-		/// The transfer does not exist.
-		TransferDNE,
 		/// The authority has already voted.
 		AlreadyVoted,
 		/// The value is out of range.
@@ -110,7 +114,7 @@ pub mod pallet {
 			authority_id: T::AccountId,
 			option: TransferOption,
 			amount: BalanceOf<T>,
-			status: TransferStatus,
+			is_approved: bool,
 		},
 		/// A finalization has been polled.
 		FinalizationPolled {
@@ -220,37 +224,87 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// Active cross-chain transfers awaiting finalization.
+	/// Pending cross-chain transfers awaiting majority consensus approval.
 	///
-	/// This storage tracks all transfers that have been approved for execution but not yet
-	/// finalized (committed or rolled back). Transfers remain in this storage from approval
-	/// until finalization, when they are moved to `FinalizedTransfers`.
+	/// This storage tracks transfers during the initial voting phase before they are approved
+	/// for execution. Transfers enter this storage on the first relayer vote and remain here
+	/// until majority consensus is reached, at which point they transition to `OnFlightTransfers`.
 	///
-	/// - **Key 1**: `ChainId` (u32) - The source chain ID where the transfer originated
-	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer (from `msg.req_id.sequence`)
+	/// - **Key 1**: `SocketMessageHash` (H256) - Hash of the REQUESTED socket message (keccak256)
+	///   - Uniquely identifies the transfer request across all chains
+	///   - Computed from the original CCCP message with `status = REQUESTED (1)`
+	/// - **Key 2**: `SourceTransactionId` (H256) - The transaction hash from the source chain
+	///   - Enables duplicate detection: same message from different source transactions
+	///   - Prevents replay attacks across multiple source chain reorganizations
 	/// - **Value**: `TransferInfo<Balance, AccountId>` containing:
 	///   - `amount`: Transfer amount in the asset's units
 	///   - `sequence_id`: The sequence ID from the socket message request
 	///   - `src_chain_id`: The source chain ID where the transfer originated
 	///   - `dst_chain_id`: The destination chain ID for the transfer
 	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
-	///   - `option`: Fast or Standard transfer mode
-	///   - `status`: Current status (Pending → OnFlight → Finalized)
-	///   - `socket_message`: Original CCCP message from the transfer request
-	///   - `on_flight_voters`: Relayers who voted to approve the transfer (inbound only)
-	///   - `finalization_voters`: Relayers who voted to finalize the transfer (inbound only)
+	///   - `option`: Fast or Standard transfer mode (recalculated at each vote)
+	///   - `socket_message`: Original CCCP message (status: REQUESTED)
+	///   - `on_flight_voters`: Relayers who have voted to approve this transfer
 	///
 	/// **Transfer Lifecycle**:
-	/// 1. **Outbound** (Bifrost → External): Immediately OnFlight upon first submission
-	/// 2. **Inbound** (External → Bifrost): Pending → OnFlight when majority consensus reached
-	/// 3. Both paths: Removed from this storage and moved to `FinalizedTransfers` upon finalization
-	pub type OnFlightTransfers<T: Config> = StorageDoubleMap<
+	/// 1. **First Vote**: Creates entry in PendingTransfers with single voter
+	/// 2. **Subsequent Votes**: Adds voters to `on_flight_voters` list
+	/// 3. **Majority Reached**: Transfer moves to `OnFlightTransfers` and is removed from here
+	/// 4. **Dynamic Option**: Transfer option (Fast/Standard) is re-evaluated at each vote
+	///    based on current asset cap availability
+	///
+	/// **Purpose**:
+	/// - Collects relayer votes before transfer execution approval
+	/// - Prevents duplicate processing of the same transfer from different source transactions
+	/// - Enables consensus-based security for all cross-chain transfers
+	pub type PendingTransfers<T: Config> = StorageDoubleMap<
 		_,
 		Twox64Concat,
-		ChainId,
+		SocketMessageHash,
 		Twox64Concat,
-		U256,
+		SourceTransactionId,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
+	>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Active cross-chain transfers awaiting finalization.
+	///
+	/// This storage tracks all transfers that have received majority approval and are now
+	/// awaiting finalization (either committed or rolled back on the destination chain).
+	/// Transfers move here from `PendingTransfers` after majority consensus, and remain
+	/// until finalization consensus is reached.
+	///
+	/// - **Key**: `SocketMessageHash` (H256) - Hash of the original REQUESTED socket message
+	///   - Same hash used in `PendingTransfers` for consistent lookup
+	///   - Computed from CCCP message with `status = REQUESTED (1)`
+	/// - **Value**: `TransferInfoWithTxId<Balance, AccountId>` containing:
+	///   - `amount`: Transfer amount in the asset's units
+	///   - `sequence_id`: The sequence ID from the socket message request
+	///   - `src_chain_id`: The source chain ID where the transfer originated
+	///   - `dst_chain_id`: The destination chain ID for the transfer
+	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
+	///   - `option`: Fast or Standard transfer mode (finalized during approval)
+	///   - `socket_message`: Original CCCP message (status: REQUESTED)
+	///   - `on_flight_voters`: Complete list of relayers who approved the transfer
+	///   - `finalization_voters`: Relayers voting for finalization (grows during this phase)
+	///   - `src_tx_id`: Source transaction hash that originated the transfer request
+	///
+	/// **Transfer Lifecycle**:
+	/// 1. **Entry**: Moved here from `PendingTransfers` when on-flight majority reached
+	/// 2. **Finalization Voting**: Relayers vote by submitting COMMITTED/ROLLBACKED messages
+	/// 3. **Majority Reached**: Transfer moves to `FinalizedTransfers` and is removed from here
+	///
+	/// **Purpose**:
+	/// - Tracks approved transfers awaiting finalization confirmation
+	/// - Collects finalization votes from relayers observing destination chain outcome
+	/// - Prevents double-finalization by checking for existence in `FinalizedTransfers` first
+	/// - For Fast transfers: Holds the on-flight cap until finalization releases it
+	pub type OnFlightTransfers<T: Config> = StorageMap<
+		_,
+		Twox64Concat,
+		SocketMessageHash,
+		TransferInfoWithTxId<BalanceOf<T>, T::AccountId>,
 	>;
 
 	#[pallet::storage]
@@ -259,34 +313,36 @@ pub mod pallet {
 	///
 	/// This storage maintains a permanent record of all transfers that have been finalized,
 	/// either committed (successfully executed) or rolled back (cancelled). Transfers are
-	/// moved here from `OnFlightTransfers` upon reaching final consensus.
+	/// moved here from `OnFlightTransfers` upon reaching finalization majority consensus.
 	///
-	/// - **Key 1**: `ChainId` (u32) - The source chain ID where the transfer originated
-	/// - **Key 2**: `U256` - The sequence ID uniquely identifying this transfer (from `msg.req_id.sequence`)
-	/// - **Value**: `TransferInfo<Balance, AccountId>` with `status = Finalized` and final state:
+	/// - **Key**: `SocketMessageHash` (H256) - Hash of the original REQUESTED socket message
+	///   - Same hash used throughout the transfer lifecycle for consistent identification
+	///   - Enables duplicate detection: prevents reprocessing of already-finalized transfers
+	/// - **Value**: `TransferInfoWithTxId<Balance, AccountId>` with complete finalization state:
 	///   - `amount`: Transfer amount in the asset's units
 	///   - `sequence_id`: The sequence ID from the socket message request
 	///   - `src_chain_id`: The source chain ID where the transfer originated
 	///   - `dst_chain_id`: The destination chain ID for the transfer
 	///   - `asset_index_hash`: The CCCP asset index identifying the transferred asset
-	///   - `option`: Fast or Standard transfer mode used
-	///   - `status`: Always `Finalized` in this storage
-	///   - `socket_message`: Final CCCP message showing committed or rolled back status
+	///   - `option`: Fast or Standard transfer mode that was used
+	///   - `socket_message`: Original CCCP message (status: REQUESTED)
 	///   - `on_flight_voters`: Complete list of relayers who approved the transfer
 	///   - `finalization_voters`: Complete list of relayers who confirmed finalization
+	///   - `src_tx_id`: Source transaction hash that originated the transfer request
 	///
 	/// **Purpose**:
-	/// - Prevents duplicate transfer processing by checking if a sequence ID already exists
-	/// - Provides historical audit trail for cross-chain transfer operations
-	/// - Enables queries for transfer outcomes (committed vs rolled back)
+	/// - Prevents duplicate transfer processing by checking message hash before accepting new transfers
+	/// - Provides permanent historical audit trail for cross-chain transfer operations
+	/// - Enables queries for transfer outcomes and voting participation
 	/// - Never removed (unbounded storage for permanent record-keeping)
-	pub type FinalizedTransfers<T: Config> = StorageDoubleMap<
+	///
+	/// **Note**: The actual finalization outcome (committed vs rolled back) is determined by
+	/// querying the Socket contract's final status, not stored in this struct.
+	pub type FinalizedTransfers<T: Config> = StorageMap<
 		_,
 		Twox64Concat,
-		ChainId,
-		Twox64Concat,
-		U256,
-		TransferInfo<BalanceOf<T>, T::AccountId>,
+		SocketMessageHash,
+		TransferInfoWithTxId<BalanceOf<T>, T::AccountId>,
 	>;
 
 	#[pallet::call]
@@ -297,36 +353,62 @@ pub mod pallet {
 	{
 		/// Submit a transfer request for on-flight approval voting.
 		///
-		/// This extrinsic handles the initial validation and approval of CCCP transfer requests.
-		/// The behavior differs based on whether the transfer is outbound or inbound:
+		/// This extrinsic handles the initial validation and consensus-based approval of CCCP
+		/// transfer requests. ALL transfers (both inbound and outbound) follow a unified voting
+		/// workflow requiring majority relayer consensus before approval.
 		///
-		/// **Outbound transfers (Bifrost → External chain):**
-		/// - Validated against on-chain Socket contract state
-		/// - Immediately approved without voting (Bifrost is authoritative source)
-		/// - Status: Directly to `OnFlight`
+		/// # Transfer Lifecycle
 		///
-		/// **Inbound transfers (External chain → Bifrost):**
-		/// - Requires majority consensus from relayers
-		/// - First vote creates transfer with `Pending` status
-		/// - Subsequent votes update voter list
-		/// - Status: `Pending` → `OnFlight` when majority reached
+		/// **Stage 1: Pending (in `PendingTransfers` storage)**
+		/// - First relayer vote creates a new entry in `PendingTransfers`
+		/// - Subsequent relayer votes are accumulated in the `on_flight_voters` list
+		/// - Transfer option (Fast/Standard) is dynamically re-evaluated at each vote
+		/// - Keyed by `(msg_hash, src_tx_id)` for duplicate detection
 		///
-		/// **Fast vs Standard transfers:**
-		/// - Transfer option is determined based on available on-flight cap
-		/// - If on-flight cap would be exceeded, automatically uses Standard
-		/// - Fast transfers update the on-flight cap; Standard transfers do not
+		/// **Stage 2: On-Flight (moved to `OnFlightTransfers` storage)**
+		/// - When majority consensus is reached, transfer moves from `PendingTransfers`
+		/// - For Fast transfers: on-flight cap is locked at this point
+		/// - Transfer awaits finalization (commitment or rollback on destination chain)
+		/// - Keyed by `msg_hash` for efficient lookup during finalization
 		///
-		/// **Dynamic cap re-checking (inbound only):**
-		/// - Asset cap is re-evaluated when majority is reached
-		/// - Cap can change during voting due to other transfers finalizing or approving
-		/// - Transfer option (Fast/Standard) is updated based on current cap at majority point
-		/// - Example: Standard → Fast if other Fast transfers freed up cap during voting
-		/// - Example: Fast → Standard if cap was consumed by other transfers during voting
+		/// **Stage 3: Finalized (moved to `FinalizedTransfers` storage)**
+		/// - Handled by `finalize_poll` extrinsic (separate voting phase)
+		///
+		/// # Unified Voting Workflow
+		///
+		/// Both inbound and outbound transfers require majority consensus:
+		/// - **First vote**: Creates entry in `PendingTransfers` with single voter
+		/// - **Subsequent votes**: Adds voters, prevents double-voting
+		/// - **Majority reached**: Transitions to `OnFlightTransfers`, locks Fast transfer cap
+		///
+		/// **Rationale**: Consensus-based approval provides security against Byzantine relayers
+		/// and ensures transfer validity regardless of origin chain.
+		///
+		/// # Fast vs Standard Transfer Mode
+		///
+		/// Transfer mode is dynamically determined based on asset cap availability:
+		/// - **Fast**: Used when `on_flight_cap + amount <= max_on_flight_cap`
+		/// - **Standard**: Used when cap would be exceeded or asset not registered
+		/// - **Dynamic re-evaluation**: Mode recalculated at each vote and at majority point
+		///   - Cap can change during voting (other transfers finalizing/approving)
+		///   - Example: Standard → Fast if other transfers freed cap during voting
+		///   - Example: Fast → Standard if cap consumed by other transfers
+		///
+		/// # Duplicate Detection
+		///
+		/// Multiple layers prevent duplicate transfer processing:
+		/// - `msg_hash`: Prevents same message from being processed twice
+		/// - `src_tx_id`: Distinguishes same message from different source transactions
+		/// - Checks against `OnFlightTransfers` and `FinalizedTransfers` before accepting
 		///
 		/// # Arguments
 		/// * `origin` - Must be `None` (unsigned transaction, validated in `validate_unsigned`)
-		/// * `socket_message_submission` - Contains authority ID and socket message bytes
-		/// * `_signature` - Signature over the message (validated in `validate_unsigned`)
+		/// * `on_flight_poll_submission` - Contains:
+		///   - `authority_id`: The relayer submitting this vote
+		///   - `msg`: Original CCCP socket message (status: REQUESTED)
+		///   - `msg_hash`: Keccak256 hash of the message (validated against computed hash)
+		///   - `src_tx_id`: Source chain transaction hash that emitted the REQUESTED message
+		/// * `_signature` - Signature over `(msg, msg_hash, src_tx_id)` (validated in `validate_unsigned`)
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn on_flight_poll(
@@ -336,262 +418,210 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let OnFlightPollSubmission {
-				authority_id,
-				src_tx_id,
-				src_chain_id,
-				sequence_id,
-				message,
-			} = on_flight_poll_submission;
+			let OnFlightPollSubmission { authority_id, msg, msg_hash, src_tx_id } =
+				on_flight_poll_submission;
 
 			// Parse and validate socket message (must be in REQUESTED status)
-			let msg = Self::validate_and_parse_socket_message(&message, |m| m.is_requested())?;
-			let amount = msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+			let parsed_msg = Self::validate_and_parse_socket_message(&msg, |m| m.is_requested())?;
+			ensure!(msg_hash == Self::hash_bytes(&msg), Error::<T>::MessageHashMismatch);
+
+			let sequence_id = parsed_msg.req_id.sequence;
+			let amount = parsed_msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
+			let src_chain_id: ChainId = u32::from_be_bytes(
+				parsed_msg
+					.req_id
+					.chain
+					.as_slice()
+					.try_into()
+					.map_err(|_| Error::<T>::OutOfRange)?,
+			);
 			let dst_chain_id: ChainId = u32::from_be_bytes(
-				msg.ins_code.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
+				parsed_msg
+					.ins_code
+					.chain
+					.as_slice()
+					.try_into()
+					.map_err(|_| Error::<T>::OutOfRange)?,
 			);
-			ensure!(
-				src_chain_id
-					== u32::from_be_bytes(
-						msg.req_id
-							.chain
-							.as_slice()
-							.try_into()
-							.map_err(|_| Error::<T>::OutOfRange)?,
-					),
-				Error::<T>::InvalidSocketMessage
-			);
-			ensure!(sequence_id == msg.req_id.sequence, Error::<T>::InvalidSocketMessage);
 
 			// Get asset information (if registered)
-			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
+			let asset_index_hash = AssetIndexHash::from_slice(&parsed_msg.params.token_idx0);
 			let asset_info = Self::get_asset_info(asset_index_hash);
 
-			// Ensure transfer hasn't been finalized already
+			// Ensure transfer hasn't been on-flight or finalized already
 			ensure!(
-				!FinalizedTransfers::<T>::contains_key(src_chain_id, sequence_id),
+				!OnFlightTransfers::<T>::contains_key(msg_hash),
+				Error::<T>::TransferAlreadyOnFlight
+			);
+			ensure!(
+				!FinalizedTransfers::<T>::contains_key(msg_hash),
 				Error::<T>::TransferAlreadyFinalized
 			);
-			let on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, sequence_id);
+
+			let pending_transfer = PendingTransfers::<T>::get(msg_hash, src_tx_id);
 
 			// Determine transfer option based on current cap:
 			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
 			// - If asset is not registered: Always Standard (no Fast transfer support)
-			let transfer_option = if let Some((_, ref asset_cap)) = asset_info {
-				Self::determine_transfer_option(asset_cap, msg.params.amount)?
+			let option = if let Some((_, ref asset_cap)) = asset_info {
+				Self::determine_transfer_option(asset_cap, parsed_msg.params.amount)?
 			} else {
 				TransferOption::Standard
 			};
 
-			if msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
-				// ============================================================
-				// OUTBOUND PATH: Immediate approval (Bifrost is source)
-				// ============================================================
+			// ============================================================
+			// INBOUND/OUTBOUND PATH: Requires voting consensus
+			// ============================================================
+			//
+			// IMPORTANT: Asset cap is dynamically re-checked when majority is reached.
+			// During the voting period, the asset cap can change due to:
+			// - Other Fast transfers being finalized (freeing cap)
+			// - New Fast transfers being approved (consuming cap)
+			//
+			// Therefore, a transfer initially determined as Standard might become
+			// eligible for Fast (or vice versa) by the time majority is reached.
+			// The actual transfer option is re-determined at the majority checkpoint.
 
-				// Validate against on-chain Socket contract state
-				let request_info = Self::validate_on_chain_existence(&msg)?;
-				ensure!(request_info.is_requested(), Error::<T>::InvalidSocketMessage);
+			if let Some(mut pending_transfer) = pending_transfer {
+				// Add voter with double-vote prevention
+				Self::add_voter_to_list(&mut pending_transfer.on_flight_voters, &authority_id)?;
 
-				// Ensure transfer does not exist yet
-				ensure!(on_flight_transfer.is_none(), Error::<T>::TransferAlreadyOnFlight);
+				// Re-set transfer option based on latest asset cap
+				pending_transfer.option = option;
 
-				// Create transfer with OnFlight status (immediate approval)
-				OnFlightTransfers::<T>::insert(
-					src_chain_id,
-					sequence_id,
+				// Check if majority reached → transition to OnFlight
+				if pending_transfer.on_flight_voters.len() as u32 >= T::Relayers::majority() {
+					// Update cap for Fast transfers
+					if let Some((asset_id, asset_cap)) = asset_info {
+						if option == TransferOption::Fast {
+							Self::update_fast_transfer_cap(
+								asset_id,
+								asset_cap,
+								parsed_msg.params.amount,
+								true,
+							)?;
+						}
+					}
+
+					// Move to OnFlightTransfers
+					PendingTransfers::<T>::remove(msg_hash, src_tx_id);
+					OnFlightTransfers::<T>::insert(
+						msg_hash,
+						TransferInfoWithTxId::from_transfer_info(pending_transfer, src_tx_id),
+					);
+
+					Self::deposit_event(Event::TransferPolled {
+						asset_index_hash,
+						sequence_id,
+						src_chain_id,
+						dst_chain_id,
+						authority_id,
+						option,
+						amount,
+						is_approved: true,
+					});
+
+					return Ok(().into());
+				}
+				PendingTransfers::<T>::insert(msg_hash, src_tx_id, pending_transfer);
+			} else {
+				// First vote: create transfer with Pending status
+				PendingTransfers::<T>::insert(
+					msg_hash,
+					src_tx_id,
 					TransferInfo {
 						amount,
 						sequence_id,
-						src_tx_id,
 						src_chain_id,
 						dst_chain_id,
 						asset_index_hash,
-						option: transfer_option,
-						status: TransferStatus::OnFlight,
-						socket_message: message.clone(),
+						option,
+						socket_message: msg.clone(),
 						on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
 							.map_err(|_| Error::<T>::OutOfRange)?,
-						finalization_voters: BoundedVec::new(),
 					},
 				);
-
-				// Update cap for Fast transfers (only if asset is registered)
-				if transfer_option == TransferOption::Fast {
-					if let Some((asset_id, asset_cap)) = asset_info {
-						Self::update_fast_transfer_cap(
-							asset_id,
-							asset_cap,
-							msg.params.amount,
-							true,
-						)?;
-					}
-				}
-
-				Self::deposit_event(Event::TransferPolled {
-					asset_index_hash,
-					sequence_id,
-					src_chain_id,
-					dst_chain_id,
-					authority_id,
-					option: transfer_option,
-					amount,
-					status: TransferStatus::OnFlight,
-				});
-			} else {
-				// ============================================================
-				// INBOUND PATH: Requires voting consensus
-				// ============================================================
-				//
-				// IMPORTANT: Asset cap is dynamically re-checked when majority is reached.
-				// During the voting period, the asset cap can change due to:
-				// - Other Fast transfers being finalized (freeing cap)
-				// - New Fast transfers being approved (consuming cap)
-				//
-				// Therefore, a transfer initially determined as Standard might become
-				// eligible for Fast (or vice versa) by the time majority is reached.
-				// The actual transfer option is re-determined at the majority checkpoint.
-
-				if let Some(mut on_flight_transfer) = on_flight_transfer {
-					// Subsequent vote on existing transfer
-					ensure!(
-						on_flight_transfer.status == TransferStatus::Pending,
-						Error::<T>::TransferAlreadyOnFlight
-					);
-					ensure!(
-						on_flight_transfer.socket_message == message,
-						Error::<T>::InvalidSocketMessage
-					);
-
-					// Add voter with double-vote prevention
-					Self::add_voter_to_list(
-						&mut on_flight_transfer.on_flight_voters,
-						&authority_id,
-					)?;
-
-					// Check if majority reached → transition to OnFlight
-					if on_flight_transfer.on_flight_voters.len() as u32 >= T::Relayers::majority() {
-						// Re-check asset cap with latest state to handle cap changes during voting
-						// If asset is not registered, always use Standard mode
-						let actual_transfer_option = if let Some((asset_id, current_asset_cap)) =
-							Self::get_asset_info(asset_index_hash)
-						{
-							let option = Self::determine_transfer_option(
-								&current_asset_cap,
-								msg.params.amount,
-							)?;
-
-							// Update cap for Fast transfers
-							if option == TransferOption::Fast {
-								Self::update_fast_transfer_cap(
-									asset_id,
-									current_asset_cap,
-									msg.params.amount,
-									true,
-								)?;
-							}
-
-							option
-						} else {
-							TransferOption::Standard
-						};
-
-						// Update transfer option if cap availability changed during voting
-						on_flight_transfer.option = actual_transfer_option;
-						on_flight_transfer.status = TransferStatus::OnFlight;
-					}
-
-					Self::deposit_event(Event::TransferPolled {
-						asset_index_hash,
-						sequence_id: msg.req_id.sequence,
-						src_chain_id,
-						dst_chain_id,
-						authority_id,
-						option: on_flight_transfer.option,
-						amount: on_flight_transfer.amount,
-						status: on_flight_transfer.status,
-					});
-
-					OnFlightTransfers::<T>::insert(src_chain_id, sequence_id, on_flight_transfer);
-				} else {
-					// First vote: create transfer with Pending status
-					OnFlightTransfers::<T>::insert(
-						src_chain_id,
-						sequence_id,
-						TransferInfo {
-							amount,
-							sequence_id,
-							src_tx_id,
-							src_chain_id,
-							dst_chain_id,
-							asset_index_hash,
-							option: transfer_option,
-							status: TransferStatus::Pending,
-							socket_message: message.clone(),
-							on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
-								.map_err(|_| Error::<T>::OutOfRange)?,
-							finalization_voters: BoundedVec::new(),
-						},
-					);
-
-					Self::deposit_event(Event::TransferPolled {
-						asset_index_hash,
-						sequence_id: msg.req_id.sequence,
-						src_chain_id,
-						dst_chain_id,
-						authority_id,
-						option: transfer_option,
-						amount,
-						status: TransferStatus::Pending,
-					});
-				}
 			}
+			Self::deposit_event(Event::TransferPolled {
+				asset_index_hash,
+				sequence_id,
+				src_chain_id,
+				dst_chain_id,
+				authority_id,
+				option,
+				amount,
+				is_approved: false,
+			});
 
 			Ok(().into())
 		}
 
 		/// Finalize a transfer by polling finalization status from relayers.
-		/// This function must be called after committed/rollbacked status met consensus on the source chain.
 		///
-		/// This function implements dual-path finalization logic:
-		/// - **Outbound transfers** (Bifrost → External): Finalized immediately upon first commit/rollback vote
-		/// - **Inbound transfers** (External → Bifrost): Require majority consensus for finalization
+		/// This extrinsic handles the final stage of cross-chain transfers after execution
+		/// on the destination chain. It implements dual-path finalization logic based on
+		/// transfer direction, with outbound getting immediate finalization and inbound
+		/// requiring majority consensus.
+		///
+		/// # Transfer Lookup via Hash Reconstruction
+		///
+		/// Finalization messages (COMMITTED/ROLLBACKED) are linked back to the original
+		/// transfer by reconstructing the REQUESTED message hash:
+		/// 1. Clone the finalization message
+		/// 2. Set status field to `1` (REQUESTED)
+		/// 3. Compute `msg_hash = keccak256(message.encode())`
+		/// 4. Look up transfer in `OnFlightTransfers` using this hash
+		///
+		/// This enables consistent transfer identification across different message statuses
+		/// while maintaining the hash-based storage architecture.
 		///
 		/// # Dual-Path Finalization Architecture
 		///
 		/// ## Outbound Path (Immediate Finalization)
 		/// When a transfer originates from Bifrost to an external chain:
-		/// 1. First relayer submits commit/rollback status
+		/// 1. First relayer submits COMMITTED or ROLLBACKED message
 		/// 2. Validate status matches on-chain Socket contract state
-		/// 3. Immediately finalize without waiting for majority
-		/// 4. Update asset cap if Fast transfer
-		/// 5. Move to FinalizedTransfers
+		/// 3. **Immediately finalize** without waiting for majority
+		/// 4. Update asset cap if Fast transfer (frees locked capacity)
+		/// 5. Move from `OnFlightTransfers` to `FinalizedTransfers`
 		///
-		/// **Rationale**: Bifrost is the source chain, so the transfer execution is trusted.
-		/// Only the final status (committed/rollbacked) needs to be recorded.
+		/// **Rationale**: Bifrost is the source chain with authoritative execution state.
+		/// Only the final status needs to be recorded for audit trail.
 		///
 		/// ## Inbound Path (Voting-Based Finalization)
 		/// When a transfer originates from an external chain to Bifrost:
-		/// 1. Each relayer submits commit/rollback vote
-		/// 2. Votes are accumulated in `finalization_voters`
-		/// 3. When majority is reached, finalize the transfer
-		/// 4. Update asset cap if Fast transfer
-		/// 5. Move to FinalizedTransfers
+		/// 1. Each relayer submits COMMITTED or ROLLBACKED vote
+		/// 2. Votes accumulate in `finalization_voters` list (with double-vote prevention)
+		/// 3. **When majority reached**, finalize the transfer
+		/// 4. Update asset cap if Fast transfer (frees locked capacity)
+		/// 5. Move from `OnFlightTransfers` to `FinalizedTransfers`
 		///
-		/// **Rationale**: External chains are not trusted, so majority consensus
-		/// is required to confirm the transfer was properly committed/rollbacked.
+		/// **Rationale**: External chains are untrusted. Majority consensus required to
+		/// confirm the transfer was properly executed or rolled back on destination chain.
 		///
-		/// # Validation Steps
-		/// 1. Parse and validate socket message (must be COMMITTED or ROLLBACKED)
-		/// 2. Verify asset exists and has configured cap
-		/// 3. Ensure transfer is in OnFlight status (not Pending or already Finalized)
-		/// 4. Verify submitted message matches initial message (except status field)
-		/// 5. Validate against on-chain Socket contract state
-		/// 6. Prevent double-voting by checking finalization_voters list
+		/// # Socket Contract State Validation
+		///
+		/// **Outbound**: Socket contract must show COMMITTED or ROLLBACKED status
+		/// - `request_info.is_committed() && msg.is_committed()`, OR
+		/// - `request_info.is_rollbacked() && msg.is_rollbacked()`
+		///
+		/// **Inbound**: Socket contract must show ACCEPTED or REJECTED status
+		/// - `request_info.is_accepted() && msg.is_committed()` (successful execution), OR
+		/// - `request_info.is_rejected() && msg.is_rollbacked()` (failed execution)
 		///
 		/// # Fast Transfer Cap Management
-		/// For Fast transfers, the on-flight cap is decremented when finalized:
+		///
+		/// For Fast transfers, the on-flight cap is released upon finalization:
 		/// - `on_flight_cap -= transfer_amount`
-		/// - This frees up capacity for new Fast transfers
+		/// - Frees capacity for new Fast transfers
+		/// - Applied for both COMMITTED and ROLLBACKED outcomes
+		///
+		/// # Arguments
+		/// * `origin` - Must be `None` (unsigned transaction, validated in `validate_unsigned`)
+		/// * `finalize_poll_submission` - Contains:
+		///   - `authority_id`: The relayer submitting this finalization vote
+		///   - `msg`: CCCP socket message with status COMMITTED or ROLLBACKED
+		/// * `_signature` - Signature over the message (validated in `validate_unsigned`)
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn finalize_poll(
@@ -601,80 +631,70 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let FinalizePollSubmission { authority_id, src_chain_id, sequence_id, message } =
-				finalize_poll_submission;
+			let FinalizePollSubmission { authority_id, msg } = finalize_poll_submission;
 
 			// Parse and validate socket message (must be COMMITTED or ROLLBACKED)
-			let msg = Self::validate_and_parse_socket_message(&message, |msg| {
+			let parsed_msg = Self::validate_and_parse_socket_message(&msg, |msg| {
 				msg.is_committed() || msg.is_rollbacked()
 			})?;
+			let sequence_id = parsed_msg.req_id.sequence;
+			let src_chain_id: ChainId = u32::from_be_bytes(
+				parsed_msg
+					.req_id
+					.chain
+					.as_slice()
+					.try_into()
+					.map_err(|_| Error::<T>::OutOfRange)?,
+			);
 			let dst_chain_id: ChainId = u32::from_be_bytes(
-				msg.ins_code.chain.as_slice().try_into().map_err(|_| Error::<T>::OutOfRange)?,
+				parsed_msg
+					.ins_code
+					.chain
+					.as_slice()
+					.try_into()
+					.map_err(|_| Error::<T>::OutOfRange)?,
 			);
-			ensure!(
-				src_chain_id
-					== u32::from_be_bytes(
-						msg.req_id
-							.chain
-							.as_slice()
-							.try_into()
-							.map_err(|_| Error::<T>::OutOfRange)?,
-					),
-				Error::<T>::InvalidSocketMessage
-			);
-			ensure!(sequence_id == msg.req_id.sequence, Error::<T>::InvalidSocketMessage);
 
 			// Get asset information (if registered)
-			let asset_index_hash = AssetIndexHash::from_slice(&msg.params.token_idx0);
+			let asset_index_hash = AssetIndexHash::from_slice(&parsed_msg.params.token_idx0);
 			let asset_info = Self::get_asset_info(asset_index_hash);
+
+			// Generate the initial socket message hash for the transfer (status: REQUESTED)
+			let mut msg_cloned = parsed_msg.clone();
+			msg_cloned.status = U256::from(1);
+			let msg_hash = Self::hash_bytes(&msg_cloned.encode());
 
 			// Ensure transfer is not already finalized
 			ensure!(
-				!FinalizedTransfers::<T>::contains_key(src_chain_id, sequence_id),
+				!FinalizedTransfers::<T>::contains_key(msg_hash),
 				Error::<T>::TransferAlreadyFinalized
 			);
 
 			// Get transfer and ensure it's in OnFlight status
-			let mut on_flight_transfer = OnFlightTransfers::<T>::get(src_chain_id, sequence_id)
-				.ok_or(Error::<T>::TransferDNE)?;
-			ensure!(
-				on_flight_transfer.status == TransferStatus::OnFlight,
-				Error::<T>::TransferNotOnFlight
-			);
-
-			// Verify submitted message matches initial message (except status field)
-			let mut initial_socket_message =
-				SocketMessage::try_from(on_flight_transfer.socket_message.clone())
-					.map_err(|_| Error::<T>::InvalidSocketMessage)?;
-			initial_socket_message.status = msg.status;
-			ensure!(initial_socket_message.encode() == message, Error::<T>::InvalidSocketMessage);
+			let mut on_flight_transfer =
+				OnFlightTransfers::<T>::get(msg_hash).ok_or(Error::<T>::TransferNotOnFlight)?;
 
 			// Validate against on-chain Socket contract state
-			let request_info = Self::validate_on_chain_existence(&msg)?;
+			let request_info = Self::validate_on_chain_existence(&parsed_msg)?;
 
 			// Add voter to finalization voters list (prevents double-voting)
 			Self::add_voter_to_list(&mut on_flight_transfer.finalization_voters, &authority_id)?;
 
 			// Outbound path: Immediate finalization
-			if msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
+			if parsed_msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
 				// For outbound, Socket contract must show Committed|Rollbacked status
 				ensure!(
-					(request_info.is_committed() && msg.is_committed())
-						|| (request_info.is_rollbacked() && msg.is_rollbacked()),
-					Error::<T>::InvalidSocketMessage
+					(request_info.is_committed() && parsed_msg.is_committed())
+						|| (request_info.is_rollbacked() && parsed_msg.is_rollbacked()),
+					Error::<T>::MessageStatusMismatch
 				);
 
 				// Extract transfer option before moving
 				let is_fast_transfer = on_flight_transfer.option == TransferOption::Fast;
 
 				// Finalize immediately
-				on_flight_transfer.status = TransferStatus::Finalized;
-				FinalizedTransfers::<T>::insert(
-					src_chain_id,
-					sequence_id,
-					on_flight_transfer.clone(),
-				);
-				OnFlightTransfers::<T>::remove(src_chain_id, sequence_id);
+				OnFlightTransfers::<T>::remove(msg_hash);
+				FinalizedTransfers::<T>::insert(msg_hash, on_flight_transfer.clone());
 
 				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
@@ -682,7 +702,7 @@ pub mod pallet {
 						Self::update_fast_transfer_cap(
 							asset_id,
 							asset_cap,
-							msg.params.amount,
+							parsed_msg.params.amount,
 							false, // subtract from cap
 						)?;
 					}
@@ -690,7 +710,7 @@ pub mod pallet {
 
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
-					sequence_id: msg.req_id.sequence,
+					sequence_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -705,9 +725,9 @@ pub mod pallet {
 			// Inbound path: Voting-based finalization
 			// For inbound, Socket contract must show Accepted|Rejected status
 			ensure!(
-				(request_info.is_accepted() && msg.is_committed())
-					|| (request_info.is_rejected() && msg.is_rollbacked()),
-				Error::<T>::InvalidSocketMessage
+				(request_info.is_accepted() && parsed_msg.is_committed())
+					|| (request_info.is_rejected() && parsed_msg.is_rollbacked()),
+				Error::<T>::MessageStatusMismatch
 			);
 
 			// Check if majority is reached
@@ -716,13 +736,8 @@ pub mod pallet {
 				let is_fast_transfer = on_flight_transfer.option == TransferOption::Fast;
 
 				// Finalize with majority consensus
-				on_flight_transfer.status = TransferStatus::Finalized;
-				FinalizedTransfers::<T>::insert(
-					src_chain_id,
-					sequence_id,
-					on_flight_transfer.clone(),
-				);
-				OnFlightTransfers::<T>::remove(src_chain_id, sequence_id);
+				OnFlightTransfers::<T>::remove(msg_hash);
+				FinalizedTransfers::<T>::insert(msg_hash, on_flight_transfer.clone());
 
 				// Update cap for Fast transfers (only if asset is registered)
 				if is_fast_transfer {
@@ -730,7 +745,7 @@ pub mod pallet {
 						Self::update_fast_transfer_cap(
 							asset_id,
 							asset_cap,
-							msg.params.amount,
+							parsed_msg.params.amount,
 							false, // subtract from cap
 						)?;
 					}
@@ -738,7 +753,7 @@ pub mod pallet {
 
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
-					sequence_id: msg.req_id.sequence,
+					sequence_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -748,15 +763,11 @@ pub mod pallet {
 				});
 			} else {
 				// Majority not yet reached - persist vote and wait for more voters
-				OnFlightTransfers::<T>::insert(
-					src_chain_id,
-					sequence_id,
-					on_flight_transfer.clone(),
-				);
+				OnFlightTransfers::<T>::insert(msg_hash, on_flight_transfer.clone());
 
 				Self::deposit_event(Event::FinalizationPolled {
 					asset_index_hash,
-					sequence_id: msg.req_id.sequence,
+					sequence_id,
 					src_chain_id,
 					dst_chain_id,
 					authority_id,
@@ -953,10 +964,9 @@ pub mod pallet {
 			// Check if any of the asset indexes have active on-flight transfers
 			let asset_index_set: sp_std::collections::btree_set::BTreeSet<_> =
 				asset_indexes.iter().collect();
-			let has_active_transfers =
-				OnFlightTransfers::<T>::iter().any(|(_, _, transfer_info)| {
-					asset_index_set.contains(&transfer_info.asset_index_hash)
-				});
+			let has_active_transfers = OnFlightTransfers::<T>::iter().any(|(_, transfer_info)| {
+				asset_index_set.contains(&transfer_info.asset_index_hash)
+			});
 			ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
 
 			// Safe to remove asset and its indexes
@@ -1128,7 +1138,7 @@ pub mod pallet {
 				let remove_index_set: sp_std::collections::btree_set::BTreeSet<_> =
 					remove_asset_indexes.iter().collect();
 				let has_active_transfers =
-					OnFlightTransfers::<T>::iter().any(|(_, _, transfer_info)| {
+					OnFlightTransfers::<T>::iter().any(|(_, transfer_info)| {
 						remove_index_set.contains(&transfer_info.asset_index_hash)
 					});
 				ensure!(!has_active_transfers, Error::<T>::AssetHasActiveTransfers);
@@ -1221,19 +1231,14 @@ pub mod pallet {
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
 				Call::on_flight_poll { on_flight_poll_submission, signature } => {
-					let OnFlightPollSubmission {
-						authority_id,
-						src_tx_id,
-						src_chain_id,
-						sequence_id,
-						message,
-					} = on_flight_poll_submission;
+					let OnFlightPollSubmission { authority_id, msg, msg_hash, src_tx_id } =
+						on_flight_poll_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
 					let message = [
 						keccak_256("OnFlightPoll".as_bytes()).as_slice(),
-						Encode::encode(&(src_tx_id, src_chain_id, sequence_id, message)).as_slice(),
+						Encode::encode(&(msg, msg_hash, src_tx_id)).as_slice(),
 					]
 					.concat();
 					if !signature.verify(&*message, authority_id) {
@@ -1247,16 +1252,12 @@ pub mod pallet {
 						.build()
 				},
 				Call::finalize_poll { finalize_poll_submission, signature } => {
-					let FinalizePollSubmission { authority_id, src_chain_id, sequence_id, message } =
-						finalize_poll_submission;
+					let FinalizePollSubmission { authority_id, msg } = finalize_poll_submission;
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
-					let message = [
-						keccak_256("FinalizePoll".as_bytes()).as_slice(),
-						Encode::encode(&(src_chain_id, sequence_id, message)).as_slice(),
-					]
-					.concat();
+					let message =
+						[keccak_256("FinalizePoll".as_bytes()).as_slice(), msg.as_slice()].concat();
 					if !signature.verify(&*message, authority_id) {
 						return InvalidTransaction::BadProof.into();
 					}
