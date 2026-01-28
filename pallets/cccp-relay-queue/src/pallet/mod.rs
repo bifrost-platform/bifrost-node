@@ -503,8 +503,10 @@ pub mod pallet {
 						}
 					}
 
+					// Clear every entry with the same msg_hash since the transaction with id=src_tx_id has met consensus
+					let _ = PendingTransfers::<T>::clear_prefix(msg_hash, u32::MAX, None);
+
 					// Move to OnFlightTransfers
-					PendingTransfers::<T>::remove(msg_hash, src_tx_id);
 					OnFlightTransfers::<T>::insert(
 						msg_hash,
 						TransferInfoWithTxId::from_transfer_info(pending_transfer, src_tx_id),
