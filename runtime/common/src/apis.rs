@@ -11,7 +11,7 @@ macro_rules! impl_common_runtime_apis {
 				fn version() -> RuntimeVersion {
 					VERSION
 				}
-				fn execute_block(block: Block) {
+				fn execute_block(block: <Block as BlockT>::LazyBlock) {
 					Executive::execute_block(block);
 				}
 				fn initialize_block(header: &<Block as BlockT>::Header) -> ExtrinsicInclusionMode {
@@ -40,7 +40,7 @@ macro_rules! impl_common_runtime_apis {
 					data.create_extrinsics()
 				}
 				fn check_inherents(
-					block: Block,
+					block: <Block as BlockT>::LazyBlock,
 					data: sp_inherents::InherentData,
 				) -> sp_inherents::CheckInherentsResult {
 					data.check_extrinsics(&block)
