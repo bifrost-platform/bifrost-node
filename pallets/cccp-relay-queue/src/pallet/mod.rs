@@ -528,21 +528,53 @@ pub mod pallet {
 				PendingTransfers::<T>::insert(msg_hash, src_tx_id, pending_transfer);
 			} else {
 				// First vote: create transfer with Pending status
-				PendingTransfers::<T>::insert(
-					msg_hash,
-					src_tx_id,
-					TransferInfo {
-						amount,
+				let transfer_info = TransferInfo {
+					amount,
+					sequence_id,
+					src_chain_id,
+					dst_chain_id,
+					asset_index_hash,
+					option,
+					socket_message: msg.clone(),
+					on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
+						.map_err(|_| Error::<T>::OutOfRange)?,
+				};
+
+				// Check if majority reached immediately (e.g. single validator network)
+				if transfer_info.on_flight_voters.len() as u32 >= T::Relayers::majority() {
+					// Update cap for Fast transfers
+					if let Some((asset_id, asset_cap)) = asset_info {
+						if option == TransferOption::Fast {
+							Self::update_fast_transfer_cap(
+								asset_id,
+								asset_cap,
+								parsed_msg.params.amount,
+								true,
+							)?;
+						}
+					}
+
+					// Move to OnFlightTransfers
+					OnFlightTransfers::<T>::insert(
+						msg_hash,
+						TransferInfoWithTxId::from_transfer_info(transfer_info, src_tx_id),
+					);
+
+					Self::deposit_event(Event::TransferPolled {
+						asset_index_hash,
 						sequence_id,
 						src_chain_id,
 						dst_chain_id,
-						asset_index_hash,
+						authority_id,
 						option,
-						socket_message: msg.clone(),
-						on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
-							.map_err(|_| Error::<T>::OutOfRange)?,
-					},
-				);
+						amount,
+						is_approved: true,
+					});
+
+					return Ok(().into());
+				}
+
+				PendingTransfers::<T>::insert(msg_hash, src_tx_id, transfer_info);
 			}
 			Self::deposit_event(Event::TransferPolled {
 				asset_index_hash,
