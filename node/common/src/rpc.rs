@@ -86,6 +86,8 @@ pub struct FullDevDeps<C, P, BE, SC, CIDP> {
 	pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<Hash>>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
+	/// Maximum block range for eth_getLogs.
+	pub max_block_range: u32,
 	/// Timeout for eth logs query in seconds. (default 10)
 	pub logs_request_timeout: u64,
 	/// Mandated parent hashes for a given block hash.
@@ -134,6 +136,8 @@ pub struct FullDeps<C, P, BE, SC, CIDP> {
 	pub block_data_cache: Arc<EthBlockDataCacheTask<Block>>,
 	/// Maximum number of logs in one query.
 	pub max_past_logs: u32,
+	/// Maximum block range for eth_getLogs.
+	pub max_block_range: u32,
 	/// Timeout for eth logs query in seconds. (default 10)
 	pub logs_request_timeout: u64,
 	/// Mandated parent hashes for a given block hash.
