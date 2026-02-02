@@ -119,7 +119,7 @@ pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type Migrations = (pallet_bifrost_evm_tx_payment::migrations::v1::MigrateToV1<Runtime>,);
+type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -128,7 +128,6 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
-	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -230,6 +229,8 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	/// Single block migrations
+	type SingleBlockMigrations = SingleBlockMigrations;
 	/// migrations pallet
 	type MultiBlockMigrator = MultiBlockMigrations;
 }
@@ -433,6 +434,8 @@ impl pallet_session::Config for Runtime {
 	type Keys = opaque::SessionKeys;
 	type DisablingStrategy = ();
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+	type Currency = Balances;
+	type KeyDeposit = ConstU128<0>;
 }
 
 impl pallet_session::historical::Config for Runtime {
