@@ -42,7 +42,7 @@ pub struct Cli {
 	pub max_past_logs: u32,
 
 	/// Maximum block range for eth_getLogs.
-	#[clap(long, default_value = "1024")]
+	#[clap(long, default_value = "4294967295")]
 	pub max_block_range: u32,
 
 	/// Timeout for eth logs query RPCs in seconds. (default 10)
