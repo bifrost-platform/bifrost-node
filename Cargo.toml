@@ -1,36 +1,39 @@
 [workspace]
 resolver = "2"
 members = [
-    "node/core",
-    "node/common",
-    "node/dev",
-    "node/testnet",
-    "node/mainnet",
-    "runtime/common",
-    "runtime/dev",
-    "runtime/testnet",
-    "runtime/mainnet",
-    "pallets/bfc-staking",
-    "pallets/bfc-utility",
-    "pallets/bfc-offences",
-    "pallets/relay-manager",
-    "pallets/btc-registration-pool",
-    "pallets/btc-socket-queue",
-    "pallets/blaze",
-    "precompiles/bfc-staking",
-    "precompiles/bfc-offences",
-    "precompiles/relay-manager",
-    "precompiles/governance",
-    "precompiles/collective",
-    "precompiles/balance",
-    "precompiles/btc-registration-pool",
-    "precompiles/btc-socket-queue",
-    "precompiles/blaze",
-    "pallets/bifrost-evm-tx-payment",
-    "precompiles/bifrost-evm-tx-payment",
-    "primitives/core",
-    "primitives/bfc-staking",
-    "primitives/btc-relay",
+	"node/core",
+	"node/common",
+	"node/dev",
+	"node/testnet",
+	"node/mainnet",
+	"runtime/common",
+	"runtime/dev",
+	"runtime/testnet",
+	"runtime/mainnet",
+	"pallets/bfc-staking",
+	"pallets/bfc-utility",
+	"pallets/bfc-offences",
+	"pallets/relay-manager",
+	"pallets/btc-registration-pool",
+	"pallets/btc-socket-queue",
+	"pallets/blaze",
+	"pallets/bifrost-evm-tx-payment",
+	"pallets/cccp-relay-queue",
+	"precompiles/bfc-staking",
+	"precompiles/bfc-offences",
+	"precompiles/relay-manager",
+	"precompiles/governance",
+	"precompiles/collective",
+	"precompiles/balance",
+	"precompiles/btc-registration-pool",
+	"precompiles/btc-socket-queue",
+	"precompiles/blaze",
+	"precompiles/bifrost-evm-tx-payment",
+	"precompiles/cccp-relay-queue",
+	"primitives/core",
+	"primitives/bfc-staking",
+	"primitives/btc-relay",
+	"primitives/cccp",
 ]
 [profile.release]
 panic = "unwind"
@@ -46,15 +49,15 @@ repository = "https://github.com/bifrost-platform/bifrost-node"
 # General
 substrate-fixed = { version = "0.6.0", default-features = false }
 parity-scale-codec = { version = "3.7.5", default-features = false, features = [
-    "derive",
+	"derive",
 ] }
 scale-info = { version = "2.11.6", default-features = false, features = [
-    "derive",
-    "serde",
+	"derive",
+	"serde",
 ] }
 evm = { version = "0.43.4", default-features = false }
 ethereum = { version = "0.18.2", default-features = false, features = [
-    "with-scale",
+	"with-scale",
 ] }
 clap = { version = "4.5", features = ["derive"] }
 hex = { version = "0.4.3", default-features = false }
@@ -64,7 +67,7 @@ serde = { version = "1.0", default-features = false }
 jsonrpsee = { version = "0.24.9" }
 log = { version = "0.4.21", default-features = false }
 miniscript = { version = "12.3.1", default-features = false, features = [
-    "no-std",
+	"no-std",
 ] }
 ethabi-decode = { version = "2.0.0", default-features = false }
 hex-literal = "0.4.1"
@@ -77,6 +80,7 @@ array-bytes = "6.1"
 bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }
 bp-core = { default-features = false, path = "primitives/core" }
 bp-staking = { default-features = false, path = "primitives/bfc-staking" }
+bp-cccp = { default-features = false, path = "primitives/cccp" }
 
 # Bifrost Runtime
 bifrost-common-constants = { default-features = false, path = "runtime/common/constants" }
@@ -103,6 +107,7 @@ pallet-btc-registration-pool = { default-features = false, path = "pallets/btc-r
 pallet-btc-socket-queue = { default-features = false, path = "pallets/btc-socket-queue" }
 pallet-blaze = { default-features = false, path = "pallets/blaze" }
 pallet-bifrost-evm-tx-payment = { default-features = false, path = "pallets/bifrost-evm-tx-payment" }
+pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay-queue" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -115,6 +120,8 @@ precompile-btc-registration-pool = { default-features = false, path = "precompil
 precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
+precompile-cccp-relay-queue = { default-features = false, path = "precompiles/cccp-relay-queue" }
+
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }
 sc-client-api = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

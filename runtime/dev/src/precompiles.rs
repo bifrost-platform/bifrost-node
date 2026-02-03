@@ -8,11 +8,12 @@ use pallet_evm_precompile_simple::{ECRecover, Identity, Ripemd160, Sha256};
 use precompile_balance::BalancePrecompile;
 use precompile_bfc_offences::BfcOffencesPrecompile;
 use precompile_bfc_staking::BfcStakingPrecompile;
+use precompile_bifrost_evm_tx_payment::BifrostTransactionPaymentPrecompile;
 use precompile_blaze::BlazePrecompile;
 use precompile_btc_registration_pool::BtcRegistrationPoolPrecompile;
 use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
+use precompile_cccp_relay_queue::CCCPRelayQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
-use precompile_bifrost_evm_tx_payment::BifrostTransactionPaymentPrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
 
@@ -57,9 +58,14 @@ pub type BifrostPrecompilesAt<R> = (
 		BifrostPrecompilesChecks,
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<4369>, CCCPRelayQueuePrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
 	// Bifrost Transaction Payment Precompile at 0x0810 (2064)
-	PrecompileAt<AddressU64<2064>, BifrostTransactionPaymentPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<
+		AddressU64<2064>,
+		BifrostTransactionPaymentPrecompile<R>,
+		BifrostPrecompilesChecks,
+	>,
 );
 
 /// The PrecompileSet installed in the BIFROST runtime.

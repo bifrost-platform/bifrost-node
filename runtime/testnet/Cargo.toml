@@ -151,6 +151,7 @@ std = [
 	"pallet-btc-registration-pool/std",
 	"pallet-blaze/std",
 	"pallet-bifrost-evm-tx-payment/std",
+	"pallet-migrations/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
@@ -191,7 +192,6 @@ std = [
 	"precompile-blaze/std",
 	"precompile-bifrost-evm-tx-payment/std",
 	"substrate-wasm-builder",
-	"pallet-migrations/std",
 ]
 evm-tracing = ["evm-tracer"]
 runtime-wasm = []

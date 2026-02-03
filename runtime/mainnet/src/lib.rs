@@ -46,6 +46,7 @@ use sp_version::RuntimeVersion;
 
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
+use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
@@ -53,7 +54,6 @@ use pallet_evm::{
 	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
 	IdentityAddressMapping, Runner,
 };
-use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
 };
@@ -834,6 +834,7 @@ parameter_types! {
 impl pallet_relay_manager::Config for Runtime {
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayQueue = ();
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
