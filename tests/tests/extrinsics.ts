@@ -29,6 +29,30 @@ export async function getExtrinsicResult(
       phase.asApplyExtrinsic.eq(extrinsicIndex) &&
       context.polkadotApi.events.system.ExtrinsicFailed.is(event)
   );
+
+  // Check for Sudo.Sudid event if the extrinsic is sudo.sudo
+  if (!failedEvent && pallet === 'sudo' && (call === 'sudo' || call === 'sudoUncheckedWeight')) {
+    const sudidEvent = allEvents.find(
+      ({ phase, event }) =>
+        phase.isApplyExtrinsic &&
+        phase.asApplyExtrinsic.eq(extrinsicIndex) &&
+        context.polkadotApi.events.sudo.Sudid.is(event)
+    );
+    if (sudidEvent) {
+      // Sudid event data: [DispatchResult]
+      const dispatchResult = sudidEvent.event.data[0] as any;
+      if (dispatchResult.isErr) {
+        const dispatchError = dispatchResult.asErr;
+        if (dispatchError.isModule) {
+            const decodedError = context.polkadotApi.registry.findMetaError(dispatchError.asModule);
+            return decodedError.name;
+        }
+        return dispatchError.toString();
+      }
+      return null; // Success
+    }
+  }
+
   if (!failedEvent) {
     return null;
   }
