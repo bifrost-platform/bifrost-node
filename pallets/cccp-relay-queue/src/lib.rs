@@ -23,7 +23,7 @@ pub type ChainId = u32;
 pub type AssetId = H160;
 
 /// Asset oracle address type.
-pub type AssetOracleId = H160;
+pub type AssetOracleId = H256;
 
 /// Asset index hash type.
 pub type AssetIndexHash = H256;

@@ -9,17 +9,17 @@ pragma solidity >=0.8.0;
  */
 
 interface ICCCPRelayQueue {
-    /// @dev Returns the oracle address for an asset by its asset index hash.
+    /// @dev Returns the oracle ID for an asset by its asset index hash.
     /// @custom:selector 0a500830
-    /// @return The oracle address
-    function get_asset_oracle_by_hash(
+    /// @return The oracle ID
+    function get_asset_oracle_id_by_hash(
         bytes32 asset_index_hash
-    ) external view returns (address);
+    ) external view returns (bytes32);
 
-    /// @dev Returns the native currency oracle address for a chain.
+    /// @dev Returns the native currency oracle ID for a chain.
     /// @custom:selector 58e49607
-    /// @return The native currency oracle address
-    function get_native_currency_oracle(
+    /// @return The native currency oracle ID
+    function get_native_currency_oracle_id(
         uint32 chain_id
-    ) external view returns (address);
+    ) external view returns (bytes32);
 }
