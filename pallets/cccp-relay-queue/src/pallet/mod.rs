@@ -203,23 +203,23 @@ pub mod pallet {
 	/// Mapping from asset addresses to their oracle addresses.
 	///
 	/// This storage maps EVM-compatible asset contract addresses to their corresponding
-	/// oracle addresses. Oracle addresses are used to fetch the price of the asset from the
+	/// oracle IDs. Oracle IDs are used to fetch the price of the asset from the
 	/// price oracle.
 	///
 	/// - **Key**: `AssetId` (H160) - The EVM-compatible asset contract address
-	/// - **Value**: `AssetOracleId` (H160) - The oracle address
+	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
 	pub type AssetOracles<T: Config> = StorageMap<_, Twox64Concat, AssetId, AssetOracleId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// Mapping from chain IDs to their native currency oracle addresses.
+	/// Mapping from chain IDs to their native currency oracle IDs.
 	///
-	/// This storage maps chain IDs to their corresponding native currency oracle addresses.
-	/// Native currency oracle addresses are used to fetch the price of the native currency from the
+	/// This storage maps chain IDs to their corresponding native currency oracle IDs.
+	/// Native currency oracle IDs are used to fetch the price of the native currency from the
 	/// price oracle.
 	///
 	/// - **Key**: `ChainId` (u32) - The chain ID
-	/// - **Value**: `AssetOracleId` (H160) - The oracle address
+	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
 	pub type NativeCurrencyOracles<T: Config> = StorageMap<_, Twox64Concat, ChainId, AssetOracleId>;
 
 	#[pallet::storage]
@@ -860,7 +860,7 @@ pub mod pallet {
 		/// * `asset_id` - The EVM-compatible asset contract address (H160)
 		///   - For native BFC: `0xffffffffffffffffffffffffffffffffffffffff`
 		///   - For ERC20 tokens: The unified token contract address
-		/// * `asset_oracle_id` - The oracle address (H160) for price feed of this asset
+		/// * `asset_oracle_id` - The oracle ID (H256) for price feed of this asset
 		/// * `max_on_flight_cap` - Maximum total amount allowed in Fast transfers simultaneously
 		///   - Must be > 0 (cannot create non-functional assets)
 		///   - Must be ≤ 100,000,000 * 10^18 (100M cap limit)
@@ -1023,8 +1023,8 @@ pub mod pallet {
 		/// # Parameters
 		/// * `origin` - Must be `Root` (sudo access required)
 		/// * `asset_id` - The EVM-compatible asset contract address (H160) to update
-		/// * `new_asset_oracle_id` - (Optional) New oracle address for price feed of this asset
-		///   - Cannot be the same as the current oracle address
+		/// * `new_asset_oracle_id` - (Optional) New oracle ID for price feed of this asset
+		///   - Cannot be the same as the current oracle ID
 		/// * `new_max_on_flight_cap` - (Optional) New maximum total amount allowed in Fast transfers
 		///   - Must be > 0
 		///   - Must be ≤ 100M cap limit
@@ -1057,7 +1057,7 @@ pub mod pallet {
 		/// * `AssetUpdated { asset_id, new_asset_oracle_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
 		///
 		/// # Storage Modifications
-		/// - `AssetOracles`: Updates oracle address for the asset if provided
+		/// - `AssetOracles`: Updates oracle ID for the asset if provided
 		/// - `AssetCaps`: Updates `max_on_flight_cap` for the asset if provided
 		/// - `AssetIndexes`: Inserts new mappings and removes specified mappings
 		#[pallet::call_index(5)]
@@ -1195,6 +1195,14 @@ pub mod pallet {
 
 		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Set the native currency oracle ID for a chain.
+		///
+		/// This extrinsic sets the native currency oracle ID for a chain. The native currency oracle ID is used to fetch the price of the native currency from the price oracle.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `chain_id` - The chain ID (u32)
+		/// * `native_currency_oracle_id` - The native currency oracle ID (H256)
 		pub fn set_native_currency_oracle(
 			origin: OriginFor<T>,
 			chain_id: ChainId,
@@ -1213,6 +1221,15 @@ pub mod pallet {
 
 		#[pallet::call_index(7)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Update the native currency oracle ID for a chain.
+		///
+		/// This extrinsic updates the native currency oracle ID for a chain. The native currency oracle ID is used to fetch the price of the native currency from the price oracle.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `chain_id` - The chain ID (u32)
+		/// * `native_currency_oracle_id` - The native currency oracle ID (H256)
+		///   - Cannot be the same as the current native currency oracle ID
 		pub fn update_native_currency_oracle(
 			origin: OriginFor<T>,
 			chain_id: ChainId,
@@ -1237,6 +1254,13 @@ pub mod pallet {
 
 		#[pallet::call_index(8)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		/// Remove the native currency oracle ID for a chain.
+		///
+		/// This extrinsic removes the native currency oracle ID for a chain. The native currency oracle ID is used to fetch the price of the native currency from the price oracle.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `chain_id` - The chain ID (u32)
 		pub fn remove_native_currency_oracle(
 			origin: OriginFor<T>,
 			chain_id: ChainId,
