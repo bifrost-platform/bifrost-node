@@ -32,6 +32,7 @@ members = [
     "primitives/core",
     "primitives/bfc-staking",
     "primitives/btc-relay",
+    "primitives/oracle",
 ]
 [profile.release]
 panic = "unwind"
@@ -77,6 +78,7 @@ array-bytes = "6.1"
 # Bifrost Primitive
 bp-btc-relay = { default-features = false, path = "primitives/btc-relay" }
 bp-core = { default-features = false, path = "primitives/core" }
+bp-oracle = { default-features = false, path = "primitives/oracle" }
 bp-staking = { default-features = false, path = "primitives/bfc-staking" }
 
 # Bifrost Runtime

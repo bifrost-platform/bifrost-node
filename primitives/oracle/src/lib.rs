@@ -1,4 +1,6 @@
-//! Type definitions for the Oracle Registry pallet.
+#![cfg_attr(not(feature = "std"), no_std)]
+
+pub mod traits;
 
 use sp_core::{H160, H256};
 
