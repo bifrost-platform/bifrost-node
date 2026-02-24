@@ -1,6 +1,6 @@
 //! Storage migrations for the EVM Fee Token pallet.
 
-use crate::{types::FeeTokenConfigV0, Config, FeeTokenConfig, Pallet};
+use crate::{types::FeeTokenConfigV0, Config, Pallet};
 use frame_support::{
 	pallet_prelude::*,
 	storage_alias,
@@ -61,7 +61,8 @@ pub mod v1 {
 					},
 				);
 
-				weight = weight.saturating_add(T::DbWeight::get().reads_writes(count as u64, count as u64));
+				weight = weight
+					.saturating_add(T::DbWeight::get().reads_writes(count as u64, count as u64));
 
 				// Update storage version
 				current.put::<Pallet<T>>();

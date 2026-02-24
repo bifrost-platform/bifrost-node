@@ -1140,6 +1140,10 @@ impl pallet_migrations::Config for Runtime {
 	type WeightInfo = pallet_migrations::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_oracle_registry::Config for Runtime {
+	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -1264,6 +1268,9 @@ mod runtime {
 
 	#[runtime::pallet_index(63)]
 	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
+
+	#[runtime::pallet_index(64)]
+	pub type OracleRegistry = pallet_oracle_registry;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
