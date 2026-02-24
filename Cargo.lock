@@ -1072,6 +1072,7 @@ dependencies = [
  "pallet-membership",
  "pallet-migrations",
  "pallet-offences",
+ "pallet-oracle-registry",
  "pallet-preimage",
  "pallet-relay-manager",
  "pallet-safe-mode",
@@ -8128,6 +8129,18 @@ dependencies = [
  "serde",
  "sp-runtime",
  "sp-staking",
+]
+
+[[package]]
+name = "pallet-oracle-registry"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-std",
 ]
 
 [[package]]
