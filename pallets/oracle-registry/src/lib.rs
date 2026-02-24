@@ -7,19 +7,20 @@
 //! The pallet provides:
 //! - Registry mapping EVM asset contract addresses to their oracle IDs
 //! - Registry mapping chain IDs to their native currency oracle IDs
-//! - Root-gated set/remove operations for both registries
+//! - A configurable oracle manager contract address for EVM-level authorization
+//! - Root-gated set/remove operations for all registries
 //!
 //! Oracle IDs are used by other pallets (e.g., fee payment) to fetch prices from
-//! off-chain price feeds.
+//! off-chain price feeds. Other pallets access this pallet through the
+//! [`bp_oracle::traits::OracleRegistryManager`] trait.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
-pub mod types;
 pub mod weights;
 
+pub use bp_oracle::{traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId};
 pub use pallet::*;
-pub use types::*;
 pub use weights::WeightInfo;
 
 use frame_support::traits::StorageVersion;
@@ -32,6 +33,7 @@ pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
+	use sp_core::H160;
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
@@ -48,10 +50,6 @@ pub mod pallet {
 	#[pallet::unbounded]
 	/// Mapping from asset addresses to their oracle IDs.
 	///
-	/// This storage maps EVM-compatible asset contract addresses to their corresponding
-	/// oracle IDs. Oracle IDs are used to fetch the price of the asset from the
-	/// price oracle.
-	///
 	/// - **Key**: `AssetId` (H160) - The EVM-compatible asset contract address
 	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
 	pub type AssetOracles<T: Config> = StorageMap<_, Twox64Concat, AssetId, AssetOracleId>;
@@ -60,13 +58,16 @@ pub mod pallet {
 	#[pallet::unbounded]
 	/// Mapping from chain IDs to their native currency oracle IDs.
 	///
-	/// This storage maps chain IDs to their corresponding native currency oracle IDs.
-	/// Native currency oracle IDs are used to fetch the price of the native currency from the
-	/// price oracle.
-	///
 	/// - **Key**: `ChainId` (u32) - The chain ID
 	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
 	pub type NativeCurrencyOracles<T: Config> = StorageMap<_, Twox64Concat, ChainId, AssetOracleId>;
+
+	#[pallet::storage]
+	/// The EVM contract address authorised to manage the oracle registry.
+	///
+	/// Precompiles and other pallets can call [`OracleRegistryManager::get_oracle_manager_contract`]
+	/// to check whether a given caller is the designated manager.
+	pub type OracleManagerContract<T: Config> = StorageValue<_, H160, OptionQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -79,6 +80,10 @@ pub mod pallet {
 		NativeCurrencyOracleSet { chain_id: ChainId, oracle_id: AssetOracleId },
 		/// A native currency oracle ID has been removed.
 		NativeCurrencyOracleRemoved { chain_id: ChainId },
+		/// The oracle manager contract address has been set or updated.
+		OracleManagerContractSet { contract: H160 },
+		/// The oracle manager contract address has been removed.
+		OracleManagerContractRemoved,
 	}
 
 	#[pallet::error]
@@ -87,6 +92,8 @@ pub mod pallet {
 		AssetDNE,
 		/// The native currency oracle for this chain does not exist.
 		NativeCurrencyChainDNE,
+		/// The oracle manager contract is not set.
+		OracleManagerContractDNE,
 		/// Cannot write the same value that is already stored.
 		NoWritingSameValue,
 	}
@@ -196,17 +203,66 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_oracle_manager_contract())]
+		/// Set or update the oracle manager contract address.
+		///
+		/// The oracle manager contract is an EVM contract authorised to perform
+		/// oracle registry management. Precompiles and other pallets check this
+		/// address via [`OracleRegistryManager::get_oracle_manager_contract`].
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `contract` - The EVM contract address (H160)
+		pub fn set_oracle_manager_contract(
+			origin: OriginFor<T>,
+			contract: H160,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			if let Some(current) = OracleManagerContract::<T>::get() {
+				ensure!(current != contract, Error::<T>::NoWritingSameValue);
+			}
+			OracleManagerContract::<T>::put(contract);
+
+			Self::deposit_event(Event::OracleManagerContractSet { contract });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_oracle_manager_contract())]
+		/// Remove the oracle manager contract address.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		pub fn remove_oracle_manager_contract(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(
+				OracleManagerContract::<T>::get().is_some(),
+				Error::<T>::OracleManagerContractDNE
+			);
+			OracleManagerContract::<T>::kill();
+
+			Self::deposit_event(Event::OracleManagerContractRemoved);
+
+			Ok(().into())
+		}
 	}
 
-	impl<T: Config> Pallet<T> {
-		/// Get the oracle ID for an asset, if registered.
-		pub fn get_asset_oracle(asset: &AssetId) -> Option<AssetOracleId> {
+	impl<T: Config> OracleRegistryManager for Pallet<T> {
+		fn get_asset_oracle(asset: &AssetId) -> Option<AssetOracleId> {
 			AssetOracles::<T>::get(asset)
 		}
 
-		/// Get the native currency oracle ID for a chain, if registered.
-		pub fn get_native_currency_oracle(chain_id: ChainId) -> Option<AssetOracleId> {
+		fn get_native_currency_oracle(chain_id: ChainId) -> Option<AssetOracleId> {
 			NativeCurrencyOracles::<T>::get(chain_id)
+		}
+
+		fn get_oracle_manager_contract() -> Option<H160> {
+			OracleManagerContract::<T>::get()
 		}
 	}
 }

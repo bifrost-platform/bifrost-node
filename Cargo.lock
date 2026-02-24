@@ -1737,6 +1737,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bp-oracle"
+version = "0.1.0"
+dependencies = [
+ "sp-core",
+ "sp-std",
+]
+
+[[package]]
 name = "bp-staking"
 version = "0.0.1"
 dependencies = [
@@ -8135,6 +8143,7 @@ dependencies = [
 name = "pallet-oracle-registry"
 version = "0.1.0"
 dependencies = [
+ "bp-oracle",
  "frame-support",
  "frame-system",
  "parity-scale-codec",

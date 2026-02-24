@@ -16,6 +16,8 @@ pub trait WeightInfo {
 	fn remove_asset_oracle() -> Weight;
 	fn set_native_currency_oracle() -> Weight;
 	fn remove_native_currency_oracle() -> Weight;
+	fn set_oracle_manager_contract() -> Weight;
+	fn remove_oracle_manager_contract() -> Weight;
 }
 
 /// Weights for pallet_oracle_registry using the Substrate node and recommended hardware.
@@ -49,6 +51,20 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
+
+	/// Storage: OracleManagerContract (r:1 w:1)
+	fn set_oracle_manager_contract() -> Weight {
+		Weight::from_parts(15_000_000, 0)
+			.saturating_add(T::DbWeight::get().reads(1))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}
+
+	/// Storage: OracleManagerContract (r:1 w:1)
+	fn remove_oracle_manager_contract() -> Weight {
+		Weight::from_parts(15_000_000, 0)
+			.saturating_add(T::DbWeight::get().reads(1))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}
 }
 
 impl WeightInfo for () {
@@ -72,6 +88,18 @@ impl WeightInfo for () {
 
 	fn remove_native_currency_oracle() -> Weight {
 		Weight::from_parts(20_000_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(1))
+			.saturating_add(RocksDbWeight::get().writes(1))
+	}
+
+	fn set_oracle_manager_contract() -> Weight {
+		Weight::from_parts(15_000_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(1))
+			.saturating_add(RocksDbWeight::get().writes(1))
+	}
+
+	fn remove_oracle_manager_contract() -> Weight {
+		Weight::from_parts(15_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1))
 			.saturating_add(RocksDbWeight::get().writes(1))
 	}
