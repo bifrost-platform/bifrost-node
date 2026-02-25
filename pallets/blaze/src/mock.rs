@@ -1,8 +1,9 @@
 use crate as pallet_blaze;
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{PoolManager, SocketQueueManager},
 	BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
+use bp_cccp::traits::SocketVerifier;
 use bp_core::{AccountId, Balance, BlockNumber};
 use bp_staking::traits::Authorities;
 use fp_account::{EthereumSignature, EthereumSigner};

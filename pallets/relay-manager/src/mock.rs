@@ -2,9 +2,10 @@ use crate as pallet_relay_manager;
 use crate::{IdentificationTuple, UnresponsivenessOffence};
 
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{PoolManager, SocketQueueManager},
 	BoundedBitcoinAddress, Descriptor, MigrationSequence, PublicKey, UnboundedBytes,
 };
+use bp_cccp::traits::{RelayQueueManager, SocketVerifier};
 use bp_core::{AccountId, Balance, BlockNumber};
 use frame_support::{
 	construct_runtime, parameter_types,
@@ -223,7 +224,13 @@ impl
 	}
 }
 
+pub struct MockRelayQueue;
+impl RelayQueueManager<AccountId> for MockRelayQueue {
+	fn replace_authority(_: &AccountId, _: &AccountId) {}
+}
+
 impl pallet_relay_manager::Config for Test {
+	type RelayQueue = MockRelayQueue;
 	type SocketQueue = MockSocketQueue;
 	type RegistrationPool = MockPoolManager;
 	type ValidatorSet = MockValidatorSet;
