@@ -111,7 +111,6 @@ precompile-btc-registration-pool = { workspace = true }
 precompile-btc-socket-queue = { workspace = true }
 precompile-blaze = { workspace = true }
 precompile-bifrost-evm-tx-payment = { workspace = true }
-precompile-cccp-relay-queue = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -195,7 +194,6 @@ std = [
 	"precompile-btc-socket-queue/std",
 	"precompile-blaze/std",
 	"precompile-bifrost-evm-tx-payment/std",
-	"precompile-cccp-relay-queue/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
