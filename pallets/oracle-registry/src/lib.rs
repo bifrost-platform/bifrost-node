@@ -5,8 +5,7 @@
 //! ## Overview
 //!
 //! The pallet provides:
-//! - Registry mapping EVM asset contract addresses to their oracle IDs
-//! - Registry mapping chain IDs to their native currency oracle IDs
+//! - A unified registry mapping [`OracleKey`]s to oracle IDs
 //! - A configurable oracle manager contract address for EVM-level authorization
 //! - Root-gated set/remove operations for all registries
 //!
@@ -19,7 +18,7 @@
 
 pub mod weights;
 
-pub use bp_oracle::{traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId};
+pub use bp_oracle::{traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId, OracleKey};
 pub use pallet::*;
 pub use weights::WeightInfo;
 
@@ -36,7 +35,6 @@ pub mod pallet {
 	use sp_core::H160;
 
 	#[pallet::pallet]
-	#[pallet::without_storage_info]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
@@ -47,20 +45,11 @@ pub mod pallet {
 	}
 
 	#[pallet::storage]
-	#[pallet::unbounded]
-	/// Mapping from asset addresses to their oracle IDs.
+	/// Unified mapping from oracle keys to their oracle IDs.
 	///
-	/// - **Key**: `AssetId` (H160) - The EVM-compatible asset contract address
-	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
-	pub type AssetOracles<T: Config> = StorageMap<_, Twox64Concat, AssetId, AssetOracleId>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
-	/// Mapping from chain IDs to their native currency oracle IDs.
-	///
-	/// - **Key**: `ChainId` (u32) - The chain ID
-	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
-	pub type NativeCurrencyOracles<T: Config> = StorageMap<_, Twox64Concat, ChainId, AssetOracleId>;
+	/// - **Key**: [`OracleKey`] — either an EVM asset contract address or a chain ID
+	/// - **Value**: [`AssetOracleId`] (H256) — the oracle ID
+	pub type Oracles<T: Config> = StorageMap<_, Blake2_128Concat, OracleKey, AssetOracleId>;
 
 	#[pallet::storage]
 	/// The EVM contract address authorised to manage the oracle registry.
@@ -118,10 +107,11 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
-			if let Some(current) = AssetOracles::<T>::get(asset) {
+			let key = OracleKey::Asset(asset);
+			if let Some(current) = Oracles::<T>::get(&key) {
 				ensure!(current != asset_oracle_id, Error::<T>::NoWritingSameValue);
 			}
-			AssetOracles::<T>::insert(asset, asset_oracle_id);
+			Oracles::<T>::insert(key, asset_oracle_id);
 
 			Self::deposit_event(Event::AssetOracleSet { asset, oracle_id: asset_oracle_id });
 
@@ -141,8 +131,9 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
-			ensure!(AssetOracles::<T>::contains_key(asset), Error::<T>::AssetDNE);
-			AssetOracles::<T>::remove(asset);
+			let key = OracleKey::Asset(asset);
+			ensure!(Oracles::<T>::contains_key(&key), Error::<T>::AssetDNE);
+			Oracles::<T>::remove(key);
 
 			Self::deposit_event(Event::AssetOracleRemoved { asset });
 
@@ -167,10 +158,11 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
-			if let Some(current) = NativeCurrencyOracles::<T>::get(chain_id) {
+			let key = OracleKey::NativeCurrency(chain_id);
+			if let Some(current) = Oracles::<T>::get(&key) {
 				ensure!(current != native_currency_oracle_id, Error::<T>::NoWritingSameValue);
 			}
-			NativeCurrencyOracles::<T>::insert(chain_id, native_currency_oracle_id);
+			Oracles::<T>::insert(key, native_currency_oracle_id);
 
 			Self::deposit_event(Event::NativeCurrencyOracleSet {
 				chain_id,
@@ -193,11 +185,9 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
-			ensure!(
-				NativeCurrencyOracles::<T>::contains_key(chain_id),
-				Error::<T>::NativeCurrencyChainDNE
-			);
-			NativeCurrencyOracles::<T>::remove(chain_id);
+			let key = OracleKey::NativeCurrency(chain_id);
+			ensure!(Oracles::<T>::contains_key(&key), Error::<T>::NativeCurrencyChainDNE);
+			Oracles::<T>::remove(key);
 
 			Self::deposit_event(Event::NativeCurrencyOracleRemoved { chain_id });
 
@@ -253,12 +243,8 @@ pub mod pallet {
 	}
 
 	impl<T: Config> OracleRegistryManager for Pallet<T> {
-		fn get_asset_oracle(asset: &AssetId) -> Option<AssetOracleId> {
-			AssetOracles::<T>::get(asset)
-		}
-
-		fn get_native_currency_oracle(chain_id: ChainId) -> Option<AssetOracleId> {
-			NativeCurrencyOracles::<T>::get(chain_id)
+		fn get_oracle(key: OracleKey) -> Option<AssetOracleId> {
+			Oracles::<T>::get(key)
 		}
 
 		fn get_oracle_manager_contract() -> Option<H160> {
