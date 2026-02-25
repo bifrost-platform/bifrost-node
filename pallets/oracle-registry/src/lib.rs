@@ -18,11 +18,20 @@
 
 pub mod weights;
 
-pub use bp_oracle::{traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId, OracleKey};
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 pub use pallet::*;
 pub use weights::WeightInfo;
 
-use frame_support::traits::StorageVersion;
+pub use bp_oracle::{traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId, OracleKey};
+use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_system::pallet_prelude::*;
+use pallet_evm::Runner;
+use sp_core::H160;
 
 /// The current storage version.
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
@@ -30,16 +39,13 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
-	use sp_core::H160;
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_evm::Config {
 		/// Weight information for extrinsics.
 		type WeightInfo: WeightInfo;
 	}
@@ -249,6 +255,42 @@ pub mod pallet {
 
 		fn get_oracle_manager_contract() -> Option<H160> {
 			OracleManagerContract::<T>::get()
+		}
+
+		fn get_latest_oracle_data(oracle_id: AssetOracleId) -> Option<sp_core::H256> {
+			use bp_oracle::traits::oracle_manager_abi;
+			use pallet_evm::ExitReason;
+
+			let contract = OracleManagerContract::<T>::get()?;
+			let calldata = oracle_manager_abi::encode_calldata(oracle_id);
+
+			let result = T::Runner::view_call(
+				H160::zero(),
+				contract,
+				calldata.to_vec(),
+				100_000u64,
+				T::config(),
+			)
+			.map_err(|_| {
+				log::warn!(
+					target: "oracle-registry",
+					"Oracle manager call failed: Runner::call returned error"
+				);
+			})
+			.ok()?;
+
+			match result.exit_reason {
+				ExitReason::Succeed(_) => {},
+				ref reason => {
+					log::warn!(
+						target: "oracle-registry",
+						"Oracle manager call reverted: {:?}", reason
+					);
+					return None;
+				},
+			}
+
+			oracle_manager_abi::decode_return(&result.value)
 		}
 	}
 }

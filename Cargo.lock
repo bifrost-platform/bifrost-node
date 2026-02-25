@@ -8145,12 +8145,19 @@ dependencies = [
 name = "pallet-oracle-registry"
 version = "0.1.0"
 dependencies = [
+ "bp-core",
  "bp-oracle",
  "frame-support",
  "frame-system",
+ "log",
+ "pallet-balances",
+ "pallet-evm",
+ "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
+ "sp-io",
+ "sp-runtime",
  "sp-std",
 ]
 
