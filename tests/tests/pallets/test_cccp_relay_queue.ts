@@ -31,10 +31,6 @@ const BFC_MAX_CAP = '1000000000000000000000000';    // 1,000,000 * 10^18
 const ERC20_MAX_CAP = '100000000000000000000';       // 100 * 10^18
 const CAP_TOO_LARGE = '100000000000000000000000001';  // MAX_ON_FLIGHT_CAP + 1
 
-// Test oracle addresses
-const TEST_ORACLE_1 = '0x0000000000000000000000000000000000100001';
-const TEST_ORACLE_2 = '0x0000000000000000000000000000000000100002';
-
 // Socket message for inbound request (Sepolia 11155111 -> Bifrost 49088), status = REQUESTED (1)
 // asset_index_hash = ERC20_ASSET_INDEX_2
 const INBOUND_SOCKET_MESSAGE = '0x000000000000000000000000000000000000000000000000000000000000002000aa36a7000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005834000000000000000000000000000000000000000000000000000000000000000f00000000000000000000000000000000000000000000000000000000000000010000bfc000000000000000000000000000000000000000000000000000000000030101020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e0000000040000000100aa36a7ffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fa2789d80e1f3954aada2d6da1785a9cf6bbae8b000000000000000000000000d52e34b9e819a5b980357d168254ce6ff47c397b0000000000000000000000000000000000000000000000000023867e056e780000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e000000000000000000000000055b57a7a0f41d668c584b2246d373b639084eaed000000000000000000000000c96971f6f5a1d20efcd465b1163812a955b414a3000000000000000000000000fa2789d80e1f3954aada2d6da1785a9cf6bbae8b00000000000000000000000000000000000000000000000000038d7ea4c6800000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000000548656c6c6f000000000000000000000000000000000000000000000000000000';
@@ -165,12 +161,11 @@ async function addAssetViaSudo(
   context: INodeContext,
   sudo: any,
   assetId: string,
-  oracleId: string,
   maxCap: string,
   indexes: string[],
 ) {
   await context.polkadotApi.tx.sudo.sudo(
-    context.polkadotApi.tx.cccpRelayQueue.addAsset(assetId, oracleId, maxCap, indexes)
+    context.polkadotApi.tx.cccpRelayQueue.addAsset(assetId, maxCap, indexes)
   ).signAndSend(sudo);
   await context.createBlock();
 }
@@ -244,7 +239,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
 
   it('should fail to add asset - empty asset indexes', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.addAsset(BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP, [])
+      context.polkadotApi.tx.cccpRelayQueue.addAsset(BFC_ASSET_ID, BFC_MAX_CAP, [])
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -254,7 +249,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
 
   it('should fail to add asset - zero max cap', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.addAsset(BFC_ASSET_ID, TEST_ORACLE_1, '0', [BFC_ASSET_INDEX_1])
+      context.polkadotApi.tx.cccpRelayQueue.addAsset(BFC_ASSET_ID, '0', [BFC_ASSET_INDEX_1])
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -264,7 +259,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
 
   it('should fail to add asset - cap too large', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.addAsset(BFC_ASSET_ID, TEST_ORACLE_1, CAP_TOO_LARGE, [BFC_ASSET_INDEX_1])
+      context.polkadotApi.tx.cccpRelayQueue.addAsset(BFC_ASSET_ID, CAP_TOO_LARGE, [BFC_ASSET_INDEX_1])
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -275,7 +270,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
   it('should fail to add asset - duplicate asset indexes', async function () {
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.addAsset(
-        BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP,
+        BFC_ASSET_ID, BFC_MAX_CAP,
         [BFC_ASSET_INDEX_1, BFC_ASSET_INDEX_1] // duplicate
       )
     ).signAndSend(sudo);
@@ -287,7 +282,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
 
   it('should successfully add BFC asset', async function () {
     await addAssetViaSudo(
-      context, sudo, BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP,
+      context, sudo, BFC_ASSET_ID, BFC_MAX_CAP,
       [BFC_ASSET_INDEX_1, BFC_ASSET_INDEX_2, BFC_ASSET_INDEX_3]
     );
 
@@ -310,18 +305,12 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
     const rawIndex3: any = await context.polkadotApi.query.cccpRelayQueue.assetIndexes(BFC_ASSET_INDEX_3);
     const index3 = rawIndex3.toJSON();
     expect(index3).is.ok;
-
-    // Verify AssetOracles storage
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.assetOracles(BFC_ASSET_ID);
-    const oracle = rawOracle.toJSON();
-    expect(oracle).is.ok;
-    expect(oracle.toLowerCase()).eq(TEST_ORACLE_1.toLowerCase());
   });
 
   it('should fail to add asset - asset already exists', async function () {
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.addAsset(
-        BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP,
+        BFC_ASSET_ID, BFC_MAX_CAP,
         ['0x0000000000000000000000000000000000000000000000000000000000000099'] // new index
       )
     ).signAndSend(sudo);
@@ -335,7 +324,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
     // Try to register a different asset with an index that BFC already owns
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.addAsset(
-        testErc20Address, TEST_ORACLE_2, ERC20_MAX_CAP,
+        testErc20Address, ERC20_MAX_CAP,
         [BFC_ASSET_INDEX_1] // already registered to BFC
       )
     ).signAndSend(sudo);
@@ -347,7 +336,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
 
   it('should successfully add ERC20 asset', async function () {
     await addAssetViaSudo(
-      context, sudo, testErc20Address, TEST_ORACLE_2, ERC20_MAX_CAP,
+      context, sudo, testErc20Address, ERC20_MAX_CAP,
       [ERC20_ASSET_INDEX_1, ERC20_ASSET_INDEX_2]
     );
 
@@ -361,10 +350,6 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
     expect(rawIndex1.toJSON()).is.ok;
     const rawIndex2: any = await context.polkadotApi.query.cccpRelayQueue.assetIndexes(ERC20_ASSET_INDEX_2);
     expect(rawIndex2.toJSON()).is.ok;
-
-    // Verify AssetOracles
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.assetOracles(testErc20Address);
-    expect(rawOracle.toJSON()).is.ok;
   });
 
   it('should fail to add asset - too many asset indexes', async function () {
@@ -374,7 +359,7 @@ describeDevNode('pallet_cccp_relay_queue - add_asset', (context) => {
     const randomAssetId = '0x0000000000000000000000000000000000099999';
 
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.addAsset(randomAssetId, TEST_ORACLE_1, ERC20_MAX_CAP, tooManyIndexes)
+      context.polkadotApi.tx.cccpRelayQueue.addAsset(randomAssetId, ERC20_MAX_CAP, tooManyIndexes)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -395,7 +380,7 @@ describeDevNode('pallet_cccp_relay_queue - remove_asset', (context) => {
   before('setup: deploy ERC20 and add asset', async function () {
     testErc20Address = await deployTestContract(context);
     await addAssetViaSudo(
-      context, sudo, testErc20Address, TEST_ORACLE_2, ERC20_MAX_CAP,
+      context, sudo, testErc20Address, ERC20_MAX_CAP,
       [ERC20_ASSET_INDEX_1, ERC20_ASSET_INDEX_2]
     );
   });
@@ -427,10 +412,6 @@ describeDevNode('pallet_cccp_relay_queue - remove_asset', (context) => {
 
     const rawIndex2: any = await context.polkadotApi.query.cccpRelayQueue.assetIndexes(ERC20_ASSET_INDEX_2);
     expect(rawIndex2.toJSON()).is.null;
-
-    // Verify AssetOracles removed
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.assetOracles(testErc20Address);
-    expect(rawOracle.toJSON()).is.null;
   });
 });
 
@@ -446,14 +427,14 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
 
   before('setup: add BFC asset', async function () {
     await addAssetViaSudo(
-      context, sudo, BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP,
+      context, sudo, BFC_ASSET_ID, BFC_MAX_CAP,
       [BFC_ASSET_INDEX_1, BFC_ASSET_INDEX_2]
     );
   });
 
   it('should fail to update asset - empty submission (no fields provided)', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, null, null, null, null)
+      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, null, null, null)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -464,28 +445,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
   it('should fail to update asset - asset does not exist', async function () {
     const nonExistent = '0x0000000000000000000000000000000000000001';
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(nonExistent, TEST_ORACLE_2, null, null, null)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'sudo', 'sudo');
-    expect(extrinsicResult).is.not.null;
-  });
-
-  it('should successfully update asset oracle', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, TEST_ORACLE_2, null, null, null)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.assetOracles(BFC_ASSET_ID);
-    const oracle = rawOracle.toJSON();
-    expect(oracle.toLowerCase()).eq(TEST_ORACLE_2.toLowerCase());
-  });
-
-  it('should fail to update asset - same value oracle', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, TEST_ORACLE_2, null, null, null)
+      context.polkadotApi.tx.cccpRelayQueue.updateAsset(nonExistent, BFC_MAX_CAP, null, null)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -496,7 +456,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
   it('should successfully update max on-flight cap', async function () {
     const newCap = '2000000000000000000000000'; // 2M * 10^18
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, null, newCap, null, null)
+      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, newCap, null, null)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -508,7 +468,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
   it('should fail to update asset - same value max cap', async function () {
     const sameCap = '2000000000000000000000000';
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, null, sameCap, null, null)
+      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, sameCap, null, null)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -518,7 +478,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
 
   it('should fail to update asset - max cap zero', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, null, '0', null, null)
+      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, '0', null, null)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -528,7 +488,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
 
   it('should fail to update asset - cap too large', async function () {
     await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, null, CAP_TOO_LARGE, null, null)
+      context.polkadotApi.tx.cccpRelayQueue.updateAsset(BFC_ASSET_ID, CAP_TOO_LARGE, null, null)
     ).signAndSend(sudo);
     await context.createBlock();
 
@@ -539,7 +499,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
   it('should successfully add new asset indexes', async function () {
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.updateAsset(
-        BFC_ASSET_ID, null, null,
+        BFC_ASSET_ID, null,
         [NEW_ASSET_INDEX, NEW_ASSET_INDEX_2], // add
         null // remove
       )
@@ -555,7 +515,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
   it('should fail to add asset indexes - already exists', async function () {
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.updateAsset(
-        BFC_ASSET_ID, null, null,
+        BFC_ASSET_ID, null,
         [NEW_ASSET_INDEX], // already added above
         null
       )
@@ -569,7 +529,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
   it('should successfully remove asset indexes', async function () {
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.updateAsset(
-        BFC_ASSET_ID, null, null,
+        BFC_ASSET_ID, null,
         null,
         [NEW_ASSET_INDEX, NEW_ASSET_INDEX_2] // remove
       )
@@ -587,7 +547,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
     const conflictIndex = '0x00000000000000000000000000000000000000000000000000000000cccccccc';
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.updateAsset(
-        BFC_ASSET_ID, null, null,
+        BFC_ASSET_ID, null,
         [conflictIndex], // add
         [conflictIndex]  // remove same index
       )
@@ -602,7 +562,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
     const dupIndex = '0x00000000000000000000000000000000000000000000000000000000dddddddd';
     await context.polkadotApi.tx.sudo.sudo(
       context.polkadotApi.tx.cccpRelayQueue.updateAsset(
-        BFC_ASSET_ID, null, null,
+        BFC_ASSET_ID, null,
         [dupIndex, dupIndex], // duplicate
         null
       )
@@ -615,91 +575,7 @@ describeDevNode('pallet_cccp_relay_queue - update_asset', (context) => {
 });
 
 // ============================================================
-// Test Suite 5: native_currency_oracle
-// ============================================================
-
-describeDevNode('pallet_cccp_relay_queue - native_currency_oracle', (context) => {
-  const keyring = new Keyring({ type: 'ethereum' });
-  const sudo = keyring.addFromUri(TEST_CONTROLLERS[0].private);
-  const CHAIN_ID_1 = 11155111; // Sepolia
-  const CHAIN_ID_2 = 1;       // Ethereum mainnet
-
-  it('should successfully set native currency oracle', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.setNativeCurrencyOracle(CHAIN_ID_1, TEST_ORACLE_1)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.nativeCurrencyOracles(CHAIN_ID_1);
-    const oracle = rawOracle.toJSON();
-    expect(oracle).is.ok;
-    expect(oracle.toLowerCase()).eq(TEST_ORACLE_1.toLowerCase());
-  });
-
-  it('should fail to set native currency oracle - chain already exists', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.setNativeCurrencyOracle(CHAIN_ID_1, TEST_ORACLE_2)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'sudo', 'sudo');
-    expect(extrinsicResult).is.not.null;
-  });
-
-  it('should successfully update native currency oracle', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateNativeCurrencyOracle(CHAIN_ID_1, TEST_ORACLE_2)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.nativeCurrencyOracles(CHAIN_ID_1);
-    const oracle = rawOracle.toJSON();
-    expect(oracle.toLowerCase()).eq(TEST_ORACLE_2.toLowerCase());
-  });
-
-  it('should fail to update native currency oracle - chain does not exist', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateNativeCurrencyOracle(CHAIN_ID_2, TEST_ORACLE_1)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'sudo', 'sudo');
-    expect(extrinsicResult).is.not.null;
-  });
-
-  it('should fail to update native currency oracle - same value', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.updateNativeCurrencyOracle(CHAIN_ID_1, TEST_ORACLE_2)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'sudo', 'sudo');
-    expect(extrinsicResult).is.not.null;
-  });
-
-  it('should fail to remove native currency oracle - chain does not exist', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.removeNativeCurrencyOracle(CHAIN_ID_2)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const extrinsicResult = await getExtrinsicResult(context, 'sudo', 'sudo');
-    expect(extrinsicResult).is.not.null;
-  });
-
-  it('should successfully remove native currency oracle', async function () {
-    await context.polkadotApi.tx.sudo.sudo(
-      context.polkadotApi.tx.cccpRelayQueue.removeNativeCurrencyOracle(CHAIN_ID_1)
-    ).signAndSend(sudo);
-    await context.createBlock();
-
-    const rawOracle: any = await context.polkadotApi.query.cccpRelayQueue.nativeCurrencyOracles(CHAIN_ID_1);
-    expect(rawOracle.toJSON()).is.null;
-  });
-});
-
-// ============================================================
-// Test Suite 6: on_flight_poll
+// Test Suite 5: on_flight_poll
 // ============================================================
 
 describeDevNode('pallet_cccp_relay_queue - on_flight_poll', (context) => {
@@ -747,13 +623,13 @@ describeDevNode('pallet_cccp_relay_queue - on_flight_poll', (context) => {
 
     // Register BFC asset
     await addAssetViaSudo(
-      context, sudo, BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP,
+      context, sudo, BFC_ASSET_ID, BFC_MAX_CAP,
       [BFC_ASSET_INDEX_1, BFC_ASSET_INDEX_2, BFC_ASSET_INDEX_3]
     );
 
     // Register ERC20 asset (required for Fast transfer detection)
     await addAssetViaSudo(
-      context, sudo, testErc20Address, TEST_ORACLE_2, ERC20_MAX_CAP,
+      context, sudo, testErc20Address, ERC20_MAX_CAP,
       [ERC20_ASSET_INDEX_1, ERC20_ASSET_INDEX_2]
     );
   });
@@ -998,13 +874,13 @@ describeDevNode('pallet_cccp_relay_queue - finalize_poll', (context) => {
 
     // Register BFC asset
     await addAssetViaSudo(
-      context, sudo, BFC_ASSET_ID, TEST_ORACLE_1, BFC_MAX_CAP,
+      context, sudo, BFC_ASSET_ID, BFC_MAX_CAP,
       [BFC_ASSET_INDEX_1, BFC_ASSET_INDEX_2, BFC_ASSET_INDEX_3]
     );
 
     // Register ERC20 asset
     await addAssetViaSudo(
-      context, sudo, testErc20Address, TEST_ORACLE_2, ERC20_MAX_CAP,
+      context, sudo, testErc20Address, ERC20_MAX_CAP,
       [ERC20_ASSET_INDEX_1, ERC20_ASSET_INDEX_2]
     );
 
@@ -1188,7 +1064,7 @@ describeDevNode('pallet_cccp_relay_queue - standard_on_flights', (context) => {
     // Set cap lower than transfer amount to force Standard transfer
     const lowCap = '100000000'; // 100M base units - less than transfer amount
     await addAssetViaSudo(
-      context, sudo, testAssetAddress, TEST_ORACLE_1, lowCap,
+      context, sudo, testAssetAddress, lowCap,
       [STANDARD_ASSET_INDEX]
     );
   });
