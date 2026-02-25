@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetOracleId, BalanceOf, ChainId,
+	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, ChainId,
 	FinalizePollSubmission, OnFlightPollSubmission, SocketMessageHash, SourceTransactionId,
 	TransferInfo, TransferInfoWithTxId, TransferOption,
 };
@@ -96,10 +96,6 @@ pub mod pallet {
 		InvalidMaxCap,
 		/// Max on-flight cap exceeds maximum allowed value.
 		CapTooLarge,
-		/// Native currency chain already exists.
-		NativeCurrencyChainAlreadyExists,
-		/// Native currency chain does not exist.
-		NativeCurrencyChainDNE,
 	}
 
 	#[pallet::event]
@@ -130,7 +126,6 @@ pub mod pallet {
 		/// An asset has been added.
 		AssetAdded {
 			asset_id: AssetId,
-			asset_oracle_id: AssetOracleId,
 			max_on_flight_cap: BalanceOf<T>,
 			asset_indexes: Vec<AssetIndexHash>,
 		},
@@ -139,7 +134,6 @@ pub mod pallet {
 		/// An asset has been updated.
 		AssetUpdated {
 			asset_id: AssetId,
-			new_asset_oracle_id: Option<AssetOracleId>,
 			new_max_on_flight_cap: Option<BalanceOf<T>>,
 			add_asset_indexes: Option<Vec<AssetIndexHash>>,
 			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
@@ -197,30 +191,6 @@ pub mod pallet {
 	///   - Cap decreases when Fast transfers are finalized (committed or rolled back)
 	pub type AssetCaps<T: Config> =
 		StorageMap<_, Twox64Concat, AssetId, AssetCapInfo<BalanceOf<T>>>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
-	/// Mapping from asset addresses to their oracle addresses.
-	///
-	/// This storage maps EVM-compatible asset contract addresses to their corresponding
-	/// oracle IDs. Oracle IDs are used to fetch the price of the asset from the
-	/// price oracle.
-	///
-	/// - **Key**: `AssetId` (H160) - The EVM-compatible asset contract address
-	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
-	pub type AssetOracles<T: Config> = StorageMap<_, Twox64Concat, AssetId, AssetOracleId>;
-
-	#[pallet::storage]
-	#[pallet::unbounded]
-	/// Mapping from chain IDs to their native currency oracle IDs.
-	///
-	/// This storage maps chain IDs to their corresponding native currency oracle IDs.
-	/// Native currency oracle IDs are used to fetch the price of the native currency from the
-	/// price oracle.
-	///
-	/// - **Key**: `ChainId` (u32) - The chain ID
-	/// - **Value**: `AssetOracleId` (H256) - The oracle ID
-	pub type NativeCurrencyOracles<T: Config> = StorageMap<_, Twox64Concat, ChainId, AssetOracleId>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -860,7 +830,6 @@ pub mod pallet {
 		/// * `asset_id` - The EVM-compatible asset contract address (H160)
 		///   - For native BFC: `0xffffffffffffffffffffffffffffffffffffffff`
 		///   - For ERC20 tokens: The unified token contract address
-		/// * `asset_oracle_id` - The oracle ID (H256) for price feed of this asset
 		/// * `max_on_flight_cap` - Maximum total amount allowed in Fast transfers simultaneously
 		///   - Must be > 0 (cannot create non-functional assets)
 		///   - Must be ≤ 100,000,000 * 10^18 (100M cap limit)
@@ -882,11 +851,10 @@ pub mod pallet {
 		/// * `AssetIndexAlreadyExists` - If any asset index is already associated with another asset
 		///
 		/// # Events
-		/// * `AssetAdded { asset_id, asset_oracle_id, max_on_flight_cap, asset_indexes }` - Emitted on successful registration
+		/// * `AssetAdded { asset_id, max_on_flight_cap, asset_indexes }` - Emitted on successful registration
 		///
 		/// # Storage Modifications
 		/// - `AssetCaps`: Inserts new entry with `max_on_flight_cap` and `on_flight_cap = 0`
-		/// - `AssetOracles`: Inserts mapping from asset_id to asset_oracle_id
 		/// - `AssetIndexes`: Inserts mapping from each asset index to the asset_id
 		///
 		/// # Important
@@ -899,7 +867,6 @@ pub mod pallet {
 		pub fn add_asset(
 			origin: OriginFor<T>,
 			asset_id: AssetId,
-			asset_oracle_id: AssetOracleId,
 			max_on_flight_cap: BalanceOf<T>,
 			asset_indexes: Vec<AssetIndexHash>,
 		) -> DispatchResultWithPostInfo {
@@ -943,17 +910,11 @@ pub mod pallet {
 				asset_id,
 				AssetCapInfo { max_on_flight_cap, on_flight_cap: Default::default() },
 			);
-			AssetOracles::<T>::insert(asset_id, asset_oracle_id);
 			for asset_index in &asset_indexes {
 				AssetIndexes::<T>::insert(asset_index, asset_id);
 			}
 
-			Self::deposit_event(Event::AssetAdded {
-				asset_id,
-				asset_oracle_id,
-				max_on_flight_cap,
-				asset_indexes,
-			});
+			Self::deposit_event(Event::AssetAdded { asset_id, max_on_flight_cap, asset_indexes });
 
 			Ok(().into())
 		}
@@ -976,7 +937,6 @@ pub mod pallet {
 		///
 		/// # Storage Modifications
 		/// - `AssetCaps`: Entry for `asset_id` is removed
-		/// - `AssetOracles`: Entry for `asset_id` is removed
 		/// - `AssetIndexes`: All mappings for the associated asset indexes are removed
 		///
 		/// # Important
@@ -1005,7 +965,6 @@ pub mod pallet {
 
 			// Safe to remove asset and its indexes
 			AssetCaps::<T>::remove(asset_id);
-			AssetOracles::<T>::remove(asset_id);
 			for asset_index in &asset_indexes {
 				AssetIndexes::<T>::remove(asset_index);
 			}
@@ -1017,14 +976,12 @@ pub mod pallet {
 
 		/// Update an existing asset's configuration and CCCP asset indexes.
 		///
-		/// This extrinsic allows modifying the oracle address, maximum on-flight capacity of a registered
+		/// This extrinsic allows modifying the maximum on-flight capacity of a registered
 		/// asset and managing its associated CCCP asset indexes by adding or removing them.
 		///
 		/// # Parameters
 		/// * `origin` - Must be `Root` (sudo access required)
 		/// * `asset_id` - The EVM-compatible asset contract address (H160) to update
-		/// * `new_asset_oracle_id` - (Optional) New oracle ID for price feed of this asset
-		///   - Cannot be the same as the current oracle ID
 		/// * `new_max_on_flight_cap` - (Optional) New maximum total amount allowed in Fast transfers
 		///   - Must be > 0
 		///   - Must be ≤ 100M cap limit
@@ -1054,10 +1011,9 @@ pub mod pallet {
 		/// * `AssetHasActiveTransfers` - If an index to remove has active on-flight transfers
 		///
 		/// # Events
-		/// * `AssetUpdated { asset_id, new_asset_oracle_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
+		/// * `AssetUpdated { asset_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
 		///
 		/// # Storage Modifications
-		/// - `AssetOracles`: Updates oracle ID for the asset if provided
 		/// - `AssetCaps`: Updates `max_on_flight_cap` for the asset if provided
 		/// - `AssetIndexes`: Inserts new mappings and removes specified mappings
 		#[pallet::call_index(5)]
@@ -1065,7 +1021,6 @@ pub mod pallet {
 		pub fn update_asset(
 			origin: OriginFor<T>,
 			asset_id: AssetId,
-			new_asset_oracle_id: Option<AssetOracleId>,
 			new_max_on_flight_cap: Option<BalanceOf<T>>,
 			add_asset_indexes: Option<Vec<AssetIndexHash>>,
 			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
@@ -1074,8 +1029,7 @@ pub mod pallet {
 
 			// Ensure at least one of the fields is provided
 			ensure!(
-				new_asset_oracle_id.is_some()
-					|| new_max_on_flight_cap.is_some()
+				new_max_on_flight_cap.is_some()
 					|| add_asset_indexes.is_some()
 					|| remove_asset_indexes.is_some(),
 				Error::<T>::EmptySubmission
@@ -1119,18 +1073,6 @@ pub mod pallet {
 			}
 
 			let mut asset_cap = AssetCaps::<T>::get(asset_id).ok_or(Error::<T>::AssetDNE)?;
-
-			// Update oracle address if provided
-			if let Some(new_asset_oracle_id) = new_asset_oracle_id {
-				let current_oracle_id = AssetOracles::<T>::get(asset_id);
-				if let Some(current_oracle_id) = current_oracle_id {
-					ensure!(
-						current_oracle_id != new_asset_oracle_id,
-						Error::<T>::NoWritingSameValue
-					);
-				}
-				AssetOracles::<T>::insert(asset_id, new_asset_oracle_id);
-			}
 
 			if let Some(new_max_on_flight_cap) = new_max_on_flight_cap {
 				if asset_cap.max_on_flight_cap == new_max_on_flight_cap {
@@ -1184,94 +1126,10 @@ pub mod pallet {
 
 			Self::deposit_event(Event::AssetUpdated {
 				asset_id,
-				new_asset_oracle_id,
 				new_max_on_flight_cap,
 				add_asset_indexes,
 				remove_asset_indexes,
 			});
-
-			Ok(().into())
-		}
-
-		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Set the native currency oracle ID for a chain.
-		///
-		/// This extrinsic sets the native currency oracle ID for a chain. The native currency oracle ID is used to fetch the price of the native currency from the price oracle.
-		///
-		/// # Parameters
-		/// * `origin` - Must be `Root` (sudo access required)
-		/// * `chain_id` - The chain ID (u32)
-		/// * `native_currency_oracle_id` - The native currency oracle ID (H256)
-		pub fn set_native_currency_oracle(
-			origin: OriginFor<T>,
-			chain_id: ChainId,
-			native_currency_oracle_id: AssetOracleId,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-
-			ensure!(
-				!NativeCurrencyOracles::<T>::contains_key(chain_id),
-				Error::<T>::NativeCurrencyChainAlreadyExists
-			);
-			NativeCurrencyOracles::<T>::insert(chain_id, native_currency_oracle_id);
-
-			Ok(().into())
-		}
-
-		#[pallet::call_index(7)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Update the native currency oracle ID for a chain.
-		///
-		/// This extrinsic updates the native currency oracle ID for a chain. The native currency oracle ID is used to fetch the price of the native currency from the price oracle.
-		///
-		/// # Parameters
-		/// * `origin` - Must be `Root` (sudo access required)
-		/// * `chain_id` - The chain ID (u32)
-		/// * `native_currency_oracle_id` - The native currency oracle ID (H256)
-		///   - Cannot be the same as the current native currency oracle ID
-		pub fn update_native_currency_oracle(
-			origin: OriginFor<T>,
-			chain_id: ChainId,
-			native_currency_oracle_id: AssetOracleId,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-
-			ensure!(
-				NativeCurrencyOracles::<T>::contains_key(chain_id),
-				Error::<T>::NativeCurrencyChainDNE
-			);
-			if let Some(current_oracle_id) = NativeCurrencyOracles::<T>::get(chain_id) {
-				ensure!(
-					current_oracle_id != native_currency_oracle_id,
-					Error::<T>::NoWritingSameValue
-				);
-			}
-			NativeCurrencyOracles::<T>::insert(chain_id, native_currency_oracle_id);
-
-			Ok(().into())
-		}
-
-		#[pallet::call_index(8)]
-		#[pallet::weight(<T as Config>::WeightInfo::default())]
-		/// Remove the native currency oracle ID for a chain.
-		///
-		/// This extrinsic removes the native currency oracle ID for a chain. The native currency oracle ID is used to fetch the price of the native currency from the price oracle.
-		///
-		/// # Parameters
-		/// * `origin` - Must be `Root` (sudo access required)
-		/// * `chain_id` - The chain ID (u32)
-		pub fn remove_native_currency_oracle(
-			origin: OriginFor<T>,
-			chain_id: ChainId,
-		) -> DispatchResultWithPostInfo {
-			ensure_root(origin)?;
-
-			ensure!(
-				NativeCurrencyOracles::<T>::contains_key(chain_id),
-				Error::<T>::NativeCurrencyChainDNE
-			);
-			NativeCurrencyOracles::<T>::remove(chain_id);
 
 			Ok(().into())
 		}
