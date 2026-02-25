@@ -24,28 +24,28 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: AssetOracles (r:1 w:1)
+	/// Storage: Oracles (r:1 w:1)
 	fn set_asset_oracle() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 
-	/// Storage: AssetOracles (r:1 w:1)
+	/// Storage: Oracles (r:1 w:1)
 	fn remove_asset_oracle() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 
-	/// Storage: NativeCurrencyOracles (r:1 w:1)
+	/// Storage: Oracles (r:1 w:1)
 	fn set_native_currency_oracle() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 
-	/// Storage: NativeCurrencyOracles (r:1 w:1)
+	/// Storage: Oracles (r:1 w:1)
 	fn remove_native_currency_oracle() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1))
