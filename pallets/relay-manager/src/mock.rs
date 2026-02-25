@@ -14,7 +14,7 @@ use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, Convert, IdentityLookup},
 	transaction_validity::TransactionValidityError,
-	BuildStorage, DispatchError, Perbill,
+	DispatchError, Perbill,
 };
 use sp_staking::{
 	offence::{OffenceError, ReportOffence},
@@ -70,6 +70,7 @@ impl frame_system::Config for Test {
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+	type ExtensionsWeightInfo = ();
 }
 
 impl pallet_balances::Config for Test {
@@ -86,6 +87,7 @@ impl pallet_balances::Config for Test {
 	type RuntimeFreezeReason = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type DoneSlashHandler = ();
 }
 
 // Mock implementations for required traits
@@ -222,7 +224,6 @@ impl
 }
 
 impl pallet_relay_manager::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
 	type SocketQueue = MockSocketQueue;
 	type RegistrationPool = MockPoolManager;
 	type ValidatorSet = MockValidatorSet;
@@ -233,6 +234,7 @@ impl pallet_relay_manager::Config for Test {
 	type WeightInfo = ();
 }
 
+#[cfg(feature = "runtime-benchmarks")]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }
