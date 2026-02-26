@@ -27,7 +27,9 @@ mod tests;
 pub use pallet::*;
 pub use weights::WeightInfo;
 
-pub use bp_oracle::{traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId, OracleKey};
+pub use bp_oracle::{
+	traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId, OracleInfo, OracleKey,
+};
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use pallet_evm::Runner;
@@ -291,6 +293,42 @@ pub mod pallet {
 			}
 
 			oracle_manager_abi::decode_return(&result.value)
+		}
+
+		fn get_latest_oracle_info(oracle_id: AssetOracleId) -> Option<OracleInfo> {
+			use bp_oracle::traits::oracle_info_abi;
+			use pallet_evm::ExitReason;
+
+			let contract = OracleManagerContract::<T>::get()?;
+			let calldata = oracle_info_abi::encode_calldata(oracle_id);
+
+			let result = T::Runner::view_call(
+				H160::zero(),
+				contract,
+				calldata.to_vec(),
+				100_000u64,
+				T::config(),
+			)
+			.map_err(|_| {
+				log::warn!(
+					target: "oracle-registry",
+					"Oracle manager call (last_oracle_info) failed: Runner::call returned error"
+				);
+			})
+			.ok()?;
+
+			match result.exit_reason {
+				ExitReason::Succeed(_) => {},
+				ref reason => {
+					log::warn!(
+						target: "oracle-registry",
+						"Oracle manager call (last_oracle_info) reverted: {:?}", reason
+					);
+					return None;
+				},
+			}
+
+			oracle_info_abi::decode_return(&result.value)
 		}
 	}
 }
