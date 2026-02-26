@@ -1122,6 +1122,7 @@ impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type AdminOrigin = EnsureRoot<AccountId>;
 	type FeeCollectorAddress = FeeCollectorAddress;
 	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
+	type OracleRegistry = OracleRegistry;
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 
