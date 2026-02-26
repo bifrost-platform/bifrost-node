@@ -46,9 +46,10 @@ pub use pallet::*;
 pub use types::*;
 pub use weights::WeightInfo;
 
+use bp_oracle::traits::OracleRegistryManager;
 use frame_support::{pallet_prelude::*, traits::{Hooks, OnRuntimeUpgrade}, weights::Weight};
 use frame_system::pallet_prelude::*;
-use sp_core::{H160, H256, U256};
+use sp_core::{H160, U256};
 
 /// The current storage version.
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
@@ -99,6 +100,11 @@ pub mod pallet {
 		/// Provides token → oracle ID mapping and oracle price queries.
 		type OracleRegistry: bp_oracle::traits::OracleRegistryManager;
 
+		/// Chain ID used to look up the native currency (BFC/USD) oracle
+		/// from the oracle-registry via `get_native_currency_oracle(chain_id)`.
+		#[pallet::constant]
+		type NativeChainId: Get<bp_oracle::ChainId>;
+
 		/// Weight information for extrinsics.
 		type WeightInfo: WeightInfo;
 	}
@@ -117,12 +123,6 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn user_fee_token)]
 	pub type UserFeeToken<T: Config> = StorageMap<_, Blake2_128Concat, H160, H160, OptionQuery>;
-
-	/// BFC/USD Oracle ID for native token price conversion.
-	/// When None, ERC20 fee payment is disabled (falls back to native).
-	#[pallet::storage]
-	#[pallet::getter(fn native_oracle_id)]
-	pub type NativeOracleId<T: Config> = StorageValue<_, H256, OptionQuery>;
 
 	/// Last block number when user updated their fee token preference.
 	/// Used for rate limiting fee token changes.
@@ -170,8 +170,6 @@ pub mod pallet {
 		UserFeeTokenSet { user: H160, token: Option<H160> },
 		/// Fee was paid in ERC20 token (withdrawn before execution).
 		FeePaymentInToken { user: H160, token: H160, amount: U256, native_equivalent: U256 },
-		/// Native token oracle ID has been set or cleared.
-		NativeOracleSet { oracle_id: Option<H256> },
 		/// Excess fee was refunded to user in ERC20 token.
 		FeeRefundInToken { user: H160, token: H160, amount: U256 },
 		/// Tip was paid to block author in ERC20 token.
@@ -305,33 +303,6 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Set the BFC/USD oracle ID.
-		///
-		/// Only callable by AdminOrigin (sudo/governance).
-		/// Pass `None` to disable ERC20 fee payment (all users fall back to native).
-		///
-		/// Parameters:
-		/// - `oracle_id`: BFC/USD oracle ID (H256, None to disable)
-		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_native_oracle())]
-		pub fn set_native_oracle(
-			origin: OriginFor<T>,
-			oracle_id: Option<H256>,
-		) -> DispatchResult {
-			T::AdminOrigin::ensure_origin(origin)?;
-
-			if let Some(id) = oracle_id {
-				ensure!(id != H256::zero(), Error::<T>::InvalidTokenConfig);
-				NativeOracleId::<T>::put(id);
-			} else {
-				NativeOracleId::<T>::kill();
-			}
-
-			Self::deposit_event(Event::NativeOracleSet { oracle_id });
-
-			Ok(())
-		}
-
 		/// Withdraw collected fee tokens from the fee collector address.
 		///
 		/// Only callable by AdminOrigin (sudo/governance).
@@ -401,9 +372,12 @@ pub mod pallet {
 			AcceptedFeeTokens::<T>::get(token)
 		}
 
-		/// Check if ERC20 fee payment is enabled (native oracle ID is set).
+		/// Check if ERC20 fee payment is enabled.
+		///
+		/// Returns true if the oracle-registry has a native currency oracle
+		/// registered for this chain's EVM chain ID.
 		pub fn is_erc20_fee_enabled() -> bool {
-			NativeOracleId::<T>::get().is_some()
+			T::OracleRegistry::get_native_currency_oracle(T::NativeChainId::get()).is_some()
 		}
 
 		/// Convert native fee amount to token amount.
@@ -477,16 +451,17 @@ pub mod pallet {
 			Ok((token_amount, token_usd_price, bfc_usd_price))
 		}
 
-		/// Get BFC/USD price from oracle-registry using the stored native oracle ID.
+		/// Get BFC/USD price from oracle-registry using the chain ID.
 		fn get_bfc_usd_price() -> Result<U256, Error<T>> {
-			let oracle_id =
-				NativeOracleId::<T>::get().ok_or(Error::<T>::NativeOracleNotSet)?;
+			let chain_id = T::NativeChainId::get();
+			let oracle_id = T::OracleRegistry::get_native_currency_oracle(chain_id)
+				.ok_or(Error::<T>::NativeOracleNotSet)?;
 
 			crate::oracle::get_oracle_price_from_registry::<T>(oracle_id, 0).map_err(|e| {
 				log::error!(
 					target: "bifrost-tx-payment",
-					"BFC/USD oracle call failed: {:?}",
-					e
+					"BFC/USD oracle call failed (chain_id={}): {:?}",
+					chain_id, e
 				);
 				Error::<T>::OraclePriceFailed
 			})

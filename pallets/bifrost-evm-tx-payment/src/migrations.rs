@@ -13,7 +13,7 @@ use sp_core::H160;
 use sp_runtime::TryRuntimeError;
 
 /// V2 migration: Remove oracle_address and oracle_decimals from FeeTokenConfig,
-/// switch to oracle-registry.
+/// switch to oracle-registry with chain-ID-based native oracle lookup.
 ///
 /// This migration:
 /// 1. Translates `AcceptedFeeTokens` from `FeeTokenConfigV0` to `FeeTokenConfig`
@@ -22,8 +22,9 @@ use sp_runtime::TryRuntimeError;
 /// 3. Removes old `NativeOracleDecimals` storage (u8)
 /// 4. Updates the storage version from 1 to 2
 ///
-/// Note: After migration, admin must call `set_native_oracle(Some(BFC_USD_ORACLE_ID))`
-/// to re-enable ERC20 fee payment.
+/// Note: After migration, the native currency oracle is resolved via
+/// `OracleRegistry::get_native_currency_oracle(chain_id)`. Ensure the
+/// oracle-registry has the BFC/USD oracle registered for the chain ID.
 pub mod v1 {
 	use super::*;
 
