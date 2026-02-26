@@ -1123,6 +1123,7 @@ impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type FeeCollectorAddress = FeeCollectorAddress;
 	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
 	type OracleRegistry = OracleRegistry;
+	type NativeChainId = BifrostChainId;
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 

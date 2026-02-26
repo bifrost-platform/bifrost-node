@@ -7,7 +7,7 @@ use scale_info::TypeInfo;
 use sp_core::{H160, H256};
 
 /// Chain ID type.
-pub type ChainId = u32;
+pub type ChainId = u64;
 
 /// Asset address type (EVM-compatible contract address).
 pub type AssetId = H160;
