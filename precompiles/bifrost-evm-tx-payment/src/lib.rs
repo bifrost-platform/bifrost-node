@@ -19,11 +19,10 @@
 //!     function isAcceptedToken(address token) external view returns (bool);
 //!     function getTokenConfig(address token) external view returns (
 //!         bool enabled,
-//!         address oracle,
 //!         uint8 decimals,
-//!         uint8 oracleDecimals,
 //!         uint256 minBalance
 //!     );
+//!     function getTokenPrice(address token) external view returns (uint256);
 //! }
 //! ```
 
@@ -60,9 +59,6 @@ where
 	// ========================================================================
 
 	/// Set the caller's preferred fee token.
-	///
-	/// The user must have approved the treasury address to spend their tokens
-	/// before setting a fee token.
 	///
 	/// Rate limited: users must wait `FeeTokenUpdateCooldown` blocks between changes.
 	///
@@ -161,10 +157,8 @@ where
 	/// Get all users who have set a fee token preference.
 	///
 	/// Returns two arrays: users and their corresponding tokens.
-	/// Only includes users who have explicitly set a token preference (non-native).
 	///
-	/// WARNING: This function iterates over all storage entries and may be expensive
-	/// with a large number of users. Use with caution.
+	/// WARNING: This function iterates over all storage entries and may be expensive.
 	///
 	/// Selector: `getUsersFeeToken()`
 	/// Signature: `0x56ebb34c`
@@ -173,8 +167,6 @@ where
 	fn get_users_fee_token(
 		handle: &mut impl PrecompileHandle,
 	) -> EvmResult<(Vec<Address>, Vec<Address>)> {
-		// Charge base cost plus per-entry cost
-		// We don't know the count upfront, so charge a reasonable base
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost() * 10)?;
 
 		let mut users: Vec<Address> = Vec::new();
@@ -184,7 +176,6 @@ where
 			users.push(Address(user));
 			tokens.push(Address(token));
 
-			// Charge additional gas per entry to prevent DoS
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		}
 
@@ -240,13 +231,13 @@ where
 	/// Selector: `getTokenConfig(address)`
 	/// Signature: `0xcb67e3b1`
 	///
-	/// Returns: (enabled, oracle, decimals, oracleDecimals, minBalance)
+	/// Returns: (enabled, decimals, minBalance)
 	#[precompile::public("getTokenConfig(address)")]
 	#[precompile::view]
 	fn get_token_config(
 		handle: &mut impl PrecompileHandle,
 		token: Address,
-	) -> EvmResult<(bool, Address, u8, u8, U256)> {
+	) -> EvmResult<(bool, u8, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let token_h160: H160 = token.into();
@@ -256,14 +247,14 @@ where
 
 		Ok((
 			config.enabled,
-			Address(config.oracle_address),
 			config.decimals,
-			config.oracle_decimals,
 			config.min_balance,
 		))
 	}
 
 	/// Get the current oracle price for a token.
+	///
+	/// Queries the oracle-registry for the token's price.
 	///
 	/// Selector: `getTokenPrice(address)`
 	/// Signature: `0xd02641a0`
@@ -275,13 +266,12 @@ where
 
 		let token_h160: H160 = token.into();
 
-		let config =
-			AcceptedFeeTokens::<Runtime>::get(token_h160).ok_or(revert("Token not found"))?;
-
-		let price = pallet_bifrost_evm_tx_payment::oracle::get_oracle_price::<Runtime>(
-			config.oracle_address,
-		)
-		.map_err(|_| revert("Failed to get oracle price"))?;
+		let price =
+			pallet_bifrost_evm_tx_payment::oracle::get_token_price_via_registry::<Runtime>(
+				token_h160,
+				0,
+			)
+			.map_err(|_| revert("Failed to get oracle price"))?;
 
 		Ok(price)
 	}
@@ -308,8 +298,6 @@ where
 	// ========================================================================
 
 	/// Check if the caller is rate limited from changing their fee token.
-	///
-	/// Returns Ok(()) if not rate limited, Err with revert message otherwise.
 	fn check_rate_limit(caller: H160) -> EvmResult {
 		use sp_runtime::traits::Zero;
 

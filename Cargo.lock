@@ -7780,6 +7780,7 @@ dependencies = [
 name = "pallet-bifrost-evm-tx-payment"
 version = "0.1.0"
 dependencies = [
+ "bp-oracle",
  "frame-benchmarking",
  "frame-support",
  "frame-system",

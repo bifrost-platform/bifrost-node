@@ -12,25 +12,37 @@ use sp_core::H160;
 #[cfg(feature = "try-runtime")]
 use sp_runtime::TryRuntimeError;
 
-/// V1 migration: Add `min_balance` field to `FeeTokenConfig`.
+/// V2 migration: Remove oracle_address and oracle_decimals from FeeTokenConfig,
+/// switch to oracle-registry.
 ///
 /// This migration:
-/// 1. Reads all existing `AcceptedFeeTokens` entries (stored as `FeeTokenConfigV0`)
-/// 2. Converts them to `FeeTokenConfig` with `min_balance = 0`
-/// 3. Writes them back to storage
-/// 4. Updates the storage version from 0 to 1
+/// 1. Translates `AcceptedFeeTokens` from `FeeTokenConfigV0` to `FeeTokenConfig`
+///    - Drops `oracle_address` and `oracle_decimals` fields
+/// 2. Removes old `NativeTokenOracle` storage (H160)
+/// 3. Removes old `NativeOracleDecimals` storage (u8)
+/// 4. Updates the storage version from 1 to 2
+///
+/// Note: After migration, admin must call `set_native_oracle(Some(BFC_USD_ORACLE_ID))`
+/// to re-enable ERC20 fee payment.
 pub mod v1 {
 	use super::*;
 
 	/// Old storage type for `AcceptedFeeTokens` using `FeeTokenConfigV0`.
-	/// This is only used for pre_upgrade count check.
 	#[storage_alias]
 	pub type AcceptedFeeTokensV0<T: Config> =
 		StorageMap<Pallet<T>, Blake2_128Concat, H160, FeeTokenConfigV0, OptionQuery>;
 
-	pub struct MigrateToV1<T>(sp_std::marker::PhantomData<T>);
+	/// Old storage: NativeTokenOracle (H160 address).
+	#[storage_alias]
+	pub type NativeTokenOracle<T: Config> = StorageValue<Pallet<T>, H160, OptionQuery>;
 
-	impl<T: Config> OnRuntimeUpgrade for MigrateToV1<T> {
+	/// Old storage: NativeOracleDecimals (u8).
+	#[storage_alias]
+	pub type NativeOracleDecimals<T: Config> = StorageValue<Pallet<T>, u8, ValueQuery>;
+
+	pub struct MigrateToV2<T>(sp_std::marker::PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for MigrateToV2<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -39,24 +51,22 @@ pub mod v1 {
 
 			log::info!(
 				target: "bifrost-tx-payment",
-				"Running migration with in-code version {:?} and on-chain version {:?}",
+				"V2 migration: in-code version {:?}, on-chain version {:?}",
 				current, onchain
 			);
 
-			// Only migrate if on-chain version is 0 and in-code version is 1
-			if current == 1 && onchain == 0 {
+			if current == 2 && onchain == 1 {
 				log::info!(
 					target: "bifrost-tx-payment",
-					"Starting migration from V0 to V1 (adding min_balance to FeeTokenConfig)"
+					"Starting migration from V1 to V2 (removing oracle_address/oracle_decimals, switching to oracle-registry)"
 				);
 
 				let mut count: u32 = 0;
 
-				// Use translate to safely convert old storage format to new format in-place
+				// Translate FeeTokenConfigV0 → FeeTokenConfig
 				crate::pallet::AcceptedFeeTokens::<T>::translate::<FeeTokenConfigV0, _>(
 					|_token, old_config| {
 						count += 1;
-						// Convert V0 to V1 (adds min_balance = 0)
 						Some(old_config.into())
 					},
 				);
@@ -64,19 +74,27 @@ pub mod v1 {
 				weight = weight
 					.saturating_add(T::DbWeight::get().reads_writes(count as u64, count as u64));
 
+				// Remove old NativeTokenOracle (H160) storage
+				NativeTokenOracle::<T>::kill();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				// Remove old NativeOracleDecimals storage
+				NativeOracleDecimals::<T>::kill();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
 				// Update storage version
 				current.put::<Pallet<T>>();
 				weight = weight.saturating_add(T::DbWeight::get().writes(1));
 
 				log::info!(
 					target: "bifrost-tx-payment",
-					"Migration V0 -> V1 completed: migrated {} fee token configs",
+					"Migration V1 -> V2 completed: migrated {} fee token configs, removed NativeTokenOracle and NativeOracleDecimals",
 					count
 				);
 			} else {
 				log::info!(
 					target: "bifrost-tx-payment",
-					"Skipping migration V0 -> V1 (on-chain={:?}, in-code={:?})",
+					"Skipping migration V1 -> V2 (on-chain={:?}, in-code={:?})",
 					onchain, current
 				);
 				weight = weight.saturating_add(T::DbWeight::get().reads(1));
@@ -89,16 +107,18 @@ pub mod v1 {
 		fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
 			let onchain = Pallet::<T>::on_chain_storage_version();
 
-			// Count existing entries using old storage alias
-			let count = AcceptedFeeTokensV0::<T>::iter().count() as u32;
+			let count = if onchain == 1 {
+				AcceptedFeeTokensV0::<T>::iter().count() as u32
+			} else {
+				0u32
+			};
 
 			log::info!(
 				target: "bifrost-tx-payment",
-				"pre_upgrade: on-chain version {:?}, {} fee token configs to migrate",
+				"pre_upgrade V1 -> V2: on-chain version {:?}, {} fee token configs to migrate",
 				onchain, count
 			);
 
-			// Encode the count for post_upgrade verification
 			Ok(count.encode())
 		}
 
@@ -107,31 +127,27 @@ pub mod v1 {
 			let expected_count: u32 =
 				Decode::decode(&mut &state[..]).expect("Failed to decode pre_upgrade state");
 
-			// Verify storage version updated
 			ensure!(
-				Pallet::<T>::on_chain_storage_version() == 1,
-				"Storage version should be 1 after migration"
+				Pallet::<T>::on_chain_storage_version() == 2,
+				"Storage version should be 2 after migration"
 			);
 
-			// Verify all entries migrated correctly
 			let actual_count = crate::pallet::AcceptedFeeTokens::<T>::iter().count() as u32;
 			ensure!(
 				actual_count == expected_count,
 				"Fee token config count mismatch after migration"
 			);
 
-			// Verify all entries have valid FeeTokenConfig (with min_balance field)
-			for (token, config) in crate::pallet::AcceptedFeeTokens::<T>::iter() {
-				log::info!(
-					target: "bifrost-tx-payment",
-					"post_upgrade: token {:?} has min_balance {:?}",
-					token, config.min_balance
-				);
-			}
+			// Verify old storage items were removed
+			ensure!(
+				NativeTokenOracle::<T>::get().is_none(),
+				"NativeTokenOracle should be removed after migration"
+			);
 
 			log::info!(
 				target: "bifrost-tx-payment",
-				"post_upgrade: migration V0 -> V1 verified successfully"
+				"post_upgrade: migration V1 -> V2 verified successfully ({} configs)",
+				actual_count
 			);
 
 			Ok(())

@@ -7,7 +7,7 @@
 //! The pallet provides:
 //! - Registry of accepted ERC20 tokens for fee payment
 //! - User preference storage for fee token selection
-//! - Oracle integration for price conversion (Chainlink-style)
+//! - Oracle integration for price conversion (via oracle-registry)
 //! - ERC20 transfer execution via pallet-evm Runner
 //!
 //! ## Architecture
@@ -21,7 +21,8 @@
 //!                                    │                               │
 //!                              [Native BFC]                   [ERC20 Token]
 //!                                    │                               │
-//!                              Currency::withdraw          Oracle price query
+//!                              Currency::withdraw      Oracle price query
+//!                                                     (via oracle-registry)
 //!                                                                    │
 //!                                                          Runner::call(ERC20)
 //! ```
@@ -47,10 +48,10 @@ pub use weights::WeightInfo;
 
 use frame_support::{pallet_prelude::*, traits::{Hooks, OnRuntimeUpgrade}, weights::Weight};
 use frame_system::pallet_prelude::*;
-use sp_core::{H160, U256};
+use sp_core::{H160, H256, U256};
 
 /// The current storage version.
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -65,12 +66,6 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
 			// Clear previous block's fee payment data at the start of new block.
-			//
-			// Why on_initialize instead of on_finalize?
-			// - RPC queries use historical state at specific block hash
-			// - Block hash state = state AFTER on_finalize
-			// - If we clear in on_finalize, the data is gone when RPC queries that block
-			// - By clearing in on_initialize, the data persists in the previous block's state
 			let _ = PendingFeePayments::<T>::clear(u32::MAX, None);
 			// Reset transaction index counter for this block.
 			CurrentTxIndex::<T>::kill();
@@ -78,7 +73,7 @@ pub mod pallet {
 		}
 
 		fn on_runtime_upgrade() -> Weight {
-			crate::migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+			crate::migrations::v1::MigrateToV2::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -100,13 +95,17 @@ pub mod pallet {
 		#[pallet::constant]
 		type FeeTokenUpdateCooldown: Get<BlockNumberFor<Self>>;
 
+		/// Oracle registry for price lookups.
+		/// Provides token → oracle ID mapping and oracle price queries.
+		type OracleRegistry: bp_oracle::traits::OracleRegistryManager;
+
 		/// Weight information for extrinsics.
 		type WeightInfo: WeightInfo;
 	}
 
 	/// Accepted fee tokens with their configuration.
 	/// Key: ERC20 token contract address
-	/// Value: Token configuration including oracle address and parameters
+	/// Value: Token configuration
 	#[pallet::storage]
 	#[pallet::getter(fn accepted_fee_tokens)]
 	pub type AcceptedFeeTokens<T: Config> =
@@ -119,16 +118,11 @@ pub mod pallet {
 	#[pallet::getter(fn user_fee_token)]
 	pub type UserFeeToken<T: Config> = StorageMap<_, Blake2_128Concat, H160, H160, OptionQuery>;
 
-	/// BFC/USD Oracle address for native token price conversion.
+	/// BFC/USD Oracle ID for native token price conversion.
 	/// When None, ERC20 fee payment is disabled (falls back to native).
 	#[pallet::storage]
-	#[pallet::getter(fn native_token_oracle)]
-	pub type NativeTokenOracle<T: Config> = StorageValue<_, H160, OptionQuery>;
-
-	/// Decimals of the native token oracle (e.g., 8 for Chainlink standard).
-	#[pallet::storage]
-	#[pallet::getter(fn native_oracle_decimals)]
-	pub type NativeOracleDecimals<T: Config> = StorageValue<_, u8, ValueQuery>;
+	#[pallet::getter(fn native_oracle_id)]
+	pub type NativeOracleId<T: Config> = StorageValue<_, H256, OptionQuery>;
 
 	/// Last block number when user updated their fee token preference.
 	/// Used for rate limiting fee token changes.
@@ -167,7 +161,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// A new fee token has been added.
-		FeeTokenAdded { token: H160, oracle: H160, decimals: u8 },
+		FeeTokenAdded { token: H160, decimals: u8 },
 		/// A fee token has been removed.
 		FeeTokenRemoved { token: H160 },
 		/// A fee token configuration has been updated.
@@ -176,8 +170,8 @@ pub mod pallet {
 		UserFeeTokenSet { user: H160, token: Option<H160> },
 		/// Fee was paid in ERC20 token (withdrawn before execution).
 		FeePaymentInToken { user: H160, token: H160, amount: U256, native_equivalent: U256 },
-		/// Native token oracle has been set or cleared.
-		NativeOracleSet { oracle: Option<H160> },
+		/// Native token oracle ID has been set or cleared.
+		NativeOracleSet { oracle_id: Option<H256> },
 		/// Excess fee was refunded to user in ERC20 token.
 		FeeRefundInToken { user: H160, token: H160, amount: U256 },
 		/// Tip was paid to block author in ERC20 token.
@@ -194,8 +188,6 @@ pub mod pallet {
 		TokenNotAccepted,
 		/// Token is already in the accepted list.
 		TokenAlreadyAccepted,
-		/// Oracle address is invalid.
-		InvalidOracle,
 		/// Failed to get price from oracle.
 		OraclePriceFailed,
 		/// Price conversion overflow.
@@ -214,6 +206,8 @@ pub mod pallet {
 		RateLimited,
 		/// Oracle price data is stale (updated_at too old).
 		OraclePriceStale,
+		/// No oracle registered for token in oracle-registry.
+		OracleNotRegistered,
 	}
 
 	#[pallet::call]
@@ -224,7 +218,7 @@ pub mod pallet {
 		///
 		/// Parameters:
 		/// - `token`: ERC20 token contract address
-		/// - `config`: Token configuration including oracle address
+		/// - `config`: Token configuration
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::add_fee_token())]
 		pub fn add_fee_token(
@@ -237,15 +231,12 @@ pub mod pallet {
 			ensure!(!AcceptedFeeTokens::<T>::contains_key(token), Error::<T>::TokenAlreadyAccepted);
 
 			// Validate configuration
-			ensure!(config.oracle_address != H160::zero(), Error::<T>::InvalidOracle);
 			ensure!(config.decimals <= 18, Error::<T>::InvalidTokenConfig);
-			ensure!(config.oracle_decimals <= 18, Error::<T>::InvalidTokenConfig);
 
 			AcceptedFeeTokens::<T>::insert(token, config.clone());
 
 			Self::deposit_event(Event::FeeTokenAdded {
 				token,
-				oracle: config.oracle_address,
 				decimals: config.decimals,
 			});
 
@@ -282,9 +273,7 @@ pub mod pallet {
 			T::AdminOrigin::ensure_origin(origin)?;
 
 			ensure!(AcceptedFeeTokens::<T>::contains_key(token), Error::<T>::TokenNotAccepted);
-			ensure!(config.oracle_address != H160::zero(), Error::<T>::InvalidOracle);
 			ensure!(config.decimals <= 18, Error::<T>::InvalidTokenConfig);
-			ensure!(config.oracle_decimals <= 18, Error::<T>::InvalidTokenConfig);
 
 			AcceptedFeeTokens::<T>::insert(token, config);
 
@@ -316,35 +305,29 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Set the BFC/USD oracle address and decimals.
+		/// Set the BFC/USD oracle ID.
 		///
 		/// Only callable by AdminOrigin (sudo/governance).
-		/// Pass `None` for oracle to disable ERC20 fee payment (all users fall back to native).
+		/// Pass `None` to disable ERC20 fee payment (all users fall back to native).
 		///
 		/// Parameters:
-		/// - `oracle`: BFC/USD oracle address (None to disable)
-		/// - `decimals`: Oracle price decimals (e.g., 8 for Chainlink standard)
+		/// - `oracle_id`: BFC/USD oracle ID (H256, None to disable)
 		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_native_oracle())]
 		pub fn set_native_oracle(
 			origin: OriginFor<T>,
-			oracle: Option<H160>,
-			decimals: u8,
+			oracle_id: Option<H256>,
 		) -> DispatchResult {
 			T::AdminOrigin::ensure_origin(origin)?;
 
-			ensure!(decimals <= 18, Error::<T>::InvalidTokenConfig);
-
-			if let Some(addr) = oracle {
-				ensure!(addr != H160::zero(), Error::<T>::InvalidOracle);
-				NativeTokenOracle::<T>::put(addr);
-				NativeOracleDecimals::<T>::put(decimals);
+			if let Some(id) = oracle_id {
+				ensure!(id != H256::zero(), Error::<T>::InvalidTokenConfig);
+				NativeOracleId::<T>::put(id);
 			} else {
-				NativeTokenOracle::<T>::kill();
-				NativeOracleDecimals::<T>::kill();
+				NativeOracleId::<T>::kill();
 			}
 
-			Self::deposit_event(Event::NativeOracleSet { oracle });
+			Self::deposit_event(Event::NativeOracleSet { oracle_id });
 
 			Ok(())
 		}
@@ -418,23 +401,23 @@ pub mod pallet {
 			AcceptedFeeTokens::<T>::get(token)
 		}
 
-		/// Check if ERC20 fee payment is enabled (native oracle is set).
+		/// Check if ERC20 fee payment is enabled (native oracle ID is set).
 		pub fn is_erc20_fee_enabled() -> bool {
-			NativeTokenOracle::<T>::get().is_some()
+			NativeOracleId::<T>::get().is_some()
 		}
 
 		/// Convert native fee amount to token amount.
 		///
-		/// Uses BFC/USD and Token/USD oracles to calculate the conversion.
-		/// Includes staleness check for the token's oracle price.
+		/// Uses BFC/USD and Token/USD oracles (via oracle-registry) to calculate the conversion.
+		/// All oracle prices use 18 decimals.
 		///
-		/// Formula (with oracle decimals):
+		/// Formula:
 		/// ```text
-		/// token_amount = native_fee * bfc_usd_price * 10^token_decimals * 10^token_oracle_decimals
-		///                / (token_usd_price * 10^18 * 10^native_oracle_decimals)
+		/// token_amount = native_fee * bfc_usd_price * 10^token_decimals
+		///                / (token_usd_price * 10^18)
 		/// ```
 		///
-		/// Returns Err(NativeOracleNotSet) if BFC/USD oracle is not configured.
+		/// Returns Err(NativeOracleNotSet) if BFC/USD oracle ID is not configured.
 		/// Returns Err(OraclePriceStale) if the token's oracle price is stale.
 		pub fn convert_native_to_token(native_fee: U256, token: H160) -> Result<U256, Error<T>> {
 			Self::convert_native_to_token_with_prices(native_fee, token).map(|(amount, _, _)| amount)
@@ -455,40 +438,34 @@ pub mod pallet {
 
 			// Get BFC/USD price (required for conversion) - no staleness check for native oracle
 			let bfc_usd_price = Self::get_bfc_usd_price()?;
-			let native_oracle_decimals = NativeOracleDecimals::<T>::get();
 
-			// Get Token/USD price with staleness check
-			let token_usd_price = Self::get_oracle_price_with_staleness(
-				config.oracle_address,
-				config.max_staleness_seconds,
-			)?;
-			let token_oracle_decimals = config.oracle_decimals;
+			// Get Token/USD price via oracle-registry with staleness check
+			let token_usd_price =
+				crate::oracle::get_token_price_via_registry::<T>(token, config.max_staleness_seconds)
+					.map_err(|e| match e {
+						crate::oracle::OracleError::StalePrice => Error::<T>::OraclePriceStale,
+						crate::oracle::OracleError::OracleNotRegistered =>
+							Error::<T>::OracleNotRegistered,
+						_ => Error::<T>::OraclePriceFailed,
+					})?;
 
 			log::debug!(
 				target: "bifrost-tx-payment",
-				"Price conversion: native_fee={}, bfc_usd={} (dec={}), token_usd={} (dec={}), token_decimals={}, max_staleness={}s",
-				native_fee, bfc_usd_price, native_oracle_decimals, token_usd_price, token_oracle_decimals, config.decimals, config.max_staleness_seconds
+				"Price conversion: native_fee={}, bfc_usd={}, token_usd={}, token_decimals={}, max_staleness={}s",
+				native_fee, bfc_usd_price, token_usd_price, config.decimals, config.max_staleness_seconds
 			);
 
-			// Conversion formula:
-			// token_amount = native_fee * bfc_usd_price * 10^token_decimals * 10^token_oracle_decimals
-			//                / (token_usd_price * 10^18 * 10^native_oracle_decimals)
-			//
-			// Simplify: multiply numerator, then divide by denominator
-			// Numerator: native_fee * bfc_usd_price * 10^(token_decimals + token_oracle_decimals)
-			// Denominator: token_usd_price * 10^(18 + native_oracle_decimals)
-
-			let numerator_decimal_exp = config.decimals as u32 + token_oracle_decimals as u32;
-			let denominator_decimal_exp = 18u32 + native_oracle_decimals as u32;
-
+			// Conversion formula (all oracle prices are 18 decimals):
+			// token_amount = native_fee * bfc_usd_price * 10^token_decimals
+			//                / (token_usd_price * 10^18)
 			let token_amount = native_fee
 				.checked_mul(bfc_usd_price)
 				.ok_or(Error::<T>::PriceOverflow)?
-				.checked_mul(U256::from(10u128.pow(numerator_decimal_exp)))
+				.checked_mul(U256::from(10u128.pow(config.decimals as u32)))
 				.ok_or(Error::<T>::PriceOverflow)?
 				.checked_div(token_usd_price)
 				.ok_or(Error::<T>::PriceOverflow)?
-				.checked_div(U256::from(10u128.pow(denominator_decimal_exp)))
+				.checked_div(U256::from(10u128.pow(18u32)))
 				.ok_or(Error::<T>::PriceOverflow)?;
 
 			log::debug!(
@@ -500,84 +477,19 @@ pub mod pallet {
 			Ok((token_amount, token_usd_price, bfc_usd_price))
 		}
 
-		/// Get BFC/USD price from the native token oracle.
+		/// Get BFC/USD price from oracle-registry using the stored native oracle ID.
 		fn get_bfc_usd_price() -> Result<U256, Error<T>> {
-			let oracle_address =
-				NativeTokenOracle::<T>::get().ok_or(Error::<T>::NativeOracleNotSet)?;
+			let oracle_id =
+				NativeOracleId::<T>::get().ok_or(Error::<T>::NativeOracleNotSet)?;
 
-			// Native oracle uses legacy function (no staleness check) for simplicity
-			// If staleness check is needed for native oracle, add NativeOracleStaleness config
-			Self::get_oracle_price(oracle_address)
-		}
-
-		/// Get price from a Chainlink-style oracle (no staleness check).
-		fn get_oracle_price(oracle_address: H160) -> Result<U256, Error<T>> {
-			log::debug!(
-				target: "bifrost-tx-payment",
-				"Fetching price from oracle {:?}",
-				oracle_address
-			);
-
-			match crate::oracle::get_oracle_price::<T>(oracle_address) {
-				Ok(price) => {
-					log::debug!(
-						target: "bifrost-tx-payment",
-						"Oracle price fetched: {}",
-						price
-					);
-					Ok(price)
-				},
-				Err(_) => {
-					log::error!(
-						target: "bifrost-tx-payment",
-						"Oracle call failed for oracle {:?}",
-						oracle_address
-					);
-					Err(Error::<T>::OraclePriceFailed)
-				},
-			}
-		}
-
-		/// Get price from a Chainlink-style oracle with staleness check.
-		fn get_oracle_price_with_staleness(
-			oracle_address: H160,
-			max_staleness_seconds: u64,
-		) -> Result<U256, Error<T>> {
-			log::debug!(
-				target: "bifrost-tx-payment",
-				"Fetching price from oracle {:?} with max_staleness={}s",
-				oracle_address, max_staleness_seconds
-			);
-
-			match crate::oracle::get_oracle_price_with_staleness::<T>(
-				oracle_address,
-				max_staleness_seconds,
-			) {
-				Ok(price) => {
-					log::debug!(
-						target: "bifrost-tx-payment",
-						"Oracle price fetched: {}",
-						price
-					);
-					Ok(price)
-				},
-				Err(crate::oracle::OracleError::StalePrice) => {
-					log::error!(
-						target: "bifrost-tx-payment",
-						"Oracle price stale for oracle {:?}",
-						oracle_address
-					);
-					Err(Error::<T>::OraclePriceStale)
-				},
-				Err(e) => {
-					log::error!(
-						target: "bifrost-tx-payment",
-						"Oracle call failed for oracle {:?}: {:?}",
-						oracle_address, e
-					);
-					Err(Error::<T>::OraclePriceFailed)
-				},
-			}
+			crate::oracle::get_oracle_price_from_registry::<T>(oracle_id, 0).map_err(|e| {
+				log::error!(
+					target: "bifrost-tx-payment",
+					"BFC/USD oracle call failed: {:?}",
+					e
+				);
+				Error::<T>::OraclePriceFailed
+			})
 		}
 
 		/// Execute ERC20 transfer for fee payment.
