@@ -1083,7 +1083,13 @@ impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type AdminOrigin = EnsureRoot<AccountId>;
 	type FeeCollectorAddress = FeeCollectorAddress;
 	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
+	type OracleRegistry = OracleRegistry;
+	type NativeChainId = BifrostChainId;
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_oracle_registry::Config for Runtime {
+	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_btc_socket_queue::Config for Runtime {
@@ -1270,6 +1276,9 @@ mod runtime {
 
 	#[runtime::pallet_index(62)]
 	pub type Blaze = pallet_blaze;
+
+	#[runtime::pallet_index(64)]
+	pub type OracleRegistry = pallet_oracle_registry;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
