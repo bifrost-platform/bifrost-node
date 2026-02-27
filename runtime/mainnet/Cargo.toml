@@ -92,6 +92,7 @@ pallet-btc-socket-queue = { workspace = true }
 pallet-btc-registration-pool = { workspace = true }
 pallet-blaze = { workspace = true }
 pallet-bifrost-evm-tx-payment = { workspace = true }
+pallet-oracle-registry = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -190,6 +191,7 @@ std = [
 	"precompile-blaze/std",
 	"precompile-bifrost-evm-tx-payment/std",
 	"pallet-bifrost-evm-tx-payment/std",
+	"pallet-oracle-registry/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
