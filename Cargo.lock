@@ -7838,7 +7838,6 @@ dependencies = [
  "bp-cccp",
  "bp-core",
  "bp-staking",
- "ethabi-decode",
  "fp-account",
  "frame-benchmarking",
  "frame-support",
