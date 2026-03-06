@@ -394,6 +394,10 @@ pub mod pallet {
 			// Parse and validate socket message (must be in REQUESTED status)
 			let parsed_msg = Self::validate_and_parse_socket_message(&msg, |m| m.is_requested())?;
 			ensure!(msg_hash == Self::hash_bytes(&msg), Error::<T>::MessageHashMismatch);
+			ensure!(
+				msg_hash == Self::hash_bytes(&parsed_msg.encode()),
+				Error::<T>::MessageHashMismatch
+			);
 
 			let sequence_id = parsed_msg.req_id.sequence;
 			let amount = parsed_msg.params.amount.try_into().map_err(|_| Error::<T>::OutOfRange)?;
