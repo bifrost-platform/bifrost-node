@@ -13,7 +13,6 @@ repository = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
 array-bytes = { workspace = true }
-ethabi-decode = { workspace = true } # TODO: remove this dependency later
 
 # Substrate
 scale-info = { workspace = true }
