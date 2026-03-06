@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
-	SocketMessagesSubmission, Utxo, UtxoStatus, UtxoSubmission,
+	SocketMessage, SocketMessagesSubmission, Utxo, UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{
@@ -19,7 +19,7 @@ use bp_btc_relay::{
 };
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use parity_scale_codec::{alloc::string::ToString, Encode};
-use sp_core::H256;
+use sp_core::{H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{Block, Header, IdentifyAccount, Verify};
 use sp_std::{fmt::Display, vec, vec::Vec};
@@ -369,15 +369,32 @@ pub mod pallet {
 			ensure!(!messages.is_empty(), Error::<T>::EmptySubmission);
 
 			let mut pool = <OutboundPool<T>>::get();
+			// collect sequence IDs already present in the pool to detect logical duplicates
+			// (same sequence, different raw bytes)
+			let mut pool_sequences: Vec<U256> = pool
+				.iter()
+				.filter_map(|m| SocketMessage::try_from(m.clone()).ok())
+				.map(|m| m.req_id.sequence)
+				.collect();
+
 			for message in messages {
-				// check if the message is already submitted
+				// check if the message is already submitted (exact bytes match)
 				if pool.contains(&message) {
+					continue;
+				}
+				// parse and check for sequence ID duplicate
+				let msg = match SocketMessage::try_from(message.clone()) {
+					Ok(m) => m,
+					Err(_) => continue,
+				};
+				if pool_sequences.contains(&msg.req_id.sequence) {
 					continue;
 				}
 				// verify the message
 				if T::SocketQueue::verify_socket_message(&message).is_err() {
 					continue;
 				}
+				pool_sequences.push(msg.req_id.sequence);
 				pool.push(message.clone());
 
 				Self::deposit_event(Event::SocketMessageSubmitted {
