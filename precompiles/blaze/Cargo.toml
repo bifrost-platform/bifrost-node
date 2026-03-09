@@ -10,6 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 # Bifrost
+bp-btc-relay = { workspace = true }
 pallet-blaze = { workspace = true }
 precompile-utils = { workspace = true }
 parity-scale-codec = { workspace = true }
@@ -29,6 +30,7 @@ pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 [features]
 default = ["std"]
 std = [
+	"bp-btc-relay/std",
 	"fp-evm/std",
 	"frame-support/std",
 	"frame-system/std",
