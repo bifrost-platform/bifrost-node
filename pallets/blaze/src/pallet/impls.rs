@@ -105,16 +105,22 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 				unreachable!()
 			};
 
-			let hash = H256::from_slice(
-				keccak_256(&Encode::encode(&(H256::from(txid), vout as u32, amount.to_sat())))
-					.as_ref(),
-			);
-			match <Utxos<T>>::get(&hash) {
-				Some(utxo) => inputs.push(utxo.inner.clone()),
-				None => {
-					return Err(Error::<T>::UtxoDNE.into());
-				},
-			}
+			let target_txid = H256::from(txid);
+			let target_vout = vout as u32;
+			let target_amount = amount.to_sat();
+
+			// Look up UTXO by (txid, vout, amount) since the hash now includes
+			// the address which is not available from the PSBT.
+			let utxo = <Utxos<T>>::iter()
+				.find(|(_, u)| {
+					u.inner.txid == target_txid
+						&& u.inner.vout == target_vout
+						&& u.inner.amount == target_amount
+				})
+				.map(|(_, u)| u.inner.clone())
+				.ok_or(Error::<T>::UtxoDNE)?;
+
+			inputs.push(utxo);
 		}
 		Ok(inputs)
 	}
@@ -430,7 +436,8 @@ impl<T: Config> Pallet<T> {
 					.iter()
 					.map(|x| {
 						let utxo_hash = H256::from_slice(
-							keccak_256(&Encode::encode(&(x.txid, x.vout, x.amount))).as_ref(),
+							keccak_256(&Encode::encode(&(x.txid, x.vout, x.amount, x.address.clone())))
+								.as_ref(),
 						);
 						hex::encode(utxo_hash)
 					})

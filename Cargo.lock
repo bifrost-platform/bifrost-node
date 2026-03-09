@@ -9334,6 +9334,7 @@ dependencies = [
 name = "precompile-blaze"
 version = "1.0.0"
 dependencies = [
+ "bp-btc-relay",
  "fp-evm",
  "frame-support",
  "frame-system",
