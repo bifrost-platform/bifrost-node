@@ -143,6 +143,15 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 				<RollbackRequests<T>>::insert(&txid, request);
 			}
 		});
+		// replace authority in broadcast confirmations
+		<BroadcastConfirmations<T>>::iter().for_each(|(txid, mut confirmations)| {
+			if let Some(val) = confirmations.remove(old) {
+				confirmations
+					.try_insert(new.clone(), val)
+					.expect("Should not fail as we just removed an element");
+				<BroadcastConfirmations<T>>::insert(&txid, confirmations);
+			}
+		});
 	}
 
 	fn get_max_fee_rate() -> u64 {
