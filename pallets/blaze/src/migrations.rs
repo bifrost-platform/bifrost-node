@@ -88,7 +88,7 @@ pub mod v2 {
 	}
 }
 
-pub mod v3 {
+pub mod v5 {
 	use super::*;
 	use core::marker::PhantomData;
 	use frame_support::{
@@ -96,14 +96,14 @@ pub mod v3 {
 		weights::Weight,
 	};
 
-	/// Migration V3: Clear all UTXOs and PendingTxs due to utxo_hash computation change.
+	/// Migration V5: Clear all UTXOs and PendingTxs due to utxo_hash computation change.
 	///
 	/// The utxo_hash now includes `address` in the hash: keccak256(txid, vout, amount, address).
 	/// Existing UTXO storage keys are invalid since they were computed without `address`.
 	/// BLAZE will be deactivated so relayers can re-submit UTXOs after reactivation.
-	pub struct V3<T>(PhantomData<T>);
+	pub struct V5<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for V3<T> {
+	impl<T: Config> OnRuntimeUpgrade for V5<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -112,12 +112,13 @@ pub mod v3 {
 
 			weight = weight.saturating_add(T::DbWeight::get().reads(2));
 
-			if current == 3 && onchain == 2 {
+			if current == 5 && onchain == 4 {
 				// Count existing entries for weight calculation
 				let utxo_count = Utxos::<T>::iter().count() as u64;
 				let pending_tx_count = PendingTxs::<T>::iter().count() as u64;
 
-				weight = weight.saturating_add(T::DbWeight::get().reads(utxo_count + pending_tx_count));
+				weight =
+					weight.saturating_add(T::DbWeight::get().reads(utxo_count + pending_tx_count));
 
 				// Clear all UTXOs (storage keys are now invalid)
 				let _ = Utxos::<T>::clear(u32::MAX, None);
@@ -140,12 +141,12 @@ pub mod v3 {
 
 				log!(
 					info,
-					"blaze v3: cleared {} UTXOs and {} PendingTxs due to utxo_hash change ✅",
+					"blaze v5: cleared {} UTXOs and {} PendingTxs due to utxo_hash change ✅",
 					utxo_count,
 					pending_tx_count
 				);
 			} else {
-				log!(warn, "Skipping blaze storage v3 💤");
+				log!(warn, "Skipping blaze storage v5 💤");
 			}
 			weight
 		}
