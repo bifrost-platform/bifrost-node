@@ -251,6 +251,10 @@ pub mod pallet {
 						let (filtered_outbound_pool, outbound_requests) =
 							Self::filter_unregistered_outbounds(outbound_pool);
 
+						if filtered_outbound_pool.is_empty() {
+							return weight;
+						}
+
 						let utxos = T::Blaze::get_utxos();
 
 						let outbound_amount_sum = outbound_requests
