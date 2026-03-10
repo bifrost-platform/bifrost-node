@@ -17,12 +17,14 @@ use bp_btc_relay::{
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
 use bp_cccp::SocketMessage;
-use bp_staking::traits::Authorities;
+use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
+use sp_core::ConstU32;
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
@@ -59,6 +61,8 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// The authority has already submitted a signed PSBT.
 		AuthorityAlreadySubmitted,
+		/// The authority has already confirmed the broadcast of this request.
+		BroadcastAlreadyConfirmed,
 		/// The signed PSBT is already submitted by an authority.
 		SignedPsbtAlreadySubmitted,
 		/// The socket message is already submitted.
@@ -134,6 +138,8 @@ pub mod pallet {
 		SocketSet { new: T::AccountId, is_bitcoin: bool },
 		/// The maximum PSBT fee rate has been set.
 		MaxFeeRateSet { new: u64 },
+		/// A relayer has confirmed the broadcast of an executed request.
+		BroadcastConfirmed { txid: H256, authority_id: T::AccountId },
 	}
 
 	#[pallet::storage]
@@ -208,6 +214,17 @@ pub mod pallet {
 	#[pallet::storage]
 	/// The maximum fee rate(sat/vb) that can be set for PSBT.
 	pub type MaxFeeRate<T: Config> = StorageValue<_, u64, ValueQuery>;
+
+	#[pallet::storage]
+	/// Broadcast confirmation votes for finalized requests (Blaze mode only).
+	/// key: The PSBT's txid.
+	/// value: The set of relayers that have confirmed broadcast.
+	pub type BroadcastConfirmations<T: Config> = StorageMap<
+		_,
+		Twox64Concat,
+		H256,
+		BoundedBTreeMap<T::AccountId, bool, ConstU32<MAX_AUTHORITIES>>,
+	>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
@@ -511,6 +528,9 @@ pub mod pallet {
 		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_executed_request())]
 		/// Submit an executed PSBT request.
+		/// When Blaze is disabled, the single authority immediately marks the request as executed.
+		/// When Blaze is enabled, each relayer votes to confirm broadcast; the request moves to
+		/// `ExecutedRequests` only once a majority of relayers have confirmed.
 		pub fn submit_executed_request(
 			origin: OriginFor<T>,
 			msg: ExecutedPsbtMessage<T::AccountId>,
@@ -518,15 +538,44 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let ExecutedPsbtMessage { txid, .. } = msg;
+			let ExecutedPsbtMessage { authority_id, txid } = msg;
 
 			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
-			if request.request_type == RequestType::Migration {
-				T::RegistrationPool::execute_migration_tx(txid.clone());
+
+			let should_execute = if T::Blaze::is_activated() {
+				let mut confirmations = <BroadcastConfirmations<T>>::get(&txid).unwrap_or_default();
+
+				ensure!(
+					!confirmations.contains_key(&authority_id),
+					Error::<T>::BroadcastAlreadyConfirmed
+				);
+				confirmations
+					.try_insert(authority_id.clone(), true)
+					.map_err(|_| Error::<T>::OutOfRange)?;
+
+				Self::deposit_event(Event::BroadcastConfirmed { txid, authority_id });
+
+				if confirmations.len() as u32 >= T::Relayers::majority() {
+					<BroadcastConfirmations<T>>::remove(&txid);
+					true
+				} else {
+					<BroadcastConfirmations<T>>::insert(&txid, confirmations);
+					false
+				}
+			} else {
+				// Clean up any stale broadcast confirmations accumulated before Blaze fallback.
+				<BroadcastConfirmations<T>>::remove(&txid);
+				true
+			};
+
+			if should_execute {
+				if request.request_type == RequestType::Migration {
+					T::RegistrationPool::execute_migration_tx(txid.clone());
+				}
+				<FinalizedRequests<T>>::remove(&txid);
+				<ExecutedRequests<T>>::insert(&txid, request);
+				Self::deposit_event(Event::RequestExecuted { txid });
 			}
-			<FinalizedRequests<T>>::remove(&txid);
-			<ExecutedRequests<T>>::insert(&txid, request);
-			Self::deposit_event(Event::RequestExecuted { txid });
 
 			Ok(().into())
 		}
