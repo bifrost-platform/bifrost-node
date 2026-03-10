@@ -88,6 +88,45 @@ pub mod v2 {
 	}
 }
 
+pub mod v6 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	/// Migration V6: Clear all PendingTxs storage.
+	pub struct V6<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V6<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			weight = weight.saturating_add(T::DbWeight::get().reads(2));
+
+			if current == 6 && onchain == 5 {
+				let pending_tx_count = PendingTxs::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(pending_tx_count));
+
+				let _ = PendingTxs::<T>::clear(u32::MAX, None);
+				weight = weight.saturating_add(T::DbWeight::get().writes(pending_tx_count));
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(info, "blaze v6: cleared {} PendingTxs ✅", pending_tx_count);
+			} else {
+				log!(warn, "Skipping blaze storage v6 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod v5 {
 	use super::*;
 	use core::marker::PhantomData;

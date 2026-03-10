@@ -1,5 +1,48 @@
 use super::*;
 
+pub mod v5 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	/// Migration V5: Clear all PendingRequests storage.
+	pub struct V5<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V5<T>
+	where
+		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
+	{
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			weight = weight.saturating_add(T::DbWeight::get().reads(2));
+
+			if current == 5 && onchain == 4 {
+				let pending_count = PendingRequests::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(pending_count));
+
+				let _ = PendingRequests::<T>::clear(u32::MAX, None);
+				weight = weight.saturating_add(T::DbWeight::get().writes(pending_count));
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(info, "btc-socket-queue v5: cleared {} PendingRequests ✅", pending_count);
+			} else {
+				log!(warn, "Skipping btc-socket-queue storage v5 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod init_v2 {
 	use super::*;
 	use core::marker::PhantomData;
