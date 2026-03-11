@@ -1,14 +1,14 @@
 mod impls;
 
 use crate::{
-	weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, ChainId,
-	FinalizePollSubmission, OnFlightPollSubmission, SocketMessageHash, SourceTransactionId,
-	TransferInfo, TransferInfoWithTxId, TransferOption,
+	AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, ChainId, FinalizePollSubmission,
+	OnFlightPollSubmission, SocketMessageHash, SourceTransactionId, TransferInfo,
+	TransferInfoWithTxId, TransferOption, migrations, weights::WeightInfo,
 };
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Currency, ReservableCurrency, StorageVersion},
+	traits::{Currency, OnRuntimeUpgrade, ReservableCurrency, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -22,7 +22,7 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -314,6 +314,17 @@ pub mod pallet {
 		SocketMessageHash,
 		TransferInfoWithTxId<BalanceOf<T>, T::AccountId>,
 	>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+	where
+		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
+	{
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v4::V4::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T>

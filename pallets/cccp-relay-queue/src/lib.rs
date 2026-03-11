@@ -13,8 +13,21 @@ use bp_staking::MAX_AUTHORITIES;
 use frame_support::traits::Currency;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
+use sp_core::{ConstU32, H160, H256, RuntimeDebug, U256};
 use sp_runtime::BoundedVec;
+
+pub(crate) const LOG_TARGET: &'static str = "runtime::cccp-relay-queue";
+
+// syntactic sugar for logging.
+#[macro_export]
+macro_rules! log {
+	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
+		log::$level!(
+			target: crate::LOG_TARGET,
+			concat!("[{:?}] 💸 ", $patter), <frame_system::Pallet<T>>::block_number() $(, $values)*
+		)
+	};
+}
 
 /// Chain ID type.
 pub type ChainId = u32;
