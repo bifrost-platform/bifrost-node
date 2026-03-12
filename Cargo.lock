@@ -2905,7 +2905,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.111",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3587,7 +3587,7 @@ dependencies = [
 [[package]]
 name = "evm-tracer"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum-types",
  "evm",
@@ -3667,7 +3667,7 @@ dependencies = [
 [[package]]
 name = "fc-api"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "async-trait",
  "fp-storage",
@@ -3679,7 +3679,7 @@ dependencies = [
 [[package]]
 name = "fc-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "async-trait",
  "fp-consensus",
@@ -3695,7 +3695,7 @@ dependencies = [
 [[package]]
 name = "fc-db"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "async-trait",
  "ethereum",
@@ -3725,7 +3725,7 @@ dependencies = [
 [[package]]
 name = "fc-evm-tracing"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum-types",
  "fp-rpc-debug",
@@ -3742,7 +3742,7 @@ dependencies = [
 [[package]]
 name = "fc-mapping-sync"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "fc-db",
  "fc-storage",
@@ -3765,7 +3765,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3821,7 +3821,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core"
 version = "1.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3837,7 +3837,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3851,7 +3851,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -3865,7 +3865,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-types"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum-types",
  "serde",
@@ -3875,7 +3875,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3906,7 +3906,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -3943,7 +3943,7 @@ dependencies = [
 [[package]]
 name = "fc-storage"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4125,7 +4125,7 @@ dependencies = [
 [[package]]
 name = "fp-account"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "hex",
  "impl-serde",
@@ -4143,7 +4143,7 @@ dependencies = [
 [[package]]
 name = "fp-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -4154,7 +4154,7 @@ dependencies = [
 [[package]]
 name = "fp-ethereum"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4166,7 +4166,7 @@ dependencies = [
 [[package]]
 name = "fp-evm"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "environmental",
  "evm",
@@ -4182,7 +4182,7 @@ dependencies = [
 [[package]]
 name = "fp-ext"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum-types",
  "fp-rpc-evm-tracing-events",
@@ -4195,7 +4195,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4211,7 +4211,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4224,7 +4224,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-evm-tracing-events"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "environmental",
  "ethereum",
@@ -4239,7 +4239,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -4253,7 +4253,7 @@ dependencies = [
 [[package]]
 name = "fp-self-contained"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -4265,7 +4265,7 @@ dependencies = [
 [[package]]
 name = "fp-storage"
 version = "2.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -4372,7 +4372,7 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e56c0e51972d7b26ff76966c4d0f2307030df9daa5ce0885149ece1ab7ca5ad"
 dependencies = [
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "parity-scale-codec",
  "scale-decode",
  "scale-info",
@@ -4428,17 +4428,6 @@ dependencies = [
 
 [[package]]
 name = "frame-metadata"
-version = "21.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20dfd1d7eae1d94e32e869e2fb272d81f52dd8db57820a373adb83ea24d7d862"
-dependencies = [
- "cfg-if",
- "parity-scale-codec",
- "scale-info",
-]
-
-[[package]]
-name = "frame-metadata"
 version = "23.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ba5be0edbdb824843a0f9c6f0906ecfc66c5316218d74457003218b24909ed0"
@@ -4490,7 +4479,7 @@ dependencies = [
  "bitflags 1.3.2",
  "docify",
  "environmental",
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "frame-support-procedural",
  "impl-trait-for-tuples",
  "k256",
@@ -6936,7 +6925,7 @@ checksum = "b3e3e3f549d27d2dc054372f320ddf68045a833fab490563ff70d4cf1b9d91ea"
 dependencies = [
  "array-bytes 9.3.0",
  "blake3",
- "frame-metadata 21.0.0",
+ "frame-metadata",
  "parity-scale-codec",
  "scale-decode",
  "scale-info",
@@ -7491,7 +7480,7 @@ version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
 dependencies = [
- "proc-macro-crate 3.4.0",
+ "proc-macro-crate 1.1.3",
  "proc-macro2",
  "quote",
  "syn 2.0.111",
@@ -7751,7 +7740,7 @@ dependencies = [
 [[package]]
 name = "pallet-base-fee"
 version = "1.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "fp-evm",
  "frame-support",
@@ -7955,7 +7944,7 @@ dependencies = [
 [[package]]
 name = "pallet-ethereum"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -7978,7 +7967,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm"
 version = "6.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "cumulus-primitives-storage-weight-reclaim",
  "environmental",
@@ -8003,7 +7992,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-blake2"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "fp-evm",
 ]
@@ -8011,7 +8000,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-bn128"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "fp-evm",
  "sp-core",
@@ -8021,7 +8010,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-modexp"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "fp-evm",
  "num",
@@ -8030,7 +8019,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-simple"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "fp-evm",
  "ripemd",
@@ -9373,7 +9362,7 @@ dependencies = [
 [[package]]
 name = "precompile-utils"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "environmental",
  "evm",
@@ -9397,7 +9386,7 @@ dependencies = [
 [[package]]
 name = "precompile-utils-macro"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#bff364b87be681224db7980ac7d3061983788633"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#f4acb5ab0a3a74c77bd51d38c552f316a52c3261"
 dependencies = [
  "case",
  "num_enum",
@@ -9633,7 +9622,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -9653,7 +9642,7 @@ version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -12698,7 +12687,7 @@ name = "sp-metadata-ir"
 version = "0.12.1"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
 dependencies = [
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "parity-scale-codec",
  "scale-info",
 ]
@@ -13451,7 +13440,7 @@ dependencies = [
  "cargo_metadata",
  "console",
  "filetime",
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "jobserver",
  "merkleized-metadata",
  "parity-scale-codec",
@@ -13492,7 +13481,7 @@ dependencies = [
  "async-trait",
  "derive-where",
  "either",
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "futures 0.3.31",
  "hex",
  "parity-scale-codec",
@@ -13545,7 +13534,7 @@ dependencies = [
  "blake2 0.10.6",
  "derive-where",
  "frame-decode",
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "hashbrown 0.14.5",
  "hex",
  "impl-serde",
@@ -13606,7 +13595,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c134068711c0c46906abc0e6e4911204420331530738e18ca903a5469364d9f"
 dependencies = [
  "frame-decode",
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "hashbrown 0.14.5",
  "parity-scale-codec",
  "scale-info",
@@ -13621,7 +13610,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25de7727144780d780a6a7d78bbfd28414b8adbab68b05e87329c367d7705be4"
 dependencies = [
  "derive-where",
- "frame-metadata 23.0.1",
+ "frame-metadata",
  "futures 0.3.31",
  "hex",
  "impl-serde",
