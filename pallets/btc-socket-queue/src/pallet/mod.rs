@@ -268,6 +268,18 @@ pub mod pallet {
 							return weight;
 						}
 
+						// estimate output vbytes for fee-adjusted target
+						// TxOut size = 8 (value) + 1 (script_len varint) + script_len
+						let unique_scripts: sp_std::collections::btree_set::BTreeSet<_> =
+							outbound_requests.iter().map(|x| x.1.clone()).collect();
+						let output_vbytes: u64 = unique_scripts
+							.iter()
+							.map(|s| 9u64 + s.len() as u64)
+							.sum();
+						// 11 = version(4) + locktime(4) + input_count(1) + output_count(1) + segwit(1)
+						let base_fee = fee_rate * (11 + output_vbytes);
+						let target = outbound_amount_sum.saturating_add(base_fee);
+
 						let scored_utxos = utxos
 							.iter()
 							.filter_map(|x| {
@@ -286,7 +298,7 @@ pub mod pallet {
 
 						let (selected_utxos, strategy) = match T::Blaze::select_coins(
 							scored_utxos,
-							outbound_amount_sum,
+							target,
 							43 * fee_rate,
 							200_000,
 							100_000,
