@@ -1,5 +1,44 @@
 use super::*;
 
+pub mod v8 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	/// Migration V8: Clear all outbound pool.
+	pub struct V8<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V8<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			weight = weight.saturating_add(T::DbWeight::get().reads(2));
+
+			if current == 8 && onchain == 7 {
+				let outbound_pool_count = OutboundPool::<T>::get().len() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(outbound_pool_count));
+
+				OutboundPool::<T>::put(Vec::<UnboundedBytes>::new());
+				weight = weight.saturating_add(T::DbWeight::get().writes(outbound_pool_count));
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(info, "blaze v8: cleared {} OutboundPool ✅", outbound_pool_count);
+			} else {
+				log!(warn, "Skipping blaze storage v8 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod init_v1 {
 	use core::marker::PhantomData;
 
