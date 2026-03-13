@@ -243,9 +243,11 @@ impl<T: Config> Pallet<T> {
 		max_tries: usize,
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
 		pool.sort_by(|a, b| {
-			b.effective_value
-				.cmp(&a.effective_value)
-				.then((a.fee - a.long_term_fee).cmp(&(b.fee - b.long_term_fee)))
+			b.effective_value.cmp(&a.effective_value).then(
+				a.fee
+					.saturating_sub(a.long_term_fee)
+					.cmp(&b.fee.saturating_sub(b.long_term_fee)),
+			)
 		});
 
 		let mut best_selection = Vec::new();
@@ -284,7 +286,10 @@ impl<T: Config> Pallet<T> {
 			}
 			if curr_value >= target {
 				let waste = curr_value - target
-					+ curr_selection.iter().map(|x| x.fee - x.long_term_fee).sum::<u64>();
+					+ curr_selection
+						.iter()
+						.map(|x| x.fee.saturating_sub(x.long_term_fee))
+						.sum::<u64>();
 				if waste < *best_waste {
 					*best_waste = waste;
 					*best_selection = curr_selection.iter().map(|x| x.utxo.clone()).collect();
