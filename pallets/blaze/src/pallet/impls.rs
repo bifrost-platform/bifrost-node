@@ -371,86 +371,182 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Coin selection by knapsack solver.
+	///
+	/// Modeled after Bitcoin Core's `KnapsackSolver`. The stochastic
+	/// `ApproximateBestSubset` is replaced with a deterministic bounded DFS
+	/// suitable for on-chain (consensus-critical) execution.
 	fn select_coins_knapsack(
 		pool: Vec<ScoredUtxo>,
 		target: u64,
 		change_target: u64,
 		max_weight: u64,
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
-		let mut applicable = vec![];
-		let mut total_lower = 0u64;
-		let mut lowest_larger: Option<&ScoredUtxo> = None;
-		let mut best_exact: Option<&ScoredUtxo> = None;
+		// Phase 1 — categorize UTXOs (mirrors Bitcoin Core's KnapsackSolver).
+		let mut applicable: Vec<ScoredUtxo> = vec![];
+		let mut lowest_larger: Option<ScoredUtxo> = None;
+		let mut best_exact: Option<ScoredUtxo> = None;
 
-		for scored in &pool {
+		for scored in pool.iter() {
 			if scored.effective_value >= target
 				&& scored.effective_value <= target + change_target
 				&& scored.utxo.input_vbytes <= max_weight
 			{
-				// pick the single UTXO closest to target
-				if best_exact.map_or(true, |x| scored.effective_value < x.effective_value) {
-					best_exact = Some(scored);
+				if best_exact
+					.as_ref()
+					.map_or(true, |x| scored.effective_value < x.effective_value)
+				{
+					best_exact = Some(scored.clone());
 				}
 			} else if scored.effective_value < target + change_target {
-				applicable.push(scored);
-				total_lower += scored.effective_value;
+				applicable.push(scored.clone());
 			} else if lowest_larger
+				.as_ref()
 				.map_or(true, |x| scored.effective_value < x.effective_value)
 			{
-				lowest_larger = Some(scored);
+				lowest_larger = Some(scored.clone());
 			}
 		}
+
+		// Single UTXO covers target within acceptable change range.
 		if let Some(exact) = best_exact {
-			return Some((vec![exact.utxo.clone()], SelectionStrategy::Knapsack));
+			return Some((vec![exact.utxo], SelectionStrategy::Knapsack));
 		}
 
-		if total_lower == target {
-			return Some((
-				applicable.iter().map(|x| x.utxo.clone()).collect(),
-				SelectionStrategy::Knapsack,
-			));
-		}
+		let total_lower: u64 = applicable.iter().map(|x| x.effective_value).sum();
+
+		// Not enough value even with all applicable UTXOs — fall back to
+		// the smallest single UTXO that exceeds target.
 		if total_lower < target {
 			return lowest_larger
 				.filter(|x| x.utxo.input_vbytes <= max_weight)
-				.map(|x| (vec![x.utxo.clone()], SelectionStrategy::Knapsack));
+				.map(|x| (vec![x.utxo], SelectionStrategy::Knapsack));
 		}
 
+		// Phase 2 — bounded DFS subset search.
+		// Replaces Bitcoin Core's stochastic ApproximateBestSubset with a
+		// deterministic branch-and-bound that explores non-contiguous subsets.
 		applicable.sort_by(|a, b| b.effective_value.cmp(&a.effective_value));
 
-		let mut best = vec![];
-		let mut best_total = u64::MAX;
-
-		for i in 0..applicable.len() {
-			let mut selected = vec![];
-			let mut total = 0;
-			let mut weight = 0;
-
-			for j in i..applicable.len() {
-				let scored = applicable[j];
-				total += scored.effective_value;
-				weight += scored.utxo.input_vbytes;
-				selected.push(scored.utxo.clone());
-
-				if total >= target {
-					if weight <= max_weight && total < best_total {
-						best_total = total;
-						best = selected.clone();
-					}
-					break;
-				}
-				if weight > max_weight {
-					break;
-				}
-			}
+		let mut suffix_sums = vec![0u64; applicable.len() + 1];
+		for i in (0..applicable.len()).rev() {
+			suffix_sums[i] = suffix_sums[i + 1].saturating_add(applicable[i].effective_value);
 		}
 
-		if !best.is_empty() {
-			Some((best, SelectionStrategy::Knapsack))
+		let mut best_selection: Vec<UtxoInfoWithSize> = Vec::new();
+		let mut best_total = u64::MAX;
+		let mut curr_selection: Vec<ScoredUtxo> = Vec::new();
+
+		fn dfs(
+			index: usize,
+			tries: &mut usize,
+			applicable: &[ScoredUtxo],
+			suffix_sums: &[u64],
+			curr_selection: &mut Vec<ScoredUtxo>,
+			curr_value: u64,
+			curr_weight: u64,
+			target: u64,
+			max_weight: u64,
+			best_selection: &mut Vec<UtxoInfoWithSize>,
+			best_total: &mut u64,
+			max_tries: usize,
+		) {
+			if *tries >= max_tries {
+				return;
+			}
+			*tries += 1;
+
+			// Prune: cannot reach target with remaining UTXOs.
+			if curr_value + suffix_sums[index] < target {
+				return;
+			}
+			// Prune: weight already exceeded.
+			if curr_weight > max_weight {
+				return;
+			}
+			// Solution found — record if it is the best so far.
+			if curr_value >= target {
+				if curr_value < *best_total {
+					*best_total = curr_value;
+					*best_selection =
+						curr_selection.iter().map(|x| x.utxo.clone()).collect();
+				}
+				return;
+			}
+			// Optimal (exact match) already found.
+			if *best_total == target {
+				return;
+			}
+
+			if index >= applicable.len() {
+				return;
+			}
+
+			// Include current UTXO.
+			curr_selection.push(applicable[index].clone());
+			dfs(
+				index + 1,
+				tries,
+				applicable,
+				suffix_sums,
+				curr_selection,
+				curr_value + applicable[index].effective_value,
+				curr_weight + applicable[index].utxo.input_vbytes,
+				target,
+				max_weight,
+				best_selection,
+				best_total,
+				max_tries,
+			);
+			curr_selection.pop();
+
+			// Exclude current UTXO.
+			dfs(
+				index + 1,
+				tries,
+				applicable,
+				suffix_sums,
+				curr_selection,
+				curr_value,
+				curr_weight,
+				target,
+				max_weight,
+				best_selection,
+				best_total,
+				max_tries,
+			);
+		}
+
+		let mut tries = 0;
+		dfs(
+			0,
+			&mut tries,
+			&applicable,
+			&suffix_sums,
+			&mut curr_selection,
+			0,
+			0,
+			target,
+			max_weight,
+			&mut best_selection,
+			&mut best_total,
+			100_000,
+		);
+
+		// Phase 3 — compare DFS result with lowest_larger.
+		// A single larger UTXO may be preferable (fewer inputs = smaller tx).
+		if !best_selection.is_empty() {
+			if let Some(ref larger) = lowest_larger {
+				if larger.utxo.input_vbytes <= max_weight
+					&& larger.effective_value <= best_total
+				{
+					return Some((vec![larger.utxo.clone()], SelectionStrategy::Knapsack));
+				}
+			}
+			Some((best_selection, SelectionStrategy::Knapsack))
 		} else {
 			lowest_larger
 				.filter(|x| x.utxo.input_vbytes <= max_weight)
-				.map(|x| (vec![x.utxo.clone()], SelectionStrategy::Knapsack))
+				.map(|x| (vec![x.utxo], SelectionStrategy::Knapsack))
 		}
 	}
 
