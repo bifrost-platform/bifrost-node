@@ -1,9 +1,9 @@
 mod impls;
 
 use crate::{
-	AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, ChainId, FinalizePollSubmission,
-	OnFlightPollSubmission, SocketMessageHash, SourceTransactionId, TransferInfo,
-	TransferInfoWithTxId, TransferOption, migrations, weights::WeightInfo,
+	migrations, weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, ChainId,
+	FinalizePollSubmission, OnFlightPollSubmission, SocketMessageHash, SourceTransactionId,
+	TransferInfo, TransferInfoWithTxId, TransferOption,
 };
 
 use frame_support::{
@@ -22,7 +22,7 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(5);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -322,7 +322,7 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v4::V4::<T>::on_runtime_upgrade()
+			migrations::v5::V5::<T>::on_runtime_upgrade()
 		}
 	}
 
