@@ -302,6 +302,10 @@ impl<T: Config> Pallet<T> {
 				}
 				return;
 			}
+			// perfect match found, no need to explore further
+			if *best_waste == 0 {
+				return;
+			}
 
 			if index >= pool.len() {
 				return;
