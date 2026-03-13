@@ -218,6 +218,7 @@ where
 				T::RelayQueue::replace_authority(&r.old, &r.new);
 				T::SocketQueue::replace_authority(&r.old, &r.new);
 				T::RegistrationPool::replace_authority(&r.old, &r.new);
+				T::Blaze::replace_authority(&r.old, &r.new);
 
 				// replace member of RelayExecutive (only if it's the old member)
 				let mut members = Members::<T, Instance3>::get();
