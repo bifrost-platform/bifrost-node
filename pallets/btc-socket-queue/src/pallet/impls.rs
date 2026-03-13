@@ -518,7 +518,7 @@ where
 			if let Some(change_amount) =
 				input_sum.checked_sub(target).and_then(|v| v.checked_sub(fee))
 			{
-				if change_amount >= bp_btc_relay::DUST_LIMIT {
+				if change_amount > bp_btc_relay::DUST_LIMIT {
 					let system_vault = T::RegistrationPool::get_system_vault(
 						T::RegistrationPool::get_current_round(),
 					)?;
