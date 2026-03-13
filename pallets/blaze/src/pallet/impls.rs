@@ -385,18 +385,29 @@ impl<T: Config> Pallet<T> {
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
 		let mut applicable = vec![];
 		let mut total_lower = 0u64;
-		let mut lowest_larger: Option<&UtxoInfoWithSize> = None;
+		let mut lowest_larger: Option<&ScoredUtxo> = None;
+		let mut best_exact: Option<&ScoredUtxo> = None;
 
 		for scored in &pool {
-			if scored.effective_value >= target && scored.effective_value <= target + change_target
+			if scored.effective_value >= target
+				&& scored.effective_value <= target + change_target
+				&& scored.utxo.input_vbytes <= max_weight
 			{
-				return Some((vec![scored.utxo.clone()], SelectionStrategy::Knapsack));
+				// pick the single UTXO closest to target
+				if best_exact.map_or(true, |x| scored.effective_value < x.effective_value) {
+					best_exact = Some(scored);
+				}
 			} else if scored.effective_value < target + change_target {
 				applicable.push(scored);
 				total_lower += scored.effective_value;
-			} else if lowest_larger.map_or(true, |x| scored.utxo.amount < x.amount) {
-				lowest_larger = Some(&scored.utxo);
+			} else if lowest_larger
+				.map_or(true, |x| scored.effective_value < x.effective_value)
+			{
+				lowest_larger = Some(scored);
 			}
+		}
+		if let Some(exact) = best_exact {
+			return Some((vec![exact.utxo.clone()], SelectionStrategy::Knapsack));
 		}
 
 		if total_lower == target {
@@ -406,7 +417,9 @@ impl<T: Config> Pallet<T> {
 			));
 		}
 		if total_lower < target {
-			return lowest_larger.map(|x| (vec![x.clone()], SelectionStrategy::Knapsack));
+			return lowest_larger
+				.filter(|x| x.utxo.input_vbytes <= max_weight)
+				.map(|x| (vec![x.utxo.clone()], SelectionStrategy::Knapsack));
 		}
 
 		applicable.sort_by(|a, b| b.effective_value.cmp(&a.effective_value));
@@ -425,11 +438,14 @@ impl<T: Config> Pallet<T> {
 				weight += scored.utxo.input_vbytes;
 				selected.push(scored.utxo.clone());
 
-				if total >= target && weight <= max_weight {
-					if total < best_total {
+				if total >= target {
+					if weight <= max_weight && total < best_total {
 						best_total = total;
 						best = selected.clone();
 					}
+					break;
+				}
+				if weight > max_weight {
 					break;
 				}
 			}
@@ -438,7 +454,9 @@ impl<T: Config> Pallet<T> {
 		if !best.is_empty() {
 			Some((best, SelectionStrategy::Knapsack))
 		} else {
-			lowest_larger.map(|x| (vec![x.clone()], SelectionStrategy::Knapsack))
+			lowest_larger
+				.filter(|x| x.utxo.input_vbytes <= max_weight)
+				.map(|x| (vec![x.utxo.clone()], SelectionStrategy::Knapsack))
 		}
 	}
 
