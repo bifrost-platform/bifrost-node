@@ -502,7 +502,7 @@ where
 		}
 		let mut output = merged_output
 			.into_iter()
-			.filter(|(_, value)| value.to_sat() >= bp_btc_relay::DUST_LIMIT)
+			.filter(|(_, value)| value.to_sat() > bp_btc_relay::DUST_LIMIT)
 			.map(|(script_pubkey, value)| TxOut { value, script_pubkey })
 			.collect::<Vec<_>>();
 		if output.is_empty() {
