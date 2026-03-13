@@ -235,6 +235,8 @@ impl PoolManager<AccountId> for MockPoolManager {
 
 pub struct MockBlazeManager;
 impl BlazeManager<Test> for MockBlazeManager {
+	fn replace_authority(_: &AccountId, _: &AccountId) {}
+
 	fn is_activated() -> bool {
 		true
 	}

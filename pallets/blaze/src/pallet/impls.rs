@@ -27,6 +27,33 @@ use sp_runtime::{
 use sp_std::{fmt::Display, vec, vec::Vec};
 
 impl<T: Config> BlazeManager<T> for Pallet<T> {
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// Replace authority in unconfirmed UTXOs (still accumulating votes)
+		<Utxos<T>>::iter().for_each(|(hash, mut utxo)| {
+			if utxo.status == UtxoStatus::Unconfirmed && utxo.voters.contains(old) {
+				utxo.replace_authority(old, new);
+				<Utxos<T>>::insert(hash, utxo);
+			}
+		});
+
+		// Replace authority in pending PSBTs (waiting for broadcast confirmation votes)
+		<PendingTxs<T>>::iter().for_each(|(txid, mut tx)| {
+			if tx.voters.contains(old) {
+				tx.replace_authority(old, new);
+				<PendingTxs<T>>::insert(txid, tx);
+			}
+		});
+
+		// Replace authority in fee rates map
+		let mut fee_rates = <FeeRates<T>>::get();
+		if let Some(val) = fee_rates.remove(old) {
+			fee_rates
+				.try_insert(new.clone(), val)
+				.expect("Should not fail as we just removed an element");
+			<FeeRates<T>>::put(fee_rates);
+		}
+	}
+
 	fn is_activated() -> bool {
 		<IsActivated<T>>::get()
 	}
