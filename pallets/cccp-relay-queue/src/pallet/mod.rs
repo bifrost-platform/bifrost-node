@@ -344,15 +344,26 @@ pub mod pallet {
 		/// **Stage 3: Finalized (moved to `FinalizedTransfers` storage)**
 		/// - Handled by `finalize_poll` extrinsic (separate voting phase)
 		///
-		/// # Unified Voting Workflow
+		/// # Transfer Approval Workflow
 		///
-		/// Both inbound and outbound transfers require majority consensus:
+		/// ## Outbound Path (Direct Approval)
+		/// When a transfer originates from Bifrost to an external chain:
+		/// 1. Validate on-chain Socket contract shows REQUESTED (1) status via `get_request()`
+		/// 2. **Immediately approve** without waiting for majority vote
+		///
+		/// **Rationale**: The Socket contract on Bifrost is the authoritative source.
+		/// If the contract shows REQUESTED, the transfer is valid.
+		///
+		/// ## Inbound Path (Voting-Based Approval)
+		/// When a transfer originates from an external chain to Bifrost:
+		/// 1. Validate on-chain Socket contract shows zero (0) status (not yet registered)
+		/// 2. Each relayer casts a vote in `PendingTransfers`
+		/// 3. **When majority reached**: Transitions to `OnFlightTransfers`, locks Fast transfer cap
 		/// - **First vote**: Creates entry in `PendingTransfers` with single voter
 		/// - **Subsequent votes**: Adds voters, prevents double-voting
-		/// - **Majority reached**: Transitions to `OnFlightTransfers`, locks Fast transfer cap
 		///
 		/// **Rationale**: Consensus-based approval provides security against Byzantine relayers
-		/// and ensures transfer validity regardless of origin chain.
+		/// for transfers originating from external (untrusted) chains.
 		///
 		/// # Fast vs Standard Transfer Mode
 		///
@@ -432,8 +443,6 @@ pub mod pallet {
 				Error::<T>::TransferAlreadyFinalized
 			);
 
-			let pending_transfer = PendingTransfers::<T>::get(msg_hash, src_tx_id);
-
 			// Determine transfer option based on current cap:
 			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
 			// - If asset is not registered: Always Standard (no Fast transfer support)
@@ -443,9 +452,64 @@ pub mod pallet {
 				TransferOption::Standard
 			};
 
+			if parsed_msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
+				// Outbound: validate params match on-chain state and status must be REQUESTED (1)
+				// validate_on_chain_existence cross-checks (ins_code, params) against request_info.msg_hash
+				let request_info = Self::validate_on_chain_existence(&parsed_msg)?;
+				ensure!(request_info.is_requested(), Error::<T>::MessageStatusMismatch);
+
+				// Update cap for Fast transfers
+				if let Some((asset_id, asset_cap)) = asset_info {
+					if option == TransferOption::Fast {
+						Self::update_fast_transfer_cap(
+							asset_id,
+							asset_cap,
+							parsed_msg.params.amount,
+							true,
+						)?;
+					}
+				}
+
+				OnFlightTransfers::<T>::insert(
+					msg_hash,
+					TransferInfoWithTxId::from_transfer_info(
+						TransferInfo {
+							amount,
+							sequence_id,
+							src_chain_id,
+							dst_chain_id,
+							asset_index_hash,
+							option,
+							socket_message: msg.clone(),
+							on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
+								.map_err(|_| Error::<T>::OutOfRange)?,
+						},
+						src_tx_id,
+					),
+				);
+
+				Self::deposit_event(Event::TransferPolled {
+					asset_index_hash,
+					sequence_id,
+					src_chain_id,
+					dst_chain_id,
+					authority_id,
+					option,
+					amount,
+					is_approved: true,
+				});
+
+				return Ok(().into());
+			}
+
 			// ============================================================
-			// INBOUND/OUTBOUND PATH: Requires voting consensus
+			// INBOUND PATH: Requires voting consensus
 			// ============================================================
+			//
+			// Inbound: on-chain status must be zero (request not yet registered on Bifrost).
+			// Note: validate_on_chain_existence cannot be used here because the msg_hash
+			// field in RequestInfo would be H256::zero() for unregistered requests,
+			// causing the content cross-check to fail. Only status validation is needed.
 			//
 			// IMPORTANT: Asset cap is dynamically re-checked when majority is reached.
 			// During the voting period, the asset cap can change due to:
@@ -455,6 +519,10 @@ pub mod pallet {
 			// Therefore, a transfer initially determined as Standard might become
 			// eligible for Fast (or vice versa) by the time majority is reached.
 			// The actual transfer option is re-determined at the majority checkpoint.
+			let request_info = Self::try_get_request(&parsed_msg.encode_req_id())?;
+			ensure!(request_info.field[0] == U256::zero(), Error::<T>::MessageStatusMismatch);
+
+			let pending_transfer = PendingTransfers::<T>::get(msg_hash, src_tx_id);
 
 			if let Some(mut pending_transfer) = pending_transfer {
 				// Add voter with double-vote prevention
@@ -613,9 +681,9 @@ pub mod pallet {
 		/// - `request_info.is_committed() && msg.is_committed()`, OR
 		/// - `request_info.is_rollbacked() && msg.is_rollbacked()`
 		///
-		/// **Inbound**: Socket contract must show ACCEPTED or REJECTED status
-		/// - `request_info.is_accepted() && msg.is_committed()` (successful execution), OR
-		/// - `request_info.is_rejected() && msg.is_rollbacked()` (failed execution)
+		/// **Inbound**: Socket contract must show ACCEPTED (5) or REJECTED (6) status
+		/// - `request_info.is_accepted()` (transfer accepted on destination chain), OR
+		/// - `request_info.is_rejected()` (transfer rejected on destination chain)
 		///
 		/// # Fast Transfer Cap Management
 		///
@@ -731,10 +799,9 @@ pub mod pallet {
 			}
 
 			// Inbound path: Voting-based finalization
-			// For inbound, Socket contract must show Accepted|Rejected status
+			// For inbound, Socket contract must show Accepted (5) or Rejected (6) status
 			ensure!(
-				(request_info.is_accepted() && parsed_msg.is_committed())
-					|| (request_info.is_rejected() && parsed_msg.is_rollbacked()),
+				request_info.is_accepted() || request_info.is_rejected(),
 				Error::<T>::MessageStatusMismatch
 			);
 
