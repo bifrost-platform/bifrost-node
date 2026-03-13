@@ -88,7 +88,7 @@ pub mod v2 {
 	}
 }
 
-pub mod v6 {
+pub mod v7 {
 	use super::*;
 	use core::marker::PhantomData;
 	use frame_support::{
@@ -96,10 +96,10 @@ pub mod v6 {
 		weights::Weight,
 	};
 
-	/// Migration V6: Clear all PendingTxs storage.
-	pub struct V6<T>(PhantomData<T>);
+	/// Migration V7: Clear all PendingTxs storage.
+	pub struct V7<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for V6<T> {
+	impl<T: Config> OnRuntimeUpgrade for V7<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -108,19 +108,26 @@ pub mod v6 {
 
 			weight = weight.saturating_add(T::DbWeight::get().reads(2));
 
-			if current == 6 && onchain == 5 {
+			if current == 7 && onchain == 6 {
 				let pending_tx_count = PendingTxs::<T>::iter().count() as u64;
 				weight = weight.saturating_add(T::DbWeight::get().reads(pending_tx_count));
 
 				let _ = PendingTxs::<T>::clear(u32::MAX, None);
 				weight = weight.saturating_add(T::DbWeight::get().writes(pending_tx_count));
 
+				// clear UTXOs
+				let utxo_count = Utxos::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(utxo_count));
+
+				let _ = Utxos::<T>::clear(u32::MAX, None);
+				weight = weight.saturating_add(T::DbWeight::get().writes(utxo_count));
+
 				current.put::<Pallet<T>>();
 				weight = weight.saturating_add(T::DbWeight::get().writes(1));
 
-				log!(info, "blaze v6: cleared {} PendingTxs ✅", pending_tx_count);
+				log!(info, "blaze v7: cleared {} PendingTxs ✅", pending_tx_count);
 			} else {
-				log!(warn, "Skipping blaze storage v6 💤");
+				log!(warn, "Skipping blaze storage v7 💤");
 			}
 			weight
 		}

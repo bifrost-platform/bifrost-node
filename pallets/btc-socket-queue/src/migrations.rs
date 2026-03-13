@@ -1,5 +1,55 @@
 use super::*;
 
+pub mod v6 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	/// Migration V6: Clear all PendingRequests storage.
+	pub struct V6<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V6<T>
+	where
+		T::AccountId: Into<H160>,
+		H160: Into<T::AccountId>,
+	{
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			weight = weight.saturating_add(T::DbWeight::get().reads(2));
+
+			if current == 6 && onchain == 5 {
+				let pending_count = PendingRequests::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(pending_count));
+
+				let _ = PendingRequests::<T>::clear(u32::MAX, None);
+				weight = weight.saturating_add(T::DbWeight::get().writes(pending_count));
+
+				// remove finalized requests
+				let finalized_count = FinalizedRequests::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(finalized_count));
+
+				let _ = FinalizedRequests::<T>::clear(u32::MAX, None);
+				weight = weight.saturating_add(T::DbWeight::get().writes(finalized_count));
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(info, "btc-socket-queue v6: cleared {} PendingRequests ✅", pending_count);
+			} else {
+				log!(warn, "Skipping btc-socket-queue storage v6 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod v5 {
 	use super::*;
 	use core::marker::PhantomData;
