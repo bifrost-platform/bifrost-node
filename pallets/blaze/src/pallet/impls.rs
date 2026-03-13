@@ -259,12 +259,19 @@ impl<T: Config> Pallet<T> {
 		let mut best_selection = Vec::new();
 		let mut best_waste = u64::MAX;
 
+		// precompute suffix sums for O(1) remaining value lookup
+		let mut suffix_sums = vec![0u64; pool.len() + 1];
+		for i in (0..pool.len()).rev() {
+			suffix_sums[i] = suffix_sums[i + 1].saturating_add(pool[i].effective_value);
+		}
+
 		let mut curr_selection = Vec::new();
 
 		fn dfs(
 			index: usize,
 			tries: &mut usize,
 			pool: &[ScoredUtxo],
+			suffix_sums: &[u64],
 			curr_selection: &mut Vec<ScoredUtxo>,
 			curr_value: u64,
 			curr_weight: u64,
@@ -280,8 +287,7 @@ impl<T: Config> Pallet<T> {
 			}
 			*tries += 1;
 
-			let available_remaining = pool[index..].iter().map(|x| x.effective_value).sum::<u64>();
-			if curr_value + available_remaining < target {
+			if curr_value + suffix_sums[index] < target {
 				return;
 			}
 			if curr_value > target + cost_of_change {
@@ -312,6 +318,7 @@ impl<T: Config> Pallet<T> {
 				index + 1,
 				tries,
 				pool,
+				suffix_sums,
 				curr_selection,
 				curr_value + pool[index].effective_value,
 				curr_weight + pool[index].utxo.input_vbytes,
@@ -328,6 +335,7 @@ impl<T: Config> Pallet<T> {
 				index + 1,
 				tries,
 				pool,
+				suffix_sums,
 				curr_selection,
 				curr_value,
 				curr_weight,
@@ -345,6 +353,7 @@ impl<T: Config> Pallet<T> {
 			0,
 			&mut tries,
 			&pool,
+			&suffix_sums,
 			&mut curr_selection,
 			0,
 			0,
