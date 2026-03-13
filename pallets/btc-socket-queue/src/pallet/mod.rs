@@ -290,7 +290,7 @@ pub mod pallet {
 							43 * fee_rate,
 							200_000,
 							100_000,
-							546,
+							bp_btc_relay::DUST_LIMIT,
 						) {
 							Some(utxos) => utxos,
 							None => {

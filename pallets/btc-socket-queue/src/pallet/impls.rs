@@ -502,25 +502,34 @@ where
 		}
 		let mut output = merged_output
 			.into_iter()
+			.filter(|(_, value)| value.to_sat() >= bp_btc_relay::DUST_LIMIT)
 			.map(|(script_pubkey, value)| TxOut { value, script_pubkey })
 			.collect::<Vec<_>>();
+		if output.is_empty() {
+			return None;
+		}
 		if selection_strategy == SelectionStrategy::Knapsack {
 			let input_sum = selected_utxos.iter().map(|x| x.amount).sum::<u64>();
-			if input_sum - 546 > target {
-				let input_size_sum = selected_utxos.iter().map(|x| x.input_vbytes).sum::<u64>();
-				let output_size_sum = output.iter().map(|x| x.size() as u64).sum::<u64>() + 43;
-				let estimated_size = 11 + input_size_sum + output_size_sum;
-				let fee = fee_rate * estimated_size;
+			let input_size_sum = selected_utxos.iter().map(|x| x.input_vbytes).sum::<u64>();
+			let output_size_sum = output.iter().map(|x| x.size() as u64).sum::<u64>() + 43;
+			let estimated_size = 11 + input_size_sum + output_size_sum;
+			let fee = fee_rate.saturating_mul(estimated_size);
 
-				let change_amount = input_sum - target - fee;
-				let system_vault =
-					T::RegistrationPool::get_system_vault(T::RegistrationPool::get_current_round())
-						.unwrap();
-				let system_vault = Self::try_convert_to_address_from_vec(system_vault).unwrap();
-				output.push(TxOut {
-					value: Amount::from_sat(change_amount),
-					script_pubkey: system_vault.script_pubkey(),
-				})
+			if let Some(change_amount) =
+				input_sum.checked_sub(target).and_then(|v| v.checked_sub(fee))
+			{
+				if change_amount >= bp_btc_relay::DUST_LIMIT {
+					let system_vault = T::RegistrationPool::get_system_vault(
+						T::RegistrationPool::get_current_round(),
+					)?;
+					let system_vault =
+						Self::try_convert_to_address_from_vec(system_vault).ok()?;
+					output.push(TxOut {
+						value: Amount::from_sat(change_amount),
+						script_pubkey: system_vault.script_pubkey(),
+					});
+				}
+				// else: change < dust limit, absorbed as fee
 			}
 		}
 
