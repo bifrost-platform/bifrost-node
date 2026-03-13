@@ -12,7 +12,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
-use bp_btc_relay::traits::{PoolManager, SocketQueueManager};
+use bp_btc_relay::traits::{BlazeManager, PoolManager, SocketQueueManager};
 use bp_cccp::traits::RelayQueueManager;
 use bp_staking::{RoundIndex, MAX_AUTHORITIES};
 use sp_runtime::Perbill;
@@ -34,6 +34,8 @@ pub mod pallet {
 	/// Configuration trait of this pallet
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
+		/// Interface of BLAZE pallet.
+		type Blaze: BlazeManager<Self>;
 		/// Interface of CCCP Relay Queue pallet.
 		type RelayQueue: RelayQueueManager<Self::AccountId>;
 		/// Interface of Bitcoin Socket Queue pallet.

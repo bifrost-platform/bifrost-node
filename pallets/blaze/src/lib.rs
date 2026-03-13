@@ -61,6 +61,15 @@ pub struct Utxo<AccountId> {
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
 }
 
+impl<AccountId: PartialEq + Clone + sp_std::fmt::Debug> Utxo<AccountId> {
+	pub fn replace_authority(&mut self, old: &AccountId, new: &AccountId) {
+		self.voters.retain(|v| v != old);
+		self.voters
+			.try_push(new.clone())
+			.expect("Should not fail as we just removed an element");
+	}
+}
+
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 /// A bundle of TXOs with their voters.
 pub struct BTCTransaction<AccountId> {
@@ -68,6 +77,15 @@ pub struct BTCTransaction<AccountId> {
 	pub inputs: Vec<UtxoInfoWithSize>,
 	/// Voters of the UTXOs.
 	pub voters: BoundedVec<AccountId, ConstU32<MAX_AUTHORITIES>>,
+}
+
+impl<AccountId: PartialEq + Clone + sp_std::fmt::Debug> BTCTransaction<AccountId> {
+	pub fn replace_authority(&mut self, old: &AccountId, new: &AccountId) {
+		self.voters.retain(|v| v != old);
+		self.voters
+			.try_push(new.clone())
+			.expect("Should not fail as we just removed an element");
+	}
 }
 
 #[derive(Encode, Decode, DecodeWithMemTracking, Clone, PartialEq, Eq, RuntimeDebug, TypeInfo)]

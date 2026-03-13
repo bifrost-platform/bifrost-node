@@ -123,6 +123,9 @@ pub trait BlazeManager<T: frame_system::Config> {
 	/// Ensure the activation status.
 	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
 
+	/// Replace an authority.
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId);
+
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_activation(activate: bool) -> Result<(), DispatchError>;
 }
