@@ -709,9 +709,9 @@ pub mod pallet {
 
 			let FinalizePollSubmission { authority_id, msg } = finalize_poll_submission;
 
-			// Parse and validate socket message (must be COMMITTED or ROLLBACKED)
+			// Parse and validate socket message (must be COMMITTED or ROLLBACKED or ACCEPTED or REJECTED)
 			let parsed_msg = Self::validate_and_parse_socket_message(&msg, |msg| {
-				msg.is_committed() || msg.is_rollbacked()
+				msg.is_committed() || msg.is_rollbacked() || msg.is_accepted() || msg.is_rejected()
 			})?;
 			let sequence_id = parsed_msg.req_id.sequence;
 			let src_chain_id: ChainId = u32::from_be_bytes(
@@ -801,7 +801,8 @@ pub mod pallet {
 			// Inbound path: Voting-based finalization
 			// For inbound, Socket contract must show Accepted (5) or Rejected (6) status
 			ensure!(
-				request_info.is_accepted() || request_info.is_rejected(),
+				(request_info.is_accepted() && parsed_msg.is_accepted())
+					|| (request_info.is_rejected() && parsed_msg.is_rejected()),
 				Error::<T>::MessageStatusMismatch
 			);
 
