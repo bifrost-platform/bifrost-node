@@ -812,8 +812,10 @@ pub mod pallet {
 			// Inbound path: Voting-based finalization
 			// For inbound, Socket contract must show Accepted (5) or Rejected (6) status
 			ensure!(
-				(request_info.is_accepted() && parsed_msg.is_accepted())
-					|| (request_info.is_rejected() && parsed_msg.is_rejected()),
+				(request_info.is_accepted()
+					&& (parsed_msg.is_accepted() || parsed_msg.is_committed()))
+					|| (request_info.is_rejected()
+						&& (parsed_msg.is_rejected() || parsed_msg.is_rollbacked())),
 				Error::<T>::MessageStatusMismatch
 			);
 
