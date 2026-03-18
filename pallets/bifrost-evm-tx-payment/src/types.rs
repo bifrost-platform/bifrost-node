@@ -4,20 +4,27 @@ use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{H160, U256};
 
-/// Configuration for an accepted fee token (V1 - for migration).
+/// Configuration for an accepted fee token (V0 - Chainlink oracle).
 ///
-/// This is the original version without `min_balance` field.
-/// Used only for storage migration from V0 to V1.
-#[derive(Clone, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq)]
+/// This version includes oracle_address and oracle_decimals for direct
+/// Chainlink-style oracle calls. Used only for storage migration to V1.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq,
+)]
 pub struct FeeTokenConfigV0 {
 	pub enabled: bool,
 	pub oracle_address: H160,
 	pub decimals: u8,
 	pub oracle_decimals: u8,
 	pub max_staleness_seconds: u64,
+	pub min_balance: U256,
 }
 
-/// Configuration for an accepted fee token.
+/// Configuration for an accepted fee token (V1 - oracle-registry).
+///
+/// Oracle address and oracle decimals are no longer stored per-token.
+/// The oracle-registry manages token → oracle ID mappings, and all
+/// oracle prices use a fixed 18-decimal format.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen, Debug, PartialEq, Eq,
 )]
@@ -25,18 +32,11 @@ pub struct FeeTokenConfig {
 	/// Whether the token is currently enabled for fee payment.
 	pub enabled: bool,
 
-	/// Oracle contract address (Chainlink-style latestRoundData interface).
-	pub oracle_address: H160,
-
 	/// Token decimals (e.g., 6 for USDC, 18 for most tokens).
 	pub decimals: u8,
 
-	/// Oracle price decimals (e.g., 8 for Chainlink standard).
-	/// Used in price conversion calculation.
-	pub oracle_decimals: u8,
-
 	/// Maximum allowed staleness for oracle price data in seconds.
-	/// If the oracle's `updated_at` timestamp is older than `now - max_staleness_seconds`,
+	/// If the oracle's timestamp is older than `now - max_staleness_seconds`,
 	/// the price is considered stale and will be rejected.
 	/// Set to 0 to disable staleness check (not recommended for production).
 	pub max_staleness_seconds: u64,
@@ -53,9 +53,7 @@ impl Default for FeeTokenConfig {
 	fn default() -> Self {
 		Self {
 			enabled: true,
-			oracle_address: H160::zero(),
 			decimals: 18,
-			oracle_decimals: 8,          // Chainlink standard
 			max_staleness_seconds: 3600, // 1 hour default
 			min_balance: U256::zero(),   // No minimum by default
 		}
@@ -66,34 +64,10 @@ impl From<FeeTokenConfigV0> for FeeTokenConfig {
 	fn from(v0: FeeTokenConfigV0) -> Self {
 		Self {
 			enabled: v0.enabled,
-			oracle_address: v0.oracle_address,
 			decimals: v0.decimals,
-			oracle_decimals: v0.oracle_decimals,
 			max_staleness_seconds: v0.max_staleness_seconds,
-			min_balance: U256::zero(), // Default to no minimum for migrated tokens
+			min_balance: v0.min_balance,
 		}
-	}
-}
-
-/// Oracle price data from Chainlink-style oracle.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OraclePriceData {
-	/// Round ID from oracle.
-	pub round_id: u128,
-	/// Price answer (typically with 8 or 18 decimals).
-	pub answer: i128,
-	/// Timestamp when the round started.
-	pub started_at: u64,
-	/// Timestamp when the answer was computed.
-	pub updated_at: u64,
-	/// Round ID in which the answer was computed.
-	pub answered_in_round: u128,
-}
-
-impl OraclePriceData {
-	/// Get the price as U256 (absolute value).
-	pub fn price_u256(&self) -> U256 {
-		U256::from(self.answer.unsigned_abs())
 	}
 }
 
@@ -129,9 +103,9 @@ pub struct FeePaymentInfo {
 	/// Equivalent amount in native token (BFC).
 	pub native_equivalent: U256,
 	/// Oracle price of the ERC20 token (Token/USD) at the time of payment.
-	/// The number of decimals is defined in the token's oracle configuration.
+	/// All oracle prices use 18 decimals.
 	pub token_price: U256,
 	/// Oracle price of the native token (Native/USD) at the time of payment.
-	/// The number of decimals is defined in the native oracle configuration.
+	/// All oracle prices use 18 decimals.
 	pub native_price: U256,
 }

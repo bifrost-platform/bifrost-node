@@ -1,16 +1,19 @@
 use super::pallet::*;
 use crate::{
-	HashKeyRequest, RequestInfo, RequestType, SocketMessage, TxInfo, UserRequest,
-	BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT, SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+	HashKeyRequest, RequestType, TxInfo, BITCOIN_SOCKET_TXS_FUNCTION_SELECTOR, CALL_GAS_LIMIT,
 };
 use bp_btc_relay::{
 	blaze::{SelectionStrategy, UtxoInfoWithSize},
-	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	utils::estimate_finalized_input_size,
 	Address, BoundedBitcoinAddress, Hash, Psbt, PsbtExt, Script, Secp256k1, Txid, UnboundedBytes,
 };
+use bp_cccp::{
+	traits::SocketVerifier, RequestInfo, SocketMessage, UserRequest,
+	SOCKET_GET_REQUEST_FUNCTION_SELECTOR,
+};
 use bp_staking::traits::Authorities;
-use ethabi_decode::{ParamKind, Token};
+use ethabi_decode::ParamKind;
 use frame_support::ensure;
 use miniscript::{
 	bitcoin::{
@@ -41,7 +44,7 @@ where
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError> {
 		// the bytes should be a valid socket message
 		let msg =
-			Self::try_decode_socket_message(msg).map_err(|_| Error::<T>::InvalidSocketMessage)?;
+			SocketMessage::try_from(msg.clone()).map_err(|_| Error::<T>::InvalidSocketMessage)?;
 		// the socket message should be valid onchain
 		let msg_hash =
 			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
@@ -58,7 +61,7 @@ where
 		}
 		// the socket message should be outbound
 		let chain_id = <T as pallet_evm::Config>::ChainId::get() as u32;
-		if !msg.is_outbound(chain_id, T::RegistrationPool::get_bitcoin_chain_id()) {
+		if !msg.is_bitcoin_outbound(chain_id, T::RegistrationPool::get_bitcoin_chain_id()) {
 			#[cfg(not(feature = "runtime-benchmarks"))]
 			return Err(Error::<T>::InvalidSocketMessage.into());
 		}
@@ -132,6 +135,15 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 			if !request.is_approved {
 				request.replace_authority(old, new);
 				<RollbackRequests<T>>::insert(&txid, request);
+			}
+		});
+		// replace authority in broadcast confirmations
+		<BroadcastConfirmations<T>>::iter().for_each(|(txid, mut confirmations)| {
+			if let Some(val) = confirmations.remove(old) {
+				confirmations
+					.try_insert(new.clone(), val)
+					.expect("Should not fail as we just removed an element");
+				<BroadcastConfirmations<T>>::insert(&txid, confirmations);
 			}
 		});
 	}
@@ -379,7 +391,7 @@ where
 					// verify socket messages
 					let mut amount = U256::default();
 					for serialized_msg in socket_messages {
-						let msg = Self::try_decode_socket_message(serialized_msg)
+						let msg = SocketMessage::try_from(serialized_msg.clone())
 							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 
 						if msg_sequences.contains(&msg.req_id.sequence) {
@@ -426,7 +438,7 @@ where
 
 		let outbound_requests = outbound_pool
 			.iter()
-			.filter_map(|x| match Self::try_decode_socket_message(x) {
+			.filter_map(|x| match SocketMessage::try_from(x.clone()) {
 				Ok(msg) => match T::RegistrationPool::get_refund_address(&msg.params.to.into()) {
 					Some(refund) => {
 						let script_pubkey =
@@ -484,25 +496,34 @@ where
 		}
 		let mut output = merged_output
 			.into_iter()
+			.filter(|(_, value)| value.to_sat() > bp_btc_relay::DUST_LIMIT)
 			.map(|(script_pubkey, value)| TxOut { value, script_pubkey })
 			.collect::<Vec<_>>();
+		if output.is_empty() {
+			return None;
+		}
 		if selection_strategy == SelectionStrategy::Knapsack {
 			let input_sum = selected_utxos.iter().map(|x| x.amount).sum::<u64>();
-			if input_sum - 546 > target {
-				let input_size_sum = selected_utxos.iter().map(|x| x.input_vbytes).sum::<u64>();
-				let output_size_sum = output.iter().map(|x| x.size() as u64).sum::<u64>() + 43;
-				let estimated_size = 11 + input_size_sum + output_size_sum;
-				let fee = fee_rate * estimated_size;
+			let input_size_sum = selected_utxos.iter().map(|x| x.input_vbytes).sum::<u64>();
+			let output_size_sum = output.iter().map(|x| x.size() as u64).sum::<u64>() + 43;
+			let estimated_size = 11 + input_size_sum + output_size_sum;
+			let fee = fee_rate.saturating_mul(estimated_size);
 
-				let change_amount = input_sum - target - fee;
-				let system_vault =
-					T::RegistrationPool::get_system_vault(T::RegistrationPool::get_current_round())
-						.unwrap();
-				let system_vault = Self::try_convert_to_address_from_vec(system_vault).unwrap();
-				output.push(TxOut {
-					value: Amount::from_sat(change_amount),
-					script_pubkey: system_vault.script_pubkey(),
-				})
+			if let Some(change_amount) =
+				input_sum.checked_sub(target).and_then(|v| v.checked_sub(fee))
+			{
+				if change_amount > bp_btc_relay::DUST_LIMIT {
+					let system_vault = T::RegistrationPool::get_system_vault(
+						T::RegistrationPool::get_current_round(),
+					)?;
+					let system_vault =
+						Self::try_convert_to_address_from_vec(system_vault).ok()?;
+					output.push(TxOut {
+						value: Amount::from_sat(change_amount),
+						script_pubkey: system_vault.script_pubkey(),
+					});
+				}
+				// else: change < dust limit, absorbed as fee
 			}
 		}
 
@@ -598,7 +619,7 @@ where
 
 		#[cfg(not(feature = "runtime-benchmarks"))]
 		{
-			Ok(Self::try_decode_request_info(&Self::try_evm_call(caller, socket, &calldata)?)
+			Ok(RequestInfo::try_from(Self::try_evm_call(caller, socket, &calldata)?)
 				.map_err(|_| Error::<T>::InvalidRequestInfo)?)
 		}
 
@@ -671,54 +692,6 @@ where
 			info,
 		) {
 			Ok(token) => Ok(token.clone().try_into()?),
-			Err(_) => Err(()),
-		}
-	}
-
-	/// Try to decode the given `RequestInfo`.
-	pub fn try_decode_request_info(info: &UnboundedBytes) -> Result<RequestInfo, ()> {
-		match ethabi_decode::decode(
-			&[
-				ParamKind::FixedArray(Box::new(ParamKind::Uint(8)), 32),
-				ParamKind::FixedBytes(32),
-				ParamKind::Uint(256),
-			],
-			info,
-		) {
-			Ok(token) => Ok(token.clone().try_into()?),
-			Err(_) => Err(()),
-		}
-	}
-
-	/// Try to decode the given `SocketMessage`.
-	pub fn try_decode_socket_message(msg: &UnboundedBytes) -> Result<SocketMessage, ()> {
-		match ethabi_decode::decode(
-			&[ParamKind::Tuple(vec![
-				Box::new(ParamKind::Tuple(vec![
-					Box::new(ParamKind::FixedBytes(4)),
-					Box::new(ParamKind::Uint(64)),
-					Box::new(ParamKind::Uint(128)),
-				])),
-				Box::new(ParamKind::Uint(8)),
-				Box::new(ParamKind::Tuple(vec![
-					Box::new(ParamKind::FixedBytes(4)),
-					Box::new(ParamKind::FixedBytes(16)),
-				])),
-				Box::new(ParamKind::Tuple(vec![
-					Box::new(ParamKind::FixedBytes(32)),
-					Box::new(ParamKind::FixedBytes(32)),
-					Box::new(ParamKind::Address),
-					Box::new(ParamKind::Address),
-					Box::new(ParamKind::Uint(256)),
-					Box::new(ParamKind::Bytes),
-				])),
-			])],
-			msg,
-		) {
-			Ok(socket) => match &socket[0] {
-				Token::Tuple(msg) => Ok(msg.clone().try_into()?),
-				_ => Err(()),
-			},
 			Err(_) => Err(()),
 		}
 	}

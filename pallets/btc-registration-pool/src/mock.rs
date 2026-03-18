@@ -6,13 +6,13 @@ use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{Everything, SortedMembers},
 };
-use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup, Lazy, Verify},
 	transaction_validity::TransactionValidityError,
-	BuildStorage, Percent,
+	Percent,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -64,6 +64,7 @@ impl frame_system::Config for Test {
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+	type ExtensionsWeightInfo = ();
 }
 
 impl pallet_balances::Config for Test {
@@ -80,6 +81,7 @@ impl pallet_balances::Config for Test {
 	type RuntimeFreezeReason = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type DoneSlashHandler = ();
 }
 
 // Mock implementations for required traits
@@ -117,7 +119,9 @@ impl SocketQueueManager<AccountId> for MockSocketQueue {
 	fn set_max_fee_rate(_: u64) {}
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, Clone, PartialEq, Eq)]
+#[derive(
+	Encode, Decode, DecodeWithMemTracking, MaxEncodedLen, TypeInfo, Debug, Clone, PartialEq, Eq,
+)]
 pub struct MockEthereumSignature(EthereumSignature);
 impl Verify for MockEthereumSignature {
 	type Signer = EthereumSigner;
@@ -127,7 +131,6 @@ impl Verify for MockEthereumSignature {
 }
 
 impl pallet_btc_registration_pool::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = MockEthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = MockExecutives;
@@ -138,6 +141,7 @@ impl pallet_btc_registration_pool::Config for Test {
 	type WeightInfo = ();
 }
 
+#[cfg(feature = "runtime-benchmarks")]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }

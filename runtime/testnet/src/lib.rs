@@ -119,7 +119,7 @@ pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type Migrations = ();
+type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -128,7 +128,6 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
-	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -160,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 501,
+	spec_version: 502,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -232,6 +231,8 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	/// Single block migrations
+	type SingleBlockMigrations = SingleBlockMigrations;
 	/// migrations pallet
 	type MultiBlockMigrator = MultiBlockMigrations;
 }
@@ -435,6 +436,8 @@ impl pallet_session::Config for Runtime {
 	type Keys = opaque::SessionKeys;
 	type DisablingStrategy = ();
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+	type Currency = Balances;
+	type KeyDeposit = ConstU128<0>;
 }
 
 impl pallet_session::historical::Config for Runtime {
@@ -835,8 +838,10 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
+	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayQueue = ();
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
@@ -1083,7 +1088,13 @@ impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type AdminOrigin = EnsureRoot<AccountId>;
 	type FeeCollectorAddress = FeeCollectorAddress;
 	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
+	type OracleRegistry = OracleRegistry;
+	type NativeChainId = BifrostChainId;
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_oracle_registry::Config for Runtime {
+	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_btc_socket_queue::Config for Runtime {
@@ -1270,6 +1281,9 @@ mod runtime {
 
 	#[runtime::pallet_index(62)]
 	pub type Blaze = pallet_blaze;
+
+	#[runtime::pallet_index(64)]
+	pub type OracleRegistry = pallet_oracle_registry;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

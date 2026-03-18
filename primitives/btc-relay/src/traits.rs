@@ -76,11 +76,6 @@ pub trait SocketQueueManager<AccountId> {
 	fn set_max_fee_rate(rate: u64);
 }
 
-pub trait SocketVerifier<AccountId> {
-	/// Verify a Socket message whether it is valid.
-	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
-}
-
 pub trait BlazeManager<T: frame_system::Config> {
 	/// Check if BLAZE is activated.
 	fn is_activated() -> bool;
@@ -127,6 +122,9 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Ensure the activation status.
 	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
+
+	/// Replace an authority.
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId);
 
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_activation(activate: bool) -> Result<(), DispatchError>;

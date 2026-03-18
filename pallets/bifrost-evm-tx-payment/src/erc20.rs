@@ -12,8 +12,8 @@ use sp_std::vec::Vec;
 const ERC20_TRANSFER_GAS_LIMIT: u64 = 100_000;
 
 /// Gas limit for ERC20 view calls (balanceOf, etc.).
-/// 30,000 gas is sufficient for standard ERC20 view functions.
-const ERC20_VIEW_GAS_LIMIT: u64 = 30_000;
+/// 50,000 gas is sufficient for standard ERC20 view functions.
+const ERC20_VIEW_GAS_LIMIT: u64 = 50_000;
 
 /// ERC20 function selectors.
 mod selectors {
@@ -213,10 +213,10 @@ pub fn get_token_balance<T: crate::Config>(account: H160, token: H160) -> Result
 
 	// Use view_call for read-only operation (no state changes, no nonce increment)
 	let result = match T::Runner::view_call(
-		account,                // source (used for context only)
-		token,                  // target (ERC20 contract)
-		calldata,               // input
-		ERC20_VIEW_GAS_LIMIT,   // gas_limit
+		account,              // source (used for context only)
+		token,                // target (ERC20 contract)
+		calldata,             // input
+		ERC20_VIEW_GAS_LIMIT, // gas_limit
 		T::config(),
 	) {
 		Ok(r) => {

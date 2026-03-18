@@ -2,19 +2,22 @@ use crate as pallet_relay_manager;
 use crate::{IdentificationTuple, UnresponsivenessOffence};
 
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager, SocketVerifier},
-	BoundedBitcoinAddress, Descriptor, MigrationSequence, PublicKey, UnboundedBytes,
+	blaze::{ScoredUtxo, SelectionStrategy, UtxoInfoWithSize},
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
+	BoundedBitcoinAddress, Descriptor, MigrationSequence, Psbt, PublicKey, UnboundedBytes,
 };
+use bp_cccp::traits::{RelayQueueManager, SocketVerifier};
 use bp_core::{AccountId, Balance, BlockNumber};
 use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{Everything, ValidatorSet, ValidatorSetWithIdentification},
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, Convert, IdentityLookup},
 	transaction_validity::TransactionValidityError,
-	BuildStorage, DispatchError, Perbill,
+	DispatchError, Perbill,
 };
 use sp_staking::{
 	offence::{OffenceError, ReportOffence},
@@ -70,6 +73,7 @@ impl frame_system::Config for Test {
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+	type ExtensionsWeightInfo = ();
 }
 
 impl pallet_balances::Config for Test {
@@ -86,6 +90,68 @@ impl pallet_balances::Config for Test {
 	type RuntimeFreezeReason = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type DoneSlashHandler = ();
+}
+
+pub struct MockBlaze;
+impl BlazeManager<Test> for MockBlaze {
+	fn replace_authority(_: &AccountId, _: &AccountId) {}
+
+	fn is_activated() -> bool {
+		true
+	}
+
+	fn get_utxos() -> Vec<UtxoInfoWithSize> {
+		vec![]
+	}
+
+	fn clear_utxos() {}
+
+	fn lock_utxos(_: &H256, _: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError> {
+		Ok(())
+	}
+
+	fn unlock_utxos(_: &H256) -> Result<(), DispatchError> {
+		Ok(())
+	}
+
+	fn extract_utxos_from_psbt(_: &Psbt) -> Result<Vec<UtxoInfoWithSize>, DispatchError> {
+		Ok(vec![])
+	}
+
+	fn get_outbound_pool() -> Vec<UnboundedBytes> {
+		vec![]
+	}
+
+	fn clear_outbound_pool(_: Vec<UnboundedBytes>) {}
+
+	fn try_fee_rate_finalization(_: BlockNumberFor<Test>) -> Option<(u64, u64)> {
+		None
+	}
+
+	fn clear_fee_rates() {}
+
+	fn select_coins(
+		_: Vec<ScoredUtxo>,
+		_: u64,
+		_: u64,
+		_: u64,
+		_: usize,
+		_: u64,
+	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
+		None
+	}
+
+	fn handle_tolerance_counter(_: bool) {}
+
+	fn ensure_activation(_: bool) -> Result<(), DispatchError> {
+		Ok(())
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_activation(_: bool) -> Result<(), DispatchError> {
+		Ok(())
+	}
 }
 
 // Mock implementations for required traits
@@ -221,8 +287,14 @@ impl
 	}
 }
 
+pub struct MockRelayQueue;
+impl RelayQueueManager<AccountId> for MockRelayQueue {
+	fn replace_authority(_: &AccountId, _: &AccountId) {}
+}
+
 impl pallet_relay_manager::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
+	type Blaze = MockBlaze;
+	type RelayQueue = MockRelayQueue;
 	type SocketQueue = MockSocketQueue;
 	type RegistrationPool = MockPoolManager;
 	type ValidatorSet = MockValidatorSet;
@@ -233,6 +305,7 @@ impl pallet_relay_manager::Config for Test {
 	type WeightInfo = ();
 }
 
+#[cfg(feature = "runtime-benchmarks")]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }

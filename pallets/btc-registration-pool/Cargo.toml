@@ -28,10 +28,8 @@ bp-btc-relay = { workspace = true }
 
 [dev-dependencies]
 pallet-balances = { workspace = true }
-pallet-btc-registration-pool = { workspace = true }
 fp-account = { workspace = true }
 bp-core = { workspace = true }
-sp-io = { workspace = true }
 
 [features]
 default = ["std"]

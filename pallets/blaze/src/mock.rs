@@ -1,8 +1,9 @@
 use crate as pallet_blaze;
 use bp_btc_relay::{
-	traits::{PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{PoolManager, SocketQueueManager},
 	BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
+use bp_cccp::traits::SocketVerifier;
 use bp_core::{AccountId, Balance, BlockNumber};
 use bp_staking::traits::Authorities;
 use fp_account::{EthereumSignature, EthereumSigner};
@@ -11,7 +12,7 @@ use sp_core::H256;
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 	transaction_validity::TransactionValidityError,
-	BuildStorage, DispatchError,
+	DispatchError,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -62,6 +63,7 @@ impl frame_system::Config for Test {
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+	type ExtensionsWeightInfo = ();
 }
 
 impl pallet_balances::Config for Test {
@@ -78,6 +80,7 @@ impl pallet_balances::Config for Test {
 	type RuntimeFreezeReason = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type DoneSlashHandler = ();
 }
 
 // Mock implementations for required traits
@@ -185,7 +188,6 @@ impl PoolManager<AccountId> for MockPoolManager {
 }
 
 impl pallet_blaze::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = MockAuthorities;
@@ -196,6 +198,7 @@ impl pallet_blaze::Config for Test {
 	type WeightInfo = ();
 }
 
+#[cfg(feature = "runtime-benchmarks")]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }

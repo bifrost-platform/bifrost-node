@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, weights::WeightInfo, BTCTransaction, BroadcastSubmission, FeeRateSubmission,
-	SocketMessage, SocketMessagesSubmission, Utxo, UtxoStatus, UtxoSubmission,
+	SocketMessagesSubmission, Utxo, UtxoStatus, UtxoSubmission,
 };
 
 use frame_support::{
@@ -13,10 +13,11 @@ use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::{
 	blaze::{UtxoInfo, UtxoInfoWithSize},
-	traits::{BlazeManager, PoolManager, SocketQueueManager, SocketVerifier},
+	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	utils::estimate_finalized_input_size,
 	UnboundedBytes,
 };
+use bp_cccp::{traits::SocketVerifier, SocketMessage};
 use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use parity_scale_codec::{alloc::string::ToString, Encode};
 use sp_core::{H256, U256};
@@ -28,7 +29,7 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -111,7 +112,7 @@ pub mod pallet {
 	#[pallet::unbounded]
 	/// The submitted UTXOs by relayers.
 	///
-	/// Key: UTXO hash (keccak256(txid, vout, amount))
+	/// Key: UTXO hash (keccak256(txid, vout, amount, address))
 	/// Value: UTXO information
 	pub type Utxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
@@ -154,7 +155,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v2::V2::<T>::on_runtime_upgrade()
+			migrations::v3::V3::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -203,9 +204,10 @@ pub mod pallet {
 					None => continue,
 				};
 
-				// try to hash (keccak256) the utxo data (txid, vout, amount)
-				let utxo_hash =
-					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
+				// try to hash (keccak256) the utxo data (txid, vout, amount, address)
+				let utxo_hash = H256::from_slice(
+					keccak_256(&Encode::encode(&(txid, vout, amount, address))).as_ref(),
+				);
 
 				// try to insert the utxo
 				if let Some(mut u) = <Utxos<T>>::get(&utxo_hash) {
@@ -433,9 +435,10 @@ pub mod pallet {
 					None => continue,
 				};
 
-				// try to hash (keccak256) the utxo data (txid, vout, amount)
-				let utxo_hash =
-					H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
+				// try to hash (keccak256) the utxo data (txid, vout, amount, address)
+				let utxo_hash = H256::from_slice(
+					keccak_256(&Encode::encode(&(txid, vout, amount, address))).as_ref(),
+				);
 
 				if <Utxos<T>>::contains_key(&utxo_hash) {
 					// if duplicate utxo is found, skip
