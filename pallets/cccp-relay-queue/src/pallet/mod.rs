@@ -1041,6 +1041,10 @@ pub mod pallet {
 				.collect();
 
 			// Check if any of the asset indexes have active on-flight transfers
+			// Pending transfers are intentionally not blocked here:
+			// if the asset is de-registered before consensus, the transfer can still
+			// complete later, but it will fall back to Standard because Fast mode
+			// requires the asset to remain registered in storage.
 			let asset_index_set: sp_std::collections::btree_set::BTreeSet<_> =
 				asset_indexes.iter().collect();
 			let has_active_transfers = OnFlightTransfers::<T>::iter().any(|(_, transfer_info)| {
@@ -1196,6 +1200,9 @@ pub mod pallet {
 				}
 
 				// Prevent removing asset indexes with active transfers
+				// Only on-flight transfers are blocked on purpose. Pending votes can
+				// still complete after the asset is removed, but they will no longer
+				// qualify for Fast mode because get_asset_info() will return None.
 				let remove_index_set: sp_std::collections::btree_set::BTreeSet<_> =
 					remove_asset_indexes.iter().collect();
 				let has_active_transfers =
