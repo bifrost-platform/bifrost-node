@@ -1,9 +1,9 @@
 mod impls;
 
 use crate::{
-	migrations, weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, BalanceOf, ChainId,
-	FinalizePollSubmission, OnFlightPollSubmission, SocketMessageHash, SourceTransactionId,
-	TransferInfo, TransferInfoWithTxId, TransferOption,
+	migrations, weights::WeightInfo, AssetCapInfo, AssetId, AssetIndexHash, AssetIndexInfo,
+	BalanceOf, ChainId, FinalizePollSubmission, OnFlightPollSubmission, SocketMessageHash,
+	SourceTransactionId, TransferInfo, TransferInfoWithTxId, TransferOption,
 };
 
 use frame_support::{
@@ -136,6 +136,7 @@ pub mod pallet {
 			asset_id: AssetId,
 			new_max_on_flight_cap: Option<BalanceOf<T>>,
 			add_asset_indexes: Option<Vec<AssetIndexHash>>,
+			update_asset_indexes: Option<Vec<AssetIndexHash>>,
 			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
 		},
 		/// The socket has been set.
@@ -152,6 +153,14 @@ pub mod pallet {
 	/// - **Type**: `Option<T::AccountId>` - The Socket contract account ID
 	/// - **Query**: Returns `None` if not configured, `Some(address)` otherwise
 	pub type Socket<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Mapping from CCCP asset index hashes to whether the asset index is currently hookable.
+	///
+	/// - **Key**: `AssetIndexHash` (H256) - The CCCP asset index hash
+	/// - **Value**: `bool` - Whether the asset index is currently hookable
+	pub type AssetIndexesHookState<T: Config> = StorageMap<_, Twox64Concat, AssetIndexHash, bool>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -953,7 +962,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			asset_id: AssetId,
 			max_on_flight_cap: BalanceOf<T>,
-			asset_indexes: Vec<AssetIndexHash>,
+			asset_indexes: Vec<AssetIndexInfo>,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 
@@ -976,7 +985,7 @@ pub mod pallet {
 			// Check for duplicates within same call
 			let mut seen = sp_std::collections::btree_set::BTreeSet::new();
 			for asset_index in &asset_indexes {
-				ensure!(seen.insert(asset_index), Error::<T>::DuplicateAssetIndex);
+				ensure!(seen.insert(asset_index.hash), Error::<T>::DuplicateAssetIndex);
 			}
 
 			// Validate asset doesn't already exist
@@ -985,7 +994,7 @@ pub mod pallet {
 			// Validate ALL indexes before ANY storage modifications (atomicity)
 			for asset_index in &asset_indexes {
 				ensure!(
-					!AssetIndexes::<T>::contains_key(asset_index),
+					!AssetIndexes::<T>::contains_key(asset_index.hash),
 					Error::<T>::AssetIndexAlreadyExists
 				);
 			}
@@ -996,10 +1005,17 @@ pub mod pallet {
 				AssetCapInfo { max_on_flight_cap, on_flight_cap: Default::default() },
 			);
 			for asset_index in &asset_indexes {
-				AssetIndexes::<T>::insert(asset_index, asset_id);
+				AssetIndexes::<T>::insert(asset_index.hash, asset_id);
+			}
+			for asset_index in &asset_indexes {
+				AssetIndexesHookState::<T>::insert(asset_index.hash, asset_index.is_hookable);
 			}
 
-			Self::deposit_event(Event::AssetAdded { asset_id, max_on_flight_cap, asset_indexes });
+			Self::deposit_event(Event::AssetAdded {
+				asset_id,
+				max_on_flight_cap,
+				asset_indexes: asset_indexes.iter().map(|index| index.hash).collect(),
+			});
 
 			Ok(().into())
 		}
@@ -1056,6 +1072,7 @@ pub mod pallet {
 			AssetCaps::<T>::remove(asset_id);
 			for asset_index in &asset_indexes {
 				AssetIndexes::<T>::remove(asset_index);
+				AssetIndexesHookState::<T>::remove(asset_index);
 			}
 
 			Self::deposit_event(Event::AssetRemoved { asset_id, asset_indexes });
@@ -1075,10 +1092,15 @@ pub mod pallet {
 		///   - Must be > 0
 		///   - Must be ≤ 100M cap limit
 		///   - Cannot be less than the current `on_flight_cap`
-		/// * `add_asset_indexes` - (Optional) Vector of new CCCP asset index hashes to associate
+		/// * `add_asset_indexes` - (Optional) Vector of new asset indexes to associate with the asset
 		///   - Maximum 100 indexes per call
 		///   - No duplicates allowed within the call
 		///   - Each index must not already be registered
+		/// * `update_asset_indexes` - (Optional) Vector of existing asset indexes to update
+		///   - Maximum 100 indexes per call
+		///   - No duplicates allowed within the call
+		///   - Each index must already be registered
+		///   - Updates the `is_hookable` flag of the index
 		/// * `remove_asset_indexes` - (Optional) Vector of CCCP asset index hashes to disassociate
 		///   - Maximum 100 indexes per call
 		///   - Each index must belong to the specified `asset_id`
@@ -1087,31 +1109,33 @@ pub mod pallet {
 		/// # Errors
 		/// * `EmptySubmission` - If no update fields are provided
 		/// * `AssetDNE` - If the asset is not registered
-		/// * `TooManyAssetIndexes` - If more than 100 asset indexes provided in add or remove lists
-		/// * `DuplicateAssetIndex` - If duplicate indexes exist within the add or remove lists
+		/// * `TooManyAssetIndexes` - If more than 100 asset indexes provided in any list
+		/// * `DuplicateAssetIndex` - If duplicate indexes exist within any list
 		/// * `ConflictingAssetIndexOperation` - If an index is present in both add and remove lists
 		/// * `NoWritingSameValue` - If the new cap is identical to the current cap
 		/// * `InvalidMaxCap` - If the new cap is zero
 		/// * `CapTooLarge` - If the new cap exceeds 100M limit
 		/// * `CapReductionBelowCurrentUsage` - If the new cap is less than the current on-flight usage
 		/// * `AssetIndexAlreadyExists` - If a new index to add is already registered
-		/// * `AssetIndexDNE` - If an index to remove is not registered
+		/// * `AssetIndexDNE` - If an index to update or remove is not registered
 		/// * `AssetIndexNotBelongToAsset` - If an index to remove belongs to a different asset
 		/// * `AssetHasActiveTransfers` - If an index to remove has active on-flight transfers
 		///
 		/// # Events
-		/// * `AssetUpdated { asset_id, new_max_on_flight_cap, add_asset_indexes, remove_asset_indexes }`
+		/// * `AssetUpdated { asset_id, new_max_on_flight_cap, add_asset_indexes, update_asset_indexes, remove_asset_indexes }`
 		///
 		/// # Storage Modifications
 		/// - `AssetCaps`: Updates `max_on_flight_cap` for the asset if provided
 		/// - `AssetIndexes`: Inserts new mappings and removes specified mappings
+		/// - `AssetIndexesHookState`: Inserts, updates, and removes hookable state alongside `AssetIndexes`
 		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn update_asset(
 			origin: OriginFor<T>,
 			asset_id: AssetId,
 			new_max_on_flight_cap: Option<BalanceOf<T>>,
-			add_asset_indexes: Option<Vec<AssetIndexHash>>,
+			add_asset_indexes: Option<Vec<AssetIndexInfo>>,
+			update_asset_indexes: Option<Vec<AssetIndexInfo>>,
 			remove_asset_indexes: Option<Vec<AssetIndexHash>>,
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
@@ -1120,12 +1144,19 @@ pub mod pallet {
 			ensure!(
 				new_max_on_flight_cap.is_some()
 					|| add_asset_indexes.is_some()
+					|| update_asset_indexes.is_some()
 					|| remove_asset_indexes.is_some(),
 				Error::<T>::EmptySubmission
 			);
 
 			// Bounded vector sizes (DoS protection)
 			if let Some(ref indexes) = add_asset_indexes {
+				ensure!(
+					indexes.len() <= crate::MAX_ASSET_INDEXES_PER_CALL,
+					Error::<T>::TooManyAssetIndexes
+				);
+			}
+			if let Some(ref indexes) = update_asset_indexes {
 				ensure!(
 					indexes.len() <= crate::MAX_ASSET_INDEXES_PER_CALL,
 					Error::<T>::TooManyAssetIndexes
@@ -1142,10 +1173,15 @@ pub mod pallet {
 			if let Some(ref indexes) = add_asset_indexes {
 				let mut seen = sp_std::collections::btree_set::BTreeSet::new();
 				for asset_index in indexes {
-					ensure!(seen.insert(asset_index), Error::<T>::DuplicateAssetIndex);
+					ensure!(seen.insert(asset_index.hash), Error::<T>::DuplicateAssetIndex);
 				}
 			}
-
+			if let Some(ref indexes) = update_asset_indexes {
+				let mut seen = sp_std::collections::btree_set::BTreeSet::new();
+				for asset_index in indexes {
+					ensure!(seen.insert(asset_index.hash), Error::<T>::DuplicateAssetIndex);
+				}
+			}
 			// Check for duplicates within remove_asset_indexes
 			if let Some(ref indexes) = remove_asset_indexes {
 				let mut seen = sp_std::collections::btree_set::BTreeSet::new();
@@ -1157,7 +1193,21 @@ pub mod pallet {
 			// Check for conflicts between add and remove
 			if let (Some(ref add), Some(ref remove)) = (&add_asset_indexes, &remove_asset_indexes) {
 				for add_idx in add {
-					ensure!(!remove.contains(add_idx), Error::<T>::ConflictingAssetIndexOperation);
+					ensure!(
+						!remove.contains(&add_idx.hash),
+						Error::<T>::ConflictingAssetIndexOperation
+					);
+				}
+			}
+			// Check for conflicts between update and remove
+			if let (Some(ref update), Some(ref remove)) =
+				(&update_asset_indexes, &remove_asset_indexes)
+			{
+				for upd_idx in update {
+					ensure!(
+						!remove.contains(&upd_idx.hash),
+						Error::<T>::ConflictingAssetIndexOperation
+					);
 				}
 			}
 
@@ -1186,10 +1236,28 @@ pub mod pallet {
 			if let Some(add_asset_indexes) = &add_asset_indexes {
 				for asset_index in add_asset_indexes {
 					ensure!(
-						!AssetIndexes::<T>::contains_key(asset_index),
+						!AssetIndexes::<T>::contains_key(asset_index.hash),
 						Error::<T>::AssetIndexAlreadyExists
 					);
-					AssetIndexes::<T>::insert(asset_index, asset_id);
+					ensure!(
+						!AssetIndexesHookState::<T>::contains_key(asset_index.hash),
+						Error::<T>::AssetIndexAlreadyExists
+					);
+					AssetIndexes::<T>::insert(asset_index.hash, asset_id);
+					AssetIndexesHookState::<T>::insert(asset_index.hash, asset_index.is_hookable);
+				}
+			}
+			if let Some(update_asset_indexes) = &update_asset_indexes {
+				for asset_index in update_asset_indexes {
+					ensure!(
+						AssetIndexes::<T>::contains_key(asset_index.hash),
+						Error::<T>::AssetIndexDNE
+					);
+					ensure!(
+						AssetIndexesHookState::<T>::contains_key(asset_index.hash),
+						Error::<T>::AssetIndexDNE
+					);
+					AssetIndexesHookState::<T>::insert(asset_index.hash, asset_index.is_hookable);
 				}
 			}
 			if let Some(remove_asset_indexes) = &remove_asset_indexes {
@@ -1213,13 +1281,17 @@ pub mod pallet {
 
 				for asset_index in remove_asset_indexes {
 					AssetIndexes::<T>::remove(asset_index);
+					AssetIndexesHookState::<T>::remove(asset_index);
 				}
 			}
 
 			Self::deposit_event(Event::AssetUpdated {
 				asset_id,
 				new_max_on_flight_cap,
-				add_asset_indexes,
+				add_asset_indexes: add_asset_indexes
+					.map(|indexes| indexes.iter().map(|index| index.hash).collect()),
+				update_asset_indexes: update_asset_indexes
+					.map(|indexes| indexes.iter().map(|index| index.hash).collect()),
 				remove_asset_indexes,
 			});
 
