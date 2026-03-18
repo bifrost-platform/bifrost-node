@@ -55,6 +55,14 @@ pub const MAX_ASSET_INDEXES_PER_CALL: usize = 100;
 /// This prevents storage bloat while allowing future chain growth.
 pub const MAX_NATIVE_CURRENCY_CHAINS: usize = 50;
 
+#[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug, DecodeWithMemTracking)]
+pub struct AssetIndexInfo {
+	/// The asset index hash.
+	pub hash: AssetIndexHash,
+	/// Whether the asset index is currently hookable.
+	pub is_hookable: bool,
+}
+
 #[derive(Decode, Encode, TypeInfo, Clone, PartialEq, Eq, RuntimeDebug)]
 pub struct AssetCapInfo<Balance> {
 	/// The maximum on-flight cap of the asset.
