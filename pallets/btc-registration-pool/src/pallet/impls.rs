@@ -352,6 +352,11 @@ impl<T: Config> Pallet<T> {
 		// generate vault address
 		let (vault_address, descriptor) = Self::generate_vault_address(vault.pub_keys())?;
 
+		// check if the vault address is the same as the refund address
+		if vault_address == *refund_address {
+			return Err(Error::<T>::AddressAlreadyRegistered.into());
+		}
+
 		// check if address is already in used as a refund address
 		if <BondedRefund<T>>::contains_key(current_round, &vault_address) {
 			return Err(Error::<T>::AddressAlreadyRegistered.into());

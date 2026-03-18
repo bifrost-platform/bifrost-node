@@ -158,7 +158,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 417,
+	spec_version: 418,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -832,14 +832,24 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
+	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayQueue = CCCPRelayQueue;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
 	type IsHeartbeatOffenceActive = IsHeartbeatOffenceActive;
 	type DefaultHeartbeatSlashFraction = DefaultHeartbeatSlashFraction;
 	type WeightInfo = pallet_relay_manager::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_cccp_relay_queue::Config for Runtime {
+	type Currency = Balances;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type WeightInfo = pallet_cccp_relay_queue::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1275,6 +1285,9 @@ mod runtime {
 	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
 
 	#[runtime::pallet_index(64)]
+	pub type CCCPRelayQueue = pallet_cccp_relay_queue;
+
+	#[runtime::pallet_index(65)]
 	pub type OracleRegistry = pallet_oracle_registry;
 
 	#[runtime::pallet_index(99)]
