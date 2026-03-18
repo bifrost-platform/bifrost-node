@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
+use bp_btc_relay::BoundedBitcoinAddress;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 
 use pallet_blaze::{Call as BlazeCall, UtxoStatus};
@@ -9,7 +10,7 @@ use precompile_utils::prelude::*;
 
 use sp_core::{H160, H256};
 use sp_io::hashing::keccak_256;
-use sp_runtime::traits::Dispatchable;
+use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec::Vec};
 
 use parity_scale_codec::Encode;
@@ -54,21 +55,24 @@ where
 		Ok(pallet_blaze::IsActivated::<Runtime>::get())
 	}
 
-	#[precompile::public("isSubmittableUtxo(bytes32,uint256,uint256,address)")]
-	#[precompile::public("is_submittable_utxo(bytes32,uint256,uint256,address)")]
+	#[precompile::public("isSubmittableUtxo(bytes32,uint256,uint256,bytes,address)")]
+	#[precompile::public("is_submittable_utxo(bytes32,uint256,uint256,bytes,address)")]
 	#[precompile::view]
 	fn is_submittable_utxo(
 		handle: &mut impl PrecompileHandle,
 		txid: H256,
 		vout: u32,
 		amount: u64,
+		address: UnboundedBytes,
 		authority_id: Address,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		let authority_id = Runtime::AddressMapping::into_account_id(authority_id.0);
+		let address: BoundedBitcoinAddress =
+			BoundedVec::try_from(address.as_bytes().to_vec()).map_err(|_| revert("invalid address"))?;
 		let utxo_hash =
-			H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount))).as_ref());
+			H256::from_slice(keccak_256(&Encode::encode(&(txid, vout, amount, address))).as_ref());
 
 		Ok(match pallet_blaze::Utxos::<Runtime>::get(&utxo_hash) {
 			Some(utxo) => {

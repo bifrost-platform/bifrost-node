@@ -357,6 +357,7 @@ where
 		tx_handler_controller,
 		sync_service: sync_service.clone(),
 		telemetry: telemetry.as_mut(),
+		tracing_execute_block: None,
 	})
 	.ok();
 
@@ -584,6 +585,7 @@ where
 			tx_handler_controller,
 			sync_service: sync_service.clone(),
 			telemetry: telemetry.as_mut(),
+			tracing_execute_block: None,
 		})
 		.ok();
 
@@ -835,6 +837,7 @@ pub fn build_rpc_extensions_builder(
 			},
 			command_sink: command_sink.clone(),
 			max_past_logs: rpc_config.max_past_logs,
+			max_block_range: rpc_config.max_block_range,
 			logs_request_timeout: rpc_config.logs_request_timeout,
 			forced_parent_hashes: None,
 			sync_service: sync_service.clone(),
