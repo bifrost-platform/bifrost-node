@@ -1023,8 +1023,7 @@ impl pallet_evm::Config for Runtime {
 	type Timestamp = Timestamp;
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
-	// TODO: Enable BifrostFeelessCalls<Runtime> when pallet_bifrost_evm_tx_payment is added
-	type FeelessCallFilter = ();
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 
