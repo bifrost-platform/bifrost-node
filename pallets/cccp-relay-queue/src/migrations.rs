@@ -1,5 +1,56 @@
 use super::*;
 
+pub mod v10 {
+	use core::marker::PhantomData;
+
+	use super::*;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	/// Migration V10: Populate AssetIndexesHookState from existing AssetIndexes.
+	///
+	/// This migration backfills the new `AssetIndexesHookState` storage map introduced in v10.
+	/// All existing asset indexes are inserted with `is_hookable = true`, as the hook feature
+	/// was not previously tracked and all registered indexes are assumed to be hookable by default.
+	pub struct V10<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V10<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			weight = weight.saturating_add(T::DbWeight::get().reads(2));
+
+			if current == 10 && onchain == 9 {
+				let asset_indexes_count = AssetIndexes::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(asset_indexes_count));
+
+				for (hash, _) in AssetIndexes::<T>::iter() {
+					AssetIndexesHookState::<T>::insert(hash, true);
+				}
+				weight = weight.saturating_add(T::DbWeight::get().writes(asset_indexes_count));
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(
+					info,
+					"cccp-relay-queue v10: populated AssetIndexesHookState for {} asset indexes (is_hookable = true) ✅",
+					asset_indexes_count,
+				);
+			} else {
+				log!(warn, "Skipping cccp-relay-queue storage v10 💤");
+			}
+
+			weight
+		}
+	}
+}
+
 pub mod v9 {
 	use core::marker::PhantomData;
 
