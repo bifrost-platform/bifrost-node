@@ -1389,6 +1389,7 @@ dependencies = [
  "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
+ "pallet-cccp-relay-queue",
  "pallet-collective",
  "pallet-democracy",
  "pallet-ethereum",
