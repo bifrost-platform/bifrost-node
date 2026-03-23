@@ -1,4 +1,4 @@
-use crate::{AssetId, AssetOracleId, ChainId, OracleInfo, OracleKey};
+use crate::{AggregatorInfo, AggregatorRoundData, AssetId, AssetOracleId, ChainId, OracleInfo, OracleKey};
 use sp_core::{H160, H256, U256};
 
 /// ABI encoding/decoding helpers for the oracle manager contract.
@@ -86,6 +86,51 @@ pub mod oracle_info_abi {
 	}
 }
 
+/// ABI encoding/decoding helpers for the `latestRoundData()` function on
+/// Chainlink-compatible aggregator contracts.
+///
+/// The function returns `(uint80, int256, uint256, uint256, uint80)`,
+/// which is ABI-encoded as 5 consecutive 32-byte words (160 bytes total).
+pub mod aggregator_abi {
+	use super::*;
+
+	/// `latestRoundData()` function selector.
+	///
+	/// Computed as `keccak256("latestRoundData()")[0..4]`.
+	pub const LATEST_ROUND_DATA_SELECTOR: [u8; 4] = [0xfe, 0xaf, 0x96, 0x8c];
+
+	/// Encodes the calldata for `latestRoundData()`.
+	///
+	/// Returns the 4-byte function selector. The function takes no parameters.
+	pub fn encode_calldata() -> [u8; 4] {
+		LATEST_ROUND_DATA_SELECTOR
+	}
+
+	/// Decodes the return data from `latestRoundData()`.
+	///
+	/// Expects at least 160 bytes (5 × 32-byte ABI words):
+	/// - Word 0: `uint80`  roundId         (left-padded to 32 bytes)
+	/// - Word 1: `int256`  answer
+	/// - Word 2: `uint256` startedAt
+	/// - Word 3: `uint256` updatedAt
+	/// - Word 4: `uint80`  answeredInRound (left-padded to 32 bytes)
+	///
+	/// Returns `None` if the slice is shorter than 160 bytes.
+	pub fn decode_return(data: &[u8]) -> Option<AggregatorRoundData> {
+		if data.len() < 160 {
+			return None;
+		}
+
+		let round_id = U256::from_big_endian(&data[0..32]);
+		let answer = U256::from_big_endian(&data[32..64]);
+		let started_at = U256::from_big_endian(&data[64..96]);
+		let updated_at = U256::from_big_endian(&data[96..128]);
+		let answered_in_round = U256::from_big_endian(&data[128..160]);
+
+		Some(AggregatorRoundData { round_id, answer, started_at, updated_at, answered_in_round })
+	}
+}
+
 /// Cross-pallet interface for the Oracle Registry.
 ///
 /// Implement this trait on the oracle registry pallet and use it as a bound in
@@ -147,4 +192,28 @@ pub trait OracleRegistryManager {
 	/// * `None` - If the contract is not set, the EVM call fails, or the
 	///   return data cannot be decoded.
 	fn get_latest_oracle_info(oracle_id: AssetOracleId) -> Option<OracleInfo>;
+
+	/// Returns the [`AggregatorInfo`] registered for the given asset, or `None`
+	/// if no aggregator is configured for it.
+	fn get_aggregator_info(asset: &AssetId) -> Option<AggregatorInfo>;
+
+	/// Calls `latestRoundData()` on the Chainlink-compatible aggregator contract
+	/// registered for the given asset and returns the round data, or `None` if
+	/// no aggregator is registered for the asset or the call fails.
+	///
+	/// Implementations should:
+	/// 1. Look up the aggregator contract address via the asset's `Aggregators` entry.
+	/// 2. Encode the calldata using [`aggregator_abi::encode_calldata`].
+	/// 3. Execute a read-only EVM call (e.g. `Runner::view_call`) with the
+	///    encoded input.
+	/// 4. Decode the return bytes via [`aggregator_abi::decode_return`].
+	///
+	/// # Arguments
+	/// * `asset` - The asset contract address (`H160`) whose aggregator to query.
+	///
+	/// # Returns
+	/// * `Some(AggregatorRoundData)` - The decoded round data from the aggregator.
+	/// * `None` - If no aggregator is registered, the EVM call fails, or the
+	///   return data cannot be decoded.
+	fn get_latest_round_data(asset: &AssetId) -> Option<AggregatorRoundData>;
 }
