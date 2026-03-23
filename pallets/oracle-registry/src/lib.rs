@@ -28,7 +28,8 @@ pub use pallet::*;
 pub use weights::WeightInfo;
 
 pub use bp_oracle::{
-	traits::OracleRegistryManager, AssetId, AssetOracleId, ChainId, OracleInfo, OracleKey,
+	traits::OracleRegistryManager, AggregatorInfo, AggregatorRoundData, AssetId, AssetOracleId,
+	ChainId, OracleInfo, OracleKey,
 };
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
@@ -56,8 +57,15 @@ pub mod pallet {
 	/// Unified mapping from oracle keys to their oracle IDs.
 	///
 	/// - **Key**: [`OracleKey`] — either an EVM asset contract address or a chain ID
-	/// - **Value**: [`AssetOracleId`] (H256) — the oracle ID
+	/// - **Value**: [`AssetOracleId`] (H256) — the oracle ID. If the oracle ID is set to zero, it means the price are retrieved from the aggregator contract.
 	pub type Oracles<T: Config> = StorageMap<_, Blake2_128Concat, OracleKey, AssetOracleId>;
+
+	#[pallet::storage]
+	/// Mapping from asset ID to its aggregator contract address.
+	///
+	/// - **Key**: Asset ID (H160)
+	/// - **Value**: Aggregator contract info (AggregatorInfo)
+	pub type Aggregators<T: Config> = StorageMap<_, Blake2_128Concat, AssetId, AggregatorInfo>;
 
 	#[pallet::storage]
 	/// The EVM contract address authorised to manage the oracle registry.
@@ -81,6 +89,10 @@ pub mod pallet {
 		OracleManagerContractSet { contract: H160 },
 		/// The oracle manager contract address has been removed.
 		OracleManagerContractRemoved,
+		/// An asset aggregator contract address has been set or updated.
+		AssetAggregatorSet { asset: AssetId, aggregator_contract: H160 },
+		/// An asset aggregator contract address has been removed.
+		AssetAggregatorRemoved { asset: AssetId },
 	}
 
 	#[pallet::error]
@@ -248,6 +260,57 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_asset_aggregator())]
+		/// Set or update the aggregator contract address for an asset.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `asset` - The asset contract address (H160)
+		/// * `aggregator_contract` - The aggregator contract address (H160)
+		pub fn set_asset_aggregator(
+			origin: OriginFor<T>,
+			asset: AssetId,
+			aggregator_contract: H160,
+			decimal: u8,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			if let Some(current) = Aggregators::<T>::get(&asset) {
+				ensure!(current.address != aggregator_contract, Error::<T>::NoWritingSameValue);
+				ensure!(current.decimal == decimal, Error::<T>::NoWritingSameValue);
+			}
+			Aggregators::<T>::insert(
+				asset,
+				AggregatorInfo { address: aggregator_contract, decimal },
+			);
+
+			Self::deposit_event(Event::AssetAggregatorSet { asset, aggregator_contract });
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(9)]
+		#[pallet::weight(<T as Config>::WeightInfo::remove_asset_aggregator())]
+		/// Remove the aggregator contract address for an asset.
+		///
+		/// # Parameters
+		/// * `origin` - Must be `Root` (sudo access required)
+		/// * `asset` - The asset contract address (H160)
+		pub fn remove_asset_aggregator(
+			origin: OriginFor<T>,
+			asset: AssetId,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			ensure!(Aggregators::<T>::contains_key(&asset), Error::<T>::AssetDNE);
+			Aggregators::<T>::remove(asset);
+
+			Self::deposit_event(Event::AssetAggregatorRemoved { asset });
+
+			Ok(().into())
+		}
 	}
 
 	impl<T: Config> OracleRegistryManager for Pallet<T> {
@@ -329,6 +392,46 @@ pub mod pallet {
 			}
 
 			oracle_info_abi::decode_return(&result.value)
+		}
+
+		fn get_aggregator_info(asset: &AssetId) -> Option<AggregatorInfo> {
+			Aggregators::<T>::get(asset)
+		}
+
+		fn get_latest_round_data(asset: &AssetId) -> Option<AggregatorRoundData> {
+			use bp_oracle::traits::aggregator_abi;
+			use pallet_evm::ExitReason;
+
+			let aggregator = Aggregators::<T>::get(asset)?;
+			let calldata = aggregator_abi::encode_calldata();
+
+			let result = T::Runner::view_call(
+				H160::zero(),
+				aggregator.address,
+				calldata.to_vec(),
+				100_000u64,
+				T::config(),
+			)
+			.map_err(|_| {
+				log::warn!(
+					target: "oracle-registry",
+					"Aggregator call (latestRoundData) failed: Runner::call returned error"
+				);
+			})
+			.ok()?;
+
+			match result.exit_reason {
+				ExitReason::Succeed(_) => {},
+				ref reason => {
+					log::warn!(
+						target: "oracle-registry",
+						"Aggregator call (latestRoundData) reverted: {:?}", reason
+					);
+					return None;
+				},
+			}
+
+			aggregator_abi::decode_return(&result.value)
 		}
 	}
 }
