@@ -51,7 +51,7 @@ pub mod v10 {
 	}
 }
 
-pub mod v9 {
+pub mod v11 {
 	use core::marker::PhantomData;
 
 	use super::*;
@@ -61,12 +61,12 @@ pub mod v9 {
 	};
 	use sp_runtime::traits::Zero;
 
-	/// Migration V9: Clear OnFlightTransfers and PendingTransfers, reset all AssetCaps.on_flight_cap to zero.
+	/// Migration V11: Clear OnFlightTransfers and PendingTransfers, reset all AssetCaps.on_flight_cap to zero.
 	///
 	/// This migration cleans up in-flight state to ensure a consistent starting point.
-	pub struct V9<T>(PhantomData<T>);
+	pub struct V11<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for V9<T> {
+	impl<T: Config> OnRuntimeUpgrade for V11<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -75,7 +75,7 @@ pub mod v9 {
 
 			weight = weight.saturating_add(T::DbWeight::get().reads(2));
 
-			if current == 9 && onchain == 8 {
+			if current == 11 && onchain == 10 {
 				// Count existing entries for weight and logging
 				let on_flight_count = OnFlightTransfers::<T>::iter().count() as u64;
 				let pending_count = PendingTransfers::<T>::iter().count() as u64;
@@ -105,13 +105,13 @@ pub mod v9 {
 
 				log!(
 					info,
-					"cccp-relay-queue v9: cleared {} OnFlightTransfers, {} PendingTransfers, reset {} AssetCaps.on_flight_cap to zero ✅",
+					"cccp-relay-queue v11: cleared {} OnFlightTransfers, {} PendingTransfers, reset {} AssetCaps.on_flight_cap to zero ✅",
 					on_flight_count,
 					pending_count,
 					asset_caps_count
 				);
 			} else {
-				log!(warn, "Skipping cccp-relay-queue storage v9 💤");
+				log!(warn, "Skipping cccp-relay-queue storage v11 💤");
 			}
 
 			weight
