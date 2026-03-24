@@ -1,6 +1,6 @@
 use super::*;
 
-pub mod v8 {
+pub mod v9 {
 	use super::*;
 	use core::marker::PhantomData;
 	use frame_support::{
@@ -8,10 +8,10 @@ pub mod v8 {
 		weights::Weight,
 	};
 
-	/// Migration V8: Clear all outbound pool.
-	pub struct V8<T>(PhantomData<T>);
+	/// Migration V9: Clear all outbound pool.
+	pub struct V9<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for V8<T> {
+	impl<T: Config> OnRuntimeUpgrade for V9<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -20,7 +20,7 @@ pub mod v8 {
 
 			weight = weight.saturating_add(T::DbWeight::get().reads(2));
 
-			if current == 8 && onchain == 7 {
+			if current == 9 && onchain == 8 {
 				let outbound_pool_count = OutboundPool::<T>::get().len() as u64;
 				weight = weight.saturating_add(T::DbWeight::get().reads(outbound_pool_count));
 
@@ -30,9 +30,9 @@ pub mod v8 {
 				current.put::<Pallet<T>>();
 				weight = weight.saturating_add(T::DbWeight::get().writes(1));
 
-				log!(info, "blaze v8: cleared {} OutboundPool ✅", outbound_pool_count);
+				log!(info, "blaze v9: cleared {} OutboundPool ✅", outbound_pool_count);
 			} else {
-				log!(warn, "Skipping blaze storage v8 💤");
+				log!(warn, "Skipping blaze storage v9 💤");
 			}
 			weight
 		}
