@@ -963,9 +963,6 @@ pub mod pallet {
 				Error::<T>::TooManyAssetIndexes
 			);
 
-			// Validate max_on_flight_cap > 0
-			ensure!(max_on_flight_cap > Default::default(), Error::<T>::InvalidMaxCap);
-
 			// Upper bound validation (100M cap limit)
 			let max_cap_u128: u128 =
 				max_on_flight_cap.try_into().map_err(|_| Error::<T>::OutOfRange)?;
