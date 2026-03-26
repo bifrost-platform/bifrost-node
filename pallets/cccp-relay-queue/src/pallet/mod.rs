@@ -22,7 +22,7 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(11);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(12);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -331,7 +331,7 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v11::V11::<T>::on_runtime_upgrade()
+			migrations::v12::V12::<T>::on_runtime_upgrade()
 		}
 	}
 
