@@ -16,7 +16,6 @@ use bifrost_common_node::{
 use fc_mapping_sync::{kv::MappingSyncWorker, SyncStrategy};
 use fc_rpc::{EthTask, StorageOverrideHandler};
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
-
 use sc_client_api::{Backend, BlockBackend, BlockchainEvents};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 use sc_consensus_manual_seal::EngineCommand;
@@ -157,7 +156,7 @@ pub fn new_partial(
 		})
 		.transpose()?;
 
-	let executor = sc_service::new_wasm_executor(&config.executor);
+	let executor = bifrost_common_node::service::new_wasm_executor(&config.executor);
 
 	let (client, backend, keystore_container, task_manager) =
 		sc_service::new_full_parts_record_import::<Block, dev::RuntimeApi, _>(
