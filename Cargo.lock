@@ -929,6 +929,7 @@ dependencies = [
  "sc-client-api",
  "sc-consensus-grandpa",
  "sc-consensus-manual-seal",
+ "sc-executor",
  "sc-network",
  "sc-network-sync",
  "sc-rpc",
