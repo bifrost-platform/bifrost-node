@@ -19,6 +19,7 @@ use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
 
 use sc_client_api::{Backend, BlockBackend, BlockchainEvents};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
+use sc_executor::HeapAllocStrategy;
 pub use sc_executor::WasmExecutor;
 use sc_network::service::traits::NetworkService;
 use sc_network_sync::SyncingService;
@@ -145,7 +146,21 @@ pub fn new_partial(
 		})
 		.transpose()?;
 
-	let executor = sc_service::new_wasm_executor(&config.executor);
+	let executor = {
+		let strategy = config
+			.executor
+			.default_heap_pages
+			.map_or(HeapAllocStrategy::Static { extra_pages: 4096 }, |p| {
+				HeapAllocStrategy::Static { extra_pages: p as _ }
+			});
+		WasmExecutor::<HostFunctions>::builder()
+			.with_execution_method(config.executor.wasm_method)
+			.with_onchain_heap_alloc_strategy(strategy)
+			.with_offchain_heap_alloc_strategy(strategy)
+			.with_max_runtime_instances(config.executor.max_runtime_instances)
+			.with_runtime_cache_size(config.executor.runtime_cache_size)
+			.build()
+	};
 
 	let (client, backend, keystore_container, task_manager) =
 		sc_service::new_full_parts_record_import::<Block, mainnet::RuntimeApi, _>(
