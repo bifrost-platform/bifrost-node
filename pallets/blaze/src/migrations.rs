@@ -1,5 +1,50 @@
 use super::*;
 
+pub mod v10 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	/// Migration V10: Clear all outbound pool and pending transactions.
+	pub struct V10<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V10<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			weight = weight.saturating_add(T::DbWeight::get().reads(2));
+
+			if current == 10 && onchain == 9 {
+				let outbound_pool_count = OutboundPool::<T>::get().len() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(outbound_pool_count));
+
+				OutboundPool::<T>::put(Vec::<UnboundedBytes>::new());
+				weight = weight.saturating_add(T::DbWeight::get().writes(outbound_pool_count));
+
+				let pending_tx_count = PendingTxs::<T>::iter().count() as u64;
+				weight = weight.saturating_add(T::DbWeight::get().reads(pending_tx_count));
+
+				let _ = PendingTxs::<T>::clear(u32::MAX, None);
+				weight = weight.saturating_add(T::DbWeight::get().writes(pending_tx_count));
+
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+
+				log!(info, "blaze v10: cleared {} OutboundPool ✅", outbound_pool_count);
+			} else {
+				log!(warn, "Skipping blaze storage v10 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod v9 {
 	use super::*;
 	use core::marker::PhantomData;
