@@ -355,24 +355,21 @@ pub mod pallet {
 		///
 		/// # Transfer Approval Workflow
 		///
-		/// ## Outbound Path (Direct Approval)
-		/// When a transfer originates from Bifrost to an external chain:
-		/// 1. Validate on-chain Socket contract shows REQUESTED (1) status via `get_request()`
-		/// 2. **Immediately approve** without waiting for majority vote
+		/// Both outbound and inbound transfers use identical voting-based consensus.
+		/// The only difference is the on-chain status check:
 		///
-		/// **Rationale**: The Socket contract on Bifrost is the authoritative source.
-		/// If the contract shows REQUESTED, the transfer is valid.
+		/// - **Outbound**: Socket contract must show REQUESTED (1) status, and message content
+		///   is cross-checked via `validate_on_chain_existence`
+		/// - **Inbound**: Socket contract must show zero (0) status (not yet registered on Bifrost)
 		///
-		/// ## Inbound Path (Voting-Based Approval)
-		/// When a transfer originates from an external chain to Bifrost:
-		/// 1. Validate on-chain Socket contract shows zero (0) status (not yet registered)
-		/// 2. Each relayer casts a vote in `PendingTransfers`
-		/// 3. **When majority reached**: Transitions to `OnFlightTransfers`, locks Fast transfer cap
-		/// - **First vote**: Creates entry in `PendingTransfers` with single voter
-		/// - **Subsequent votes**: Adds voters, prevents double-voting
+		/// **Voting flow (shared)**:
+		/// 1. First relayer vote creates an entry in `PendingTransfers`
+		/// 2. Subsequent votes accumulate in `on_flight_voters` (double-vote prevented)
+		/// 3. When majority reached: clears all `PendingTransfers` for `msg_hash`, moves to `OnFlightTransfers`
 		///
-		/// **Rationale**: Consensus-based approval provides security against Byzantine relayers
-		/// for transfers originating from external (untrusted) chains.
+		/// **Rationale**: Consensus is required for both directions because each relayer submits
+		/// its own `src_tx_id`. A majority vote ensures no single relayer can inject an invalid
+		/// source transaction ID alongside a valid socket message.
 		///
 		/// # Fast vs Standard Transfer Mode
 		///
@@ -461,172 +458,65 @@ pub mod pallet {
 				TransferOption::Standard
 			};
 
+			// Direction-specific on-chain validation.
+			// Outbound: content and REQUESTED status verified against on-chain Socket contract.
+			// Inbound: only zero-status checked since msg_hash is not yet registered on Bifrost.
 			if parsed_msg.is_outbound(<T as pallet_evm::Config>::ChainId::get() as u32) {
-				// Outbound: validate params match on-chain state and status must be REQUESTED (1)
-				// validate_on_chain_existence cross-checks (ins_code, params) against request_info.msg_hash
 				let request_info = Self::validate_on_chain_existence(&parsed_msg)?;
 				ensure!(request_info.is_requested(), Error::<T>::MessageStatusMismatch);
-
-				// Update cap for Fast transfers
-				if let Some((asset_id, asset_cap)) = asset_info {
-					if option == TransferOption::Fast {
-						Self::update_fast_transfer_cap(
-							asset_id,
-							asset_cap,
-							parsed_msg.params.amount,
-							true,
-						)?;
-					}
-				}
-
-				OnFlightTransfers::<T>::insert(
-					msg_hash,
-					TransferInfoWithTxId::from_transfer_info(
-						TransferInfo {
-							amount,
-							sequence_id,
-							src_chain_id,
-							dst_chain_id,
-							asset_index_hash,
-							option,
-							socket_message: msg.clone(),
-							on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
-								.map_err(|_| Error::<T>::OutOfRange)?,
-						},
-						src_tx_id,
-					),
-				);
-
-				Self::deposit_event(Event::TransferPolled {
-					asset_index_hash,
-					sequence_id,
-					src_chain_id,
-					dst_chain_id,
-					authority_id,
-					option,
-					amount,
-					is_approved: true,
-				});
-
-				return Ok(().into());
+			} else {
+				// Note: validate_on_chain_existence cannot be used here because the msg_hash
+				// field in RequestInfo would be H256::zero() for unregistered requests,
+				// causing the content cross-check to fail. Only status validation is needed.
+				let request_info = Self::try_get_request(&parsed_msg.encode_req_id())?;
+				ensure!(request_info.field[0] == U256::zero(), Error::<T>::MessageStatusMismatch);
 			}
 
-			// ============================================================
-			// INBOUND PATH: Requires voting consensus
-			// ============================================================
-			//
-			// Inbound: on-chain status must be zero (request not yet registered on Bifrost).
-			// Note: validate_on_chain_existence cannot be used here because the msg_hash
-			// field in RequestInfo would be H256::zero() for unregistered requests,
-			// causing the content cross-check to fail. Only status validation is needed.
+			// Voting and promotion logic shared by both outbound and inbound paths.
 			//
 			// IMPORTANT: Asset cap is dynamically re-checked when majority is reached.
 			// During the voting period, the asset cap can change due to:
 			// - Other Fast transfers being finalized (freeing cap)
 			// - New Fast transfers being approved (consuming cap)
-			//
-			// Therefore, a transfer initially determined as Standard might become
-			// eligible for Fast (or vice versa) by the time majority is reached.
-			// The actual transfer option is re-determined at the majority checkpoint.
-			let request_info = Self::try_get_request(&parsed_msg.encode_req_id())?;
-			ensure!(request_info.field[0] == U256::zero(), Error::<T>::MessageStatusMismatch);
-
-			let pending_transfer = PendingTransfers::<T>::get(msg_hash, src_tx_id);
-
-			if let Some(mut pending_transfer) = pending_transfer {
-				// Add voter with double-vote prevention
-				Self::add_voter_to_list(&mut pending_transfer.on_flight_voters, &authority_id)?;
-
-				// Re-set transfer option based on latest asset cap
-				pending_transfer.option = option;
-
-				// Check if majority reached → transition to OnFlight
-				if pending_transfer.on_flight_voters.len() as u32 >= T::Relayers::majority() {
-					// Update cap for Fast transfers
-					if let Some((asset_id, asset_cap)) = asset_info {
-						if option == TransferOption::Fast {
-							Self::update_fast_transfer_cap(
-								asset_id,
-								asset_cap,
-								parsed_msg.params.amount,
-								true,
-							)?;
-						}
-					}
-
-					// Clear every entry with the same msg_hash since the transaction with id=src_tx_id has met consensus
-					let _ = PendingTransfers::<T>::clear_prefix(msg_hash, u32::MAX, None);
-
-					// Move to OnFlightTransfers
-					OnFlightTransfers::<T>::insert(
-						msg_hash,
-						TransferInfoWithTxId::from_transfer_info(pending_transfer, src_tx_id),
-					);
-
-					Self::deposit_event(Event::TransferPolled {
-						asset_index_hash,
-						sequence_id,
-						src_chain_id,
-						dst_chain_id,
-						authority_id,
-						option,
-						amount,
-						is_approved: true,
-					});
-
-					return Ok(().into());
-				}
-				PendingTransfers::<T>::insert(msg_hash, src_tx_id, pending_transfer);
-			} else {
-				// First vote: create transfer with Pending status
-				let transfer_info = TransferInfo {
+			let transfer_info = match PendingTransfers::<T>::get(msg_hash, src_tx_id) {
+				Some(mut pending) => {
+					Self::add_voter_to_list(&mut pending.on_flight_voters, &authority_id)?;
+					pending.option = option;
+					pending
+				},
+				None => TransferInfo {
 					amount,
 					sequence_id,
 					src_chain_id,
 					dst_chain_id,
 					asset_index_hash,
 					option,
-					socket_message: msg.clone(),
+					socket_message: msg,
 					on_flight_voters: BoundedVec::try_from(vec![authority_id.clone()])
 						.map_err(|_| Error::<T>::OutOfRange)?,
-				};
+				},
+			};
 
-				// Check if majority reached immediately (e.g. single validator network)
-				if transfer_info.on_flight_voters.len() as u32 >= T::Relayers::majority() {
-					// Update cap for Fast transfers
-					if let Some((asset_id, asset_cap)) = asset_info {
-						if option == TransferOption::Fast {
-							Self::update_fast_transfer_cap(
-								asset_id,
-								asset_cap,
-								parsed_msg.params.amount,
-								true,
-							)?;
-						}
+			let is_approved = if transfer_info.on_flight_voters.len() as u32
+				>= T::Relayers::majority()
+			{
+				if let Some((asset_id, asset_cap)) = asset_info {
+					if option == TransferOption::Fast {
+						Self::update_fast_transfer_cap(asset_id, asset_cap, amount.into(), true)?;
 					}
-
-					// Move to OnFlightTransfers
-					OnFlightTransfers::<T>::insert(
-						msg_hash,
-						TransferInfoWithTxId::from_transfer_info(transfer_info, src_tx_id),
-					);
-
-					Self::deposit_event(Event::TransferPolled {
-						asset_index_hash,
-						sequence_id,
-						src_chain_id,
-						dst_chain_id,
-						authority_id,
-						option,
-						amount,
-						is_approved: true,
-					});
-
-					return Ok(().into());
 				}
-
+				// Clear every entry with the same msg_hash since the transaction with id=src_tx_id has met consensus
+				let _ = PendingTransfers::<T>::clear_prefix(msg_hash, u32::MAX, None);
+				OnFlightTransfers::<T>::insert(
+					msg_hash,
+					TransferInfoWithTxId::from_transfer_info(transfer_info, src_tx_id),
+				);
+				true
+			} else {
 				PendingTransfers::<T>::insert(msg_hash, src_tx_id, transfer_info);
-			}
+				false
+			};
+
 			Self::deposit_event(Event::TransferPolled {
 				asset_index_hash,
 				sequence_id,
@@ -635,7 +525,7 @@ pub mod pallet {
 				authority_id,
 				option,
 				amount,
-				is_approved: false,
+				is_approved,
 			});
 
 			Ok(().into())
