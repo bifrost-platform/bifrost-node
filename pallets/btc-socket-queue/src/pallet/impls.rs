@@ -42,9 +42,13 @@ where
 	H160: Into<T::AccountId>,
 {
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError> {
+		let original_msg = msg.clone();
 		// the bytes should be a valid socket message
-		let msg =
-			SocketMessage::try_from(msg.clone()).map_err(|_| Error::<T>::InvalidSocketMessage)?;
+		let msg = SocketMessage::try_from(original_msg.clone())
+			.map_err(|_| Error::<T>::InvalidSocketMessage)?;
+		if msg.encode() != original_msg {
+			return Err(Error::<T>::InvalidSocketMessage.into());
+		}
 		// the socket message should be valid onchain
 		let msg_hash =
 			Self::hash_bytes(&UserRequest::new(msg.ins_code.clone(), msg.params.clone()).encode());
@@ -516,8 +520,7 @@ where
 					let system_vault = T::RegistrationPool::get_system_vault(
 						T::RegistrationPool::get_current_round(),
 					)?;
-					let system_vault =
-						Self::try_convert_to_address_from_vec(system_vault).ok()?;
+					let system_vault = Self::try_convert_to_address_from_vec(system_vault).ok()?;
 					output.push(TxOut {
 						value: Amount::from_sat(change_amount),
 						script_pubkey: system_vault.script_pubkey(),
