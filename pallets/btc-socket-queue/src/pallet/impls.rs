@@ -124,6 +124,19 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 		}
 	}
 
+	fn verify_legacy_authority(
+		authority_id: &T::AccountId,
+	) -> Result<(), TransactionValidityError> {
+		if let Some(a) = <Authority<T>>::get() {
+			if a != *authority_id {
+				return Err(InvalidTransaction::BadSigner.into());
+			}
+			Ok(())
+		} else {
+			Err(InvalidTransaction::BadSigner.into())
+		}
+	}
+
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
 		// replace authority in pending requests
 		<PendingRequests<T>>::iter().for_each(|(txid, mut request)| {
@@ -516,8 +529,7 @@ where
 					let system_vault = T::RegistrationPool::get_system_vault(
 						T::RegistrationPool::get_current_round(),
 					)?;
-					let system_vault =
-						Self::try_convert_to_address_from_vec(system_vault).ok()?;
+					let system_vault = Self::try_convert_to_address_from_vec(system_vault).ok()?;
 					output.push(TxOut {
 						value: Amount::from_sat(change_amount),
 						script_pubkey: system_vault.script_pubkey(),
