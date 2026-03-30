@@ -1,23 +1,28 @@
 use bp_btc_relay::{
-	traits::PoolManager, Address, AddressState, Descriptor, FromSliceError as KeyError,
-	MigrationSequence, MultiSigAccount, Network, PublicKey, UnboundedBytes,
+	traits::{PoolManager, SocketQueueManager},
+	Address, AddressState, Descriptor, FromSliceError as KeyError, MigrationSequence,
+	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
 use frame_support::traits::SortedMembers;
+use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
 use sp_core::{Get, H256};
+use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::Verify,
+	traits::{Block, Header, Verify},
 	transaction_validity::{
 		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 	},
 	BoundedVec, DispatchError,
 };
-use sp_std::{str, str::FromStr, vec::Vec};
+use sp_std::{fmt::Display, str, str::FromStr, vec::Vec};
 
-use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
+use crate::{
+	BoundedBitcoinAddress, Public, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission,
+};
 
 use super::pallet::*;
 
@@ -447,6 +452,53 @@ impl<T: Config> Pallet<T> {
 		ValidTransaction::with_tag_prefix("KeyPreSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides((authority_id, pub_keys, signature))
+			.propagate(true)
+			.build()
+	}
+
+	/// Verifies the refund set approval signature.
+	pub fn verify_set_refunds_approval(
+		approval: &SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
+		signature: &T::Signature,
+	) -> TransactionValidity
+	where
+		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
+		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
+	{
+		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
+
+		// verify if the authority matches with the `SocketQueue::Authority`.
+		T::SocketQueue::verify_authority(authority_id)?;
+
+		// verify if the deadline is not expired.
+		let now = <frame_system::Pallet<T>>::block_number();
+		if now > *deadline {
+			return Err(InvalidTransaction::Stale.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = [
+			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
+			format!(
+				"{}:{}:{}",
+				pool_round,
+				deadline,
+				refund_sets
+					.into_iter()
+					.map(|x| hex::encode(x.0.clone()))
+					.collect::<Vec<String>>()
+					.concat()
+			)
+			.as_bytes(),
+		]
+		.concat();
+		if !signature.verify(&*message, &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
+		ValidTransaction::with_tag_prefix("SetRefundsApproval")
+			.priority(TransactionPriority::MAX)
+			.and_provides((authority_id, refund_sets))
 			.propagate(true)
 			.build()
 	}
