@@ -468,7 +468,7 @@ impl<T: Config> Pallet<T> {
 		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
 
 		// verify if the authority matches with the `SocketQueue::Authority`.
-		T::SocketQueue::verify_authority(authority_id)?;
+		T::SocketQueue::verify_legacy_authority(authority_id)?;
 
 		// verify if the deadline is not expired.
 		let now = <frame_system::Pallet<T>>::block_number();
