@@ -51,6 +51,7 @@ pub trait WeightInfo {
 	fn drop_previous_round() -> Weight;
 	fn set_max_presubmission() -> Weight;
 	fn set_multi_sig_ratio() -> Weight;
+	fn approve_set_refunds() -> Weight;
 }
 
 /// Weights for `pallet_btc_registration_pool` using the Substrate node and recommended hardware.
@@ -248,6 +249,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	fn approve_set_refunds() -> Weight {
+		Weight::from_parts(41_240_000, 0)
+			.saturating_add(T::DbWeight::get().reads(5_u64))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
 }
 
 // For backwards compatibility and tests.
@@ -444,4 +450,9 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
+	fn approve_set_refunds() -> Weight {
+		Weight::from_parts(41_240_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(5_u64))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+		}
 }

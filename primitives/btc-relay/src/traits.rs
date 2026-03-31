@@ -66,6 +66,9 @@ pub trait SocketQueueManager<AccountId> {
 	/// Verify if the `authority_id` is valid.
 	fn verify_authority(authority_id: &AccountId) -> Result<(), TransactionValidityError>;
 
+	/// Verify if the `authority_id` is valid for legacy authority.
+	fn verify_legacy_authority(authority_id: &AccountId) -> Result<(), TransactionValidityError>;
+
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
 

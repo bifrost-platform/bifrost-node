@@ -209,7 +209,7 @@ substrate-build-script-utils = { git = "https://github.com/bifrost-platform/polk
 # Frontier Client
 fc-db = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2512" }
 fc-rpc = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2512", features = [
-    "txpool",
+	"txpool",
 ] }
 fc-mapping-sync = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2512" }
 fc-rpc-core = { default-features = false, git = "https://github.com/bifrost-platform/bifrost-frontier", branch = "bifrost-polkadot-stable2512" }
