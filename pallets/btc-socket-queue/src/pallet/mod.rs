@@ -239,11 +239,11 @@ pub mod pallet {
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			let mut weight = Weight::from_parts(1_000_000, 0);
 
-			T::RegistrationPool::process_set_refunds();
-
 			if T::Blaze::is_activated()
 				&& matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
 			{
+				T::RegistrationPool::process_set_refunds();
+
 				if let Some((long_term_fee_rate, fee_rate)) = T::Blaze::try_fee_rate_finalization(n)
 				{
 					let outbound_pool = T::Blaze::get_outbound_pool();
@@ -272,10 +272,8 @@ pub mod pallet {
 						// TxOut size = 8 (value) + 1 (script_len varint) + script_len
 						let unique_scripts: sp_std::collections::btree_set::BTreeSet<_> =
 							outbound_requests.iter().map(|x| x.1.clone()).collect();
-						let output_vbytes: u64 = unique_scripts
-							.iter()
-							.map(|s| 9u64 + s.len() as u64)
-							.sum();
+						let output_vbytes: u64 =
+							unique_scripts.iter().map(|s| 9u64 + s.len() as u64).sum();
 						// 11 = version(4) + locktime(4) + input_count(1) + output_count(1) + segwit(1)
 						let base_fee = fee_rate * (11 + output_vbytes);
 						let target = outbound_amount_sum.saturating_add(base_fee);
