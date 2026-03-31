@@ -118,21 +118,8 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-pub struct InitPrecompile;
-impl frame_support::traits::OnRuntimeUpgrade for InitPrecompile {
-	fn on_runtime_upgrade() -> Weight {
-		use core::str::FromStr;
-		let _ = pallet_evm::Pallet::<Runtime>::create_account(
-			H160::from_str("0000000000000000000000000000000000000102").unwrap(),
-			vec![0x60, 0x00, 0x60, 0x00, 0xFD], // dummy revert bytecode
-			None,
-		);
-		Weight::from_parts(0u64, 0u64)
-	}
-}
-
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type SingleBlockMigrations = (InitPrecompile,);
+type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
