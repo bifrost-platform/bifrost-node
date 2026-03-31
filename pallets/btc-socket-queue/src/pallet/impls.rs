@@ -128,6 +128,19 @@ impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
 		}
 	}
 
+	fn verify_legacy_authority(
+		authority_id: &T::AccountId,
+	) -> Result<(), TransactionValidityError> {
+		if let Some(a) = <Authority<T>>::get() {
+			if a != *authority_id {
+				return Err(InvalidTransaction::BadSigner.into());
+			}
+			Ok(())
+		} else {
+			Err(InvalidTransaction::BadSigner.into())
+		}
+	}
+
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
 		// replace authority in pending requests
 		<PendingRequests<T>>::iter().for_each(|(txid, mut request)| {
