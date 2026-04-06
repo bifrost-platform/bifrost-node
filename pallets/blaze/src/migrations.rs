@@ -1,6 +1,6 @@
 use super::*;
 
-pub mod v12 {
+pub mod v13 {
 	use super::*;
 	use core::marker::PhantomData;
 	use frame_support::{
@@ -8,10 +8,10 @@ pub mod v12 {
 		weights::Weight,
 	};
 
-	/// Migration V12: Clear all outbound pool and pending transactions.
-	pub struct V12<T>(PhantomData<T>);
+	/// Migration V13: Clear all outbound pool and pending transactions.
+	pub struct V13<T>(PhantomData<T>);
 
-	impl<T: Config> OnRuntimeUpgrade for V12<T> {
+	impl<T: Config> OnRuntimeUpgrade for V13<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
 
@@ -20,7 +20,7 @@ pub mod v12 {
 
 			weight = weight.saturating_add(T::DbWeight::get().reads(2));
 
-			if current == 12 && onchain == 11 {
+			if current == 13 && onchain == 12 {
 				let outbound_pool_count = OutboundPool::<T>::get().len() as u64;
 				weight = weight.saturating_add(T::DbWeight::get().reads(outbound_pool_count));
 
@@ -36,9 +36,9 @@ pub mod v12 {
 				current.put::<Pallet<T>>();
 				weight = weight.saturating_add(T::DbWeight::get().writes(1));
 
-				log!(info, "blaze v12: cleared {} OutboundPool ✅", outbound_pool_count);
+				log!(info, "blaze v13: cleared {} OutboundPool ✅", outbound_pool_count);
 			} else {
-				log!(warn, "Skipping blaze storage v12 💤");
+				log!(warn, "Skipping blaze storage v13 💤");
 			}
 			weight
 		}
