@@ -127,7 +127,7 @@ where
 				RelayerState::<T>::get(&relayer).expect("RelayerState must exist");
 			relayer_state.set_controller(new.clone());
 			<RelayerState<T>>::insert(&relayer, relayer_state);
-			Self::remove_from_relayer_pool(&new, false);
+			Self::remove_from_relayer_pool(&old, false);
 			Self::add_to_relayer_pool(relayer.clone(), new.clone()).expect(<Error<T>>::TooManyRelayers.as_str());
 		}
 	}
