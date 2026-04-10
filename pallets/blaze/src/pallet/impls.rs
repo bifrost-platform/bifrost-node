@@ -675,6 +675,11 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let SocketMessagesSubmission { authority_id, messages } = outbound_request_submission;
 
+		// reject if the number of messages exceeds the per-submission limit.
+		if messages.len() > crate::MAX_SOCKET_MESSAGES_PER_SUBMISSION {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
+
 		// reject if any individual message exceeds the configured size limit.
 		let max_bytes = T::SocketQueue::get_max_socket_message_bytes() as usize;
 		if messages.iter().any(|m| m.len() > max_bytes) {
