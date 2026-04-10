@@ -29,6 +29,9 @@ pub(crate) const LOG_TARGET: &'static str = "runtime::blaze";
 /// Maximum number of socket messages allowed per `submit_outbound_requests` submission.
 pub const MAX_SOCKET_MESSAGES_PER_SUBMISSION: usize = 10;
 
+/// Maximum number of UTXOs allowed per `submit_utxos` submission.
+pub const MAX_UTXOS_PER_SUBMISSION: usize = 50;
+
 // syntactic sugar for logging.
 #[macro_export]
 macro_rules! log {

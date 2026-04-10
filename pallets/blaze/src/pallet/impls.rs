@@ -579,6 +579,11 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let UtxoSubmission { authority_id, utxos } = utxo_submission;
 
+		// reject if the number of UTXOs exceeds the per-submission limit.
+		if utxos.len() > crate::MAX_UTXOS_PER_SUBMISSION {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
+
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;
 
