@@ -357,7 +357,10 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_outbound_requests())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_outbound_requests(
+			outbound_request_submission.messages.len() as u32,
+			outbound_request_submission.messages.iter().map(|m| m.len() as u32).sum::<u32>(),
+		))]
 		/// Submit Socket messages originated from a Bitcoin outbound request.
 		pub fn submit_outbound_requests(
 			origin: OriginFor<T>,
