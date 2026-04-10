@@ -271,6 +271,12 @@ impl<T: Config> Pallet<T> {
 
 impl<T: Config> RelayQueueManager<T::AccountId> for Pallet<T> {
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// Migrate pending transfer count from old to new authority.
+		let old_count = <PendingTransferCount<T>>::take(old);
+		if old_count > 0 {
+			<PendingTransferCount<T>>::insert(new, old_count);
+		}
+
 		// Replace authority in all pending transfers (only handle on-flight voters. since finalization voters are handled in OnFlightTransfers)
 		PendingTransfers::<T>::translate::<TransferInfo<BalanceOf<T>, T::AccountId>, _>(
 			|_msg_hash, _src_tx_id, mut transfer_info| {

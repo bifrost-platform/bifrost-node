@@ -95,6 +95,8 @@ pub mod pallet {
 		DuplicateAssetIndex,
 		/// Conflicting operations on the same asset index (add and remove).
 		ConflictingAssetIndexOperation,
+		/// The relayer has reached the maximum number of pending transfers.
+		PendingTransferCapExceeded,
 		/// Max on-flight cap must be greater than zero.
 		InvalidMaxCap,
 		/// Max on-flight cap exceeds maximum allowed value.
@@ -247,6 +249,14 @@ pub mod pallet {
 		SourceTransactionId,
 		TransferInfo<BalanceOf<T>, T::AccountId>,
 	>;
+
+	#[pallet::storage]
+	/// The number of pending transfers each relayer currently has introduced.
+	///
+	/// Key: Relayer account id (original submitter)
+	/// Value: Count of pending transfers
+	pub type PendingTransferCount<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, u32, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::unbounded]
@@ -452,6 +462,16 @@ pub mod pallet {
 				Error::<T>::TransferAlreadyFinalized
 			);
 
+			// Enforce per-relayer pending transfer cap for new entries before expensive validation.
+			let is_new_entry = !PendingTransfers::<T>::contains_key(msg_hash, src_tx_id);
+			if is_new_entry {
+				ensure!(
+					<PendingTransferCount<T>>::get(&authority_id)
+						< crate::MAX_PENDING_TRANSFERS_PER_RELAYER,
+					Error::<T>::PendingTransferCapExceeded
+				);
+			}
+
 			// Determine transfer option based on current cap:
 			// - If asset is registered with cap: Fast if cap allows, otherwise Standard
 			// - If asset is not registered: Always Standard (no Fast transfer support)
@@ -508,6 +528,13 @@ pub mod pallet {
 						Self::update_fast_transfer_cap(asset_id, asset_cap, amount.into(), true)?;
 					}
 				}
+				// Decrement pending transfer counts for all stored entries being cleared.
+				PendingTransfers::<T>::iter_prefix(msg_hash).for_each(|(_, info)| {
+					if let Some(submitter) = info.on_flight_voters.first() {
+						let count = <PendingTransferCount<T>>::get(submitter);
+						<PendingTransferCount<T>>::insert(submitter, count.saturating_sub(1));
+					}
+				});
 				// Clear every entry with the same msg_hash since the transaction with id=src_tx_id has met consensus
 				let _ = PendingTransfers::<T>::clear_prefix(msg_hash, u32::MAX, None);
 				OnFlightTransfers::<T>::insert(
@@ -516,6 +543,10 @@ pub mod pallet {
 				);
 				true
 			} else {
+				if is_new_entry {
+					let count = <PendingTransferCount<T>>::get(&authority_id);
+					<PendingTransferCount<T>>::insert(&authority_id, count + 1);
+				}
 				PendingTransfers::<T>::insert(msg_hash, src_tx_id, transfer_info);
 				false
 			};
