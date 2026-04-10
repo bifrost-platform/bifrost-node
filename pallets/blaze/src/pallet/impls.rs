@@ -8,6 +8,7 @@ use bp_btc_relay::{
 	traits::{BlazeManager, SocketQueueManager},
 	Hash, Psbt, UnboundedBytes,
 };
+use bp_cccp::traits::SocketVerifier;
 use bp_staking::traits::Authorities;
 use frame_support::{
 	ensure,
@@ -397,9 +398,7 @@ impl<T: Config> Pallet<T> {
 				&& scored.effective_value <= target + change_target
 				&& scored.utxo.input_vbytes <= max_weight
 			{
-				if best_exact
-					.as_ref()
-					.map_or(true, |x| scored.effective_value < x.effective_value)
+				if best_exact.as_ref().map_or(true, |x| scored.effective_value < x.effective_value)
 				{
 					best_exact = Some(scored.clone());
 				}
@@ -473,8 +472,7 @@ impl<T: Config> Pallet<T> {
 			if curr_value >= target {
 				if curr_value < *best_total {
 					*best_total = curr_value;
-					*best_selection =
-						curr_selection.iter().map(|x| x.utxo.clone()).collect();
+					*best_selection = curr_selection.iter().map(|x| x.utxo.clone()).collect();
 				}
 				return;
 			}
@@ -542,9 +540,7 @@ impl<T: Config> Pallet<T> {
 		// A single larger UTXO may be preferable (fewer inputs = smaller tx).
 		if !best_selection.is_empty() {
 			if let Some(ref larger) = lowest_larger {
-				if larger.utxo.input_vbytes <= max_weight
-					&& larger.effective_value <= best_total
-				{
+				if larger.utxo.input_vbytes <= max_weight && larger.effective_value <= best_total {
 					return Some((vec![larger.utxo.clone()], SelectionStrategy::Knapsack));
 				}
 			}
@@ -595,8 +591,13 @@ impl<T: Config> Pallet<T> {
 					.iter()
 					.map(|x| {
 						let utxo_hash = H256::from_slice(
-							keccak_256(&Encode::encode(&(x.txid, x.vout, x.amount, x.address.clone())))
-								.as_ref(),
+							keccak_256(&Encode::encode(&(
+								x.txid,
+								x.vout,
+								x.amount,
+								x.address.clone(),
+							)))
+							.as_ref(),
 						);
 						hex::encode(utxo_hash)
 					})
@@ -673,6 +674,12 @@ impl<T: Config> Pallet<T> {
 		signature: &T::Signature,
 	) -> TransactionValidity {
 		let SocketMessagesSubmission { authority_id, messages } = outbound_request_submission;
+
+		// reject if any individual message exceeds the configured size limit.
+		let max_bytes = T::SocketQueue::get_max_socket_message_bytes() as usize;
+		if messages.iter().any(|m| m.len() > max_bytes) {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
 
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;

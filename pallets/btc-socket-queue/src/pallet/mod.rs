@@ -55,6 +55,8 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 		/// The maximum fee rate that can be set for PSBT.
 		type DefaultMaxFeeRate: Get<u64>;
+		/// The default maximum byte size of a single socket message.
+		type DefaultMaxSocketMessageBytes: Get<u32>;
 	}
 
 	#[pallet::error]
@@ -138,6 +140,8 @@ pub mod pallet {
 		SocketSet { new: T::AccountId, is_bitcoin: bool },
 		/// The maximum PSBT fee rate has been set.
 		MaxFeeRateSet { new: u64 },
+		/// The maximum socket message byte size has been set.
+		MaxSocketMessageBytesSet { new: u32 },
 		/// A relayer has confirmed the broadcast of an executed request.
 		BroadcastConfirmed { txid: H256, authority_id: T::AccountId },
 	}
@@ -214,6 +218,10 @@ pub mod pallet {
 	#[pallet::storage]
 	/// The maximum fee rate(sat/vb) that can be set for PSBT.
 	pub type MaxFeeRate<T: Config> = StorageValue<_, u64, ValueQuery>;
+
+	#[pallet::storage]
+	/// The maximum allowed byte size of a single socket message.
+	pub type MaxSocketMessageBytes<T: Config> = StorageValue<_, u32, ValueQuery>;
 
 	#[pallet::storage]
 	/// Broadcast confirmation votes for finalized requests (Blaze mode only).
@@ -368,6 +376,7 @@ pub mod pallet {
 				Authority::<T>::put(a);
 			}
 			<MaxFeeRate<T>>::put(T::DefaultMaxFeeRate::get());
+			<MaxSocketMessageBytes<T>>::put(T::DefaultMaxSocketMessageBytes::get());
 		}
 	}
 
@@ -963,6 +972,24 @@ pub mod pallet {
 			if T::Blaze::is_activated() {
 				T::Blaze::unlock_utxos(&txid)?;
 			}
+
+			Ok(().into())
+		}
+
+		#[pallet::call_index(11)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_max_socket_message_bytes())]
+		/// Set the maximum allowed byte size of a single socket message.
+		pub fn set_max_socket_message_bytes(
+			origin: OriginFor<T>,
+			new: u32,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			let old = <MaxSocketMessageBytes<T>>::get();
+			ensure!(old != new, Error::<T>::NoWritingSameValue);
+
+			<MaxSocketMessageBytes<T>>::put(new);
+			Self::deposit_event(Event::MaxSocketMessageBytesSet { new });
 
 			Ok(().into())
 		}

@@ -12,6 +12,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 
+use bp_cccp::traits::SocketVerifier;
 use bp_staking::traits::Authorities;
 use sp_core::{H160, U256};
 use sp_io::hashing::keccak_256;
@@ -38,6 +39,8 @@ pub mod pallet {
 		type Signer: IdentifyAccount<AccountId = Self::AccountId> + Encode + Decode + MaxEncodedLen;
 		/// The Bifrost relayers.
 		type Relayers: Authorities<Self::AccountId>;
+		/// Socket queue used to query the maximum allowed socket message byte size.
+		type SocketQueue: SocketVerifier<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -1189,6 +1192,12 @@ pub mod pallet {
 				Call::on_flight_poll { on_flight_poll_submission, signature } => {
 					let OnFlightPollSubmission { authority_id, msg, msg_hash, src_tx_id } =
 						on_flight_poll_submission;
+
+					// reject if the message exceeds the configured size limit.
+					if msg.len() > T::SocketQueue::get_max_socket_message_bytes() as usize {
+						return InvalidTransaction::ExhaustsResources.into();
+					}
+
 					Self::verify_authority(authority_id)?;
 
 					// verify if the signature was originated from the authority_id.
