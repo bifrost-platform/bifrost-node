@@ -109,6 +109,10 @@ impl SocketQueueManager<AccountId> for MockSocketQueue {
 		Ok(())
 	}
 
+	fn verify_legacy_authority(_: &AccountId) -> Result<(), TransactionValidityError> {
+		Ok(())
+	}
+
 	fn replace_authority(_: &AccountId, _: &AccountId) {}
 
 	fn get_max_fee_rate() -> u64 {

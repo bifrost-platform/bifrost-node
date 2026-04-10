@@ -79,8 +79,6 @@ pub mod pallet {
 		NoWritingSameValue,
 		/// The activation status is invalid.
 		InvalidActivationState,
-		/// The relayer has reached the maximum number of unconfirmed UTXOs.
-		UnconfirmedUtxoCapExceeded,
 	}
 
 	#[pallet::event]
