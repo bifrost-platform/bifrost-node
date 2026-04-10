@@ -29,6 +29,12 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 
 impl<T: Config> BlazeManager<T> for Pallet<T> {
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// Migrate unconfirmed UTXO count from old to new authority.
+		let old_count = <UnconfirmedUtxoCount<T>>::take(old);
+		if old_count > 0 {
+			<UnconfirmedUtxoCount<T>>::insert(new, old_count);
+		}
+
 		// Replace authority in unconfirmed UTXOs (still accumulating votes)
 		<Utxos<T>>::iter().for_each(|(hash, mut utxo)| {
 			if utxo.status == UtxoStatus::Unconfirmed && utxo.voters.contains(old) {
@@ -77,6 +83,11 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		let utxos = <Utxos<T>>::iter().collect::<Vec<_>>();
 		for (hash, utxo) in utxos {
 			if utxo.status != UtxoStatus::Used {
+				if utxo.status == UtxoStatus::Unconfirmed {
+					if let Some(submitter) = utxo.voters.first() {
+						<UnconfirmedUtxoCount<T>>::mutate(submitter, |c| *c = c.saturating_sub(1));
+					}
+				}
 				<Utxos<T>>::remove(hash);
 			}
 		}
