@@ -8,6 +8,7 @@ use bp_btc_relay::{
 	traits::{BlazeManager, SocketQueueManager},
 	Hash, Psbt, UnboundedBytes,
 };
+use bp_cccp::traits::SocketVerifier;
 use bp_staking::traits::Authorities;
 use frame_support::{
 	ensure,
@@ -28,6 +29,12 @@ use sp_std::{fmt::Display, vec, vec::Vec};
 
 impl<T: Config> BlazeManager<T> for Pallet<T> {
 	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// Migrate unconfirmed UTXO count from old to new authority.
+		let old_count = <UnconfirmedUtxoCount<T>>::take(old);
+		if old_count > 0 {
+			<UnconfirmedUtxoCount<T>>::insert(new, old_count);
+		}
+
 		// Replace authority in unconfirmed UTXOs (still accumulating votes)
 		<Utxos<T>>::iter().for_each(|(hash, mut utxo)| {
 			if utxo.status == UtxoStatus::Unconfirmed && utxo.voters.contains(old) {
@@ -76,6 +83,11 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		let utxos = <Utxos<T>>::iter().collect::<Vec<_>>();
 		for (hash, utxo) in utxos {
 			if utxo.status != UtxoStatus::Used {
+				if utxo.status == UtxoStatus::Unconfirmed {
+					if let Some(submitter) = utxo.voters.first() {
+						<UnconfirmedUtxoCount<T>>::mutate(submitter, |c| *c = c.saturating_sub(1));
+					}
+				}
 				<Utxos<T>>::remove(hash);
 			}
 		}
@@ -397,9 +409,7 @@ impl<T: Config> Pallet<T> {
 				&& scored.effective_value <= target + change_target
 				&& scored.utxo.input_vbytes <= max_weight
 			{
-				if best_exact
-					.as_ref()
-					.map_or(true, |x| scored.effective_value < x.effective_value)
+				if best_exact.as_ref().map_or(true, |x| scored.effective_value < x.effective_value)
 				{
 					best_exact = Some(scored.clone());
 				}
@@ -473,8 +483,7 @@ impl<T: Config> Pallet<T> {
 			if curr_value >= target {
 				if curr_value < *best_total {
 					*best_total = curr_value;
-					*best_selection =
-						curr_selection.iter().map(|x| x.utxo.clone()).collect();
+					*best_selection = curr_selection.iter().map(|x| x.utxo.clone()).collect();
 				}
 				return;
 			}
@@ -542,9 +551,7 @@ impl<T: Config> Pallet<T> {
 		// A single larger UTXO may be preferable (fewer inputs = smaller tx).
 		if !best_selection.is_empty() {
 			if let Some(ref larger) = lowest_larger {
-				if larger.utxo.input_vbytes <= max_weight
-					&& larger.effective_value <= best_total
-				{
+				if larger.utxo.input_vbytes <= max_weight && larger.effective_value <= best_total {
 					return Some((vec![larger.utxo.clone()], SelectionStrategy::Knapsack));
 				}
 			}
@@ -583,6 +590,11 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let UtxoSubmission { authority_id, utxos } = utxo_submission;
 
+		// reject if the number of UTXOs exceeds the per-submission limit.
+		if utxos.len() > crate::MAX_UTXOS_PER_SUBMISSION {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
+
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;
 
@@ -595,8 +607,13 @@ impl<T: Config> Pallet<T> {
 					.iter()
 					.map(|x| {
 						let utxo_hash = H256::from_slice(
-							keccak_256(&Encode::encode(&(x.txid, x.vout, x.amount, x.address.clone())))
-								.as_ref(),
+							keccak_256(&Encode::encode(&(
+								x.txid,
+								x.vout,
+								x.amount,
+								x.address.clone(),
+							)))
+							.as_ref(),
 						);
 						hex::encode(utxo_hash)
 					})
@@ -673,6 +690,17 @@ impl<T: Config> Pallet<T> {
 		signature: &T::Signature,
 	) -> TransactionValidity {
 		let SocketMessagesSubmission { authority_id, messages } = outbound_request_submission;
+
+		// reject if the number of messages exceeds the per-submission limit.
+		if messages.len() > crate::MAX_SOCKET_MESSAGES_PER_SUBMISSION {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
+
+		// reject if any individual message exceeds the configured size limit.
+		let max_bytes = T::SocketQueue::get_max_socket_message_bytes() as usize;
+		if messages.iter().any(|m| m.len() > max_bytes) {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
 
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;

@@ -50,6 +50,7 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 	pub const ExistentialDeposit: u128 = 1;
 	pub const DefaultMaxFeeRate: u64 = 1000;
+	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
 	pub const MinimumPeriod: u64 = 6000;
 	pub PrecompilesValue: MockPrecompiles = MockPrecompiles;
 	pub WeightPerGas: frame_support::weights::Weight = frame_support::weights::Weight::from_parts(1, 0);
@@ -305,6 +306,7 @@ impl pallet_btc_socket_queue::Config for Test {
 	type Blaze = MockBlazeManager;
 	type WeightInfo = ();
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
 }
 
 #[cfg(feature = "runtime-benchmarks")]

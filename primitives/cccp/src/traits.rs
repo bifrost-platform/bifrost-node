@@ -5,6 +5,9 @@ use crate::UnboundedBytes;
 pub trait SocketVerifier<AccountId> {
 	/// Verify a Socket message whether it is valid.
 	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
+
+	/// Returns the maximum allowed byte size for a single socket message.
+	fn get_max_socket_message_bytes() -> u32;
 }
 
 pub trait RelayQueueManager<AccountId> {
