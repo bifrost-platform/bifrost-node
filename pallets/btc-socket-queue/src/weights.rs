@@ -51,6 +51,7 @@ pub trait WeightInfo {
 	fn set_max_fee_rate() -> Weight;
 	fn submit_bump_fee_request() -> Weight;
 	fn drop_pending_rollback_request() -> Weight;
+	fn set_max_socket_message_bytes() -> Weight;
 }
 
 /// Weights for `pallet_btc_socket_queue` using the Substrate node and recommended hardware.
@@ -240,6 +241,17 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `1493`
+		// Minimum execution time: 16_830_000 picoseconds.
+		Weight::from_parts(17_380_000, 0)
+			.saturating_add(T::DbWeight::get().reads(1_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
+	/// Storage: `BtcSocketQueue::MaxSocketMessageBytes` (r:1 w:1)
+	/// Proof: `BtcSocketQueue::MaxSocketMessageBytes` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	fn set_max_socket_message_bytes() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `1489`
 		// Minimum execution time: 16_830_000 picoseconds.
 		Weight::from_parts(17_380_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
@@ -479,6 +491,17 @@ impl WeightInfo for () {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `1493`
+		// Minimum execution time: 16_830_000 picoseconds.
+		Weight::from_parts(17_380_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: `BtcSocketQueue::MaxSocketMessageBytes` (r:1 w:1)
+	/// Proof: `BtcSocketQueue::MaxSocketMessageBytes` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	fn set_max_socket_message_bytes() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `0`
+		//  Estimated: `1489`
 		// Minimum execution time: 16_830_000 picoseconds.
 		Weight::from_parts(17_380_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))

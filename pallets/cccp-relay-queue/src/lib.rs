@@ -13,7 +13,7 @@ use bp_staking::MAX_AUTHORITIES;
 use frame_support::traits::Currency;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, H160, H256, RuntimeDebug, U256};
+use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedVec;
 
 pub(crate) const LOG_TARGET: &'static str = "runtime::cccp-relay-queue";
@@ -28,6 +28,8 @@ macro_rules! log {
 		)
 	};
 }
+/// Maximum number of pending transfers a single relayer may have at any time.
+pub const MAX_PENDING_TRANSFERS_PER_RELAYER: u32 = 100;
 
 /// Chain ID type.
 pub type ChainId = u32;

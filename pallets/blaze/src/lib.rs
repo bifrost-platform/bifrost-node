@@ -26,6 +26,15 @@ use sp_std::vec::Vec;
 
 pub(crate) const LOG_TARGET: &'static str = "runtime::blaze";
 
+/// Maximum number of socket messages allowed per `submit_outbound_requests` submission.
+pub const MAX_SOCKET_MESSAGES_PER_SUBMISSION: usize = 10;
+
+/// Maximum number of UTXOs allowed per `submit_utxos` submission.
+pub const MAX_UTXOS_PER_SUBMISSION: usize = 50;
+
+/// Maximum number of unconfirmed UTXOs a single relayer may have pending at any time.
+pub const MAX_UNCONFIRMED_UTXOS_PER_RELAYER: u32 = 100;
+
 // syntactic sugar for logging.
 #[macro_export]
 macro_rules! log {
