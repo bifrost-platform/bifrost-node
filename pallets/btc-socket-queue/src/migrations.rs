@@ -1,5 +1,40 @@
 use super::*;
 
+pub mod v7 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade},
+		weights::Weight,
+	};
+
+	pub struct V7<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V7<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			// 1 read: on_chain_storage_version
+			weight = weight.saturating_add(T::DbWeight::get().reads(1));
+
+			if current == 7 && onchain == 6 {
+				<MaxSocketMessageBytes<T>>::put(T::DefaultMaxSocketMessageBytes::get());
+				current.put::<Pallet<T>>();
+
+				log!(info, "btc-socket-queue storage migration passes v7 update ✅");
+				// 2 writes: MaxSocketMessageBytes + storage version bump
+				weight = weight.saturating_add(T::DbWeight::get().writes(2));
+			} else {
+				log!(warn, "Skipping btc-socket-queue storage v7 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod v6 {
 	use super::*;
 	use core::marker::PhantomData;
