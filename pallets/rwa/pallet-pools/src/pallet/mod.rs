@@ -110,7 +110,7 @@ pub mod pallet {
 
 			ensure!(!tranches.is_empty(), Error::<T>::MissingResidualTranche);
 			ensure!(
-				tranches.last().map(|t| t.tranche_type.is_residual()).unwrap_or(false),
+				tranches.last().map(|t| t.tranche_type.is_junior()).unwrap_or(false),
 				Error::<T>::JuniorTrancheMustBeLast
 			);
 
@@ -123,8 +123,7 @@ pub mod pallet {
 					tranche_type: input.tranche_type.clone(),
 					tranche_id: input.tranche_id.clone(),
 					debt: U256::zero(),
-					reserve: U256::zero(),
-					token_supply: U256::zero(),
+					total: U256::zero(),
 					last_updated_interest: now,
 					seniority: input.seniority,
 				})

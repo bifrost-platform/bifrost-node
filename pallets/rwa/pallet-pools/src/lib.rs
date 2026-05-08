@@ -7,7 +7,7 @@ pub use pallet::pallet::*;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{H160, U256};
-use sp_runtime::{traits::One, FixedPointNumber, FixedU128, Perquintill, RuntimeDebug, Saturating};
+use sp_runtime::{FixedU128, Perquintill, RuntimeDebug};
 
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
@@ -61,9 +61,9 @@ pub struct TrancheId {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum TrancheType {
 	/// Residual (junior) tranche — absorbs losses, receives residual return.
-	Residual,
+	Junior,
 	/// Non-residual (senior) tranche with a fixed rate and minimum risk buffer.
-	NonResidual {
+	Senior {
 		/// Stored as `1 + annual_rate / SECONDS_PER_YEAR` (FixedU128).
 		interest_rate_per_sec: Rate,
 		/// Minimum junior-protection ratio required for a healthy solution.
@@ -72,8 +72,8 @@ pub enum TrancheType {
 }
 
 impl TrancheType {
-	pub fn is_residual(&self) -> bool {
-		matches!(self, TrancheType::Residual)
+	pub fn is_junior(&self) -> bool {
+		matches!(self, TrancheType::Junior)
 	}
 }
 
@@ -87,60 +87,16 @@ pub struct Tranche {
 	pub tranche_type: TrancheType,
 	/// Globally unique tranche identifier: (chain_id, vault_address).
 	pub tranche_id: TrancheId,
-	/// Outstanding debt owed to this tranche's investors. Grows at `interest_rate_per_sec`.
+	/// Total outstanding debt owed to this tranche's investors. Grows at `interest_rate_per_sec`.
 	pub debt: U256,
-	/// Reserve allocated to this tranche (not yet deployed as loans).
-	pub reserve: U256,
-	/// Total tranche-token supply outstanding.
-	pub token_supply: U256,
+	// TODO: add debts_per_loan: map of loan_id to debt
+	/// Total invested amount in this tranche.
+	/// Available = total - debt
+	pub total: U256,
 	/// Block number when interest was last accrued.
 	pub last_updated_interest: u32,
 	/// Seniority weight used in epoch solution scoring.
 	pub seniority: u32,
-}
-
-impl Tranche {
-	/// Accrues compound interest from `last_updated_interest` up to `now` (block number).
-	pub fn accrue(&mut self, now: u32) {
-		if let TrancheType::NonResidual { interest_rate_per_sec, .. } = self.tranche_type {
-			let delta = now.saturating_sub(self.last_updated_interest);
-			let debt_u128: u128 = self.debt.try_into().unwrap_or(u128::MAX);
-			if delta > 0 && debt_u128 > 0 {
-				self.debt = U256::from(compound(interest_rate_per_sec, debt_u128, delta as u64));
-			}
-		}
-		self.last_updated_interest = now;
-	}
-
-	/// Token price = tranche_value / token_supply. Returns ONE when supply is zero.
-	pub fn token_price(&self, total_assets: U256) -> FixedU128 {
-		let value: u128 = self.tranche_value(total_assets).try_into().unwrap_or(u128::MAX);
-		let supply: u128 = self.token_supply.try_into().unwrap_or(u128::MAX);
-		if supply == 0 {
-			return FixedU128::one();
-		}
-		FixedU128::from_rational(value, supply)
-	}
-
-	/// Tranche value = min(debt + reserve, total_assets).
-	pub fn tranche_value(&self, total_assets: U256) -> U256 {
-		self.debt.saturating_add(self.reserve).min(total_assets)
-	}
-}
-
-/// Fast exponentiation: `base^exp` applied to `principal`.
-fn compound(rate: Rate, principal: u128, exp: u64) -> u128 {
-	let mut base = rate;
-	let mut result = FixedU128::one();
-	let mut n = exp;
-	while n > 0 {
-		if n & 1 == 1 {
-			result = result.saturating_mul(base);
-		}
-		base = base.saturating_mul(base);
-		n >>= 1;
-	}
-	result.saturating_mul_int(principal)
 }
 
 // ---------------------------------------------------------------------------
@@ -164,11 +120,11 @@ pub struct TrancheInput {
 #[derive(Clone, Default, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ReserveDetails {
-	/// Admin-configured maximum reserve.
+	/// Admin-configured maximum reserve. (total reserve cannot exceed this amount)
 	pub max: U256,
-	/// Total reserve balance (substrate-side accounting mirror).
+	/// Total reserve balance.
 	pub total: U256,
-	/// Available = total minus amounts earmarked for pending redemptions.
+	/// Available reserve to be used for borrowers.
 	pub available: U256,
 }
 
