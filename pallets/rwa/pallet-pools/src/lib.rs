@@ -1,0 +1,255 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+mod pallet;
+
+pub use pallet::pallet::*;
+
+use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use scale_info::TypeInfo;
+use sp_core::{H160, U256};
+use sp_runtime::{traits::One, FixedPointNumber, FixedU128, Perquintill, RuntimeDebug, Saturating};
+
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Primitive type aliases
+// ---------------------------------------------------------------------------
+
+/// 18-decimal fixed-point rate: stores `1 + rate_per_second`.
+pub type Rate = FixedU128;
+
+/// Pool identifier.
+pub type PoolId = u64;
+
+/// Tranche index within a pool. 0 = most senior, last = residual (junior).
+pub type TrancheIndex = u32;
+
+/// Epoch counter.
+pub type EpochId = u32;
+
+// ---------------------------------------------------------------------------
+// TrancheType
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum TrancheType {
+	/// Residual (junior) tranche — absorbs losses, receives residual return.
+	Residual,
+	/// Non-residual (senior) tranche with a fixed rate and minimum risk buffer.
+	NonResidual {
+		/// Stored as `1 + annual_rate / SECONDS_PER_YEAR` (FixedU128).
+		interest_rate_per_sec: Rate,
+		/// Minimum junior-protection ratio required for a healthy solution.
+		min_risk_buffer: Perquintill,
+	},
+}
+
+impl TrancheType {
+	pub fn is_residual(&self) -> bool {
+		matches!(self, TrancheType::Residual)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Tranche
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct Tranche {
+	pub tranche_type: TrancheType,
+	/// The ERC-7540 vault contract address on the external chain.
+	/// This doubles as the unique tranche identifier within a pool.
+	pub vault_address: H160,
+	/// Outstanding debt owed to this tranche's investors. Grows at `interest_rate_per_sec`.
+	pub debt: U256,
+	/// Reserve allocated to this tranche (not yet deployed as loans).
+	pub reserve: U256,
+	/// Total tranche-token supply outstanding.
+	pub token_supply: U256,
+	/// Block number when interest was last accrued.
+	pub last_updated_interest: u32,
+	/// Seniority weight used in epoch solution scoring.
+	pub seniority: u32,
+}
+
+impl Tranche {
+	/// Accrues compound interest from `last_updated_interest` up to `now` (block number).
+	pub fn accrue(&mut self, now: u32) {
+		if let TrancheType::NonResidual { interest_rate_per_sec, .. } = self.tranche_type {
+			let delta = now.saturating_sub(self.last_updated_interest);
+			let debt_u128: u128 = self.debt.try_into().unwrap_or(u128::MAX);
+			if delta > 0 && debt_u128 > 0 {
+				self.debt = U256::from(compound(interest_rate_per_sec, debt_u128, delta as u64));
+			}
+		}
+		self.last_updated_interest = now;
+	}
+
+	/// Token price = tranche_value / token_supply. Returns ONE when supply is zero.
+	pub fn token_price(&self, total_assets: U256) -> FixedU128 {
+		let value: u128 = self.tranche_value(total_assets).try_into().unwrap_or(u128::MAX);
+		let supply: u128 = self.token_supply.try_into().unwrap_or(u128::MAX);
+		if supply == 0 {
+			return FixedU128::one();
+		}
+		FixedU128::from_rational(value, supply)
+	}
+
+	/// Tranche value = min(debt + reserve, total_assets).
+	pub fn tranche_value(&self, total_assets: U256) -> U256 {
+		self.debt.saturating_add(self.reserve).min(total_assets)
+	}
+}
+
+/// Fast exponentiation: `base^exp` applied to `principal`.
+fn compound(rate: Rate, principal: u128, exp: u64) -> u128 {
+	let mut base = rate;
+	let mut result = FixedU128::one();
+	let mut n = exp;
+	while n > 0 {
+		if n & 1 == 1 {
+			result = result.saturating_mul(base);
+		}
+		base = base.saturating_mul(base);
+		n >>= 1;
+	}
+	result.saturating_mul_int(principal)
+}
+
+// ---------------------------------------------------------------------------
+// TrancheInput — used when creating a pool
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct TrancheInput {
+	pub tranche_type: TrancheType,
+	/// ERC-7540 vault contract address for this tranche on the external chain.
+	pub vault_address: H160,
+	/// Seniority weight for scoring.
+	pub seniority: u32,
+}
+
+// ---------------------------------------------------------------------------
+// ReserveDetails
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Default, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct ReserveDetails {
+	/// Admin-configured maximum reserve.
+	pub max: U256,
+	/// Total reserve balance (substrate-side accounting mirror).
+	pub total: U256,
+	/// Available = total minus amounts earmarked for pending redemptions.
+	pub available: U256,
+}
+
+impl ReserveDetails {
+	pub fn deposit(&mut self, amount: U256) {
+		self.total = self.total.saturating_add(amount);
+		self.available = self.available.saturating_add(amount);
+	}
+
+	/// Returns false if insufficient available reserve.
+	pub fn withdraw(&mut self, amount: U256) -> bool {
+		if self.available < amount {
+			return false;
+		}
+		self.available = self.available.saturating_sub(amount);
+		self.total = self.total.saturating_sub(amount);
+		true
+	}
+}
+
+// ---------------------------------------------------------------------------
+// EpochInfo — block-number-based epoch tracking
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct EpochInfo {
+	/// Current epoch index.
+	pub current_epoch: EpochId,
+	/// Block number when the current epoch started.
+	pub epoch_start_block: u32,
+	/// Number of blocks each epoch lasts.
+	pub epoch_length: u32,
+}
+
+impl EpochInfo {
+	pub fn new(epoch_length: u32, start_block: u32) -> Self {
+		EpochInfo { current_epoch: 0, epoch_start_block: start_block, epoch_length }
+	}
+
+	/// True when `now` has passed the end of the current epoch.
+	pub fn should_advance(&self, now: u32) -> bool {
+		now.saturating_sub(self.epoch_start_block) >= self.epoch_length
+	}
+
+	/// Advance to the next epoch starting at `now`.
+	pub fn advance(&mut self, now: u32) {
+		self.current_epoch = self.current_epoch.saturating_add(1);
+		self.epoch_start_block = now;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PoolDetails
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct PoolDetails<AccountId> {
+	/// Pool admin account address.
+	pub admin: AccountId,
+	/// Accepted currency contract address (on Bifrost EVM).
+	/// For example, if the pool accepts USDC, the currency will be the UnifiedUSDC contract address.
+	pub currency: H160,
+	/// Reserve details.
+	pub reserve: ReserveDetails,
+	/// Ordered tranches list: index 0 = most senior, last = residual (junior).
+	/// Each tranche is identified by its ERC-7540 `vault_address` on the external chain.
+	pub tranches: sp_std::vec::Vec<Tranche>,
+	/// Block-number-based epoch tracking.
+	pub epoch: EpochInfo,
+	/// Maximum age (in blocks) of the NAV before closing an epoch is blocked.
+	pub max_nav_age: u32,
+	/// Most recent NAV reported by pallet-loans.
+	pub last_nav: U256,
+	/// Block number when `last_nav` was recorded.
+	pub last_nav_update: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Traits
+// ---------------------------------------------------------------------------
+
+use frame_support::pallet_prelude::DispatchError;
+
+/// Implemented by pallet-loans. Called by pallet-pools to fetch or refresh the
+/// current NAV (net asset value = total loan AUM) for a pool.
+pub trait PoolNAV<PoolId, Balance> {
+	/// Returns `(nav, block_number)` of the last recorded NAV without recomputing.
+	fn nav(pool_id: PoolId) -> Option<(Balance, u32)>;
+
+	/// Triggers a fresh NAV computation across all active loans and returns the result.
+	fn update_nav(pool_id: PoolId) -> Result<Balance, DispatchError>;
+}
+
+/// Implemented by pallet-pools. Called by pallet-loans when disbursing or receiving
+/// loan repayments so that pool reserve accounting stays consistent.
+pub trait PoolReserve<Balance> {
+	/// Decrease available reserve by `amount` (loan disbursement).
+	/// Returns `Err` if insufficient available reserve.
+	fn withdraw(pool_id: PoolId, amount: Balance) -> frame_support::dispatch::DispatchResult;
+
+	/// Increase total and available reserve by `amount` (loan repayment or invest settlement).
+	fn deposit(pool_id: PoolId, amount: Balance) -> frame_support::dispatch::DispatchResult;
+
+	/// Read available reserve for a pool.
+	fn available_reserve(pool_id: PoolId) -> Balance;
+}
