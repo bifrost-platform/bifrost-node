@@ -9437,6 +9437,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-investments"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-investments",
+ "pallet-pools",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-relay-manager"
 version = "1.0.0"
 dependencies = [

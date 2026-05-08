@@ -23,6 +23,7 @@ members = [
 	"pallets/rwa/pallet-pools",
 	"pallets/rwa/pallet-loans",
 	"pallets/rwa/pallet-investments",
+	"precompiles/investments",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -126,6 +127,7 @@ precompile-btc-registration-pool = { default-features = false, path = "precompil
 precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
+precompile-investments = { default-features = false, path = "precompiles/investments" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }
