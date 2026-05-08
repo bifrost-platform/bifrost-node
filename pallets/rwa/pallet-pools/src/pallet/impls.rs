@@ -1,8 +1,8 @@
 use frame_support::ensure;
-use sp_core::{H160, U256};
+use sp_core::U256;
 use sp_runtime::DispatchError;
 
-use crate::{PoolId, PoolReserve, TrancheIndex};
+use crate::{PoolId, PoolInspect, PoolReserve, TrancheId, TrancheIndex};
 
 use super::pallet::*;
 
@@ -12,13 +12,21 @@ impl<T: Config> Pallet<T> {
 		frame_system::Pallet::<T>::block_number().try_into().unwrap_or(u32::MAX)
 	}
 
-	/// Look up the index of a tranche within a pool by its vault address.
-	pub fn tranche_index_by_vault(pool_id: PoolId, vault_address: H160) -> Option<TrancheIndex> {
+	/// Look up the index of a tranche within a pool by its TrancheId.
+	pub fn tranche_index_by_id(pool_id: PoolId, tranche_id: TrancheId) -> Option<TrancheIndex> {
 		let pool = Pool::<T>::get(pool_id)?;
 		pool.tranches
 			.iter()
-			.position(|t| t.vault_address == vault_address)
+			.position(|t| t.tranche_id == tranche_id)
 			.map(|i| i as TrancheIndex)
+	}
+}
+
+impl<T: Config> PoolInspect for Pallet<T> {
+	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool {
+		Pool::<T>::get(pool_id)
+			.map(|p| p.tranches.iter().any(|t| t.tranche_id == tranche_id))
+			.unwrap_or(false)
 	}
 }
 

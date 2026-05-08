@@ -8126,19 +8126,13 @@ dependencies = [
 name = "pallet-investments"
 version = "1.0.0"
 dependencies = [
- "array-bytes 6.2.3",
- "bifrost-common-constants",
- "bp-cccp",
- "bp-staking",
- "frame-benchmarking",
  "frame-support",
  "frame-system",
- "log",
- "pallet-evm",
+ "pallet-pools",
  "parity-scale-codec",
  "scale-info",
+ "serde",
  "sp-core",
- "sp-io",
  "sp-runtime",
  "sp-std",
 ]

@@ -4,7 +4,7 @@ mod pallet;
 
 pub use pallet::pallet::*;
 
-use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{H160, U256};
 use sp_runtime::{traits::One, FixedPointNumber, FixedU128, Perquintill, RuntimeDebug, Saturating};
@@ -27,6 +27,31 @@ pub type TrancheIndex = u32;
 
 /// Epoch counter.
 pub type EpochId = u32;
+
+// ---------------------------------------------------------------------------
+// TrancheId
+// ---------------------------------------------------------------------------
+
+/// Globally unique tranche identifier: the EVM chain where the vault is deployed
+/// paired with the ERC-7540 vault contract address on that chain.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct TrancheId {
+	/// EVM chain ID of the chain where the vault contract is deployed.
+	pub chain_id: u64,
+	/// ERC-7540 vault contract address on that chain.
+	pub vault_address: H160,
+}
 
 // ---------------------------------------------------------------------------
 // TrancheType
@@ -60,9 +85,8 @@ impl TrancheType {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Tranche {
 	pub tranche_type: TrancheType,
-	/// The ERC-7540 vault contract address on the external chain.
-	/// This doubles as the unique tranche identifier within a pool.
-	pub vault_address: H160,
+	/// Globally unique tranche identifier: (chain_id, vault_address).
+	pub tranche_id: TrancheId,
 	/// Outstanding debt owed to this tranche's investors. Grows at `interest_rate_per_sec`.
 	pub debt: U256,
 	/// Reserve allocated to this tranche (not yet deployed as loans).
@@ -127,8 +151,8 @@ fn compound(rate: Rate, principal: u128, exp: u64) -> u128 {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct TrancheInput {
 	pub tranche_type: TrancheType,
-	/// ERC-7540 vault contract address for this tranche on the external chain.
-	pub vault_address: H160,
+	/// Globally unique tranche identifier: (chain_id, vault_address).
+	pub tranche_id: TrancheId,
 	/// Seniority weight for scoring.
 	pub seniority: u32,
 }
@@ -229,6 +253,12 @@ pub struct PoolDetails<AccountId> {
 // ---------------------------------------------------------------------------
 
 use frame_support::pallet_prelude::DispatchError;
+
+/// Implemented by pallet-pools. Called by pallet-investments to validate that a
+/// tranche vault address belongs to an existing pool before accepting an order.
+pub trait PoolInspect {
+	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
+}
 
 /// Implemented by pallet-loans. Called by pallet-pools to fetch or refresh the
 /// current NAV (net asset value = total loan AUM) for a pool.

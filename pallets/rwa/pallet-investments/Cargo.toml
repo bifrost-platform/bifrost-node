@@ -10,31 +10,24 @@ repository = { workspace = true }
 
 [dependencies]
 # General
-log = { workspace = true }
-array-bytes = { workspace = true }
+serde = { workspace = true, optional = true }
 
 # Substrate
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
-frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 sp-runtime = { workspace = true }
 sp-core = { workspace = true }
 sp-std = { workspace = true }
-sp-io = { workspace = true }
 
-# Bifrost
-bp-staking = { workspace = true }
-bp-cccp = { workspace = true }
-bifrost-common-constants = { workspace = true }
-
-# Frontier
-pallet-evm = { workspace = true }
+# RWA
+pallet-pools = { path = "../pallet-pools", default-features = false }
 
 [features]
 default = ["std"]
 std = [
+	"serde",
 	"scale-info/std",
 	"parity-scale-codec/std",
 	"frame-support/std",
@@ -42,14 +35,6 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-core/std",
-	"sp-io/std",
-	"bp-cccp/std",
-	"pallet-evm/std",
+	"pallet-pools/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
-runtime-benchmarks = [
-	"frame-benchmarking",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
-]

@@ -1,7 +1,8 @@
 mod impls;
 
 use crate::{
-	EpochInfo, PoolDetails, PoolId, PoolNAV, ReserveDetails, Tranche, TrancheIndex, TrancheInput,
+	EpochInfo, PoolDetails, PoolId, PoolNAV, ReserveDetails, Tranche, TrancheId, TrancheIndex,
+	TrancheInput,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -63,8 +64,8 @@ pub mod pallet {
 		PoolUpdated { pool_id: PoolId },
 		/// Maximum reserve was changed.
 		MaxReserveSet { pool_id: PoolId, max_reserve: U256 },
-		/// A tranche vault address was registered or updated.
-		TrancheVaultSet { pool_id: PoolId, vault_address: H160 },
+		/// A tranche ID (chain + vault address) was registered or updated.
+		TrancheIdSet { pool_id: PoolId, tranche_id: TrancheId },
 		/// Pool reserve was updated (via pallet-loans borrow or repay).
 		ReserveUpdated { pool_id: PoolId, total: U256, available: U256 },
 	}
@@ -120,7 +121,7 @@ pub mod pallet {
 				.iter()
 				.map(|input| Tranche {
 					tranche_type: input.tranche_type.clone(),
-					vault_address: input.vault_address,
+					tranche_id: input.tranche_id.clone(),
 					debt: U256::zero(),
 					reserve: U256::zero(),
 					token_supply: U256::zero(),
@@ -191,14 +192,14 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Register or update the ERC-7540 vault address for a tranche (admin only).
+		/// Register or update the TrancheId (chain + vault address) for a tranche (admin only).
 		#[pallet::call_index(3)]
 		#[pallet::weight(Weight::from_parts(5_000, 0))]
-		pub fn set_tranche_vault(
+		pub fn set_tranche_id(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_index: TrancheIndex,
-			vault_address: H160,
+			tranche_id: TrancheId,
 		) -> DispatchResult {
 			let caller = ensure_signed(origin)?;
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
@@ -208,10 +209,10 @@ pub mod pallet {
 					.tranches
 					.get_mut(tranche_index as usize)
 					.ok_or(Error::<T>::TrancheNotFound)?;
-				tranche.vault_address = vault_address;
+				tranche.tranche_id = tranche_id.clone();
 				Ok(())
 			})?;
-			Self::deposit_event(Event::TrancheVaultSet { pool_id, vault_address });
+			Self::deposit_event(Event::TrancheIdSet { pool_id, tranche_id });
 			Ok(())
 		}
 	}

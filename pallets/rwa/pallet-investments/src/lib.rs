@@ -1,2 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
-// pallet-investments — implementation in progress
+
+mod pallet;
+
+pub use pallet::pallet::*;
+pub use pallet_pools::{PoolId, PoolInspect, TrancheId};
