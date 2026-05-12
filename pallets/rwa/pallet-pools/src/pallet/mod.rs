@@ -122,7 +122,8 @@ pub mod pallet {
 				.map(|input| Tranche {
 					tranche_type: input.tranche_type.clone(),
 					tranche_id: input.tranche_id.clone(),
-					debt: U256::zero(),
+					principal: U256::zero(),
+					interest: U256::zero(),
 					total: U256::zero(),
 					last_updated_interest: now,
 					seniority: input.seniority,

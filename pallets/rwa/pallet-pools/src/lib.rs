@@ -7,7 +7,7 @@ pub use pallet::pallet::*;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{H160, U256};
-use sp_runtime::{FixedU128, Perquintill, RuntimeDebug};
+use sp_runtime::{traits::One, FixedPointNumber, FixedU128, Perquintill, RuntimeDebug, Saturating};
 
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
@@ -87,16 +87,63 @@ pub struct Tranche {
 	pub tranche_type: TrancheType,
 	/// Globally unique tranche identifier: (chain_id, vault_address).
 	pub tranche_id: TrancheId,
-	/// Total outstanding debt owed to this tranche's investors. Grows at `interest_rate_per_sec`.
-	pub debt: U256,
-	// TODO: add debts_per_loan: map of loan_id to debt
+	/// Original amount invested by investors — reduced only when redemptions are settled.
+	pub principal: U256,
+	/// Compound interest accrued on top of `principal` since last settlement.
+	pub interest: U256,
 	/// Total invested amount in this tranche.
-	/// Available = total - debt
 	pub total: U256,
 	/// Block number when interest was last accrued.
 	pub last_updated_interest: u32,
 	/// Seniority weight used in epoch solution scoring.
 	pub seniority: u32,
+}
+
+impl Tranche {
+	/// Total obligation to investors: principal + accrued interest.
+	pub fn debt(&self) -> U256 {
+		self.principal.saturating_add(self.interest)
+	}
+
+	/// Compound interest on the outstanding debt up to block `now`.
+	/// Only applies to Senior tranches — Junior has no fixed rate.
+	pub fn accrue(&mut self, now: u32) {
+		if let TrancheType::Senior { interest_rate_per_sec, .. } = self.tranche_type {
+			let delta = now.saturating_sub(self.last_updated_interest);
+			if delta > 0 && !self.principal.is_zero() {
+				let current_debt: u128 = self.debt().try_into().unwrap_or(u128::MAX);
+				let new_debt = compound(interest_rate_per_sec, current_debt, delta as u64);
+				let principal: u128 = self.principal.try_into().unwrap_or(u128::MAX);
+				self.interest = U256::from(new_debt.saturating_sub(principal));
+			}
+		}
+		self.last_updated_interest = now;
+	}
+
+	/// Token price = debt / token_supply. Returns ONE when no tokens are outstanding.
+	pub fn token_price(&self) -> FixedU128 {
+		let debt: u128 = self.debt().try_into().unwrap_or(u128::MAX);
+		let supply: u128 = self.total.try_into().unwrap_or(u128::MAX);
+		if supply == 0 {
+			return FixedU128::one();
+		}
+		FixedU128::from_rational(debt, supply)
+	}
+}
+
+/// Fast exponentiation: `base^exp` applied to `principal`.
+fn compound(rate: Rate, principal: u128, exp: u64) -> u128 {
+	let mut base = rate;
+	let mut result = FixedU128::one();
+	let mut n = exp;
+	while n > 0 {
+		if n & 1 == 1 {
+			result = result.saturating_mul(base);
+		}
+		base = base.saturating_mul(base);
+		n >>= 1;
+	}
+	result.saturating_mul_int(principal)
 }
 
 // ---------------------------------------------------------------------------
