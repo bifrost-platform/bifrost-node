@@ -257,9 +257,11 @@ pub struct PoolDetails<AccountId> {
 
 use frame_support::pallet_prelude::DispatchError;
 
-/// Implemented by pallet-pools. Called by pallet-investments to validate that a
-/// tranche vault address belongs to an existing pool before accepting an order.
-pub trait PoolInspect {
+/// Implemented by pallet-pools. Called by pallet-investments / pallet-loans to
+/// validate pool/tranche existence and resolve the pool admin for auth checks.
+pub trait PoolInspect<AccountId> {
+	fn pool_exists(pool_id: PoolId) -> bool;
+	fn pool_admin(pool_id: PoolId) -> Option<AccountId>;
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
 }
 

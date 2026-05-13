@@ -22,7 +22,15 @@ impl<T: Config> Pallet<T> {
 	}
 }
 
-impl<T: Config> PoolInspect for Pallet<T> {
+impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
+	fn pool_exists(pool_id: PoolId) -> bool {
+		Pool::<T>::contains_key(pool_id)
+	}
+
+	fn pool_admin(pool_id: PoolId) -> Option<T::AccountId> {
+		Pool::<T>::get(pool_id).map(|p| p.admin)
+	}
+
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool {
 		Pool::<T>::get(pool_id)
 			.map(|p| p.tranches.iter().any(|t| t.tranche_id == tranche_id))

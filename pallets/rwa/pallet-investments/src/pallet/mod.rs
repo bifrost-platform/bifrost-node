@@ -19,7 +19,7 @@ pub mod pallet {
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
 		/// Pool inspection — implemented by pallet-pools.
-		type Pools: PoolInspect;
+		type Pools: PoolInspect<Self::AccountId>;
 	}
 
 	// -----------------------------------------------------------------------
