@@ -21,7 +21,6 @@ members = [
 	"pallets/oracle-registry",
 	"pallets/cccp-relay-queue",
 	"pallets/rwa/pallet-pools",
-	"pallets/rwa/pallet-loans",
 	"pallets/rwa/pallet-investments",
 	"precompiles/investments",
 	"precompiles/bfc-staking",
