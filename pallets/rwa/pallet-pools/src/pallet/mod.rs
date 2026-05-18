@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	EpochInfo, PoolDetails, PoolId, PoolNAV, ReserveDetails, Tranche, TrancheId, TrancheIndex,
-	TrancheInput,
+	CollateralAsset, EpochInfo, PoolDetails, PoolId, ReserveDetails, SettlementMode, Tranche,
+	TrancheId, TrancheIndex, TrancheInput,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -23,9 +23,6 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
-		/// NAV provider — implemented by pallet-loans.
-		type NAV: PoolNAV<PoolId, U256>;
-
 		/// Maximum number of tranches per pool (enforced at creation).
 		#[pallet::constant]
 		type MaxTranches: Get<u32>;
@@ -43,7 +40,7 @@ pub mod pallet {
 		NotPoolAdmin,
 		/// The junior (residual) tranche must be the last entry in the tranche list.
 		JuniorTrancheMustBeLast,
-		/// At least one tranche is required and the last must be residual.
+		/// At least one tranche is required and the last must be junior.
 		MissingResidualTranche,
 		/// Tranche index is out of range.
 		TrancheNotFound,
@@ -64,10 +61,12 @@ pub mod pallet {
 		PoolUpdated { pool_id: PoolId },
 		/// Maximum reserve was changed.
 		MaxReserveSet { pool_id: PoolId, max_reserve: U256 },
-		/// A tranche ID (chain + vault address) was registered or updated.
-		TrancheIdSet { pool_id: PoolId, tranche_id: TrancheId },
-		/// Pool reserve was updated (via pallet-loans borrow or repay).
+		/// An ERC-7540 vault was registered to a tranche.
+		VaultAdded { pool_id: PoolId, tranche_index: TrancheIndex, tranche_id: TrancheId },
+		/// Pool reserve was updated (via invest settlement or repay).
 		ReserveUpdated { pool_id: PoolId, total: U256, available: U256 },
+		/// An epoch ended and a new one began.
+		EpochAdvanced { pool_id: PoolId, new_epoch: u32 },
 	}
 
 	// -----------------------------------------------------------------------
@@ -84,6 +83,39 @@ pub mod pallet {
 	pub type NextPoolId<T: Config> = StorageValue<_, PoolId, ValueQuery>;
 
 	// -----------------------------------------------------------------------
+	// Hooks
+	// -----------------------------------------------------------------------
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
+			let now = Self::current_block();
+			let mut weight = Weight::zero();
+
+			for (pool_id, mut pool) in Pool::<T>::iter() {
+				weight = weight.saturating_add(Weight::from_parts(1_000, 0));
+
+				if pool.epoch.should_advance(now) {
+					pool.epoch.advance(now);
+					let new_epoch = pool.epoch.current_epoch;
+
+					// Automatic invest settlement runs on epoch transition.
+					// Confirmed invest orders are written here; the off-chain bot
+					// handles cross-chain mint and clears them afterwards.
+					if pool.invest_settlement == SettlementMode::Automatic {
+						Self::settle_invest_orders(pool_id, &mut pool);
+					}
+
+					Pool::<T>::insert(pool_id, pool);
+					Self::deposit_event(Event::EpochAdvanced { pool_id, new_epoch });
+				}
+			}
+
+			weight
+		}
+	}
+
+	// -----------------------------------------------------------------------
 	// Extrinsics
 	// -----------------------------------------------------------------------
 
@@ -91,19 +123,24 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Create a new RWA pool.
 		///
-		/// `tranches` must end with exactly one `Residual` (junior) tranche.
-		/// All preceding entries must be `NonResidual` (senior), ordered most-senior first.
-		/// Each tranche is identified by its ERC-7540 `vault_address` on the external chain.
+		/// `tranches` must end with exactly one junior tranche.
+		/// All preceding entries must be senior, ordered most-senior first.
 		///
-		/// `epoch_length` is the number of blocks each epoch lasts.
+		/// `settlement_start_offset` is how many blocks before epoch end
+		/// the settlement window opens. During this window new orders are rejected.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			currency: H160,
 			epoch_length: u32,
-			max_nav_age: u32,
+			settlement_start_offset: u32,
 			max_reserve: U256,
+			investment_ceiling: U256,
+			invest_settlement: SettlementMode,
+			redeem_settlement: SettlementMode,
+			nft_contract: H160,
+			nft_token_id: U256,
 			tranches: BoundedVec<TrancheInput, T::MaxTranches>,
 		) -> DispatchResult {
 			let admin = ensure_signed(origin)?;
@@ -122,10 +159,7 @@ pub mod pallet {
 				.map(|input| Tranche {
 					tranche_type: input.tranche_type.clone(),
 					tranche_id: input.tranche_id.clone(),
-					principal: U256::zero(),
-					interest: U256::zero(),
 					total: U256::zero(),
-					last_updated_interest: now,
 					seniority: input.seniority,
 				})
 				.collect();
@@ -139,10 +173,11 @@ pub mod pallet {
 					available: U256::zero(),
 				},
 				tranches: built_tranches,
-				epoch: EpochInfo::new(epoch_length, now),
-				max_nav_age,
-				last_nav: U256::zero(),
-				last_nav_update: 0,
+				epoch: EpochInfo::new(epoch_length, settlement_start_offset, now),
+				collateral: CollateralAsset { nft_contract, nft_token_id },
+				investment_ceiling,
+				invest_settlement,
+				redeem_settlement,
 			};
 
 			Pool::<T>::insert(pool_id, pool);
@@ -152,21 +187,21 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Update epoch length and max NAV age (admin only).
+		/// Update epoch parameters (admin only).
 		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::from_parts(5_000, 0))]
 		pub fn update_pool(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			epoch_length: u32,
-			max_nav_age: u32,
+			settlement_start_offset: u32,
 		) -> DispatchResult {
 			let caller = ensure_signed(origin)?;
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 				ensure!(pool.admin == caller, Error::<T>::NotPoolAdmin);
 				pool.epoch.epoch_length = epoch_length;
-				pool.max_nav_age = max_nav_age;
+				pool.epoch.settlement_start_offset = settlement_start_offset;
 				Ok(())
 			})?;
 			Self::deposit_event(Event::PoolUpdated { pool_id });
@@ -192,10 +227,13 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Register or update the TrancheId (chain + vault address) for a tranche (admin only).
+		/// Register an ERC-7540 vault (chain_id + vault_address) to a tranche (admin only).
+		///
+		/// Each tranche slot is created at pool creation; this call associates it with
+		/// the deployed vault contract on the external EVM chain.
 		#[pallet::call_index(3)]
 		#[pallet::weight(Weight::from_parts(5_000, 0))]
-		pub fn set_tranche_id(
+		pub fn add_vault(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_index: TrancheIndex,
@@ -212,7 +250,7 @@ pub mod pallet {
 				tranche.tranche_id = tranche_id.clone();
 				Ok(())
 			})?;
-			Self::deposit_event(Event::TrancheIdSet { pool_id, tranche_id });
+			Self::deposit_event(Event::VaultAdded { pool_id, tranche_index, tranche_id });
 			Ok(())
 		}
 	}

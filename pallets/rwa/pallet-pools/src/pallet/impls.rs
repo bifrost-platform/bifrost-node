@@ -2,7 +2,7 @@ use frame_support::ensure;
 use sp_core::U256;
 use sp_runtime::DispatchError;
 
-use crate::{PoolId, PoolInspect, PoolReserve, TrancheId, TrancheIndex};
+use crate::{PoolDetails, PoolId, PoolInspect, PoolReserve, TrancheId, TrancheIndex};
 
 use super::pallet::*;
 
@@ -20,6 +20,21 @@ impl<T: Config> Pallet<T> {
 			.position(|t| t.tranche_id == tranche_id)
 			.map(|i| i as TrancheIndex)
 	}
+
+	/// Pro-rata invest settlement: allocates available reserve across all tranches,
+	/// respecting seniority ordering and the pool investment ceiling.
+	///
+	/// Senior tranches are filled first (lowest seniority index). Each tranche's
+	/// confirmed orders are capped by available reserve. The off-chain settlement bot
+	/// reads ConfirmedInvestOrders from pallet-investments, mints tranche tokens on the
+	/// external chain, and clears the confirmed orders once done.
+	///
+	/// Called from `on_initialize` for Automatic pools.
+	/// TODO: call into pallet-investments via InvestmentSettlement trait once wired.
+	pub(crate) fn settle_invest_orders(_pool_id: PoolId, _pool: &mut PoolDetails<T::AccountId>) {
+		// Placeholder — settlement algorithm will be implemented when
+		// pallet-investments exposes the InvestmentSettlement trait.
+	}
 }
 
 impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
@@ -34,6 +49,13 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool {
 		Pool::<T>::get(pool_id)
 			.map(|p| p.tranches.iter().any(|t| t.tranche_id == tranche_id))
+			.unwrap_or(false)
+	}
+
+	fn in_settlement_window(pool_id: PoolId) -> bool {
+		let now = Self::current_block();
+		Pool::<T>::get(pool_id)
+			.map(|p| p.epoch.in_settlement_window(now))
 			.unwrap_or(false)
 	}
 }

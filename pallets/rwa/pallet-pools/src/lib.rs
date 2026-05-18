@@ -7,7 +7,7 @@ pub use pallet::pallet::*;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{H160, U256};
-use sp_runtime::{traits::One, FixedPointNumber, FixedU128, Perquintill, RuntimeDebug, Saturating};
+use sp_runtime::{traits::One, FixedU128, Perquintill, RuntimeDebug};
 
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
@@ -60,13 +60,16 @@ pub struct TrancheId {
 #[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum TrancheType {
-	/// Residual (junior) tranche — absorbs losses, receives residual return.
+	/// Residual (junior) tranche — absorbs losses first, receives residual return.
 	Junior,
-	/// Non-residual (senior) tranche with a fixed rate and minimum risk buffer.
+	/// Senior tranche — protected by the junior buffer.
+	/// `interest_rate_per_sec` and `min_risk_buffer` are stored for record-keeping
+	/// and loss-waterfall scoring; no on-chain interest accrual is performed.
+	/// Yield is distributed by the borrower funding the pool reserve via the repay flow.
 	Senior {
-		/// Stored as `1 + annual_rate / SECONDS_PER_YEAR` (FixedU128).
+		/// Agreed target yield, stored as `1 + annual_rate / SECONDS_PER_YEAR`.
 		interest_rate_per_sec: Rate,
-		/// Minimum junior-protection ratio required for a healthy solution.
+		/// Minimum junior-to-pool ratio required for a healthy epoch solution.
 		min_risk_buffer: Perquintill,
 	},
 }
@@ -81,69 +84,33 @@ impl TrancheType {
 // Tranche
 // ---------------------------------------------------------------------------
 
+/// All tranche pricing is oracle-driven (NAV / token supply).
+/// There is no on-chain interest accrual; senior yield is distributed through
+/// the borrower repay flow.
 #[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct Tranche {
 	pub tranche_type: TrancheType,
 	/// Globally unique tranche identifier: (chain_id, vault_address).
 	pub tranche_id: TrancheId,
-	/// Original amount invested by investors — reduced only when redemptions are settled.
-	pub principal: U256,
-	/// Compound interest accrued on top of `principal` since last settlement.
-	pub interest: U256,
-	/// Total invested amount in this tranche.
+	/// Outstanding ERC-1404 token supply for this tranche.
 	pub total: U256,
-	/// Block number when interest was last accrued.
-	pub last_updated_interest: u32,
-	/// Seniority weight used in epoch solution scoring.
+	/// Seniority weight used in epoch solution scoring. 0 = most senior.
 	pub seniority: u32,
 }
 
 impl Tranche {
-	/// Total obligation to investors: principal + accrued interest.
-	pub fn debt(&self) -> U256 {
-		self.principal.saturating_add(self.interest)
-	}
-
-	/// Compound interest on the outstanding debt up to block `now`.
-	/// Only applies to Senior tranches — Junior has no fixed rate.
-	pub fn accrue(&mut self, now: u32) {
-		if let TrancheType::Senior { interest_rate_per_sec, .. } = self.tranche_type {
-			let delta = now.saturating_sub(self.last_updated_interest);
-			if delta > 0 && !self.principal.is_zero() {
-				let current_debt: u128 = self.debt().try_into().unwrap_or(u128::MAX);
-				let new_debt = compound(interest_rate_per_sec, current_debt, delta as u64);
-				let principal: u128 = self.principal.try_into().unwrap_or(u128::MAX);
-				self.interest = U256::from(new_debt.saturating_sub(principal));
-			}
-		}
-		self.last_updated_interest = now;
-	}
-
-	/// Token price = debt / token_supply. Returns ONE when no tokens are outstanding.
-	pub fn token_price(&self) -> FixedU128 {
-		let debt: u128 = self.debt().try_into().unwrap_or(u128::MAX);
+	/// Token price = tranche_nav / token_supply.
+	/// `nav` is this tranche's share of the pool NAV, provided by pallet-nav-oracle.
+	/// Returns ONE when no tokens are outstanding.
+	pub fn token_price(&self, nav: U256) -> FixedU128 {
+		let nav: u128 = nav.try_into().unwrap_or(u128::MAX);
 		let supply: u128 = self.total.try_into().unwrap_or(u128::MAX);
 		if supply == 0 {
 			return FixedU128::one();
 		}
-		FixedU128::from_rational(debt, supply)
+		FixedU128::from_rational(nav, supply)
 	}
-}
-
-/// Fast exponentiation: `base^exp` applied to `principal`.
-fn compound(rate: Rate, principal: u128, exp: u64) -> u128 {
-	let mut base = rate;
-	let mut result = FixedU128::one();
-	let mut n = exp;
-	while n > 0 {
-		if n & 1 == 1 {
-			result = result.saturating_mul(base);
-		}
-		base = base.saturating_mul(base);
-		n >>= 1;
-	}
-	result.saturating_mul_int(principal)
 }
 
 // ---------------------------------------------------------------------------
@@ -156,8 +123,46 @@ pub struct TrancheInput {
 	pub tranche_type: TrancheType,
 	/// Globally unique tranche identifier: (chain_id, vault_address).
 	pub tranche_id: TrancheId,
-	/// Seniority weight for scoring.
+	/// Seniority weight for scoring. 0 = most senior.
 	pub seniority: u32,
+}
+
+// ---------------------------------------------------------------------------
+// SettlementMode
+// ---------------------------------------------------------------------------
+
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub enum SettlementMode {
+	/// Orders settle automatically via `on_initialize` when the epoch ends.
+	Automatic,
+	/// Orders are frozen during the settlement window; the pool admin or borrower
+	/// must explicitly call `approve_invest_orders` / `approve_redeem_orders`.
+	Approval,
+}
+
+// ---------------------------------------------------------------------------
+// CollateralAsset — NFT representing the off-chain RWA
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+pub struct CollateralAsset {
+	/// ERC-721 / ERC-1155 contract address on Bifrost EVM.
+	pub nft_contract: H160,
+	/// Token ID identifying the specific NFT.
+	pub nft_token_id: U256,
 }
 
 // ---------------------------------------------------------------------------
@@ -167,11 +172,11 @@ pub struct TrancheInput {
 #[derive(Clone, Default, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct ReserveDetails {
-	/// Admin-configured maximum reserve. (total reserve cannot exceed this amount)
+	/// Admin-configured maximum reserve (total reserve cannot exceed this amount).
 	pub max: U256,
 	/// Total reserve balance.
 	pub total: U256,
-	/// Available reserve to be used for borrowers.
+	/// Available reserve for borrowers.
 	pub available: U256,
 }
 
@@ -193,7 +198,7 @@ impl ReserveDetails {
 }
 
 // ---------------------------------------------------------------------------
-// EpochInfo — block-number-based epoch tracking
+// EpochInfo — block-number-based epoch tracking with settlement window
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -205,14 +210,23 @@ pub struct EpochInfo {
 	pub epoch_start_block: u32,
 	/// Number of blocks each epoch lasts.
 	pub epoch_length: u32,
+	/// Number of blocks before epoch end when the settlement window opens.
+	/// During [settlement_start_block, epoch_end), new orders are rejected and
+	/// confirmed orders can be executed.
+	pub settlement_start_offset: u32,
 }
 
 impl EpochInfo {
-	pub fn new(epoch_length: u32, start_block: u32) -> Self {
-		EpochInfo { current_epoch: 0, epoch_start_block: start_block, epoch_length }
+	pub fn new(epoch_length: u32, settlement_start_offset: u32, start_block: u32) -> Self {
+		EpochInfo {
+			current_epoch: 0,
+			epoch_start_block: start_block,
+			epoch_length,
+			settlement_start_offset,
+		}
 	}
 
-	/// True when `now` has passed the end of the current epoch.
+	/// True when `now` has reached or passed the end of the current epoch.
 	pub fn should_advance(&self, now: u32) -> bool {
 		now.saturating_sub(self.epoch_start_block) >= self.epoch_length
 	}
@@ -221,6 +235,19 @@ impl EpochInfo {
 	pub fn advance(&mut self, now: u32) {
 		self.current_epoch = self.current_epoch.saturating_add(1);
 		self.epoch_start_block = now;
+	}
+
+	/// First block of the settlement window for the current epoch.
+	pub fn settlement_start_block(&self) -> u32 {
+		self.epoch_start_block
+			.saturating_add(self.epoch_length)
+			.saturating_sub(self.settlement_start_offset)
+	}
+
+	/// True when `now` is inside the settlement window: new orders are frozen,
+	/// confirmed orders may be executed.
+	pub fn in_settlement_window(&self, now: u32) -> bool {
+		!self.should_advance(now) && now >= self.settlement_start_block()
 	}
 }
 
@@ -231,24 +258,24 @@ impl EpochInfo {
 #[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct PoolDetails<AccountId> {
-	/// Pool admin account address.
+	/// Pool admin account.
 	pub admin: AccountId,
-	/// Accepted currency contract address (on Bifrost EVM).
-	/// For example, if the pool accepts USDC, the currency will be the UnifiedUSDC contract address.
+	/// Accepted currency contract address on Bifrost EVM (e.g. UnifiedUSDC).
 	pub currency: H160,
 	/// Reserve details.
 	pub reserve: ReserveDetails,
-	/// Ordered tranches list: index 0 = most senior, last = residual (junior).
-	/// Each tranche is identified by its ERC-7540 `vault_address` on the external chain.
+	/// Ordered tranches: index 0 = most senior, last = junior.
 	pub tranches: sp_std::vec::Vec<Tranche>,
 	/// Block-number-based epoch tracking.
 	pub epoch: EpochInfo,
-	/// Maximum age (in blocks) of the NAV before closing an epoch is blocked.
-	pub max_nav_age: u32,
-	/// Most recent NAV reported by pallet-loans.
-	pub last_nav: U256,
-	/// Block number when `last_nav` was recorded.
-	pub last_nav_update: u32,
+	/// NFT collateral representing the off-chain RWA.
+	pub collateral: CollateralAsset,
+	/// Maximum total investment the pool will accept.
+	pub investment_ceiling: U256,
+	/// Settlement mode for invest orders.
+	pub invest_settlement: SettlementMode,
+	/// Settlement mode for redeem orders.
+	pub redeem_settlement: SettlementMode,
 }
 
 // ---------------------------------------------------------------------------
@@ -257,32 +284,34 @@ pub struct PoolDetails<AccountId> {
 
 use frame_support::pallet_prelude::DispatchError;
 
-/// Implemented by pallet-pools. Called by pallet-investments / pallet-loans to
-/// validate pool/tranche existence and resolve the pool admin for auth checks.
+/// Implemented by pallet-pools. Called by pallet-investments and the gateway
+/// to validate pool/tranche existence, resolve pool admin, and query epoch state.
 pub trait PoolInspect<AccountId> {
 	fn pool_exists(pool_id: PoolId) -> bool;
 	fn pool_admin(pool_id: PoolId) -> Option<AccountId>;
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
+	/// True when the pool is currently inside its settlement window.
+	fn in_settlement_window(pool_id: PoolId) -> bool;
 }
 
-/// Implemented by pallet-loans. Called by pallet-pools to fetch or refresh the
-/// current NAV (net asset value = total loan AUM) for a pool.
+/// Implemented by pallet-nav-oracle. Called by pallet-pools to fetch the current
+/// NAV (net asset value = total collateral AUM) for a pool.
 pub trait PoolNAV<PoolId, Balance> {
 	/// Returns `(nav, block_number)` of the last recorded NAV without recomputing.
 	fn nav(pool_id: PoolId) -> Option<(Balance, u32)>;
 
-	/// Triggers a fresh NAV computation across all active loans and returns the result.
+	/// Triggers a fresh NAV report and returns the result.
 	fn update_nav(pool_id: PoolId) -> Result<Balance, DispatchError>;
 }
 
-/// Implemented by pallet-pools. Called by pallet-loans when disbursing or receiving
-/// loan repayments so that pool reserve accounting stays consistent.
+/// Implemented by pallet-pools. Called by the settlement layer when disbursing
+/// or receiving payments so pool reserve accounting stays consistent.
 pub trait PoolReserve<Balance> {
-	/// Decrease available reserve by `amount` (loan disbursement).
+	/// Decrease available reserve by `amount` (borrower draw-down).
 	/// Returns `Err` if insufficient available reserve.
 	fn withdraw(pool_id: PoolId, amount: Balance) -> frame_support::dispatch::DispatchResult;
 
-	/// Increase total and available reserve by `amount` (loan repayment or invest settlement).
+	/// Increase total and available reserve by `amount` (repayment or invest settlement).
 	fn deposit(pool_id: PoolId, amount: Balance) -> frame_support::dispatch::DispatchResult;
 
 	/// Read available reserve for a pool.
