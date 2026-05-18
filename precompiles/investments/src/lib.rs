@@ -94,4 +94,34 @@ where
 		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 		Ok(())
 	}
+
+	/// Execute confirmed redeem orders for a tranche during the settlement window.
+	///
+	/// Called by the borrower after depositing `usdc_amount` to the Spoke Treasury.
+	/// Drains all `ConfirmedRedeemOrders` for the tranche and emits an event that
+	/// the off-chain bot uses to distribute USDC to investors.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param usdc_amount   USDC deposited to the Spoke Treasury to cover redemptions
+	#[precompile::public("executeRedeemOrders(uint64,uint64,address,uint256)")]
+	#[precompile::public("execute_redeem_orders(uint64,uint64,address,uint256)")]
+	fn execute_redeem_orders(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		usdc_amount: U256,
+	) -> EvmResult {
+		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+
+		let call =
+			InvestmentsCall::<Runtime>::execute_redeem_orders { pool_id, tranche_id, usdc_amount };
+
+		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
+		Ok(())
+	}
 }
