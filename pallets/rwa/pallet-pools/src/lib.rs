@@ -294,6 +294,20 @@ pub trait PoolInspect<AccountId> {
 	fn in_settlement_window(pool_id: PoolId) -> bool;
 }
 
+/// Defined here, implemented by pallet-investments.
+/// Called from pallet-pools' `on_initialize` during automatic invest settlement.
+pub trait InvestmentSettlement<PoolId, TrancheId, Balance> {
+	/// Pro-rata confirm pending invest orders for a tranche up to `max_amount` USDC.
+	///
+	/// If total pending <= `max_amount`, all orders are confirmed in full.
+	/// If total pending > `max_amount`, each investor's order is scaled down proportionally
+	/// and the remainder stays in `PendingInvestOrders` for the next epoch.
+	///
+	/// Returns the actual USDC amount moved to `ConfirmedInvestOrders`.
+	fn settle_invest_orders(pool_id: PoolId, tranche_id: TrancheId, max_amount: Balance)
+		-> Balance;
+}
+
 /// Implemented by pallet-nav-oracle. Called by pallet-pools to fetch the current
 /// NAV (net asset value = total collateral AUM) for a pool.
 pub trait PoolNAV<PoolId, Balance> {

@@ -2,7 +2,9 @@ use frame_support::ensure;
 use sp_core::U256;
 use sp_runtime::DispatchError;
 
-use crate::{PoolDetails, PoolId, PoolInspect, PoolReserve, TrancheId, TrancheIndex};
+use crate::{
+	InvestmentSettlement, PoolDetails, PoolId, PoolInspect, PoolReserve, TrancheId, TrancheIndex,
+};
 
 use super::pallet::*;
 
@@ -21,19 +23,33 @@ impl<T: Config> Pallet<T> {
 			.map(|i| i as TrancheIndex)
 	}
 
-	/// Pro-rata invest settlement: allocates available reserve across all tranches,
-	/// respecting seniority ordering and the pool investment ceiling.
+	/// Pro-rata invest settlement: allocates available reserve capacity across all
+	/// tranches in seniority order (index 0 = most senior fills first).
 	///
-	/// Senior tranches are filled first (lowest seniority index). Each tranche's
-	/// confirmed orders are capped by available reserve. The off-chain settlement bot
-	/// reads ConfirmedInvestOrders from pallet-investments, mints tranche tokens on the
-	/// external chain, and clears the confirmed orders once done.
+	/// For each tranche, delegates to `T::Investments::settle_invest_orders` which
+	/// handles the per-investor pro-rata distribution and writes `ConfirmedInvestOrders`.
+	/// The pool reserve is credited by the actual USDC confirmed per tranche.
 	///
 	/// Called from `on_initialize` for Automatic pools.
-	/// TODO: call into pallet-investments via InvestmentSettlement trait once wired.
-	pub(crate) fn settle_invest_orders(_pool_id: PoolId, _pool: &mut PoolDetails<T::AccountId>) {
-		// Placeholder — settlement algorithm will be implemented when
-		// pallet-investments exposes the InvestmentSettlement trait.
+	pub(crate) fn settle_invest_orders(pool_id: PoolId, pool: &mut PoolDetails<T::AccountId>) {
+		let reserve_space = pool.reserve.max.saturating_sub(pool.reserve.total);
+		if reserve_space.is_zero() {
+			return;
+		}
+
+		let mut remaining = reserve_space;
+
+		for tranche in pool.tranches.iter() {
+			if remaining.is_zero() {
+				break;
+			}
+			let actual =
+				T::Investments::settle_invest_orders(pool_id, tranche.tranche_id.clone(), remaining);
+			if !actual.is_zero() {
+				pool.reserve.deposit(actual);
+				remaining = remaining.saturating_sub(actual);
+			}
+		}
 	}
 }
 

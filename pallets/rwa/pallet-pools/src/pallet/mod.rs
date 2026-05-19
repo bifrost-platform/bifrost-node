@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	CollateralAsset, EpochInfo, PoolDetails, PoolId, ReserveDetails, SettlementMode, Tranche,
-	TrancheId, TrancheIndex, TrancheInput,
+	CollateralAsset, EpochInfo, InvestmentSettlement, PoolDetails, PoolId, ReserveDetails,
+	SettlementMode, Tranche, TrancheId, TrancheIndex, TrancheInput,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -26,6 +26,10 @@ pub mod pallet {
 		/// Maximum number of tranches per pool (enforced at creation).
 		#[pallet::constant]
 		type MaxTranches: Get<u32>;
+
+		/// Investment settlement — implemented by pallet-investments.
+		/// Called during `on_initialize` to settle pending invest orders when epochs advance.
+		type Investments: InvestmentSettlement<PoolId, TrancheId, sp_core::U256>;
 	}
 
 	// -----------------------------------------------------------------------
