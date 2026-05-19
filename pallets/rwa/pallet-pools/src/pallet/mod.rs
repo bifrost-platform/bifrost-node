@@ -1,15 +1,14 @@
 mod impls;
 
 use crate::{
-	CollateralAsset, EpochInfo, InvestmentSettlement, PoolDetails, PoolId, ReserveDetails,
-	SettlementMode, Tranche, TrancheId, TrancheIndex, TrancheInput,
+	CollateralAsset, EpochInfo, InvestmentSettlement, PoolDetails, PoolId, SettlementMode, Tranche,
+	TrancheId, TrancheInput, TranchePendingOrders, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::DispatchError;
-use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -23,10 +22,6 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
-		/// Maximum number of tranches per pool (enforced at creation).
-		#[pallet::constant]
-		type MaxTranches: Get<u32>;
-
 		/// Investment settlement — implemented by pallet-investments.
 		/// Called during `on_initialize` to settle pending invest orders when epochs advance.
 		type Investments: InvestmentSettlement<PoolId, TrancheId, sp_core::U256>;
@@ -50,6 +45,12 @@ pub mod pallet {
 		TrancheNotFound,
 		/// Pool reserve is insufficient for the requested withdrawal.
 		InsufficientReserve,
+		/// Collateral already exists.
+		CollateralAlreadyExists,
+		/// Tranche already exists.
+		TrancheAlreadyExists,
+		/// Out of range.
+		OutOfRange,
 	}
 
 	// -----------------------------------------------------------------------
@@ -60,13 +61,13 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// A new pool was created.
-		PoolCreated { pool_id: PoolId, admin: T::AccountId, epoch_length: u32 },
+		PoolCreated { pool_id: PoolId, epoch_length: u32 },
 		/// Pool parameters were updated by the admin.
 		PoolUpdated { pool_id: PoolId },
 		/// Maximum reserve was changed.
 		MaxReserveSet { pool_id: PoolId, max_reserve: U256 },
 		/// An ERC-7540 vault was registered to a tranche.
-		VaultAdded { pool_id: PoolId, tranche_index: TrancheIndex, tranche_id: TrancheId },
+		VaultAdded { pool_id: PoolId, tranche_id: TrancheId },
 		/// Pool reserve was updated (via invest settlement or repay).
 		ReserveUpdated { pool_id: PoolId, total: U256, available: U256 },
 		/// An epoch ended and a new one began.
@@ -77,13 +78,21 @@ pub mod pallet {
 	// Storage
 	// -----------------------------------------------------------------------
 
-	/// All active pools, keyed by pool ID.
 	#[pallet::storage]
 	#[pallet::unbounded]
-	pub type Pool<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails<T::AccountId>>;
+	/// All active pools, keyed by pool ID.
+	pub type Pool<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails>;
 
-	/// Monotonically increasing pool ID counter.
 	#[pallet::storage]
+	/// Mapped collateral assets to pool IDs.
+	pub type Collaterals<T: Config> = StorageMap<_, Blake2_128Concat, CollateralAsset, PoolId>;
+
+	#[pallet::storage]
+	/// Mapped tranche IDs to pool IDs.
+	pub type Tranches<T: Config> = StorageMap<_, Blake2_128Concat, TrancheId, PoolId>;
+
+	#[pallet::storage]
+	/// Monotonically increasing pool ID counter.
 	pub type NextPoolId<T: Config> = StorageValue<_, PoolId, ValueQuery>;
 
 	// -----------------------------------------------------------------------
@@ -107,7 +116,7 @@ pub mod pallet {
 					// Confirmed invest orders are written here; the off-chain bot
 					// handles cross-chain mint and clears them afterwards.
 					if pool.invest_settlement == SettlementMode::Automatic {
-						Self::settle_invest_orders(pool_id, &mut pool);
+						// TODO: Implement automatic invest settlement.
 					}
 
 					Pool::<T>::insert(pool_id, pool);
@@ -136,98 +145,64 @@ pub mod pallet {
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn create_pool(
 			origin: OriginFor<T>,
-			currency: H160,
-			epoch_length: u32,
-			settlement_start_offset: u32,
-			max_reserve: U256,
-			investment_ceiling: U256,
-			invest_settlement: SettlementMode,
-			redeem_settlement: SettlementMode,
 			nft_contract: H160,
 			nft_token_id: U256,
-			tranches: BoundedVec<TrancheInput, T::MaxTranches>,
+			epoch_length: u32,
+			settlement_offset: u32,
+			invest_settlement: SettlementMode,
+			redeem_settlement: SettlementMode,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
 		) -> DispatchResult {
-			let admin = ensure_signed(origin)?;
-
-			ensure!(!tranches.is_empty(), Error::<T>::MissingResidualTranche);
-			ensure!(
-				tranches.last().map(|t| t.tranche_type.is_junior()).unwrap_or(false),
-				Error::<T>::JuniorTrancheMustBeLast
-			);
+			ensure_root(origin)?;
 
 			let pool_id = NextPoolId::<T>::get();
 			let now = Self::current_block();
 
-			let built_tranches: Vec<Tranche> = tranches
-				.iter()
-				.map(|input| Tranche {
-					tranche_type: input.tranche_type.clone(),
-					tranche_id: input.tranche_id.clone(),
-					total: U256::zero(),
-					seniority: input.seniority,
-				})
-				.collect();
+			let collateral = CollateralAsset { nft_contract, nft_token_id };
+			ensure!(
+				!Collaterals::<T>::contains_key(collateral.clone()),
+				Error::<T>::CollateralAlreadyExists
+			);
+
+			let mut built_tranches: BoundedBTreeMap<TrancheId, Tranche, ConstU32<MAX_TRANCHES>> =
+				BoundedBTreeMap::new();
+			for tranche in tranches.iter() {
+				ensure!(
+					!Tranches::<T>::contains_key(tranche.tranche_id.clone()),
+					Error::<T>::TrancheAlreadyExists
+				);
+				built_tranches
+					.try_insert(
+						tranche.tranche_id.clone(),
+						Tranche {
+							tranche_type: tranche.tranche_type.clone(),
+							max_supply: tranche.max_supply,
+							token_supply: U256::zero(),
+							invested: U256::zero(),
+							borrowed: U256::zero(),
+							pending_orders: TranchePendingOrders::default(),
+						},
+					)
+					.map_err(|_| Error::<T>::OutOfRange)?;
+			}
 
 			let pool = PoolDetails {
-				admin: admin.clone(),
-				currency,
-				reserve: ReserveDetails {
-					max: max_reserve,
-					total: U256::zero(),
-					available: U256::zero(),
-				},
-				tranches: built_tranches,
-				epoch: EpochInfo::new(epoch_length, settlement_start_offset, now),
-				collateral: CollateralAsset { nft_contract, nft_token_id },
-				investment_ceiling,
+				total: U256::zero(),
+				tranches: built_tranches.clone(),
+				epoch: EpochInfo::new(epoch_length, settlement_offset, now),
+				collateral: collateral.clone(),
 				invest_settlement,
 				redeem_settlement,
 			};
 
+			Collaterals::<T>::insert(collateral, pool_id);
+			for tranche in tranches.iter() {
+				Tranches::<T>::insert(tranche.tranche_id.clone(), pool_id);
+			}
 			Pool::<T>::insert(pool_id, pool);
 			NextPoolId::<T>::put(pool_id.saturating_add(1));
 
-			Self::deposit_event(Event::PoolCreated { pool_id, admin, epoch_length });
-			Ok(())
-		}
-
-		/// Update epoch parameters (admin only).
-		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
-		pub fn update_pool(
-			origin: OriginFor<T>,
-			pool_id: PoolId,
-			epoch_length: u32,
-			settlement_start_offset: u32,
-		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
-				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
-				ensure!(pool.admin == caller, Error::<T>::NotPoolAdmin);
-				pool.epoch.epoch_length = epoch_length;
-				pool.epoch.settlement_start_offset = settlement_start_offset;
-				Ok(())
-			})?;
-			Self::deposit_event(Event::PoolUpdated { pool_id });
-			Ok(())
-		}
-
-		/// Change the maximum reserve (admin only).
-		#[pallet::call_index(2)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
-		pub fn set_max_reserve(
-			origin: OriginFor<T>,
-			pool_id: PoolId,
-			max_reserve: U256,
-		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
-				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
-				ensure!(pool.admin == caller, Error::<T>::NotPoolAdmin);
-				pool.reserve.max = max_reserve;
-				Ok(())
-			})?;
-			Self::deposit_event(Event::MaxReserveSet { pool_id, max_reserve });
+			Self::deposit_event(Event::PoolCreated { pool_id, epoch_length });
 			Ok(())
 		}
 
@@ -235,26 +210,38 @@ pub mod pallet {
 		///
 		/// Each tranche slot is created at pool creation; this call associates it with
 		/// the deployed vault contract on the external EVM chain.
-		#[pallet::call_index(3)]
+		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::from_parts(5_000, 0))]
 		pub fn add_vault(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
-			tranche_index: TrancheIndex,
-			tranche_id: TrancheId,
+			tranche: TrancheInput,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
+			ensure_root(origin)?;
+
+			ensure!(
+				!Tranches::<T>::contains_key(tranche.tranche_id.clone()),
+				Error::<T>::TrancheAlreadyExists
+			);
+
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
-				ensure!(pool.admin == caller, Error::<T>::NotPoolAdmin);
-				let tranche = pool
-					.tranches
-					.get_mut(tranche_index as usize)
-					.ok_or(Error::<T>::TrancheNotFound)?;
-				tranche.tranche_id = tranche_id.clone();
+				pool.tranches
+					.try_insert(
+						tranche.tranche_id.clone(),
+						Tranche {
+							tranche_type: tranche.tranche_type.clone(),
+							max_supply: tranche.max_supply,
+							token_supply: U256::zero(),
+							invested: U256::zero(),
+							borrowed: U256::zero(),
+							pending_orders: TranchePendingOrders::default(),
+						},
+					)
+					.map_err(|_| Error::<T>::OutOfRange)?;
 				Ok(())
 			})?;
-			Self::deposit_event(Event::VaultAdded { pool_id, tranche_index, tranche_id });
+			Self::deposit_event(Event::VaultAdded { pool_id, tranche_id: tranche.tranche_id });
 			Ok(())
 		}
 	}

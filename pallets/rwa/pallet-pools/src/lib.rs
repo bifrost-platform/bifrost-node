@@ -6,11 +6,8 @@ pub use pallet::pallet::*;
 
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{H160, U256};
-use sp_runtime::{traits::One, FixedU128, Perquintill, RuntimeDebug};
-
-#[cfg(feature = "std")]
-use serde::{Deserialize, Serialize};
+use sp_core::{ConstU32, H160, U256};
+use sp_runtime::{traits::One, BoundedBTreeMap, FixedU128, Perquintill, RuntimeDebug};
 
 // ---------------------------------------------------------------------------
 // Primitive type aliases
@@ -22,11 +19,11 @@ pub type Rate = FixedU128;
 /// Pool identifier.
 pub type PoolId = u64;
 
-/// Tranche index within a pool. 0 = most senior, last = residual (junior).
-pub type TrancheIndex = u32;
-
 /// Epoch counter.
 pub type EpochId = u32;
+
+/// Maximum number of tranches per pool.
+pub const MAX_TRANCHES: u32 = 10;
 
 // ---------------------------------------------------------------------------
 // TrancheId
@@ -41,11 +38,12 @@ pub type EpochId = u32;
 	DecodeWithMemTracking,
 	PartialEq,
 	Eq,
+	Ord,
+	PartialOrd,
 	RuntimeDebug,
 	TypeInfo,
 	MaxEncodedLen,
 )]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct TrancheId {
 	/// EVM chain ID of the chain where the vault contract is deployed.
 	pub chain_id: u64,
@@ -57,8 +55,9 @@ pub struct TrancheId {
 // TrancheType
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
+)]
 pub enum TrancheType {
 	/// Residual (junior) tranche — absorbs losses first, receives residual return.
 	Junior,
@@ -84,19 +83,52 @@ impl TrancheType {
 // Tranche
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// TranchePendingOrders — aggregate epoch order totals
+// ---------------------------------------------------------------------------
+
+/// Aggregate pending order totals for a tranche in the current epoch.
+/// Kept as a sub-struct so it can be zeroed atomically on epoch advance.
+#[derive(
+	Clone,
+	Default,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub struct TranchePendingOrders {
+	/// Total USDC waiting to be invested (confirmed on epoch close).
+	pub invest: U256,
+	/// Total USDC-equivalent waiting to be redeemed (confirmed on epoch close).
+	pub redeem: U256,
+}
+
+// ---------------------------------------------------------------------------
+// Tranche
+// ---------------------------------------------------------------------------
+
 /// All tranche pricing is oracle-driven (NAV / token supply).
 /// There is no on-chain interest accrual; senior yield is distributed through
 /// the borrower repay flow.
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
+)]
 pub struct Tranche {
 	pub tranche_type: TrancheType,
-	/// Globally unique tranche identifier: (chain_id, vault_address).
-	pub tranche_id: TrancheId,
-	/// Outstanding ERC-1404 token supply for this tranche.
-	pub total: U256,
-	/// Seniority weight used in epoch solution scoring. 0 = most senior.
-	pub seniority: u32,
+	/// Maximum number of tranche tokens that can be minted.
+	pub max_supply: U256,
+	/// Number of tranche tokens currently outstanding (minted − burned).
+	pub token_supply: U256,
+	/// The total amount of USDC invested into the tranche (cumulative inflow).
+	pub invested: U256,
+	/// The amount of USDC borrowed from the tranche treasury.
+	pub borrowed: U256,
+	/// Aggregate pending invest/redeem orders for the current epoch.
+	pub pending_orders: TranchePendingOrders,
 }
 
 impl Tranche {
@@ -105,7 +137,7 @@ impl Tranche {
 	/// Returns ONE when no tokens are outstanding.
 	pub fn token_price(&self, nav: U256) -> FixedU128 {
 		let nav: u128 = nav.try_into().unwrap_or(u128::MAX);
-		let supply: u128 = self.total.try_into().unwrap_or(u128::MAX);
+		let supply: u128 = self.token_supply.try_into().unwrap_or(u128::MAX);
 		if supply == 0 {
 			return FixedU128::one();
 		}
@@ -117,14 +149,16 @@ impl Tranche {
 // TrancheInput — used when creating a pool
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
+)]
 pub struct TrancheInput {
+	/// Tranche type.
 	pub tranche_type: TrancheType,
 	/// Globally unique tranche identifier: (chain_id, vault_address).
 	pub tranche_id: TrancheId,
-	/// Seniority weight for scoring. 0 = most senior.
-	pub seniority: u32,
+	/// The max supply of tranche tokens.
+	pub max_supply: U256,
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +177,6 @@ pub struct TrancheInput {
 	TypeInfo,
 	MaxEncodedLen,
 )]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub enum SettlementMode {
 	/// Orders settle automatically via `on_initialize` when the epoch ends.
 	Automatic,
@@ -156,8 +189,9 @@ pub enum SettlementMode {
 // CollateralAsset — NFT representing the off-chain RWA
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
+)]
 pub struct CollateralAsset {
 	/// ERC-721 / ERC-1155 contract address on Bifrost EVM.
 	pub nft_contract: H160,
@@ -166,43 +200,12 @@ pub struct CollateralAsset {
 }
 
 // ---------------------------------------------------------------------------
-// ReserveDetails
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Default, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct ReserveDetails {
-	/// Admin-configured maximum reserve (total reserve cannot exceed this amount).
-	pub max: U256,
-	/// Total reserve balance.
-	pub total: U256,
-	/// Available reserve for borrowers.
-	pub available: U256,
-}
-
-impl ReserveDetails {
-	pub fn deposit(&mut self, amount: U256) {
-		self.total = self.total.saturating_add(amount);
-		self.available = self.available.saturating_add(amount);
-	}
-
-	/// Returns false if insufficient available reserve.
-	pub fn withdraw(&mut self, amount: U256) -> bool {
-		if self.available < amount {
-			return false;
-		}
-		self.available = self.available.saturating_sub(amount);
-		self.total = self.total.saturating_sub(amount);
-		true
-	}
-}
-
-// ---------------------------------------------------------------------------
 // EpochInfo — block-number-based epoch tracking with settlement window
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(
+	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
+)]
 pub struct EpochInfo {
 	/// Current epoch index.
 	pub current_epoch: EpochId,
@@ -213,16 +216,16 @@ pub struct EpochInfo {
 	/// Number of blocks before epoch end when the settlement window opens.
 	/// During [settlement_start_block, epoch_end), new orders are rejected and
 	/// confirmed orders can be executed.
-	pub settlement_start_offset: u32,
+	pub settlement_offset: u32,
 }
 
 impl EpochInfo {
-	pub fn new(epoch_length: u32, settlement_start_offset: u32, start_block: u32) -> Self {
+	pub fn new(epoch_length: u32, settlement_offset: u32, start_block: u32) -> Self {
 		EpochInfo {
 			current_epoch: 0,
 			epoch_start_block: start_block,
 			epoch_length,
-			settlement_start_offset,
+			settlement_offset,
 		}
 	}
 
@@ -241,7 +244,7 @@ impl EpochInfo {
 	pub fn settlement_start_block(&self) -> u32 {
 		self.epoch_start_block
 			.saturating_add(self.epoch_length)
-			.saturating_sub(self.settlement_start_offset)
+			.saturating_sub(self.settlement_offset)
 	}
 
 	/// True when `now` is inside the settlement window: new orders are frozen,
@@ -255,23 +258,18 @@ impl EpochInfo {
 // PoolDetails
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-pub struct PoolDetails<AccountId> {
-	/// Pool admin account.
-	pub admin: AccountId,
-	/// Accepted currency contract address on Bifrost EVM (e.g. UnifiedUSDC).
-	pub currency: H160,
-	/// Reserve details.
-	pub reserve: ReserveDetails,
-	/// Ordered tranches: index 0 = most senior, last = junior.
-	pub tranches: sp_std::vec::Vec<Tranche>,
+#[derive(
+	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
+)]
+pub struct PoolDetails {
+	/// Total amount of USDC invested into the pool. (= sum of all tranches' invested)
+	pub total: U256,
+	/// Mapped tranche IDs to tranches.
+	pub tranches: BoundedBTreeMap<TrancheId, Tranche, ConstU32<MAX_TRANCHES>>,
 	/// Block-number-based epoch tracking.
 	pub epoch: EpochInfo,
 	/// NFT collateral representing the off-chain RWA.
 	pub collateral: CollateralAsset,
-	/// Maximum total investment the pool will accept.
-	pub investment_ceiling: U256,
 	/// Settlement mode for invest orders.
 	pub invest_settlement: SettlementMode,
 	/// Settlement mode for redeem orders.
