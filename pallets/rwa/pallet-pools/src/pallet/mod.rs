@@ -51,6 +51,10 @@ pub mod pallet {
 		TrancheAlreadyExists,
 		/// Out of range.
 		OutOfRange,
+		/// Borrow amount exceeds available tranche treasury liquidity (invested − borrowed).
+		InsufficientTreasuryLiquidity,
+		/// Amount must be greater than zero.
+		ZeroAmount,
 	}
 
 	// -----------------------------------------------------------------------
@@ -62,16 +66,14 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// A new pool was created.
 		PoolCreated { pool_id: PoolId, epoch_length: u32 },
-		/// Pool parameters were updated by the admin.
-		PoolUpdated { pool_id: PoolId },
-		/// Maximum reserve was changed.
-		MaxReserveSet { pool_id: PoolId, max_reserve: U256 },
 		/// An ERC-7540 vault was registered to a tranche.
 		VaultAdded { pool_id: PoolId, tranche_id: TrancheId },
-		/// Pool reserve was updated (via invest settlement or repay).
-		ReserveUpdated { pool_id: PoolId, total: U256, available: U256 },
 		/// An epoch ended and a new one began.
 		EpochAdvanced { pool_id: PoolId, new_epoch: u32 },
+		/// Borrower drew funds from a tranche treasury.
+		Borrowed { pool_id: PoolId, tranche_id: TrancheId, amount: U256, available: U256 },
+		/// Borrower repaid funds into a tranche treasury.
+		Repaid { pool_id: PoolId, tranche_id: TrancheId, amount: U256, available: U256 },
 	}
 
 	// -----------------------------------------------------------------------
@@ -243,6 +245,73 @@ pub mod pallet {
 			})?;
 			Self::deposit_event(Event::VaultAdded { pool_id, tranche_id: tranche.tranche_id });
 			Ok(())
+		}
+
+		/// Called by the CCCP receiver when a borrow request arrives from the Spoke chain.
+		///
+		/// Draws `amount` USDC from the tranche treasury by incrementing `borrowed`.
+		/// Fails if available liquidity (invested − borrowed) is less than `amount`.
+		#[pallet::call_index(2)]
+		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		pub fn borrow(
+			origin: OriginFor<T>,
+			pool_id: PoolId,
+			chain_id: u64,
+			vault_address: H160,
+			amount: U256,
+		) -> DispatchResult {
+			ensure_signed(origin)?;
+			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
+
+			let tranche_id = TrancheId { chain_id, vault_address };
+
+			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+				let tranche =
+					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
+
+				ensure!(
+					tranche.treasury_liquidity() >= amount,
+					Error::<T>::InsufficientTreasuryLiquidity
+				);
+
+				tranche.borrowed = tranche.borrowed.saturating_add(amount);
+				let available = tranche.treasury_liquidity();
+
+				Self::deposit_event(Event::Borrowed { pool_id, tranche_id, amount, available });
+				Ok(())
+			})
+		}
+
+		/// Called by the CCCP receiver when a repay message arrives from the Spoke chain.
+		///
+		/// Reduces `borrowed` by `amount`, restoring tranche treasury liquidity.
+		/// Saturates at zero — over-repayment does not error.
+		#[pallet::call_index(3)]
+		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		pub fn repay(
+			origin: OriginFor<T>,
+			pool_id: PoolId,
+			chain_id: u64,
+			vault_address: H160,
+			amount: U256,
+		) -> DispatchResult {
+			ensure_signed(origin)?;
+			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
+
+			let tranche_id = TrancheId { chain_id, vault_address };
+
+			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+				let tranche =
+					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
+
+				tranche.borrowed = tranche.borrowed.saturating_sub(amount);
+				let available = tranche.treasury_liquidity();
+
+				Self::deposit_event(Event::Repaid { pool_id, tranche_id, amount, available });
+				Ok(())
+			})
 		}
 	}
 }

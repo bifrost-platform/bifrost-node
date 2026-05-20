@@ -9432,6 +9432,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-pools"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-pools",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-relay-manager"
 version = "1.0.0"
 dependencies = [

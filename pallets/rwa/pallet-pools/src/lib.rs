@@ -124,6 +124,7 @@ pub struct Tranche {
 	/// Number of tranche tokens currently outstanding (minted − burned).
 	pub token_supply: U256,
 	/// The total amount of USDC invested into the tranche (cumulative inflow).
+	/// The available amount to redeem or borrow from the tranche treasury will be (invested - borrowed).
 	pub invested: U256,
 	/// The amount of USDC borrowed from the tranche treasury.
 	pub borrowed: U256,
@@ -132,16 +133,20 @@ pub struct Tranche {
 }
 
 impl Tranche {
-	/// Token price = tranche_nav / token_supply.
+	/// Token price = tranche_nav / max_supply.
 	/// `nav` is this tranche's share of the pool NAV, provided by pallet-nav-oracle.
 	/// Returns ONE when no tokens are outstanding.
 	pub fn token_price(&self, nav: U256) -> FixedU128 {
 		let nav: u128 = nav.try_into().unwrap_or(u128::MAX);
-		let supply: u128 = self.token_supply.try_into().unwrap_or(u128::MAX);
+		let supply: u128 = self.max_supply.try_into().unwrap_or(u128::MAX);
 		if supply == 0 {
 			return FixedU128::one();
 		}
 		FixedU128::from_rational(nav, supply)
+	}
+
+	pub fn treasury_liquidity(&self) -> U256 {
+		self.invested.saturating_sub(self.borrowed)
 	}
 }
 
