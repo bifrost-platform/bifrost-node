@@ -101,9 +101,9 @@ impl TrancheType {
 	MaxEncodedLen,
 )]
 pub struct TranchePendingOrders {
-	/// Total USDC waiting to be invested (confirmed on epoch close).
-	pub invest: U256,
-	/// Total USDC-equivalent waiting to be redeemed (confirmed on epoch close).
+	/// Total USDC waiting to be deposited (confirmed on epoch close).
+	pub deposit: U256,
+	/// Total tranche tokens waiting to be redeemed (confirmed on epoch close).
 	pub redeem: U256,
 }
 
@@ -119,8 +119,9 @@ pub struct TranchePendingOrders {
 )]
 pub struct Tranche {
 	pub tranche_type: TrancheType,
-	/// Maximum number of tranche tokens that can be minted.
-	pub max_supply: U256,
+	/// Maximum USDC that can be deposited into this tranche (cumulative cap).
+	/// None means uncapped.
+	pub max_deposits: Option<U256>,
 	/// Number of tranche tokens currently outstanding (minted − burned).
 	pub token_supply: U256,
 	/// The total amount of USDC invested into the tranche (cumulative inflow).
@@ -133,16 +134,21 @@ pub struct Tranche {
 }
 
 impl Tranche {
-	/// Token price = tranche_nav / max_supply.
-	/// `nav` is this tranche's share of the pool NAV, provided by pallet-nav-oracle.
+	/// Token price = (NAV + treasury_liquidity) / token_supply.
+	///
+	/// `nav` is this tranche's share of the pool NAV (off-chain RWA value),
+	/// provided by pallet-nav-oracle. Adding `treasury_liquidity` accounts for
+	/// USDC deposited but not yet borrowed, preventing dilution when new investors
+	/// join before the borrower deploys the funds.
 	/// Returns ONE when no tokens are outstanding.
 	pub fn token_price(&self, nav: U256) -> FixedU128 {
-		let nav: u128 = nav.try_into().unwrap_or(u128::MAX);
-		let supply: u128 = self.max_supply.try_into().unwrap_or(u128::MAX);
+		let supply: u128 = self.token_supply.try_into().unwrap_or(u128::MAX);
 		if supply == 0 {
 			return FixedU128::one();
 		}
-		FixedU128::from_rational(nav, supply)
+		let total_value: u128 =
+			nav.saturating_add(self.treasury_liquidity()).try_into().unwrap_or(u128::MAX);
+		FixedU128::from_rational(total_value, supply)
 	}
 
 	pub fn treasury_liquidity(&self) -> U256 {
@@ -162,8 +168,8 @@ pub struct TrancheInput {
 	pub tranche_type: TrancheType,
 	/// Globally unique tranche identifier: (chain_id, vault_address).
 	pub tranche_id: TrancheId,
-	/// The max supply of tranche tokens.
-	pub max_supply: U256,
+	/// Maximum USDC that can be deposited into this tranche. None means uncapped.
+	pub max_deposits: Option<U256>,
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +192,7 @@ pub enum SettlementMode {
 	/// Orders settle automatically via `on_initialize` when the epoch ends.
 	Automatic,
 	/// Orders are frozen during the settlement window; the pool admin or borrower
-	/// must explicitly call `approve_invest_orders` / `approve_redeem_orders`.
+	/// must explicitly call `approve_deposit_order` / `approve_redeem_order`.
 	Approval,
 }
 
@@ -275,8 +281,8 @@ pub struct PoolDetails {
 	pub epoch: EpochInfo,
 	/// NFT collateral representing the off-chain RWA.
 	pub collateral: CollateralAsset,
-	/// Settlement mode for invest orders.
-	pub invest_settlement: SettlementMode,
+	/// Settlement mode for deposit orders.
+	pub deposit_settlement: SettlementMode,
 	/// Settlement mode for redeem orders.
 	pub redeem_settlement: SettlementMode,
 }
@@ -295,20 +301,71 @@ pub trait PoolInspect<AccountId> {
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
 	/// True when the pool is currently inside its settlement window.
 	fn in_settlement_window(pool_id: PoolId) -> bool;
+	/// True when adding `amount` USDC would push `invested + pending_deposit` above
+	/// the tranche's `max_deposits` cap. Always false if the tranche is uncapped.
+	fn deposit_cap_exceeded(pool_id: PoolId, tranche_id: TrancheId, amount: U256) -> bool;
+	/// Returns `invested - borrowed` for the tranche — the USDC available to cover redemptions.
+	fn treasury_liquidity(pool_id: PoolId, tranche_id: TrancheId) -> U256;
 }
 
 /// Defined here, implemented by pallet-investments.
-/// Called from pallet-pools' `on_initialize` during automatic invest settlement.
-pub trait InvestmentSettlement<PoolId, TrancheId, Balance> {
-	/// Pro-rata confirm pending invest orders for a tranche up to `max_amount` USDC.
+/// Called from pallet-pools' `on_initialize` during automatic deposit settlement.
+pub trait DepositSettlement<PoolId, TrancheId, Balance> {
+	/// Pro-rata confirm pending deposit orders for a tranche up to `max_amount` USDC.
 	///
 	/// If total pending <= `max_amount`, all orders are confirmed in full.
 	/// If total pending > `max_amount`, each investor's order is scaled down proportionally
-	/// and the remainder stays in `PendingInvestOrders` for the next epoch.
+	/// and the remainder stays in `PendingDepositOrders` for the next epoch.
 	///
-	/// Returns the actual USDC amount moved to `ConfirmedInvestOrders`.
-	fn settle_invest_orders(pool_id: PoolId, tranche_id: TrancheId, max_amount: Balance)
-		-> Balance;
+	/// Returns the actual USDC amount moved to `ConfirmedDepositOrders`.
+	fn settle_deposit_orders(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		max_amount: Balance,
+	) -> Balance;
+}
+
+/// Implemented by pallet-pools. Called by pallet-investments to keep aggregate
+/// tranche pending totals and token supply in sync with per-investor order storage.
+pub trait TrancheMutate<Balance> {
+	/// Increment the tranche's aggregate pending deposit total.
+	fn add_pending_deposit(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
+
+	/// Decrement the tranche's aggregate pending deposit total.
+	/// Called when an individual order is approved (Approval mode).
+	fn sub_pending_deposit(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
+
+	/// Increment the tranche's aggregate pending redeem total.
+	fn add_pending_redeem(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
+
+	/// Decrement the tranche's aggregate pending redeem total.
+	/// Called when an individual redeem order is approved (Approval mode).
+	fn sub_pending_redeem(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
+
+	/// Decrement outstanding token supply.
+	/// Called when a redeem request is submitted — tokens are burned on the Spoke
+	/// chain at request time, so Hub state must reflect the burn immediately.
+	fn sub_token_supply(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
 }
 
 /// Implemented by pallet-nav-oracle. Called by pallet-pools to fetch the current

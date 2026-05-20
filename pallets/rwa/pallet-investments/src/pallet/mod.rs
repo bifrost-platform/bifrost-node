@@ -1,6 +1,6 @@
 mod impls;
 
-use crate::{PoolId, PoolInspect, TrancheId};
+use crate::{PoolId, PoolInspect, TrancheId, TrancheMutate};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
@@ -12,14 +12,16 @@ pub mod pallet {
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
+	const MAX_INVESTORS_PER_APPROVAL: u32 = 100;
+
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
-		/// Pool inspection — implemented by pallet-pools.
-		type Pools: PoolInspect<Self::AccountId>;
+		/// Pool inspection and tranche mutation — implemented by pallet-pools.
+		type Pools: PoolInspect<Self::AccountId> + TrancheMutate<U256>;
 	}
 
 	// -----------------------------------------------------------------------
@@ -38,8 +40,10 @@ pub mod pallet {
 		NotInSettlementWindow,
 		/// Caller is not the pool admin.
 		NotPoolAdmin,
-		/// No pending order found for this investor.
-		NoPendingOrder,
+		/// Deposit would push total invested + pending above the tranche's cap.
+		DepositCapExceeded,
+		/// Tranche treasury has no available liquidity to cover redemptions.
+		InsufficientLiquidity,
 	}
 
 	// -----------------------------------------------------------------------
@@ -49,8 +53,8 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// An invest order was submitted and is pending epoch settlement.
-		InvestOrderSubmitted {
+		/// A deposit order was submitted and is pending epoch settlement.
+		DepositOrderSubmitted {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			investor: H160,
@@ -63,9 +67,9 @@ pub mod pallet {
 			investor: H160,
 			amount: U256,
 		},
-		/// An investor's pending invest order was moved to confirmed.
+		/// An investor's pending deposit order was moved to confirmed.
 		/// Off-chain bot watches this and mints tranche tokens on the external chain.
-		InvestOrderConfirmed {
+		DepositOrderConfirmed {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			investor: H160,
@@ -95,18 +99,18 @@ pub mod pallet {
 	// Storage
 	// -----------------------------------------------------------------------
 
-	/// Pending invest orders awaiting epoch settlement.
+	/// Pending deposit orders awaiting epoch settlement.
 	/// tranche_id → investor → cumulative USDC amount
 	#[pallet::storage]
-	pub type PendingInvestOrders<T: Config> =
+	pub type PendingDepositOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
 
-	/// Confirmed invest orders ready for off-chain mint.
-	/// Written by `approve_invest_order` (Approval) or `on_initialize` (Automatic).
-	/// Cleared by the off-chain settlement bot once tokens are minted.
+	/// Confirmed deposit orders ready for off-chain mint.
+	/// Written by `approve_deposit_order` (Approval) or `on_initialize` (Automatic).
+	/// Cleared by the poll-based claim flow once tokens are minted on the Spoke chain.
 	/// tranche_id → investor → USDC amount
 	#[pallet::storage]
-	pub type ConfirmedInvestOrders<T: Config> =
+	pub type ConfirmedDepositOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
 
 	/// Pending redeem orders awaiting epoch settlement.
@@ -133,9 +137,10 @@ pub mod pallet {
 		/// message arrives on Bifrost via CCCP.
 		///
 		/// Rejected during the pool's settlement window.
+		/// Updates the tranche's aggregate pending deposit total
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn submit_invest_order(
+		pub fn submit_deposit_order(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
@@ -149,12 +154,18 @@ pub mod pallet {
 			);
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
+			ensure!(
+				!T::Pools::deposit_cap_exceeded(pool_id, tranche_id.clone(), amount),
+				Error::<T>::DepositCapExceeded
+			);
 
-			PendingInvestOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+			PendingDepositOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
 				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
 			});
 
-			Self::deposit_event(Event::InvestOrderSubmitted {
+			T::Pools::add_pending_deposit(pool_id, tranche_id.clone(), amount)?;
+
+			Self::deposit_event(Event::DepositOrderSubmitted {
 				pool_id,
 				tranche_id,
 				investor,
@@ -166,6 +177,8 @@ pub mod pallet {
 		/// Entry point called by the investments precompile when a `requestRedeem`
 		/// message arrives on Bifrost via CCCP.
 		///
+		/// Tranche tokens are burned on the Spoke chain when the request is submitted,
+		/// so `token_supply` is decremented here immediately.
 		/// Rejected during the pool's settlement window.
 		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
@@ -188,6 +201,12 @@ pub mod pallet {
 				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
 			});
 
+			// keep aggregate pending redeem total in sync.
+			T::Pools::add_pending_redeem(pool_id, tranche_id.clone(), amount)?;
+
+			// tokens were burned on the Spoke chain at request time.
+			T::Pools::sub_token_supply(pool_id, tranche_id.clone(), amount)?;
+
 			Self::deposit_event(Event::RedeemOrderSubmitted {
 				pool_id,
 				tranche_id,
@@ -197,109 +216,105 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Pool admin approves a specific investor's pending invest order during the
-		/// settlement window (Approval mode).
+		/// Pool admin approves a selected set of investors' pending deposit orders during
+		/// the settlement window (Approval mode).
 		///
-		/// Moves the investor's entry from `PendingInvestOrders` to
-		/// `ConfirmedInvestOrders`. The off-chain settlement bot watches for
-		/// `InvestOrderConfirmed` and mints tranche tokens on the external chain.
+		/// For each investor in `investor_ids`: moves their entry from
+		/// `PendingDepositOrders` to `ConfirmedDepositOrders`. Investors without a
+		/// pending order are silently skipped. The poll-based claim flow handles
+		/// cross-chain token minting after this.
 		#[pallet::call_index(2)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn approve_invest_order(
+		#[pallet::weight(Weight::from_parts(10_000, 0).saturating_mul(investor_ids.len() as u64))]
+		pub fn approve_deposit_orders(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			let caller = ensure_signed(origin)?;
 			let admin = T::Pools::pool_admin(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
 			ensure!(caller == admin, Error::<T>::NotPoolAdmin);
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
 
-			let amount = PendingInvestOrders::<T>::take(tranche_id.clone(), investor)
-				.ok_or(Error::<T>::NoPendingOrder)?;
+			let mut total_approved = U256::zero();
 
-			ConfirmedInvestOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
-				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
-			});
+			for investor in investor_ids {
+				let Some(amount) = PendingDepositOrders::<T>::take(tranche_id.clone(), investor)
+				else {
+					continue;
+				};
 
-			Self::deposit_event(Event::InvestOrderConfirmed {
-				pool_id,
-				tranche_id,
-				investor,
-				amount,
-			});
+				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+					*entry = Some(entry.unwrap_or_default().saturating_add(amount));
+				});
+
+				total_approved = total_approved.saturating_add(amount);
+
+				Self::deposit_event(Event::DepositOrderConfirmed {
+					pool_id,
+					tranche_id: tranche_id.clone(),
+					investor,
+					amount,
+				});
+			}
+
+			if !total_approved.is_zero() {
+				T::Pools::sub_pending_deposit(pool_id, tranche_id, total_approved)?;
+			}
+
 			Ok(())
 		}
 
-		/// Pool admin approves a specific investor's pending redeem order during the
-		/// settlement window (Approval mode).
+		/// Pool admin approves a selected set of investors' pending redeem orders during
+		/// the settlement window (Approval mode).
 		///
-		/// Moves the investor's entry from `PendingRedeemOrders` to
-		/// `ConfirmedRedeemOrders`. The borrower then calls `execute_redeem_orders`
-		/// to settle them.
+		/// For each investor in `investor_ids`: moves their entry from
+		/// `PendingRedeemOrders` to `ConfirmedRedeemOrders`. Investors without a
+		/// pending order are silently skipped. The borrower then calls
+		/// `execute_redeem_orders` to settle them.
 		#[pallet::call_index(3)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
-		pub fn approve_redeem_order(
+		#[pallet::weight(Weight::from_parts(10_000, 0).saturating_mul(investor_ids.len() as u64))]
+		pub fn approve_redeem_orders(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			let caller = ensure_signed(origin)?;
 			let admin = T::Pools::pool_admin(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
 			ensure!(caller == admin, Error::<T>::NotPoolAdmin);
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
-
-			let tokens = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor)
-				.ok_or(Error::<T>::NoPendingOrder)?;
-
-			ConfirmedRedeemOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
-				*entry = Some(entry.unwrap_or_default().saturating_add(tokens));
-			});
-
-			Self::deposit_event(Event::RedeemOrderConfirmed {
-				pool_id,
-				tranche_id,
-				investor,
-				tokens,
-			});
-			Ok(())
-		}
-
-		/// Called by the borrower (via precompile) during the settlement window to
-		/// settle all confirmed redeem orders for a tranche.
-		///
-		/// `usdc_amount` is the USDC the borrower deposited to the Spoke Treasury
-		/// to cover these redemptions. The off-chain bot reads the
-		/// `RedeemOrdersExecuted` event and distributes USDC from the Spoke Treasury
-		/// to each investor proportional to their confirmed token balance.
-		///
-		/// Drains all `ConfirmedRedeemOrders` for the tranche.
-		#[pallet::call_index(4)]
-		#[pallet::weight(Weight::from_parts(20_000, 0))]
-		pub fn execute_redeem_orders(
-			origin: OriginFor<T>,
-			pool_id: PoolId,
-			tranche_id: TrancheId,
-			usdc_amount: U256,
-		) -> DispatchResult {
-			ensure_signed(origin)?;
 			ensure!(
-				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
-				Error::<T>::PoolOrTrancheNotFound
+				!T::Pools::treasury_liquidity(pool_id, tranche_id.clone()).is_zero(),
+				Error::<T>::InsufficientLiquidity
 			);
-			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
-			ensure!(!usdc_amount.is_zero(), Error::<T>::ZeroAmount);
 
-			let total_tokens = Self::drain_confirmed_redeem(tranche_id.clone());
+			let mut total_approved = U256::zero();
 
-			Self::deposit_event(Event::RedeemOrdersExecuted {
-				pool_id,
-				tranche_id,
-				total_tokens,
-				usdc_amount,
-			});
+			for investor in investor_ids {
+				let Some(tokens) = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor)
+				else {
+					continue;
+				};
+
+				ConfirmedRedeemOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+					*entry = Some(entry.unwrap_or_default().saturating_add(tokens));
+				});
+
+				total_approved = total_approved.saturating_add(tokens);
+
+				Self::deposit_event(Event::RedeemOrderConfirmed {
+					pool_id,
+					tranche_id: tranche_id.clone(),
+					investor,
+					tokens,
+				});
+			}
+
+			if !total_approved.is_zero() {
+				T::Pools::sub_pending_redeem(pool_id, tranche_id, total_approved)?;
+			}
+
 			Ok(())
 		}
 	}

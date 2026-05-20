@@ -9,16 +9,16 @@ pragma solidity >=0.8.0;
  */
 interface Investments {
     /**
-     * @notice Submit a pending invest order for epoch settlement.
-     * @dev Accumulates the USDC amount into PendingInvestOrders storage.
-     *      Emits InvestOrderSubmitted on the substrate side.
+     * @notice Submit a pending deposit order for epoch settlement.
+     * @dev Accumulates the USDC amount into PendingDepositOrders storage.
+     *      Emits DepositOrderSubmitted on the substrate side.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param investor      Investor address on the external chain
-     * @param amount        USDC amount to invest (18-decimal U256)
+     * @param amount        USDC amount to deposit (18-decimal U256)
      */
-    function submitInvestOrder(
+    function submitDepositOrder(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,

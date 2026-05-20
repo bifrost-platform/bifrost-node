@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	CollateralAsset, EpochInfo, InvestmentSettlement, PoolDetails, PoolId, SettlementMode, Tranche,
+	CollateralAsset, DepositSettlement, EpochInfo, PoolDetails, PoolId, SettlementMode, Tranche,
 	TrancheId, TrancheInput, TranchePendingOrders, MAX_TRANCHES,
 };
 
@@ -22,9 +22,9 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
-		/// Investment settlement — implemented by pallet-investments.
-		/// Called during `on_initialize` to settle pending invest orders when epochs advance.
-		type Investments: InvestmentSettlement<PoolId, TrancheId, sp_core::U256>;
+		/// Deposit settlement — implemented by pallet-investments.
+		/// Called during `on_initialize` to settle pending deposit orders when epochs advance.
+		type Investments: DepositSettlement<PoolId, TrancheId, sp_core::U256>;
 	}
 
 	// -----------------------------------------------------------------------
@@ -114,11 +114,21 @@ pub mod pallet {
 					pool.epoch.advance(now);
 					let new_epoch = pool.epoch.current_epoch;
 
-					// Automatic invest settlement runs on epoch transition.
-					// Confirmed invest orders are written here; the off-chain bot
-					// handles cross-chain mint and clears them afterwards.
-					if pool.invest_settlement == SettlementMode::Automatic {
-						// TODO: Implement automatic invest settlement.
+					// Automatic deposit settlement: confirm all pending deposit orders
+					// for each tranche, then update the tranche's invested total.
+					if pool.deposit_settlement == SettlementMode::Automatic {
+						for (tranche_id, tranche) in pool.tranches.iter_mut() {
+							let max_amount = tranche.pending_orders.deposit;
+							if !max_amount.is_zero() {
+								let confirmed = T::Investments::settle_deposit_orders(
+									pool_id,
+									tranche_id.clone(),
+									max_amount,
+								);
+								tranche.invested = tranche.invested.saturating_add(confirmed);
+								tranche.pending_orders.deposit = U256::zero();
+							}
+						}
 					}
 
 					Pool::<T>::insert(pool_id, pool);
@@ -151,7 +161,7 @@ pub mod pallet {
 			nft_token_id: U256,
 			epoch_length: u32,
 			settlement_offset: u32,
-			invest_settlement: SettlementMode,
+			deposit_settlement: SettlementMode,
 			redeem_settlement: SettlementMode,
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
 		) -> DispatchResult {
@@ -178,7 +188,7 @@ pub mod pallet {
 						tranche.tranche_id.clone(),
 						Tranche {
 							tranche_type: tranche.tranche_type.clone(),
-							max_supply: tranche.max_supply,
+							max_deposits: tranche.max_deposits,
 							token_supply: U256::zero(),
 							invested: U256::zero(),
 							borrowed: U256::zero(),
@@ -193,7 +203,7 @@ pub mod pallet {
 				tranches: built_tranches.clone(),
 				epoch: EpochInfo::new(epoch_length, settlement_offset, now),
 				collateral: collateral.clone(),
-				invest_settlement,
+				deposit_settlement,
 				redeem_settlement,
 			};
 
@@ -233,7 +243,7 @@ pub mod pallet {
 						tranche.tranche_id.clone(),
 						Tranche {
 							tranche_type: tranche.tranche_type.clone(),
-							max_supply: tranche.max_supply,
+							max_deposits: tranche.max_deposits,
 							token_supply: U256::zero(),
 							invested: U256::zero(),
 							borrowed: U256::zero(),

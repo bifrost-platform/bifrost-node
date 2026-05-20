@@ -3,4 +3,4 @@
 mod pallet;
 
 pub use pallet::pallet::*;
-pub use pallet_pools::{InvestmentSettlement, PoolId, PoolInspect, TrancheId};
+pub use pallet_pools::{DepositSettlement, PoolId, PoolInspect, TrancheId, TrancheMutate};
