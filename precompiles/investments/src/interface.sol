@@ -15,14 +15,14 @@ interface Investments {
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
-     * @param investor      Investor address on the external chain
+     * @param investor_id   Investor address on the external chain
      * @param amount        USDC amount to deposit (18-decimal U256)
      */
     function submitDepositOrder(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
-        address investor,
+        address investor_id,
         uint256 amount
     ) external;
 
@@ -33,14 +33,14 @@ interface Investments {
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
-     * @param investor      Investor address on the external chain
+     * @param investor_id   Investor address on the external chain
      * @param amount        Tranche token amount to redeem (18-decimal U256)
      */
     function submitRedeemOrder(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
-        address investor,
+        address investor_id,
         uint256 amount
     ) external;
 

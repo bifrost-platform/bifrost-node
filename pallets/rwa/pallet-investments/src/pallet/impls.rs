@@ -40,14 +40,14 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 
 		if max_amount >= total {
 			// Full fill — confirm every investor's order as-is.
-			for (investor, amount) in &entries {
-				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor, |e| {
+			for (investor_id, amount) in &entries {
+				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
 					*e = Some(e.unwrap_or_default().saturating_add(*amount));
 				});
 				Self::deposit_event(Event::DepositOrderConfirmed {
 					pool_id,
 					tranche_id: tranche_id.clone(),
-					investor: *investor,
+					investor_id: *investor_id,
 					amount: *amount,
 				});
 				confirmed_total = confirmed_total.saturating_add(*amount);
@@ -58,19 +58,19 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 			let total_u128: u128 = total.try_into().unwrap_or(u128::MAX);
 			let fill_ratio = FixedU128::from_rational(max_u128, total_u128);
 
-			for (investor, pending) in &entries {
+			for (investor_id, pending) in &entries {
 				let pending_u128: u128 = (*pending).try_into().unwrap_or(u128::MAX);
 				let confirmed = U256::from(fill_ratio.saturating_mul_int(pending_u128));
 				let remainder = pending.saturating_sub(confirmed);
 
 				if !confirmed.is_zero() {
-					ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor, |e| {
+					ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
 						*e = Some(e.unwrap_or_default().saturating_add(confirmed));
 					});
 					Self::deposit_event(Event::DepositOrderConfirmed {
 						pool_id,
 						tranche_id: tranche_id.clone(),
-						investor: *investor,
+						investor_id: *investor_id,
 						amount: confirmed,
 					});
 					confirmed_total = confirmed_total.saturating_add(confirmed);
@@ -78,7 +78,7 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 
 				// Re-insert unconfirmed remainder for the next epoch.
 				if !remainder.is_zero() {
-					PendingDepositOrders::<T>::insert(tranche_id.clone(), investor, remainder);
+					PendingDepositOrders::<T>::insert(tranche_id.clone(), investor_id, remainder);
 				}
 			}
 		}

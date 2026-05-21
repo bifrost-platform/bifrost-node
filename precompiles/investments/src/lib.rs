@@ -32,7 +32,7 @@ where
 	/// @param pool_id       the pool ID
 	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
 	/// @param vault_address ERC-7540 vault contract address on that chain
-	/// @param investor      investor address on the external chain
+	/// @param investor_id   investor address on the external chain
 	/// @param amount        USDC amount to deposit
 	#[precompile::public("submitDepositOrder(uint64,uint64,address,address,uint256)")]
 	#[precompile::public("submit_deposit_order(uint64,uint64,address,address,uint256)")]
@@ -41,18 +41,18 @@ where
 		pool_id: u64,
 		chain_id: u64,
 		vault_address: Address,
-		investor: Address,
+		investor_id: Address,
 		amount: U256,
 	) -> EvmResult {
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
-		let investor: H160 = investor.0;
+		let investor_id: H160 = investor_id.0;
 
 		let call = InvestmentsCall::<Runtime>::submit_deposit_order {
 			pool_id,
 			tranche_id,
-			investor,
+			investor_id,
 			amount,
 		};
 
@@ -67,7 +67,7 @@ where
 	/// @param pool_id       the pool ID
 	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
 	/// @param vault_address ERC-7540 vault contract address on that chain
-	/// @param investor      investor address on the external chain
+	/// @param investor_id   investor address on the external chain
 	/// @param amount        tranche token amount to redeem
 	#[precompile::public("submitRedeemOrder(uint64,uint64,address,address,uint256)")]
 	#[precompile::public("submit_redeem_order(uint64,uint64,address,address,uint256)")]
@@ -76,18 +76,18 @@ where
 		pool_id: u64,
 		chain_id: u64,
 		vault_address: Address,
-		investor: Address,
+		investor_id: Address,
 		amount: U256,
 	) -> EvmResult {
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
-		let investor: H160 = investor.0;
+		let investor_id: H160 = investor_id.0;
 
 		let call = InvestmentsCall::<Runtime>::submit_redeem_order {
 			pool_id,
 			tranche_id,
-			investor,
+			investor_id,
 			amount,
 		};
 

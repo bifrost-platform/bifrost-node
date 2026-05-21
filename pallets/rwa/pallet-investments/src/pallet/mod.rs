@@ -57,14 +57,14 @@ pub mod pallet {
 		DepositOrderSubmitted {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_id: H160,
 			amount: U256,
 		},
 		/// A redeem order was submitted and is pending epoch settlement.
 		RedeemOrderSubmitted {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_id: H160,
 			amount: U256,
 		},
 		/// An investor's pending deposit order was moved to confirmed.
@@ -72,14 +72,14 @@ pub mod pallet {
 		DepositOrderConfirmed {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_id: H160,
 			amount: U256,
 		},
 		/// An investor's pending redeem order was moved to confirmed.
 		RedeemOrderConfirmed {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_id: H160,
 			tokens: U256,
 		},
 		/// Confirmed redeem orders were executed.
@@ -144,7 +144,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_id: H160,
 			amount: U256,
 		) -> DispatchResult {
 			ensure_signed(origin)?;
@@ -159,7 +159,7 @@ pub mod pallet {
 				Error::<T>::DepositCapExceeded
 			);
 
-			PendingDepositOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+			PendingDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
 				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
 			});
 
@@ -168,7 +168,7 @@ pub mod pallet {
 			Self::deposit_event(Event::DepositOrderSubmitted {
 				pool_id,
 				tranche_id,
-				investor,
+				investor_id,
 				amount,
 			});
 			Ok(())
@@ -186,7 +186,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor: H160,
+			investor_id: H160,
 			amount: U256,
 		) -> DispatchResult {
 			ensure_signed(origin)?;
@@ -197,7 +197,7 @@ pub mod pallet {
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
 
-			PendingRedeemOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+			PendingRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
 				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
 			});
 
@@ -210,7 +210,7 @@ pub mod pallet {
 			Self::deposit_event(Event::RedeemOrderSubmitted {
 				pool_id,
 				tranche_id,
-				investor,
+				investor_id,
 				amount,
 			});
 			Ok(())
@@ -238,13 +238,13 @@ pub mod pallet {
 
 			let mut total_approved = U256::zero();
 
-			for investor in investor_ids {
-				let Some(amount) = PendingDepositOrders::<T>::take(tranche_id.clone(), investor)
+			for investor_id in investor_ids {
+				let Some(amount) = PendingDepositOrders::<T>::take(tranche_id.clone(), investor_id)
 				else {
 					continue;
 				};
 
-				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
 					*entry = Some(entry.unwrap_or_default().saturating_add(amount));
 				});
 
@@ -253,7 +253,7 @@ pub mod pallet {
 				Self::deposit_event(Event::DepositOrderConfirmed {
 					pool_id,
 					tranche_id: tranche_id.clone(),
-					investor,
+					investor_id,
 					amount,
 				});
 			}
@@ -292,13 +292,13 @@ pub mod pallet {
 
 			let mut total_approved = U256::zero();
 
-			for investor in investor_ids {
-				let Some(tokens) = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor)
+			for investor_id in investor_ids {
+				let Some(tokens) = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor_id)
 				else {
 					continue;
 				};
 
-				ConfirmedRedeemOrders::<T>::mutate(tranche_id.clone(), investor, |entry| {
+				ConfirmedRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
 					*entry = Some(entry.unwrap_or_default().saturating_add(tokens));
 				});
 
@@ -307,7 +307,7 @@ pub mod pallet {
 				Self::deposit_event(Event::RedeemOrderConfirmed {
 					pool_id,
 					tranche_id: tranche_id.clone(),
-					investor,
+					investor_id,
 					tokens,
 				});
 			}
