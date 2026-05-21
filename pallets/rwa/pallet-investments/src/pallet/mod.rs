@@ -105,12 +105,12 @@ pub mod pallet {
 	pub type PendingDepositOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
 
-	/// Confirmed deposit orders ready for off-chain mint.
-	/// Written by `approve_deposit_order` (Approval) or `on_initialize` (Automatic).
+	/// Approved deposit orders ready for off-chain mint.
+	/// Written by `approve_deposit_orders` (Approval) or `on_initialize` (Automatic).
 	/// Cleared by the poll-based claim flow once tokens are minted on the Spoke chain.
-	/// tranche_id → investor → USDC amount
+	/// tranche_id → investor_id → USDC amount
 	#[pallet::storage]
-	pub type ConfirmedDepositOrders<T: Config> =
+	pub type ApprovedDepositOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
 
 	/// Pending redeem orders awaiting epoch settlement.
@@ -119,12 +119,11 @@ pub mod pallet {
 	pub type PendingRedeemOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
 
-	/// Confirmed redeem orders ready for `execute_redeem_orders`.
-	/// Written by `approve_redeem_order` (Approval mode).
-	/// Cleared when the borrower calls `execute_redeem_orders`.
-	/// tranche_id → investor → tranche token amount
+	/// Approved redeem orders ready for settlement.
+	/// Written by `approve_redeem_orders` (Approval mode).
+	/// tranche_id → investor_id → tranche token amount
 	#[pallet::storage]
-	pub type ConfirmedRedeemOrders<T: Config> =
+	pub type ApprovedRedeemOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
 
 	// -----------------------------------------------------------------------
@@ -220,7 +219,7 @@ pub mod pallet {
 		/// the settlement window (Approval mode).
 		///
 		/// For each investor in `investor_ids`: moves their entry from
-		/// `PendingDepositOrders` to `ConfirmedDepositOrders`. Investors without a
+		/// `PendingDepositOrders` to `ApprovedDepositOrders`. Investors without a
 		/// pending order are silently skipped. The poll-based claim flow handles
 		/// cross-chain token minting after this.
 		#[pallet::call_index(2)]
@@ -244,7 +243,7 @@ pub mod pallet {
 					continue;
 				};
 
-				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
 					*entry = Some(entry.unwrap_or_default().saturating_add(amount));
 				});
 
@@ -270,7 +269,7 @@ pub mod pallet {
 		/// the settlement window (Approval mode).
 		///
 		/// For each investor in `investor_ids`: moves their entry from
-		/// `PendingRedeemOrders` to `ConfirmedRedeemOrders`. Investors without a
+		/// `PendingRedeemOrders` to `ApprovedRedeemOrders`. Investors without a
 		/// pending order are silently skipped. The borrower then calls
 		/// `execute_redeem_orders` to settle them.
 		#[pallet::call_index(3)]
@@ -298,7 +297,7 @@ pub mod pallet {
 					continue;
 				};
 
-				ConfirmedRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+				ApprovedRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
 					*entry = Some(entry.unwrap_or_default().saturating_add(tokens));
 				});
 

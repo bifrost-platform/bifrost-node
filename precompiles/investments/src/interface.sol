@@ -47,7 +47,7 @@ interface Investments {
     /**
      * @notice Execute confirmed redeem orders for a tranche during the settlement window.
      * @dev Called by the borrower after depositing `usdc_amount` to the Spoke Treasury.
-     *      Drains ConfirmedRedeemOrders and emits RedeemOrdersExecuted so the off-chain
+     *      Drains ApprovedRedeemOrders and emits RedeemOrdersExecuted so the off-chain
      *      bot can distribute USDC to each investor proportionally.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed

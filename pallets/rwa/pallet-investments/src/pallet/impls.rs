@@ -41,7 +41,7 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 		if max_amount >= total {
 			// Full fill — confirm every investor's order as-is.
 			for (investor_id, amount) in &entries {
-				ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
+				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
 					*e = Some(e.unwrap_or_default().saturating_add(*amount));
 				});
 				Self::deposit_event(Event::DepositOrderConfirmed {
@@ -64,7 +64,7 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 				let remainder = pending.saturating_sub(confirmed);
 
 				if !confirmed.is_zero() {
-					ConfirmedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
+					ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
 						*e = Some(e.unwrap_or_default().saturating_add(confirmed));
 					});
 					Self::deposit_event(Event::DepositOrderConfirmed {

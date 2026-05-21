@@ -317,7 +317,7 @@ pub trait DepositSettlement<PoolId, TrancheId, Balance> {
 	/// If total pending > `max_amount`, each investor's order is scaled down proportionally
 	/// and the remainder stays in `PendingDepositOrders` for the next epoch.
 	///
-	/// Returns the actual USDC amount moved to `ConfirmedDepositOrders`.
+	/// Returns the actual USDC amount moved to `ApprovedDepositOrders`.
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
