@@ -131,6 +131,9 @@ pub struct Tranche {
 	pub borrowed: U256,
 	/// Aggregate pending invest/redeem orders for the current epoch.
 	pub pending_orders: TranchePendingOrders,
+	/// Token price locked at the start of the settlement window, derived from the finalized NAV.
+	/// None outside the settlement window. Reset to None when the epoch advances.
+	pub epoch_price: Option<FixedU128>,
 }
 
 impl Tranche {
@@ -310,6 +313,8 @@ pub trait PoolInspect<AccountId> {
 	fn deposit_cap_exceeded(pool_id: PoolId, tranche_id: TrancheId, amount: U256) -> bool;
 	/// Returns `invested - borrowed` for the tranche — the USDC available to cover redemptions.
 	fn treasury_liquidity(pool_id: PoolId, tranche_id: TrancheId) -> U256;
+	/// Returns the token price locked at settlement start for this tranche, if finalized.
+	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<FixedU128>;
 }
 
 /// Defined here, implemented by pallet-investments.
@@ -321,11 +326,15 @@ pub trait DepositSettlement<PoolId, TrancheId, Balance> {
 	/// If total pending > `max_amount`, each investor's order is scaled down proportionally
 	/// and the remainder stays in `PendingDepositOrders` for the next epoch.
 	///
-	/// Returns the actual USDC amount moved to `ApprovedDepositOrders`.
+	/// Converts confirmed USDC amounts to tokens-to-mint using `epoch_price` and stores
+	/// tokens in `ApprovedDepositOrders`.
+	///
+	/// Returns the actual USDC amount confirmed (for `tranche.invested` accounting).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		max_amount: Balance,
+		epoch_price: FixedU128,
 	) -> Balance;
 }
 

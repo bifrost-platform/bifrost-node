@@ -9,6 +9,28 @@ impl<T: Config> Pallet<T> {
 	pub fn current_block() -> u32 {
 		frame_system::Pallet::<T>::block_number().try_into().unwrap_or(u32::MAX)
 	}
+
+	/// Converts a deposit asset amount to tranche shares at the given epoch price.
+	/// shares = assets * accuracy / price_inner
+	///
+	/// `FixedU128::accuracy()` = 10^18; `price.into_inner()` = price * 10^18.
+	/// All arithmetic in U256 to avoid overflow.
+	pub(crate) fn assets_to_shares(assets: U256, price: FixedU128) -> U256 {
+		let price_inner = U256::from(price.into_inner());
+		if price_inner.is_zero() {
+			return assets;
+		}
+		assets.saturating_mul(U256::from(FixedU128::accuracy())) / price_inner
+	}
+
+	/// Converts a tranche share amount to deposit assets at the given epoch price.
+	/// assets = shares * price_inner / accuracy
+	///
+	/// `FixedU128::accuracy()` = 10^18; `price.into_inner()` = price * 10^18.
+	/// All arithmetic in U256 to avoid overflow.
+	pub(crate) fn shares_to_assets(shares: U256, price: FixedU128) -> U256 {
+		shares.saturating_mul(U256::from(price.into_inner())) / U256::from(FixedU128::accuracy())
+	}
 }
 
 impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
@@ -18,8 +40,17 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 	/// - Partial fill (total pending >  max_amount): each investor's order is scaled by
 	///   `max_amount / total`; the remainder stays in `PendingDepositOrders`.
 	///
-	/// Emits `DepositOrderConfirmed` per investor. Returns actual USDC confirmed.
-	fn settle_deposit_orders(pool_id: PoolId, tranche_id: TrancheId, max_amount: U256) -> U256 {
+	/// Converts confirmed USDC amounts to tokens-to-mint using `epoch_price` and stores
+	/// tokens in `ApprovedDepositOrders`.
+	///
+	/// Emits `DepositOrderConfirmed` per investor. Returns actual USDC confirmed
+	/// (for `tranche.invested` accounting in pallet-pools).
+	fn settle_deposit_orders(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		max_amount: U256,
+		epoch_price: FixedU128,
+	) -> U256 {
 		let entries: sp_std::vec::Vec<(H160, U256)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
 
@@ -41,14 +72,16 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 		if max_amount >= total {
 			// Full fill — confirm every investor's order as-is.
 			for (investor_id, amount) in &entries {
+				let tokens_to_mint = Self::assets_to_shares(*amount, epoch_price);
 				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
-					*e = Some(e.unwrap_or_default().saturating_add(*amount));
+					*e = Some(e.unwrap_or_default().saturating_add(tokens_to_mint));
 				});
-				Self::deposit_event(Event::DepositOrderConfirmed {
+				Self::deposit_event(Event::DepositOrderApproved {
 					pool_id,
 					tranche_id: tranche_id.clone(),
 					investor_id: *investor_id,
-					amount: *amount,
+					usdc_amount: *amount,
+					tokens_to_mint,
 				});
 				confirmed_total = confirmed_total.saturating_add(*amount);
 			}
@@ -64,14 +97,16 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 				let remainder = pending.saturating_sub(confirmed);
 
 				if !confirmed.is_zero() {
+					let tokens_to_mint = Self::assets_to_shares(confirmed, epoch_price);
 					ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
-						*e = Some(e.unwrap_or_default().saturating_add(confirmed));
+						*e = Some(e.unwrap_or_default().saturating_add(tokens_to_mint));
 					});
-					Self::deposit_event(Event::DepositOrderConfirmed {
+					Self::deposit_event(Event::DepositOrderApproved {
 						pool_id,
 						tranche_id: tranche_id.clone(),
 						investor_id: *investor_id,
-						amount: confirmed,
+						usdc_amount: confirmed,
+						tokens_to_mint,
 					});
 					confirmed_total = confirmed_total.saturating_add(confirmed);
 				}

@@ -1,6 +1,6 @@
 use crate::{PoolId, PoolInspect, TrancheId, TrancheMutate};
 use sp_core::U256;
-use sp_runtime::DispatchError;
+use sp_runtime::{DispatchError, FixedU128};
 
 use super::pallet::*;
 
@@ -57,6 +57,12 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 			.and_then(|pool| pool.tranches.get(&tranche_id).cloned())
 			.map(|tranche| tranche.treasury_liquidity())
 			.unwrap_or_default()
+	}
+
+	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<FixedU128> {
+		Pool::<T>::get(pool_id)
+			.and_then(|pool| pool.tranches.get(&tranche_id).cloned())
+			.and_then(|tranche| tranche.epoch_price)
 	}
 }
 

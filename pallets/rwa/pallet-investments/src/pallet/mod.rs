@@ -44,6 +44,8 @@ pub mod pallet {
 		DepositCapExceeded,
 		/// Tranche treasury has no available liquidity to cover redemptions.
 		InsufficientLiquidity,
+		/// Settlement window is open but NAV has not been finalized for this epoch yet.
+		EpochPriceNotSet,
 	}
 
 	// -----------------------------------------------------------------------
@@ -68,30 +70,22 @@ pub mod pallet {
 			amount: U256,
 		},
 		/// An investor's pending deposit order was moved to confirmed.
-		/// Off-chain bot watches this and mints tranche tokens on the external chain.
-		DepositOrderConfirmed {
+		/// Off-chain bot watches this event and mints `tokens_to_mint` tranche tokens on the external chain.
+		DepositOrderApproved {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			investor_id: H160,
-			amount: U256,
+			usdc_amount: U256,
+			tokens_to_mint: U256,
 		},
 		/// An investor's pending redeem order was moved to confirmed.
-		RedeemOrderConfirmed {
+		/// Off-chain bot watches this event and distributes `shares_to_distribute` to the investor.
+		RedeemOrderApproved {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			investor_id: H160,
 			tokens: U256,
-		},
-		/// Confirmed redeem orders were executed.
-		/// Off-chain bot reads this and distributes `usdc_amount` from the Spoke
-		/// Treasury to each investor proportional to their confirmed token amount.
-		RedeemOrdersExecuted {
-			pool_id: PoolId,
-			tranche_id: TrancheId,
-			/// Total tranche tokens redeemed.
-			total_tokens: U256,
-			/// USDC amount the borrower deposited to the Spoke Treasury.
-			usdc_amount: U256,
+			shares_to_distribute: U256,
 		},
 	}
 
@@ -108,7 +102,7 @@ pub mod pallet {
 	/// Approved deposit orders ready for off-chain mint.
 	/// Written by `approve_deposit_orders` (Approval) or `on_initialize` (Automatic).
 	/// Cleared by the poll-based claim flow once tokens are minted on the Spoke chain.
-	/// tranche_id → investor_id → USDC amount
+	/// tranche_id → investor_id → tokens-to-mint (converted from USDC at epoch_price)
 	#[pallet::storage]
 	pub type ApprovedDepositOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
@@ -121,7 +115,7 @@ pub mod pallet {
 
 	/// Approved redeem orders ready for settlement.
 	/// Written by `approve_redeem_orders` (Approval mode).
-	/// tranche_id → investor_id → tranche token amount
+	/// tranche_id → investor_id → USDC-to-distribute (converted from tokens at epoch_price)
 	#[pallet::storage]
 	pub type ApprovedRedeemOrders<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
@@ -236,6 +230,9 @@ pub mod pallet {
 			ensure!(caller == borrower, Error::<T>::NotBorrower);
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
 
+			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
+				.ok_or(Error::<T>::EpochPriceNotSet)?;
+
 			let mut total_approved = U256::zero();
 
 			for investor_id in investor_ids {
@@ -244,17 +241,20 @@ pub mod pallet {
 					continue;
 				};
 
+				let tokens_to_mint = Self::assets_to_shares(amount, epoch_price);
+
 				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-					*entry = Some(entry.unwrap_or_default().saturating_add(amount));
+					*entry = Some(entry.unwrap_or_default().saturating_add(tokens_to_mint));
 				});
 
 				total_approved = total_approved.saturating_add(amount);
 
-				Self::deposit_event(Event::DepositOrderConfirmed {
+				Self::deposit_event(Event::DepositOrderApproved {
 					pool_id,
 					tranche_id: tranche_id.clone(),
 					investor_id,
-					amount,
+					usdc_amount: amount,
+					tokens_to_mint,
 				});
 			}
 
@@ -291,6 +291,9 @@ pub mod pallet {
 				Error::<T>::InsufficientLiquidity
 			);
 
+			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
+				.ok_or(Error::<T>::EpochPriceNotSet)?;
+
 			let mut total_approved = U256::zero();
 
 			for investor_id in investor_ids {
@@ -299,17 +302,20 @@ pub mod pallet {
 					continue;
 				};
 
+				let shares_to_distribute = Self::shares_to_assets(tokens, epoch_price);
+
 				ApprovedRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-					*entry = Some(entry.unwrap_or_default().saturating_add(tokens));
+					*entry = Some(entry.unwrap_or_default().saturating_add(shares_to_distribute));
 				});
 
 				total_approved = total_approved.saturating_add(tokens);
 
-				Self::deposit_event(Event::RedeemOrderConfirmed {
+				Self::deposit_event(Event::RedeemOrderApproved {
 					pool_id,
 					tranche_id: tranche_id.clone(),
 					investor_id,
 					tokens,
+					shares_to_distribute,
 				});
 			}
 

@@ -1,14 +1,14 @@
 mod impls;
 
 use crate::{
-	CollateralAsset, DepositSettlement, EpochInfo, PoolDetails, PoolId, SettlementMode, Tranche,
-	TrancheId, TrancheInput, TranchePendingOrders, MAX_TRANCHES,
+	CollateralAsset, DepositSettlement, EpochInfo, PoolDetails, PoolId, PoolNAV, SettlementMode,
+	Tranche, TrancheId, TrancheInput, TranchePendingOrders, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
-use sp_runtime::DispatchError;
+use sp_runtime::{DispatchError, FixedU128};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -25,6 +25,9 @@ pub mod pallet {
 		/// Deposit settlement — implemented by pallet-investments.
 		/// Called during `on_initialize` to settle pending deposit orders when epochs advance.
 		type Investments: DepositSettlement<PoolId, TrancheId, sp_core::U256>;
+		/// NAV oracle — implemented externally. Called to read the finalized collateral NAV
+		/// when the settlement window opens.
+		type NAV: PoolNAV<PoolId, sp_core::U256>;
 	}
 
 	// -----------------------------------------------------------------------
@@ -111,21 +114,35 @@ pub mod pallet {
 
 			for (pool_id, mut pool) in Pool::<T>::iter() {
 				weight = weight.saturating_add(Weight::from_parts(1_000, 0));
+				let mut changed = false;
 
+				// Settlement window just opened: lock epoch price per tranche from finalized NAV.
+				if pool.epoch.in_settlement_window(now) {
+					let needs_finalization =
+						pool.tranches.values().any(|t| t.epoch_price.is_none());
+					if needs_finalization {
+						let nav = T::NAV::nav(pool_id).map(|(n, _)| n).unwrap_or_default();
+						for (_, tranche) in pool.tranches.iter_mut() {
+							if tranche.epoch_price.is_none() {
+								tranche.epoch_price = Some(tranche.token_price(nav));
+							}
+						}
+						changed = true;
+					}
+				}
+
+				// Epoch over: settle and advance.
 				if pool.epoch.should_advance(now) {
-					pool.epoch.advance(now);
-					let new_epoch = pool.epoch.current_epoch;
-
-					// Automatic deposit settlement: confirm all pending deposit orders
-					// for each tranche, then update the tranche's invested total.
 					if pool.deposit_settlement == SettlementMode::Automatic {
 						for (tranche_id, tranche) in pool.tranches.iter_mut() {
 							let max_amount = tranche.pending_orders.deposit;
 							if !max_amount.is_zero() {
+								let epoch_price = tranche.epoch_price.unwrap_or(FixedU128::one());
 								let confirmed = T::Investments::settle_deposit_orders(
 									pool_id,
 									tranche_id.clone(),
 									max_amount,
+									epoch_price,
 								);
 								tranche.invested = tranche.invested.saturating_add(confirmed);
 								tranche.pending_orders.deposit = U256::zero();
@@ -133,8 +150,19 @@ pub mod pallet {
 						}
 					}
 
-					Pool::<T>::insert(pool_id, pool);
+					// Reset epoch prices for the next epoch.
+					for (_, tranche) in pool.tranches.iter_mut() {
+						tranche.epoch_price = None;
+					}
+
+					pool.epoch.advance(now);
+					let new_epoch = pool.epoch.current_epoch;
+					changed = true;
 					Self::deposit_event(Event::EpochAdvanced { pool_id, new_epoch });
+				}
+
+				if changed {
+					Pool::<T>::insert(pool_id, pool);
 				}
 			}
 
@@ -196,6 +224,7 @@ pub mod pallet {
 							invested: U256::zero(),
 							borrowed: U256::zero(),
 							pending_orders: TranchePendingOrders::default(),
+							epoch_price: None,
 						},
 					)
 					.map_err(|_| Error::<T>::OutOfRange)?;
@@ -252,6 +281,7 @@ pub mod pallet {
 							invested: U256::zero(),
 							borrowed: U256::zero(),
 							pending_orders: TranchePendingOrders::default(),
+							epoch_price: None,
 						},
 					)
 					.map_err(|_| Error::<T>::OutOfRange)?;
