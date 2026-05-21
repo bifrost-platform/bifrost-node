@@ -22,6 +22,10 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 		None
 	}
 
+	fn pool_borrower(pool_id: PoolId) -> Option<T::AccountId> {
+		Pool::<T>::get(pool_id).map(|pool| pool.borrower)
+	}
+
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool {
 		Pool::<T>::get(pool_id)
 			.map(|pool| pool.tranches.contains_key(&tranche_id))

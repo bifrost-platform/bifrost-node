@@ -272,7 +272,9 @@ impl EpochInfo {
 #[derive(
 	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
 )]
-pub struct PoolDetails {
+pub struct PoolDetails<AccountId> {
+	/// The institution (borrower) EOA authorized to borrow, repay, and approve orders.
+	pub borrower: AccountId,
 	/// Total amount of USDC invested into the pool. (= sum of all tranches' invested)
 	pub total: U256,
 	/// Mapped tranche IDs to tranches.
@@ -298,6 +300,8 @@ use frame_support::pallet_prelude::DispatchError;
 pub trait PoolInspect<AccountId> {
 	fn pool_exists(pool_id: PoolId) -> bool;
 	fn pool_admin(pool_id: PoolId) -> Option<AccountId>;
+	/// Returns the borrower (institution EOA) authorized for this pool.
+	fn pool_borrower(pool_id: PoolId) -> Option<AccountId>;
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
 	/// True when the pool is currently inside its settlement window.
 	fn in_settlement_window(pool_id: PoolId) -> bool;

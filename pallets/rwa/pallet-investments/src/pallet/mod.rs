@@ -38,8 +38,8 @@ pub mod pallet {
 		PoolInSettlementWindow,
 		/// This call is only valid during the pool's settlement window.
 		NotInSettlementWindow,
-		/// Caller is not the pool admin.
-		NotPoolAdmin,
+		/// Caller is not the pool's authorized borrower.
+		NotBorrower,
 		/// Deposit would push total invested + pending above the tranche's cap.
 		DepositCapExceeded,
 		/// Tranche treasury has no available liquidity to cover redemptions.
@@ -231,8 +231,9 @@ pub mod pallet {
 			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			let caller = ensure_signed(origin)?;
-			let admin = T::Pools::pool_admin(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
-			ensure!(caller == admin, Error::<T>::NotPoolAdmin);
+			let borrower =
+				T::Pools::pool_borrower(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
+			ensure!(caller == borrower, Error::<T>::NotBorrower);
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
 
 			let mut total_approved = U256::zero();
@@ -281,8 +282,9 @@ pub mod pallet {
 			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			let caller = ensure_signed(origin)?;
-			let admin = T::Pools::pool_admin(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
-			ensure!(caller == admin, Error::<T>::NotPoolAdmin);
+			let borrower =
+				T::Pools::pool_borrower(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
+			ensure!(caller == borrower, Error::<T>::NotBorrower);
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
 			ensure!(
 				!T::Pools::treasury_liquidity(pool_id, tranche_id.clone()).is_zero(),

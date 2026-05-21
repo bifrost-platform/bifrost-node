@@ -53,6 +53,8 @@ pub mod pallet {
 		OutOfRange,
 		/// Borrow amount exceeds available tranche treasury liquidity (invested − borrowed).
 		InsufficientTreasuryLiquidity,
+		/// Caller is not the pool's authorized borrower.
+		NotBorrower,
 		/// Amount must be greater than zero.
 		ZeroAmount,
 	}
@@ -83,7 +85,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// All active pools, keyed by pool ID.
-	pub type Pool<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails>;
+	pub type Pool<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails<T::AccountId>>;
 
 	#[pallet::storage]
 	/// Mapped collateral assets to pool IDs.
@@ -157,6 +159,7 @@ pub mod pallet {
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn create_pool(
 			origin: OriginFor<T>,
+			borrower: T::AccountId,
 			nft_contract: H160,
 			nft_token_id: U256,
 			epoch_length: u32,
@@ -199,6 +202,7 @@ pub mod pallet {
 			}
 
 			let pool = PoolDetails {
+				borrower,
 				total: U256::zero(),
 				tranches: built_tranches.clone(),
 				epoch: EpochInfo::new(epoch_length, settlement_offset, now),
@@ -270,13 +274,14 @@ pub mod pallet {
 			vault_address: H160,
 			amount: U256,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			let caller = ensure_signed(origin)?;
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 
 			let tranche_id = TrancheId { chain_id, vault_address };
 
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+				ensure!(caller == pool.borrower, Error::<T>::NotBorrower);
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 
@@ -306,13 +311,14 @@ pub mod pallet {
 			vault_address: H160,
 			amount: U256,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			let caller = ensure_signed(origin)?;
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 
 			let tranche_id = TrancheId { chain_id, vault_address };
 
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+				ensure!(caller == pool.borrower, Error::<T>::NotBorrower);
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 
