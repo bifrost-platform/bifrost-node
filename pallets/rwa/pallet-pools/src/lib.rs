@@ -366,6 +366,15 @@ pub trait TrancheMutate<Balance> {
 		tranche_id: TrancheId,
 		amount: Balance,
 	) -> frame_support::dispatch::DispatchResult;
+
+	/// Increment the tranche's cumulative invested total.
+	/// Called when deposit orders are confirmed in Approval mode so that
+	/// `treasury_liquidity` (`invested - borrowed`) stays accurate.
+	fn add_invested(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
 }
 
 /// Implemented by pallet-nav-oracle. Called by pallet-pools to fetch the current

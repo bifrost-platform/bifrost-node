@@ -259,7 +259,8 @@ pub mod pallet {
 			}
 
 			if !total_approved.is_zero() {
-				T::Pools::sub_pending_deposit(pool_id, tranche_id, total_approved)?;
+				T::Pools::sub_pending_deposit(pool_id, tranche_id.clone(), total_approved)?;
+				T::Pools::add_invested(pool_id, tranche_id, total_approved)?;
 			}
 
 			Ok(())
