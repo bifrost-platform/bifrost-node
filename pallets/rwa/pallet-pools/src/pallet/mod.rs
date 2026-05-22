@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	CollateralAsset, DepositSettlement, EpochInfo, PoolDetails, PoolId, PoolNAV, SettlementMode,
-	Tranche, TrancheId, TrancheInput, TranchePendingOrders, MAX_TRANCHES,
+	Tranche, TrancheId, TrancheInput, TranchePendingOrders, MAX_COLLATERALS, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -48,6 +48,8 @@ pub mod pallet {
 		TrancheNotFound,
 		/// Pool reserve is insufficient for the requested withdrawal.
 		InsufficientReserve,
+		/// At least one collateral NFT is required.
+		MissingCollateral,
 		/// Collateral already exists.
 		CollateralAlreadyExists,
 		/// Tranche already exists.
@@ -178,18 +180,18 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Create a new RWA pool.
 		///
+		/// `collaterals` must contain at least one NFT; each must not already be registered.
 		/// `tranches` must end with exactly one junior tranche.
 		/// All preceding entries must be senior, ordered most-senior first.
 		///
-		/// `settlement_start_offset` is how many blocks before epoch end
-		/// the settlement window opens. During this window new orders are rejected.
+		/// `settlement_offset` is how many blocks before epoch end the settlement window opens.
+		/// During this window new orders are rejected.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			borrower: T::AccountId,
-			nft_contract: H160,
-			nft_token_id: U256,
+			collaterals: BoundedVec<CollateralAsset, ConstU32<MAX_COLLATERALS>>,
 			epoch_length: u32,
 			settlement_offset: u32,
 			deposit_settlement: SettlementMode,
@@ -197,15 +199,17 @@ pub mod pallet {
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
 		) -> DispatchResult {
 			ensure_root(origin)?;
+			ensure!(!collaterals.is_empty(), Error::<T>::MissingCollateral);
 
 			let pool_id = NextPoolId::<T>::get();
 			let now = Self::current_block();
 
-			let collateral = CollateralAsset { nft_contract, nft_token_id };
-			ensure!(
-				!Collaterals::<T>::contains_key(collateral.clone()),
-				Error::<T>::CollateralAlreadyExists
-			);
+			for collateral in collaterals.iter() {
+				ensure!(
+					!Collaterals::<T>::contains_key(collateral),
+					Error::<T>::CollateralAlreadyExists
+				);
+			}
 
 			let mut built_tranches: BoundedBTreeMap<TrancheId, Tranche, ConstU32<MAX_TRANCHES>> =
 				BoundedBTreeMap::new();
@@ -235,12 +239,14 @@ pub mod pallet {
 				total: U256::zero(),
 				tranches: built_tranches.clone(),
 				epoch: EpochInfo::new(epoch_length, settlement_offset, now),
-				collateral: collateral.clone(),
+				collaterals: collaterals.clone(),
 				deposit_settlement,
 				redeem_settlement,
 			};
 
-			Collaterals::<T>::insert(collateral, pool_id);
+			for collateral in collaterals.iter() {
+				Collaterals::<T>::insert(collateral, pool_id);
+			}
 			for tranche in tranches.iter() {
 				Tranches::<T>::insert(tranche.tranche_id.clone(), pool_id);
 			}

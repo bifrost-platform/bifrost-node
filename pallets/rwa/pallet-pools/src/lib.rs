@@ -7,7 +7,7 @@ pub use pallet::pallet::*;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, U256};
-use sp_runtime::{traits::One, BoundedBTreeMap, FixedU128, Perquintill, RuntimeDebug};
+use sp_runtime::{traits::One, BoundedBTreeMap, BoundedVec, FixedU128, Perquintill, RuntimeDebug};
 
 // ---------------------------------------------------------------------------
 // Primitive type aliases
@@ -24,6 +24,9 @@ pub type EpochId = u32;
 
 /// Maximum number of tranches per pool.
 pub const MAX_TRANCHES: u32 = 10;
+
+/// Maximum number of collateral NFTs per pool.
+pub const MAX_COLLATERALS: u32 = 10;
 
 // ---------------------------------------------------------------------------
 // TrancheId
@@ -284,8 +287,8 @@ pub struct PoolDetails<AccountId> {
 	pub tranches: BoundedBTreeMap<TrancheId, Tranche, ConstU32<MAX_TRANCHES>>,
 	/// Block-number-based epoch tracking.
 	pub epoch: EpochInfo,
-	/// NFT collateral representing the off-chain RWA.
-	pub collateral: CollateralAsset,
+	/// NFT collaterals representing the off-chain RWA. At least one required.
+	pub collaterals: BoundedVec<CollateralAsset, ConstU32<MAX_COLLATERALS>>,
 	/// Settlement mode for deposit orders.
 	pub deposit_settlement: SettlementMode,
 	/// Settlement mode for redeem orders.
