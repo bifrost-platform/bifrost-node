@@ -320,6 +320,8 @@ pub trait PoolInspect<AccountId> {
 	/// Returns the current Gateway EVM contract address stored on-chain.
 	/// Both precompiles read this to verify the EVM-level caller before dispatching.
 	fn gateway_address() -> H160;
+	/// Returns the current epoch index for a pool, or `None` if the pool does not exist.
+	fn current_epoch(pool_id: PoolId) -> Option<EpochId>;
 }
 
 /// Defined here, implemented by pallet-investments.

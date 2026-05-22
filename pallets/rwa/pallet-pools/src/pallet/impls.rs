@@ -1,4 +1,4 @@
-use crate::{PoolId, PoolInspect, TrancheId, TrancheMutate};
+use crate::{EpochId, PoolId, PoolInspect, TrancheId, TrancheMutate};
 use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedU128};
 
@@ -67,6 +67,10 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 
 	fn gateway_address() -> H160 {
 		GatewayAddress::<T>::get()
+	}
+
+	fn current_epoch(pool_id: PoolId) -> Option<EpochId> {
+		Pool::<T>::get(pool_id).map(|pool| pool.epoch.current_epoch)
 	}
 }
 

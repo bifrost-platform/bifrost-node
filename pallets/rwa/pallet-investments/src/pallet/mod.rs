@@ -1,6 +1,9 @@
 mod impls;
 
-use crate::{PoolId, PoolInspect, TrancheId, TrancheMutate};
+use crate::{
+	ApprovedDepositOrder, ApprovedRedeemOrder, PendingDepositOrder, PendingRedeemOrder, PoolId,
+	PoolInspect, TrancheId, TrancheMutate,
+};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
@@ -78,22 +81,22 @@ pub mod pallet {
 			amount: U256,
 		},
 		/// An investor's pending deposit order was moved to confirmed.
-		/// Off-chain bot watches this event and mints `tokens_to_mint` tranche tokens on the external chain.
+		/// Off-chain bot watches this event and mints `shares_to_mint` tranche shares on the external chain.
 		DepositOrderApproved {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			investor_id: H160,
-			usdc_amount: U256,
-			tokens_to_mint: U256,
+			amount: U256,
+			shares_to_mint: U256,
 		},
 		/// An investor's pending redeem order was moved to confirmed.
-		/// Off-chain bot watches this event and distributes `shares_to_distribute` to the investor.
+		/// Off-chain bot watches this event and pays out `payout` asset to the investor.
 		RedeemOrderApproved {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			investor_id: H160,
-			tokens: U256,
-			shares_to_distribute: U256,
+			shares_redeemed: U256,
+			payout: U256,
 		},
 	}
 
@@ -102,31 +105,55 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 
 	/// Pending deposit orders awaiting epoch settlement.
-	/// tranche_id → investor → cumulative USDC amount
+	/// tranche_id → investor → order (amount + epoch/block metadata)
 	#[pallet::storage]
-	pub type PendingDepositOrders<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
+	pub type PendingDepositOrders<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		TrancheId,
+		Blake2_128Concat,
+		H160,
+		PendingDepositOrder,
+	>;
 
 	/// Approved deposit orders ready for off-chain mint.
 	/// Written by `approve_deposit_orders` (Approval) or `on_initialize` (Automatic).
 	/// Cleared by the poll-based claim flow once tokens are minted on the Spoke chain.
-	/// tranche_id → investor_id → tokens-to-mint (converted from USDC at epoch_price)
+	/// tranche_id → investor_id → order (tokens-to-mint + epoch/block metadata)
 	#[pallet::storage]
-	pub type ApprovedDepositOrders<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
+	pub type ApprovedDepositOrders<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		TrancheId,
+		Blake2_128Concat,
+		H160,
+		ApprovedDepositOrder,
+	>;
 
 	/// Pending redeem orders awaiting epoch settlement.
-	/// tranche_id → investor → cumulative tranche token amount
+	/// tranche_id → investor → order (amount + epoch/block metadata)
 	#[pallet::storage]
-	pub type PendingRedeemOrders<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
+	pub type PendingRedeemOrders<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		TrancheId,
+		Blake2_128Concat,
+		H160,
+		PendingRedeemOrder,
+	>;
 
 	/// Approved redeem orders ready for settlement.
 	/// Written by `approve_redeem_orders` (Approval mode).
-	/// tranche_id → investor_id → USDC-to-distribute (converted from tokens at epoch_price)
+	/// tranche_id → investor_id → order (USDC-to-distribute + epoch/block metadata)
 	#[pallet::storage]
-	pub type ApprovedRedeemOrders<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, TrancheId, Blake2_128Concat, H160, U256>;
+	pub type ApprovedRedeemOrders<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		TrancheId,
+		Blake2_128Concat,
+		H160,
+		ApprovedRedeemOrder,
+	>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
@@ -138,7 +165,7 @@ pub mod pallet {
 		/// message arrives on Bifrost via CCCP.
 		///
 		/// Rejected during the pool's settlement window.
-		/// Updates the tranche's aggregate pending deposit total
+		/// Updates the tranche's aggregate pending deposit total.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn submit_deposit_order(
@@ -160,8 +187,19 @@ pub mod pallet {
 				Error::<T>::DepositCapExceeded
 			);
 
+			let now = Self::current_block();
+			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
+
 			PendingDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
+				match entry {
+					Some(existing) => {
+						// Accumulate amount; preserve original epoch/block metadata.
+						existing.amount = existing.amount.saturating_add(amount);
+					},
+					None => {
+						*entry = Some(PendingDepositOrder { amount, epoch_id, submitted_at: now });
+					},
+				}
 			});
 
 			T::Pools::add_pending_deposit(pool_id, tranche_id.clone(), amount)?;
@@ -198,9 +236,21 @@ pub mod pallet {
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
 
-			PendingRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-				*entry = Some(entry.unwrap_or_default().saturating_add(amount));
-			});
+			let now = Self::current_block();
+			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
+
+			PendingRedeemOrders::<T>::mutate(
+				tranche_id.clone(),
+				investor_id,
+				|entry| match entry {
+					Some(existing) => {
+						existing.amount = existing.amount.saturating_add(amount);
+					},
+					None => {
+						*entry = Some(PendingRedeemOrder { amount, epoch_id, submitted_at: now });
+					},
+				},
+			);
 
 			// keep aggregate pending redeem total in sync.
 			T::Pools::add_pending_redeem(pool_id, tranche_id.clone(), amount)?;
@@ -238,37 +288,57 @@ pub mod pallet {
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
 
+			let now = Self::current_block();
+			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
+
 			let mut total_approved = U256::zero();
-			let mut total_tokens_minted = U256::zero();
+			let mut total_shares_minted = U256::zero();
 
 			for investor_id in investor_ids {
-				let Some(amount) = PendingDepositOrders::<T>::take(tranche_id.clone(), investor_id)
+				let Some(pending) =
+					PendingDepositOrders::<T>::take(tranche_id.clone(), investor_id)
 				else {
 					continue;
 				};
 
-				let tokens_to_mint = Self::assets_to_shares(amount, epoch_price);
+				let shares_to_mint = Self::assets_to_shares(pending.amount, epoch_price);
 
 				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-					*entry = Some(entry.unwrap_or_default().saturating_add(tokens_to_mint));
+					match entry {
+						Some(existing) => {
+							existing.amount = existing.amount.saturating_add(pending.amount);
+							existing.shares_to_mint =
+								existing.shares_to_mint.saturating_add(shares_to_mint);
+							existing.epoch_id = epoch_id;
+							existing.approved_at = now;
+						},
+						None => {
+							*entry = Some(ApprovedDepositOrder {
+								amount: pending.amount,
+								shares_to_mint,
+								epoch_id,
+								approved_at: now,
+							});
+						},
+					}
 				});
 
-				total_approved = total_approved.saturating_add(amount);
-				total_tokens_minted = total_tokens_minted.saturating_add(tokens_to_mint);
+				total_approved = total_approved.saturating_add(pending.amount);
+				total_shares_minted = total_shares_minted.saturating_add(shares_to_mint);
 
 				Self::deposit_event(Event::DepositOrderApproved {
 					pool_id,
 					tranche_id: tranche_id.clone(),
 					investor_id,
-					usdc_amount: amount,
-					tokens_to_mint,
+					amount: pending.amount,
+					shares_to_mint,
 				});
 			}
 
 			if !total_approved.is_zero() {
 				T::Pools::sub_pending_deposit(pool_id, tranche_id.clone(), total_approved)?;
 				T::Pools::add_invested(pool_id, tranche_id.clone(), total_approved)?;
-				T::Pools::add_token_supply(pool_id, tranche_id, total_tokens_minted)?;
+				T::Pools::add_token_supply(pool_id, tranche_id, total_shares_minted)?;
 			}
 
 			Ok(())
@@ -299,28 +369,47 @@ pub mod pallet {
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
 
+			let now = Self::current_block();
+			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
+
 			let mut total_approved = U256::zero();
 
 			for investor_id in investor_ids {
-				let Some(tokens) = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor_id)
+				let Some(pending) = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor_id)
 				else {
 					continue;
 				};
 
-				let shares_to_distribute = Self::shares_to_assets(tokens, epoch_price);
+				let payout = Self::shares_to_assets(pending.amount, epoch_price);
 
 				ApprovedRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-					*entry = Some(entry.unwrap_or_default().saturating_add(shares_to_distribute));
+					match entry {
+						Some(existing) => {
+							existing.shares_redeemed =
+								existing.shares_redeemed.saturating_add(pending.amount);
+							existing.payout = existing.payout.saturating_add(payout);
+							existing.epoch_id = epoch_id;
+							existing.approved_at = now;
+						},
+						None => {
+							*entry = Some(ApprovedRedeemOrder {
+								shares_redeemed: pending.amount,
+								payout,
+								epoch_id,
+								approved_at: now,
+							});
+						},
+					}
 				});
 
-				total_approved = total_approved.saturating_add(tokens);
+				total_approved = total_approved.saturating_add(pending.amount);
 
 				Self::deposit_event(Event::RedeemOrderApproved {
 					pool_id,
 					tranche_id: tranche_id.clone(),
 					investor_id,
-					tokens,
-					shares_to_distribute,
+					shares_redeemed: pending.amount,
+					payout,
 				});
 			}
 

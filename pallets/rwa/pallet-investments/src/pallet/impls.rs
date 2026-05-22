@@ -1,3 +1,4 @@
+use crate::{ApprovedDepositOrder, PendingDepositOrder};
 use pallet_pools::{DepositSettlement, PoolId, TrancheId, TrancheMutate};
 use sp_core::{H160, U256};
 use sp_runtime::{FixedPointNumber, FixedU128};
@@ -41,9 +42,9 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 	///   `max_amount / total`; the remainder stays in `PendingDepositOrders`.
 	///
 	/// Converts confirmed USDC amounts to tokens-to-mint using `epoch_price` and stores
-	/// tokens in `ApprovedDepositOrders`.
+	/// them in `ApprovedDepositOrders` with the settling epoch/block metadata.
 	///
-	/// Emits `DepositOrderConfirmed` per investor. Returns actual USDC confirmed
+	/// Emits `DepositOrderApproved` per investor. Returns actual USDC confirmed
 	/// (for `tranche.invested` accounting in pallet-pools).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
@@ -51,41 +52,63 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 		max_amount: U256,
 		epoch_price: FixedU128,
 	) -> U256 {
-		let entries: sp_std::vec::Vec<(H160, U256)> =
+		let entries: sp_std::vec::Vec<(H160, PendingDepositOrder)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
 			return U256::zero();
 		}
 
-		let total = entries.iter().fold(U256::zero(), |acc, (_, amt)| acc.saturating_add(*amt));
+		let total = entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
 
 		if total.is_zero() {
 			return U256::zero();
 		}
 
-		// Clear all pending; remainders are re-inserted below if partial fill.
+		// Clear all pending; partial-fill remainders are re-inserted below.
 		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
 
+		let now = Self::current_block();
+		let epoch_id = <T::Pools as crate::PoolInspect<T::AccountId>>::current_epoch(pool_id)
+			.unwrap_or_default();
+
 		let mut confirmed_total = U256::zero();
-		let mut tokens_total = U256::zero();
+		let mut shares_total = U256::zero();
 
 		if max_amount >= total {
 			// Full fill — confirm every investor's order as-is.
-			for (investor_id, amount) in &entries {
-				let tokens_to_mint = Self::assets_to_shares(*amount, epoch_price);
-				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
-					*e = Some(e.unwrap_or_default().saturating_add(tokens_to_mint));
+			for (investor_id, order) in &entries {
+				let shares_to_mint = Self::assets_to_shares(order.amount, epoch_price);
+
+				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+					match entry {
+						Some(existing) => {
+							existing.amount = existing.amount.saturating_add(order.amount);
+							existing.shares_to_mint =
+								existing.shares_to_mint.saturating_add(shares_to_mint);
+							existing.epoch_id = epoch_id;
+							existing.approved_at = now;
+						},
+						None => {
+							*entry = Some(ApprovedDepositOrder {
+								amount: order.amount,
+								shares_to_mint,
+								epoch_id,
+								approved_at: now,
+							});
+						},
+					}
 				});
+
 				Self::deposit_event(Event::DepositOrderApproved {
 					pool_id,
 					tranche_id: tranche_id.clone(),
 					investor_id: *investor_id,
-					usdc_amount: *amount,
-					tokens_to_mint,
+					amount: order.amount,
+					shares_to_mint,
 				});
-				confirmed_total = confirmed_total.saturating_add(*amount);
-				tokens_total = tokens_total.saturating_add(tokens_to_mint);
+				confirmed_total = confirmed_total.saturating_add(order.amount);
+				shares_total = shares_total.saturating_add(shares_to_mint);
 			}
 		} else {
 			// Partial fill — scale each order by fill_ratio = max_amount / total.
@@ -93,36 +116,62 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 			let total_u128: u128 = total.try_into().unwrap_or(u128::MAX);
 			let fill_ratio = FixedU128::from_rational(max_u128, total_u128);
 
-			for (investor_id, pending) in &entries {
-				let pending_u128: u128 = (*pending).try_into().unwrap_or(u128::MAX);
+			for (investor_id, order) in &entries {
+				let pending_u128: u128 = order.amount.try_into().unwrap_or(u128::MAX);
 				let confirmed = U256::from(fill_ratio.saturating_mul_int(pending_u128));
-				let remainder = pending.saturating_sub(confirmed);
+				let remainder = order.amount.saturating_sub(confirmed);
 
 				if !confirmed.is_zero() {
-					let tokens_to_mint = Self::assets_to_shares(confirmed, epoch_price);
-					ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |e| {
-						*e = Some(e.unwrap_or_default().saturating_add(tokens_to_mint));
+					let shares_to_mint = Self::assets_to_shares(confirmed, epoch_price);
+
+					ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+						match entry {
+							Some(existing) => {
+								existing.amount = existing.amount.saturating_add(confirmed);
+								existing.shares_to_mint =
+									existing.shares_to_mint.saturating_add(shares_to_mint);
+								existing.epoch_id = epoch_id;
+								existing.approved_at = now;
+							},
+							None => {
+								*entry = Some(ApprovedDepositOrder {
+									amount: confirmed,
+									shares_to_mint,
+									epoch_id,
+									approved_at: now,
+								});
+							},
+						}
 					});
+
 					Self::deposit_event(Event::DepositOrderApproved {
 						pool_id,
 						tranche_id: tranche_id.clone(),
 						investor_id: *investor_id,
-						usdc_amount: confirmed,
-						tokens_to_mint,
+						amount: confirmed,
+						shares_to_mint,
 					});
 					confirmed_total = confirmed_total.saturating_add(confirmed);
-					tokens_total = tokens_total.saturating_add(tokens_to_mint);
+					shares_total = shares_total.saturating_add(shares_to_mint);
 				}
 
-				// Re-insert unconfirmed remainder for the next epoch.
+				// Re-insert unconfirmed remainder preserving original epoch/block metadata.
 				if !remainder.is_zero() {
-					PendingDepositOrders::<T>::insert(tranche_id.clone(), investor_id, remainder);
+					PendingDepositOrders::<T>::insert(
+						tranche_id.clone(),
+						investor_id,
+						PendingDepositOrder {
+							amount: remainder,
+							epoch_id: order.epoch_id,
+							submitted_at: order.submitted_at,
+						},
+					);
 				}
 			}
 		}
 
-		if !tokens_total.is_zero() {
-			let _ = T::Pools::add_token_supply(pool_id, tranche_id, tokens_total);
+		if !shares_total.is_zero() {
+			let _ = T::Pools::add_token_supply(pool_id, tranche_id, shares_total);
 		}
 
 		confirmed_total
