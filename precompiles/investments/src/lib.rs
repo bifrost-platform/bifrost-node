@@ -2,18 +2,20 @@
 #![warn(unused_crate_dependencies)]
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
-use pallet_evm::AddressMapping;
 use pallet_investments::Call as InvestmentsCall;
-use pallet_pools::TrancheId;
+use pallet_investments::MAX_INVESTORS_PER_APPROVAL;
+use pallet_pools::{PoolInspect, TrancheId};
 use precompile_utils::prelude::*;
-use sp_core::{H160, U256};
-use sp_runtime::traits::Dispatchable;
+use sp_core::{ConstU32, H160, U256};
+use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::marker::PhantomData;
 
 /// A precompile that dispatches invest/redeem order requests to pallet-investments.
 ///
-/// Called by the CCCP receiver contract when a `requestDeposit` or `requestRedeem`
-/// message arrives on Bifrost from an external EVM chain.
+/// Only callable by the Gateway contract whose address is stored in
+/// `pallet_pools::GatewayAddress` storage. Calls are dispatched with the
+/// `pallet_investments::Origin::Gateway` origin so the pallet rejects any
+/// direct extrinsic submissions.
 pub struct InvestmentsPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
@@ -21,13 +23,17 @@ impl<Runtime> InvestmentsPrecompile<Runtime>
 where
 	Runtime: pallet_investments::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
+	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_investments::Origin>,
 	Runtime::RuntimeCall: From<InvestmentsCall<Runtime>>,
-	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
+	<Runtime as pallet_investments::Config>::Pools: PoolInspect<Runtime::AccountId>,
 {
+	fn gateway_address() -> H160 {
+		<Runtime as pallet_investments::Config>::Pools::gateway_address()
+	}
+
 	/// Submit a pending deposit order for epoch settlement.
 	///
-	/// Called by the receiver contract when a `requestDeposit` CCCP message arrives.
+	/// Only the Gateway contract may call this function.
 	///
 	/// @param pool_id       the pool ID
 	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
@@ -44,7 +50,9 @@ where
 		investor_id: Address,
 		amount: U256,
 	) -> EvmResult {
-		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
 
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let investor_id: H160 = investor_id.0;
@@ -56,13 +64,18 @@ where
 			amount,
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_investments::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
 		Ok(())
 	}
 
 	/// Submit a pending redeem order for epoch settlement.
 	///
-	/// Called by the receiver contract when a `requestRedeem` CCCP message arrives.
+	/// Only the Gateway contract may call this function.
 	///
 	/// @param pool_id       the pool ID
 	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
@@ -79,7 +92,9 @@ where
 		investor_id: Address,
 		amount: U256,
 	) -> EvmResult {
-		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
 
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let investor_id: H160 = investor_id.0;
@@ -91,7 +106,89 @@ where
 			amount,
 		};
 
-		RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_investments::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
+		Ok(())
+	}
+
+	/// Approve a selected set of investors' pending deposit orders (Approval mode).
+	///
+	/// Only the Gateway contract may call this function.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param investor_ids  list of investor addresses to approve (max 100)
+	#[precompile::public("approveDepositOrders(uint64,uint64,address,address[])")]
+	fn approve_deposit_orders(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		investor_ids: Vec<Address>,
+	) -> EvmResult {
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+		let ids: sp_std::vec::Vec<H160> = investor_ids.into_iter().map(|a| a.0).collect();
+		let investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
+			ids.try_into().map_err(|_| revert("too many investor IDs"))?;
+
+		let call = InvestmentsCall::<Runtime>::approve_deposit_orders {
+			pool_id,
+			tranche_id,
+			investor_ids,
+		};
+
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_investments::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
+		Ok(())
+	}
+
+	/// Approve a selected set of investors' pending redeem orders (Approval mode).
+	///
+	/// Only the Gateway contract may call this function.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param investor_ids  list of investor addresses to approve (max 100)
+	#[precompile::public("approveRedeemOrders(uint64,uint64,address,address[])")]
+	fn approve_redeem_orders(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		investor_ids: Vec<Address>,
+	) -> EvmResult {
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+		let ids: sp_std::vec::Vec<H160> = investor_ids.into_iter().map(|a| a.0).collect();
+		let investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
+			ids.try_into().map_err(|_| revert("too many investor IDs"))?;
+
+		let call =
+			InvestmentsCall::<Runtime>::approve_redeem_orders { pool_id, tranche_id, investor_ids };
+
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_investments::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
 		Ok(())
 	}
 }

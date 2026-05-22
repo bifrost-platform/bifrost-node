@@ -12,7 +12,13 @@ pub mod pallet {
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
-	const MAX_INVESTORS_PER_APPROVAL: u32 = 100;
+	pub const MAX_INVESTORS_PER_APPROVAL: u32 = 100;
+
+	#[pallet::origin]
+	pub enum Origin {
+		/// Dispatched by the investments precompile on behalf of the Gateway contract.
+		Gateway,
+	}
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -20,6 +26,10 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
+		/// Only accepted origin for all investments extrinsics.
+		/// Wire as `pallet_investments::EnsureGateway` in the runtime so that only the
+		/// investments precompile (called by the Gateway contract) can invoke them.
+		type GatewayOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
 		/// Pool inspection and tranche mutation — implemented by pallet-pools.
 		type Pools: PoolInspect<Self::AccountId> + TrancheMutate<U256>;
 	}
@@ -38,8 +48,6 @@ pub mod pallet {
 		PoolInSettlementWindow,
 		/// This call is only valid during the pool's settlement window.
 		NotInSettlementWindow,
-		/// Caller is not the pool's authorized borrower.
-		NotBorrower,
 		/// Deposit would push total invested + pending above the tranche's cap.
 		DepositCapExceeded,
 		/// Tranche treasury has no available liquidity to cover redemptions.
@@ -140,7 +148,7 @@ pub mod pallet {
 			investor_id: H160,
 			amount: U256,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
@@ -182,7 +190,7 @@ pub mod pallet {
 			investor_id: H160,
 			amount: U256,
 		) -> DispatchResult {
-			ensure_signed(origin)?;
+			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
@@ -224,16 +232,14 @@ pub mod pallet {
 			tranche_id: TrancheId,
 			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			let borrower =
-				T::Pools::pool_borrower(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
-			ensure!(caller == borrower, Error::<T>::NotBorrower);
+			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
 
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
 
 			let mut total_approved = U256::zero();
+			let mut total_tokens_minted = U256::zero();
 
 			for investor_id in investor_ids {
 				let Some(amount) = PendingDepositOrders::<T>::take(tranche_id.clone(), investor_id)
@@ -248,6 +254,7 @@ pub mod pallet {
 				});
 
 				total_approved = total_approved.saturating_add(amount);
+				total_tokens_minted = total_tokens_minted.saturating_add(tokens_to_mint);
 
 				Self::deposit_event(Event::DepositOrderApproved {
 					pool_id,
@@ -260,7 +267,8 @@ pub mod pallet {
 
 			if !total_approved.is_zero() {
 				T::Pools::sub_pending_deposit(pool_id, tranche_id.clone(), total_approved)?;
-				T::Pools::add_invested(pool_id, tranche_id, total_approved)?;
+				T::Pools::add_invested(pool_id, tranche_id.clone(), total_approved)?;
+				T::Pools::add_token_supply(pool_id, tranche_id, total_tokens_minted)?;
 			}
 
 			Ok(())
@@ -281,10 +289,7 @@ pub mod pallet {
 			tranche_id: TrancheId,
 			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			let borrower =
-				T::Pools::pool_borrower(pool_id).ok_or(Error::<T>::PoolOrTrancheNotFound)?;
-			ensure!(caller == borrower, Error::<T>::NotBorrower);
+			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(T::Pools::in_settlement_window(pool_id), Error::<T>::NotInSettlementWindow);
 			ensure!(
 				!T::Pools::treasury_liquidity(pool_id, tranche_id.clone()).is_zero(),

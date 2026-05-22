@@ -20,8 +20,18 @@ pub mod pallet {
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
 
+	#[pallet::origin]
+	pub enum Origin {
+		/// Dispatched by the pools precompile on behalf of the Gateway contract.
+		Gateway,
+	}
+
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
+		/// Only accepted origin for `borrow` and `repay`.
+		/// Wire as `pallet_pools::EnsureGateway` in the runtime so that only the
+		/// pools precompile (called by the Gateway contract) can invoke those extrinsics.
+		type GatewayOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
 		/// Deposit settlement — implemented by pallet-investments.
 		/// Called during `on_initialize` to settle pending deposit orders when epochs advance.
 		type Investments: DepositSettlement<PoolId, TrancheId, sp_core::U256>;
@@ -58,8 +68,6 @@ pub mod pallet {
 		OutOfRange,
 		/// Borrow amount exceeds available tranche treasury liquidity (invested − borrowed).
 		InsufficientTreasuryLiquidity,
-		/// Caller is not the pool's authorized borrower.
-		NotBorrower,
 		/// Amount must be greater than zero.
 		ZeroAmount,
 	}
@@ -81,6 +89,8 @@ pub mod pallet {
 		Borrowed { pool_id: PoolId, tranche_id: TrancheId, amount: U256, available: U256 },
 		/// Borrower repaid funds into a tranche treasury.
 		Repaid { pool_id: PoolId, tranche_id: TrancheId, amount: U256, available: U256 },
+		/// The Gateway EVM contract address was updated by sudo.
+		GatewayUpdated { address: H160 },
 	}
 
 	// -----------------------------------------------------------------------
@@ -103,6 +113,12 @@ pub mod pallet {
 	#[pallet::storage]
 	/// Monotonically increasing pool ID counter.
 	pub type NextPoolId<T: Config> = StorageValue<_, PoolId, ValueQuery>;
+
+	#[pallet::storage]
+	/// The EVM address of the deployed Gateway contract.
+	/// All precompile calls are rejected unless `msg.sender` matches this address.
+	/// Defaults to the zero address (disables precompile access) until set by sudo.
+	pub type GatewayAddress<T: Config> = StorageValue<_, H160, ValueQuery>;
 
 	// -----------------------------------------------------------------------
 	// Hooks
@@ -147,7 +163,8 @@ pub mod pallet {
 									epoch_price,
 								);
 								tranche.invested = tranche.invested.saturating_add(confirmed);
-								tranche.pending_orders.deposit = U256::zero();
+								tranche.pending_orders.deposit =
+									tranche.pending_orders.deposit.saturating_sub(confirmed);
 							}
 						}
 					}
@@ -297,8 +314,9 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Called by the CCCP receiver when a borrow request arrives from the Spoke chain.
+		/// Called by the pools precompile (via Gateway) when a borrow request arrives.
 		///
+		/// Only callable through the Gateway origin — direct extrinsic calls are rejected.
 		/// Draws `amount` USDC from the tranche treasury by incrementing `borrowed`.
 		/// Fails if available liquidity (invested − borrowed) is less than `amount`.
 		#[pallet::call_index(2)]
@@ -310,14 +328,13 @@ pub mod pallet {
 			vault_address: H160,
 			amount: U256,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
+			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 
 			let tranche_id = TrancheId { chain_id, vault_address };
 
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
-				ensure!(caller == pool.borrower, Error::<T>::NotBorrower);
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 
@@ -334,8 +351,9 @@ pub mod pallet {
 			})
 		}
 
-		/// Called by the CCCP receiver when a repay message arrives from the Spoke chain.
+		/// Called by the pools precompile (via Gateway) when a repay message arrives.
 		///
+		/// Only callable through the Gateway origin — direct extrinsic calls are rejected.
 		/// Reduces `borrowed` by `amount`, restoring tranche treasury liquidity.
 		/// Saturates at zero — over-repayment does not error.
 		#[pallet::call_index(3)]
@@ -347,14 +365,13 @@ pub mod pallet {
 			vault_address: H160,
 			amount: U256,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
+			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 
 			let tranche_id = TrancheId { chain_id, vault_address };
 
 			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
-				ensure!(caller == pool.borrower, Error::<T>::NotBorrower);
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 
@@ -364,6 +381,19 @@ pub mod pallet {
 				Self::deposit_event(Event::Repaid { pool_id, tranche_id, amount, available });
 				Ok(())
 			})
+		}
+
+		/// Update the on-chain Gateway EVM contract address (sudo only).
+		///
+		/// Both pool and investment precompiles read this address to enforce that only
+		/// the Gateway contract can trigger pallet dispatch.
+		#[pallet::call_index(4)]
+		#[pallet::weight(Weight::from_parts(5_000, 0))]
+		pub fn set_gateway(origin: OriginFor<T>, address: H160) -> DispatchResult {
+			ensure_root(origin)?;
+			GatewayAddress::<T>::put(address);
+			Self::deposit_event(Event::GatewayUpdated { address });
+			Ok(())
 		}
 	}
 }

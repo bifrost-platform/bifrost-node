@@ -1,4 +1,4 @@
-use pallet_pools::{DepositSettlement, PoolId, TrancheId};
+use pallet_pools::{DepositSettlement, PoolId, TrancheId, TrancheMutate};
 use sp_core::{H160, U256};
 use sp_runtime::{FixedPointNumber, FixedU128};
 
@@ -68,6 +68,7 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
 
 		let mut confirmed_total = U256::zero();
+		let mut tokens_total = U256::zero();
 
 		if max_amount >= total {
 			// Full fill — confirm every investor's order as-is.
@@ -84,6 +85,7 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 					tokens_to_mint,
 				});
 				confirmed_total = confirmed_total.saturating_add(*amount);
+				tokens_total = tokens_total.saturating_add(tokens_to_mint);
 			}
 		} else {
 			// Partial fill — scale each order by fill_ratio = max_amount / total.
@@ -109,6 +111,7 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 						tokens_to_mint,
 					});
 					confirmed_total = confirmed_total.saturating_add(confirmed);
+					tokens_total = tokens_total.saturating_add(tokens_to_mint);
 				}
 
 				// Re-insert unconfirmed remainder for the next epoch.
@@ -116,6 +119,10 @@ impl<T: Config> DepositSettlement<PoolId, TrancheId, U256> for Pallet<T> {
 					PendingDepositOrders::<T>::insert(tranche_id.clone(), investor_id, remainder);
 				}
 			}
+		}
+
+		if !tokens_total.is_zero() {
+			let _ = T::Pools::add_token_supply(pool_id, tranche_id, tokens_total);
 		}
 
 		confirmed_total

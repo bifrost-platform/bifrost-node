@@ -4,6 +4,7 @@ mod pallet;
 
 pub use pallet::pallet::*;
 
+use frame_support::{pallet_prelude::DispatchError, traits::EnsureOrigin};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, U256};
@@ -299,8 +300,6 @@ pub struct PoolDetails<AccountId> {
 // Traits
 // ---------------------------------------------------------------------------
 
-use frame_support::pallet_prelude::DispatchError;
-
 /// Implemented by pallet-pools. Called by pallet-investments and the gateway
 /// to validate pool/tranche existence, resolve pool admin, and query epoch state.
 pub trait PoolInspect<AccountId> {
@@ -318,6 +317,9 @@ pub trait PoolInspect<AccountId> {
 	fn treasury_liquidity(pool_id: PoolId, tranche_id: TrancheId) -> U256;
 	/// Returns the token price locked at settlement start for this tranche, if finalized.
 	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<FixedU128>;
+	/// Returns the current Gateway EVM contract address stored on-chain.
+	/// Both precompiles read this to verify the EVM-level caller before dispatching.
+	fn gateway_address() -> H160;
 }
 
 /// Defined here, implemented by pallet-investments.
@@ -383,6 +385,15 @@ pub trait TrancheMutate<Balance> {
 		amount: Balance,
 	) -> frame_support::dispatch::DispatchResult;
 
+	/// Increment outstanding token supply.
+	/// Called when deposit orders are approved (Approval) or settled (Automatic)
+	/// so that `token_price()` divides by the correct outstanding supply.
+	fn add_token_supply(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
+
 	/// Increment the tranche's cumulative invested total.
 	/// Called when deposit orders are confirmed in Approval mode so that
 	/// `treasury_liquidity` (`invested - borrowed`) stays accurate.
@@ -415,4 +426,31 @@ pub trait PoolReserve<Balance> {
 
 	/// Read available reserve for a pool.
 	fn available_reserve(pool_id: PoolId) -> Balance;
+}
+
+// ---------------------------------------------------------------------------
+// Gateway origin
+// ---------------------------------------------------------------------------
+
+/// `EnsureOrigin` that accepts only the `Gateway` pallet origin.
+/// The pools precompile creates this origin before dispatching to `borrow` / `repay`.
+/// Wire as `type GatewayOrigin = pallet_pools::EnsureGateway` in the runtime.
+pub struct EnsureGateway;
+
+impl<OuterOrigin> EnsureOrigin<OuterOrigin> for EnsureGateway
+where
+	OuterOrigin: Into<Result<Origin, OuterOrigin>> + From<Origin>,
+{
+	type Success = ();
+	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
+		match o.into() {
+			Ok(Origin::Gateway) => Ok(()),
+			Err(o) => Err(o),
+		}
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<OuterOrigin, ()> {
+		Ok(OuterOrigin::from(Origin::Gateway))
+	}
 }

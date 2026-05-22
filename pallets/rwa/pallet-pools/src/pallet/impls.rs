@@ -1,5 +1,5 @@
 use crate::{PoolId, PoolInspect, TrancheId, TrancheMutate};
-use sp_core::U256;
+use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedU128};
 
 use super::pallet::*;
@@ -63,6 +63,10 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 		Pool::<T>::get(pool_id)
 			.and_then(|pool| pool.tranches.get(&tranche_id).cloned())
 			.and_then(|tranche| tranche.epoch_price)
+	}
+
+	fn gateway_address() -> H160 {
+		GatewayAddress::<T>::get()
 	}
 }
 
@@ -128,6 +132,19 @@ impl<T: Config> TrancheMutate<U256> for Pallet<T> {
 			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 			tranche.token_supply = tranche.token_supply.saturating_sub(amount);
+			Ok(())
+		})
+	}
+
+	fn add_token_supply(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: U256,
+	) -> frame_support::dispatch::DispatchResult {
+		Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
+			tranche.token_supply = tranche.token_supply.saturating_add(amount);
 			Ok(())
 		})
 	}

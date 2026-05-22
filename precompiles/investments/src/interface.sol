@@ -3,8 +3,8 @@ pragma solidity >=0.8.0;
 
 /**
  * @title Investments Precompile Interface
- * @notice Called by the CCCP receiver contract when a requestDeposit or requestRedeem
- *         message arrives on Bifrost from an external EVM chain.
+ * @notice Called exclusively by the Gateway contract. Dispatches invest/redeem
+ *         order operations to the pallet-investments Substrate pallet.
  * Address: 0x0000000000000000000000000000000000000200
  */
 interface Investments {
@@ -45,19 +45,36 @@ interface Investments {
     ) external;
 
     /**
-     * @notice Execute confirmed redeem orders for a tranche during the settlement window.
-     * @dev Called by the borrower after depositing `usdc_amount` to the Spoke Treasury.
-     *      Drains ApprovedRedeemOrders and emits RedeemOrdersExecuted so the off-chain
-     *      bot can distribute USDC to each investor proportionally.
+     * @notice Approve a selected set of investors' pending deposit orders.
+     * @dev Settlement window must be open. Converts USDC amounts to tokens-to-mint
+     *      at the locked epoch price and moves entries to ApprovedDepositOrders.
+     *      Emits DepositOrderConfirmed per investor.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
-     * @param usdc_amount   USDC deposited to the Spoke Treasury to cover redemptions
+     * @param investor_ids  Investor addresses to approve (max 100)
      */
-    function executeRedeemOrders(
+    function approveDepositOrders(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
-        uint256 usdc_amount
+        address[] calldata investor_ids
+    ) external;
+
+    /**
+     * @notice Approve a selected set of investors' pending redeem orders.
+     * @dev Settlement window must be open. Converts token amounts to USDC-to-distribute
+     *      at the locked epoch price and moves entries to ApprovedRedeemOrders.
+     *      Emits RedeemOrderConfirmed per investor.
+     * @param pool_id       The pool ID
+     * @param chain_id      EVM chain ID of the chain where the vault is deployed
+     * @param vault_address ERC-7540 vault contract address on that chain
+     * @param investor_ids  Investor addresses to approve (max 100)
+     */
+    function approveRedeemOrders(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address[] calldata investor_ids
     ) external;
 }
