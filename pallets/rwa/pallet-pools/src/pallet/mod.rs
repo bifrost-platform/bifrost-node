@@ -100,7 +100,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// All active pools, keyed by pool ID.
-	pub type Pool<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails<T::AccountId>>;
+	pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails<T::AccountId>>;
 
 	#[pallet::storage]
 	/// Mapped collateral assets to pool IDs.
@@ -130,7 +130,7 @@ pub mod pallet {
 			let now = Self::current_block();
 			let mut weight = Weight::zero();
 
-			for (pool_id, mut pool) in Pool::<T>::iter() {
+			for (pool_id, mut pool) in Pools::<T>::iter() {
 				weight = weight.saturating_add(Weight::from_parts(1_000, 0));
 				let mut changed = false;
 
@@ -181,7 +181,7 @@ pub mod pallet {
 				}
 
 				if changed {
-					Pool::<T>::insert(pool_id, pool);
+					Pools::<T>::insert(pool_id, pool);
 				}
 			}
 
@@ -267,7 +267,7 @@ pub mod pallet {
 			for tranche in tranches.iter() {
 				Tranches::<T>::insert(tranche.tranche_id.clone(), pool_id);
 			}
-			Pool::<T>::insert(pool_id, pool);
+			Pools::<T>::insert(pool_id, pool);
 			NextPoolId::<T>::put(pool_id.saturating_add(1));
 
 			Self::deposit_event(Event::PoolCreated { pool_id, epoch_length });
@@ -292,7 +292,7 @@ pub mod pallet {
 				Error::<T>::TrancheAlreadyExists
 			);
 
-			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 				pool.tranches
 					.try_insert(
@@ -333,7 +333,7 @@ pub mod pallet {
 
 			let tranche_id = TrancheId { chain_id, vault_address };
 
-			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
@@ -370,7 +370,7 @@ pub mod pallet {
 
 			let tranche_id = TrancheId { chain_id, vault_address };
 
-			Pool::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
