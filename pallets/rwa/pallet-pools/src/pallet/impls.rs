@@ -72,6 +72,14 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 	fn current_epoch(pool_id: PoolId) -> Option<EpochId> {
 		Pools::<T>::get(pool_id).map(|pool| pool.epoch.current_epoch)
 	}
+
+	fn deposit_settlement_mode(pool_id: PoolId) -> Option<crate::SettlementMode> {
+		Pools::<T>::get(pool_id).map(|pool| pool.deposit_settlement)
+	}
+
+	fn redeem_settlement_mode(pool_id: PoolId) -> Option<crate::SettlementMode> {
+		Pools::<T>::get(pool_id).map(|pool| pool.redeem_settlement)
+	}
 }
 
 impl<T: Config> TrancheMutate<U256> for Pallet<T> {
@@ -162,6 +170,19 @@ impl<T: Config> TrancheMutate<U256> for Pallet<T> {
 			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 			tranche.invested = tranche.invested.saturating_add(amount);
+			Ok(())
+		})
+	}
+
+	fn sub_invested(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: U256,
+	) -> frame_support::dispatch::DispatchResult {
+		Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
+			tranche.invested = tranche.invested.saturating_sub(amount);
 			Ok(())
 		})
 	}

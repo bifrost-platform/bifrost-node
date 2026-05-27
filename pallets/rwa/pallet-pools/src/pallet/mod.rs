@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	CollateralAsset, DepositSettlement, EpochInfo, PoolDetails, PoolId, PoolNAV, SettlementMode,
-	Tranche, TrancheId, TrancheInput, TranchePendingOrders, MAX_COLLATERALS, MAX_TRANCHES,
+	CollateralAsset, EpochInfo, PoolDetails, PoolId, PoolNAV, Settlement, SettlementMode, Tranche,
+	TrancheId, TrancheInput, TranchePendingOrders, MAX_COLLATERALS, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -32,9 +32,10 @@ pub mod pallet {
 		/// Wire as `pallet_pools::EnsureGateway` in the runtime so that only the
 		/// pools precompile (called by the Gateway contract) can invoke those extrinsics.
 		type GatewayOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
-		/// Deposit settlement — implemented by pallet-investments.
-		/// Called during `on_initialize` to settle pending deposit orders when epochs advance.
-		type Investments: DepositSettlement<PoolId, TrancheId, sp_core::U256>;
+		/// Order settlement — implemented by pallet-investments.
+		/// Called during `on_initialize` to settle pending deposit and redeem orders when
+		/// epochs advance in Automatic mode.
+		type Investments: Settlement<PoolId, TrancheId, sp_core::U256>;
 		/// NAV oracle — implemented externally. Called to read the finalized collateral NAV
 		/// when the settlement window opens.
 		type NAV: PoolNAV<PoolId, sp_core::U256>;
@@ -70,6 +71,10 @@ pub mod pallet {
 		InsufficientTreasuryLiquidity,
 		/// Amount must be greater than zero.
 		ZeroAmount,
+		/// `settlement_offset` must be greater than zero and less than `epoch_length`.
+		/// A zero offset means the settlement window never opens before the epoch ends,
+		/// so `epoch_price` is never set and automatic settlement falls back to 1:1 pricing.
+		InvalidSettlementOffset,
 	}
 
 	// -----------------------------------------------------------------------
@@ -151,6 +156,14 @@ pub mod pallet {
 
 				// Epoch over: settle and advance.
 				if pool.epoch.should_advance(now) {
+					// Snapshot liquidity before deposit settlement so that freshly settled
+					// deposits cannot immediately fund same-epoch redeem payouts.
+					let pre_deposit_liquidity: sp_std::vec::Vec<(TrancheId, U256)> = pool
+						.tranches
+						.iter()
+						.map(|(id, t)| (id.clone(), t.treasury_liquidity()))
+						.collect();
+
 					if pool.deposit_settlement == SettlementMode::Automatic {
 						for (tranche_id, tranche) in pool.tranches.iter_mut() {
 							let max_amount = tranche.pending_orders.deposit;
@@ -165,6 +178,31 @@ pub mod pallet {
 								tranche.invested = tranche.invested.saturating_add(confirmed);
 								tranche.pending_orders.deposit =
 									tranche.pending_orders.deposit.saturating_sub(confirmed);
+							}
+						}
+					}
+
+					if pool.redeem_settlement == SettlementMode::Automatic {
+						for (tranche_id, tranche) in pool.tranches.iter_mut() {
+							let max_asset_payout = pre_deposit_liquidity
+								.iter()
+								.find(|(id, _)| id == tranche_id)
+								.map(|(_, v)| *v)
+								.unwrap_or_default();
+							if !max_asset_payout.is_zero()
+								&& !tranche.pending_orders.redeem.is_zero()
+							{
+								let epoch_price = tranche.epoch_price.unwrap_or(FixedU128::one());
+								let (tokens_settled, asset_payout) =
+									T::Investments::settle_redeem_orders(
+										pool_id,
+										tranche_id.clone(),
+										max_asset_payout,
+										epoch_price,
+									);
+								tranche.invested = tranche.invested.saturating_sub(asset_payout);
+								tranche.pending_orders.redeem =
+									tranche.pending_orders.redeem.saturating_sub(tokens_settled);
 							}
 						}
 					}
@@ -217,6 +255,10 @@ pub mod pallet {
 		) -> DispatchResult {
 			ensure_root(origin)?;
 			ensure!(!collaterals.is_empty(), Error::<T>::MissingCollateral);
+			ensure!(
+				settlement_offset > 0 && settlement_offset < epoch_length,
+				Error::<T>::InvalidSettlementOffset
+			);
 
 			let pool_id = NextPoolId::<T>::get();
 			let now = Self::current_block();
@@ -317,7 +359,7 @@ pub mod pallet {
 		/// Called by the pools precompile (via Gateway) when a borrow request arrives.
 		///
 		/// Only callable through the Gateway origin — direct extrinsic calls are rejected.
-		/// Draws `amount` USDC from the tranche treasury by incrementing `borrowed`.
+		/// Draws `amount` from the tranche treasury by incrementing `borrowed`.
 		/// Fails if available liquidity (invested − borrowed) is less than `amount`.
 		#[pallet::call_index(2)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]

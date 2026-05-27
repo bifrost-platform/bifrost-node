@@ -3,13 +3,17 @@
 mod pallet;
 
 pub use pallet::pallet::*;
-pub use pallet_pools::{DepositSettlement, EpochId, PoolId, PoolInspect, TrancheId, TrancheMutate};
+pub use pallet_pools::{
+	EpochId, PoolId, PoolInspect, Settlement, SettlementMode, TrancheId, TrancheMutate,
+};
 
 use frame_support::traits::EnsureOrigin;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::U256;
 use sp_runtime::RuntimeDebug;
+
+pub const MAX_INVESTORS_PER_APPROVAL: u32 = 100;
 
 // ---------------------------------------------------------------------------
 // Order structs
@@ -26,7 +30,7 @@ use sp_runtime::RuntimeDebug;
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
 pub struct PendingDepositOrder {
-	/// Cumulative USDC amount pending settlement.
+	/// Cumulative asset amount pending settlement.
 	pub amount: U256,
 	/// Epoch index during which the order was first submitted.
 	pub epoch_id: EpochId,
@@ -87,6 +91,46 @@ pub struct ApprovedRedeemOrder {
 	pub epoch_id: EpochId,
 	/// Block number of the most recent approval.
 	pub approved_at: u32,
+}
+
+/// A claimable deposit order held in `ClaimableDepositOrders` storage (Automatic mode).
+///
+/// Written by `settle_deposit_orders` during `on_initialize` epoch settlement.
+/// The investor sends `requestTrancheClaim()` from the spoke chain; the Hub precompile
+/// dispatches `claim_shares`, which moves this entry to `ApprovedDepositOrders` and
+/// emits `DepositClaimed` — the Gateway smart contract then sends the mint instruction.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct ClaimableDepositOrder {
+	/// Asset amount settled (cost basis).
+	pub amount: U256,
+	/// Tranche shares to be minted once the investor claims.
+	pub shares_to_mint: U256,
+	/// Epoch index during which the order was settled.
+	pub epoch_id: EpochId,
+	/// Block number when the order was settled.
+	pub settled_at: u32,
+}
+
+/// A claimable redeem order held in `ClaimableRedeemOrders` storage (Automatic mode).
+///
+/// Written by `settle_redeem_orders` during `on_initialize` epoch settlement.
+/// The investor sends `requestTrancheClaim()` from the spoke chain; the Hub precompile
+/// dispatches `claim_assets`, which moves this entry to `ApprovedRedeemOrders` and
+/// emits `RedeemClaimed` — the Gateway smart contract then sends the payout instruction.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct ClaimableRedeemOrder {
+	/// Tranche shares surrendered for redemption.
+	pub shares_redeemed: U256,
+	/// Asset amount owed to the investor once they claim.
+	pub payout: U256,
+	/// Epoch index during which the order was settled.
+	pub epoch_id: EpochId,
+	/// Block number when the order was settled.
+	pub settled_at: u32,
 }
 
 // ---------------------------------------------------------------------------
