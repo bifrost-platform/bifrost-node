@@ -9,6 +9,7 @@ use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedU128};
+use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -139,7 +140,9 @@ pub mod pallet {
 				weight = weight.saturating_add(Weight::from_parts(1_000, 0));
 				let mut changed = false;
 
-				// Settlement window just opened: lock epoch price per tranche from finalized NAV.
+				// Settlement window just opened: lock epoch price and settle Automatic orders.
+				// `needs_finalization` is the once-only guard — after prices are set it
+				// stays false for the remainder of the window, preventing double-settlement.
 				if pool.epoch.in_settlement_window(now) {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
@@ -150,64 +153,66 @@ pub mod pallet {
 								tranche.epoch_price = Some(tranche.token_price(nav));
 							}
 						}
+
+						// Snapshot liquidity before deposit settlement so that freshly settled
+						// deposits cannot immediately fund same-epoch redeem payouts.
+						let pre_deposit_liquidity: Vec<(TrancheId, U256)> = pool
+							.tranches
+							.iter()
+							.map(|(id, t)| (id.clone(), t.treasury_liquidity()))
+							.collect();
+
+						if pool.deposit_settlement == SettlementMode::Automatic {
+							for (tranche_id, tranche) in pool.tranches.iter_mut() {
+								if !tranche.pending_orders.deposit.is_zero() {
+									let epoch_price =
+										tranche.epoch_price.unwrap_or(FixedU128::one());
+									let confirmed = T::Investments::settle_deposit_orders(
+										pool_id,
+										tranche_id.clone(),
+										epoch_price,
+									);
+									tranche.invested = tranche.invested.saturating_add(confirmed);
+									tranche.pending_orders.deposit = U256::zero();
+								}
+							}
+						}
+
+						if pool.redeem_settlement == SettlementMode::Automatic {
+							for (tranche_id, tranche) in pool.tranches.iter_mut() {
+								let max_asset_payout = pre_deposit_liquidity
+									.iter()
+									.find(|(id, _)| id == tranche_id)
+									.map(|(_, v)| *v)
+									.unwrap_or_default();
+								if !max_asset_payout.is_zero()
+									&& !tranche.pending_orders.redeem.is_zero()
+								{
+									let epoch_price =
+										tranche.epoch_price.unwrap_or(FixedU128::one());
+									let (tokens_settled, asset_payout) =
+										T::Investments::settle_redeem_orders(
+											pool_id,
+											tranche_id.clone(),
+											max_asset_payout,
+											epoch_price,
+										);
+									tranche.invested =
+										tranche.invested.saturating_sub(asset_payout);
+									tranche.pending_orders.redeem = tranche
+										.pending_orders
+										.redeem
+										.saturating_sub(tokens_settled);
+								}
+							}
+						}
+
 						changed = true;
 					}
 				}
 
-				// Epoch over: settle and advance.
+				// Epoch over: reset prices and advance.
 				if pool.epoch.should_advance(now) {
-					// Snapshot liquidity before deposit settlement so that freshly settled
-					// deposits cannot immediately fund same-epoch redeem payouts.
-					let pre_deposit_liquidity: sp_std::vec::Vec<(TrancheId, U256)> = pool
-						.tranches
-						.iter()
-						.map(|(id, t)| (id.clone(), t.treasury_liquidity()))
-						.collect();
-
-					if pool.deposit_settlement == SettlementMode::Automatic {
-						for (tranche_id, tranche) in pool.tranches.iter_mut() {
-							let max_amount = tranche.pending_orders.deposit;
-							if !max_amount.is_zero() {
-								let epoch_price = tranche.epoch_price.unwrap_or(FixedU128::one());
-								let confirmed = T::Investments::settle_deposit_orders(
-									pool_id,
-									tranche_id.clone(),
-									max_amount,
-									epoch_price,
-								);
-								tranche.invested = tranche.invested.saturating_add(confirmed);
-								tranche.pending_orders.deposit =
-									tranche.pending_orders.deposit.saturating_sub(confirmed);
-							}
-						}
-					}
-
-					if pool.redeem_settlement == SettlementMode::Automatic {
-						for (tranche_id, tranche) in pool.tranches.iter_mut() {
-							let max_asset_payout = pre_deposit_liquidity
-								.iter()
-								.find(|(id, _)| id == tranche_id)
-								.map(|(_, v)| *v)
-								.unwrap_or_default();
-							if !max_asset_payout.is_zero()
-								&& !tranche.pending_orders.redeem.is_zero()
-							{
-								let epoch_price = tranche.epoch_price.unwrap_or(FixedU128::one());
-								let (tokens_settled, asset_payout) =
-									T::Investments::settle_redeem_orders(
-										pool_id,
-										tranche_id.clone(),
-										max_asset_payout,
-										epoch_price,
-									);
-								tranche.invested = tranche.invested.saturating_sub(asset_payout);
-								tranche.pending_orders.redeem =
-									tranche.pending_orders.redeem.saturating_sub(tokens_settled);
-							}
-						}
-					}
-
-					// Reset epoch prices for the next epoch.
 					for (_, tranche) in pool.tranches.iter_mut() {
 						tranche.epoch_price = None;
 					}

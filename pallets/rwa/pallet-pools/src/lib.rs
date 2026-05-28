@@ -331,20 +331,15 @@ pub trait PoolInspect<AccountId> {
 /// Defined here, implemented by pallet-investments.
 /// Called from pallet-pools' `on_initialize` during automatic epoch settlement.
 pub trait Settlement<PoolId, TrancheId, Balance> {
-	/// Pro-rata settle pending deposit orders for a tranche up to `max_amount`.
-	///
-	/// If total pending <= `max_amount`, all orders are settled in full.
-	/// If total pending > `max_amount`, each investor's order is scaled down proportionally
-	/// and the remainder stays in `PendingDepositOrders` for the next epoch.
+	/// Settle all pending deposit orders for a tranche at the given epoch price.
 	///
 	/// Settled orders move to `ClaimableDepositOrders`; investors pull-claim via
 	/// `claim_deposit`, which triggers outbound share minting on the spoke chain.
 	///
-	/// Returns the actual amount confirmed (for `tranche.invested` accounting).
+	/// Returns the total amount settled (for `tranche.invested` accounting).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
-		max_amount: Balance,
 		epoch_price: FixedU128,
 	) -> Balance;
 

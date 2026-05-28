@@ -1,7 +1,9 @@
 use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, PendingRedeemOrder};
+
 use pallet_pools::{PoolId, Settlement, TrancheId, TrancheMutate};
 use sp_core::{H160, U256};
 use sp_runtime::{FixedPointNumber, FixedU128};
+use sp_std::vec::Vec;
 
 use super::pallet::*;
 
@@ -29,19 +31,18 @@ impl<T: Config> Pallet<T> {
 }
 
 impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
-	/// Pro-rata settle pending deposit orders for a tranche up to `max_amount`.
+	/// Settle all pending deposit orders for a tranche at the given epoch price.
 	///
 	/// Settled orders move to `ClaimableDepositOrders`. Token supply is incremented
-	/// only when the investor later calls `claim_deposit` (pull model).
+	/// immediately so `token_price()` stays accurate for subsequent epochs.
 	///
-	/// Returns the actual amount settled (for `tranche.invested` accounting).
+	/// Returns the total amount settled (for `tranche.invested` accounting).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
-		max_amount: U256,
 		epoch_price: FixedU128,
 	) -> U256 {
-		let entries: sp_std::vec::Vec<(H160, PendingDepositOrder)> =
+		let entries: Vec<(H160, PendingDepositOrder)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
@@ -54,113 +55,54 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 			return U256::zero();
 		}
 
-		// Clear all pending; partial-fill remainders are re-inserted below.
 		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
 
 		let now = Self::current_block();
 		let epoch_id = <T::Pools as crate::PoolInspect<T::AccountId>>::current_epoch(pool_id)
 			.unwrap_or_default();
 
-		let mut confirmed_total = U256::zero();
 		let mut shares_total = U256::zero();
 
-		if max_amount >= total {
-			// Full fill — settle every investor's order as-is.
-			for (investor_id, order) in &entries {
-				let shares_to_mint = Self::assets_to_shares(order.amount, epoch_price);
+		for (investor_id, order) in &entries {
+			let shares_to_mint = Self::assets_to_shares(order.amount, epoch_price);
 
-				ClaimableDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-					match entry {
-						Some(existing) => {
-							existing.amount = existing.amount.saturating_add(order.amount);
-							existing.shares_to_mint =
-								existing.shares_to_mint.saturating_add(shares_to_mint);
-							existing.epoch_id = epoch_id;
-							existing.settled_at = now;
-						},
-						None => {
-							*entry = Some(ClaimableDepositOrder {
-								amount: order.amount,
-								shares_to_mint,
-								epoch_id,
-								settled_at: now,
-							});
-						},
-					}
-				});
+			ClaimableDepositOrders::<T>::mutate(
+				tranche_id.clone(),
+				investor_id,
+				|entry| match entry {
+					Some(existing) => {
+						existing.amount = existing.amount.saturating_add(order.amount);
+						existing.shares_to_mint =
+							existing.shares_to_mint.saturating_add(shares_to_mint);
+						existing.epoch_id = epoch_id;
+						existing.settled_at = now;
+					},
+					None => {
+						*entry = Some(ClaimableDepositOrder {
+							amount: order.amount,
+							shares_to_mint,
+							epoch_id,
+							settled_at: now,
+						});
+					},
+				},
+			);
 
-				Self::deposit_event(Event::DepositOrderSettled {
-					pool_id,
-					tranche_id: tranche_id.clone(),
-					investor_id: *investor_id,
-					amount: order.amount,
-					shares_to_mint,
-				});
-				confirmed_total = confirmed_total.saturating_add(order.amount);
-				shares_total = shares_total.saturating_add(shares_to_mint);
-			}
-		} else {
-			// Partial fill — each investor receives floor(pending * max_amount / total).
-			for (investor_id, order) in &entries {
-				let confirmed = order.amount.saturating_mul(max_amount) / total;
-				let remainder = order.amount.saturating_sub(confirmed);
-
-				if !confirmed.is_zero() {
-					let shares_to_mint = Self::assets_to_shares(confirmed, epoch_price);
-
-					ClaimableDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-						match entry {
-							Some(existing) => {
-								existing.amount = existing.amount.saturating_add(confirmed);
-								existing.shares_to_mint =
-									existing.shares_to_mint.saturating_add(shares_to_mint);
-								existing.epoch_id = epoch_id;
-								existing.settled_at = now;
-							},
-							None => {
-								*entry = Some(ClaimableDepositOrder {
-									amount: confirmed,
-									shares_to_mint,
-									epoch_id,
-									settled_at: now,
-								});
-							},
-						}
-					});
-
-					Self::deposit_event(Event::DepositOrderSettled {
-						pool_id,
-						tranche_id: tranche_id.clone(),
-						investor_id: *investor_id,
-						amount: confirmed,
-						shares_to_mint,
-					});
-					confirmed_total = confirmed_total.saturating_add(confirmed);
-					shares_total = shares_total.saturating_add(shares_to_mint);
-				}
-
-				// Re-insert unconfirmed remainder preserving original epoch/block metadata.
-				if !remainder.is_zero() {
-					PendingDepositOrders::<T>::insert(
-						tranche_id.clone(),
-						investor_id,
-						PendingDepositOrder {
-							amount: remainder,
-							epoch_id: order.epoch_id,
-							submitted_at: order.submitted_at,
-						},
-					);
-				}
-			}
+			Self::deposit_event(Event::DepositOrderSettled {
+				pool_id,
+				tranche_id: tranche_id.clone(),
+				investor_id: *investor_id,
+				amount: order.amount,
+				shares_to_mint,
+			});
+			shares_total = shares_total.saturating_add(shares_to_mint);
 		}
 
-		// Increment token supply now so token_price() stays accurate for subsequent
-		// epochs while investors still have unclaimed ClaimableDepositOrders.
 		if !shares_total.is_zero() {
 			let _ = T::Pools::add_token_supply(pool_id, tranche_id, shares_total);
 		}
 
-		confirmed_total
+		total
 	}
 
 	/// Pro-rata settle pending redeem orders for a tranche up to `max_asset_payout`
@@ -176,7 +118,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		max_asset_payout: U256,
 		epoch_price: FixedU128,
 	) -> (U256, U256) {
-		let entries: sp_std::vec::Vec<(H160, PendingRedeemOrder)> =
+		let entries: Vec<(H160, PendingRedeemOrder)> =
 			PendingRedeemOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
@@ -202,7 +144,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let mut tokens_settled_total = U256::zero();
 		let mut asset_payout_total = U256::zero();
 
-		if total_asset_owed <= max_asset_payout || total_asset_owed.is_zero() {
+		if total_asset_owed <= max_asset_payout {
 			// Full fill — settle every investor's order as-is.
 			for (investor_id, order) in &entries {
 				let payout = Self::shares_to_assets(order.amount, epoch_price);
