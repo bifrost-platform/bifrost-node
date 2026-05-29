@@ -1,4 +1,5 @@
 use crate::{EpochId, PoolId, PoolInspect, TrancheId, TrancheMutate};
+use frame_support::traits::UnixTime;
 use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedU128};
 
@@ -16,12 +17,6 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 		Pools::<T>::contains_key(pool_id)
 	}
 
-	fn pool_admin(pool_id: PoolId) -> Option<T::AccountId> {
-		// TODO: store per-pool admin when create_pool moves from ensure_root to ensure_signed.
-		let _ = pool_id;
-		None
-	}
-
 	fn pool_borrower(pool_id: PoolId) -> Option<T::AccountId> {
 		Pools::<T>::get(pool_id).map(|pool| pool.borrower)
 	}
@@ -33,9 +28,9 @@ impl<T: Config> PoolInspect<T::AccountId> for Pallet<T> {
 	}
 
 	fn in_settlement_window(pool_id: PoolId) -> bool {
-		let now = Self::current_block();
+		let now_secs = T::Time::now().as_secs();
 		Pools::<T>::get(pool_id)
-			.map(|pool| pool.epoch.in_settlement_window(now))
+			.map(|pool| pool.epoch.in_settlement_window(now_secs))
 			.unwrap_or(false)
 	}
 

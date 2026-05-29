@@ -2,10 +2,10 @@ mod impls;
 
 use crate::{
 	CollateralAsset, EpochInfo, PoolDetails, PoolId, PoolNAV, Settlement, SettlementMode, Tranche,
-	TrancheId, TrancheInput, TranchePendingOrders, MAX_COLLATERALS, MAX_TRANCHES,
+	TrancheId, TrancheInput, TranchePendingOrders, TrancheType, MAX_COLLATERALS, MAX_TRANCHES,
 };
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{pallet_prelude::*, traits::StorageVersion, traits::UnixTime};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedU128};
@@ -40,6 +40,10 @@ pub mod pallet {
 		/// NAV oracle — implemented externally. Called to read the finalized collateral NAV
 		/// when the settlement window opens.
 		type NAV: PoolNAV<PoolId, sp_core::U256>;
+		/// Unix wall-clock time. Wire as `pallet_timestamp::Pallet<Runtime>` in the runtime.
+		/// Used for timestamp-based epoch advancement and interest accrual, so that skipped
+		/// Aura slots (each 3 s) do not distort elapsed-time calculations.
+		type Time: UnixTime;
 	}
 
 	// -----------------------------------------------------------------------
@@ -50,16 +54,8 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// No pool exists with this ID.
 		PoolNotFound,
-		/// Caller is not the pool admin.
-		NotPoolAdmin,
-		/// The junior (residual) tranche must be the last entry in the tranche list.
-		JuniorTrancheMustBeLast,
-		/// At least one tranche is required and the last must be junior.
-		MissingResidualTranche,
 		/// Tranche index is out of range.
 		TrancheNotFound,
-		/// Pool reserve is insufficient for the requested withdrawal.
-		InsufficientReserve,
 		/// At least one collateral NFT is required.
 		MissingCollateral,
 		/// Collateral already exists.
@@ -76,6 +72,8 @@ pub mod pallet {
 		/// A zero offset means the settlement window never opens before the epoch ends,
 		/// so `epoch_price` is never set and automatic settlement falls back to 1:1 pricing.
 		InvalidSettlementOffset,
+		/// The provided APR could not be converted to a per-second rate factor.
+		InvalidRate,
 	}
 
 	// -----------------------------------------------------------------------
@@ -86,7 +84,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// A new pool was created.
-		PoolCreated { pool_id: PoolId, epoch_length: u32 },
+		PoolCreated { pool_id: PoolId, epoch_length_secs: u64 },
 		/// An ERC-7540 vault was registered to a tranche.
 		VaultAdded { pool_id: PoolId, tranche_id: TrancheId },
 		/// An epoch ended and a new one began.
@@ -132,8 +130,8 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
-			let now = Self::current_block();
+		fn on_initialize(_: BlockNumberFor<T>) -> Weight {
+			let now_secs = T::Time::now().as_secs();
 			let mut weight = Weight::zero();
 
 			for (pool_id, mut pool) in Pools::<T>::iter() {
@@ -143,14 +141,53 @@ pub mod pallet {
 				// Settlement window just opened: lock epoch price and settle Automatic orders.
 				// `needs_finalization` is the once-only guard — after prices are set it
 				// stays false for the remainder of the window, preventing double-settlement.
-				if pool.epoch.in_settlement_window(now) {
+				if pool.epoch.in_settlement_window(now_secs) {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
 					if needs_finalization {
-						let nav = T::NAV::nav(pool_id).map(|(n, _)| n).unwrap_or_default();
+						let oracle_nav = T::NAV::nav(pool_id).map(|(n, _)| n).unwrap_or_default();
+						// Accrue for the full intended epoch duration, not `now - epoch_start_secs`.
+						// The settlement window opens `settlement_offset_secs` before epoch end,
+						// so using the real elapsed time would under-accrue by that offset.
+						let elapsed_secs = pool.epoch.epoch_length_secs;
+
+						// Step 1: Compound-accrue senior NAVs for the elapsed epoch.
 						for (_, tranche) in pool.tranches.iter_mut() {
-							if tranche.epoch_price.is_none() {
-								tranche.epoch_price = Some(tranche.token_price(nav));
+							tranche.accrue_interest(elapsed_secs);
+						}
+
+						// Step 2: Waterfall — split total pool value between tranches.
+						// total_pool_value = oracle_nav + sum(treasury_liquidity across all tranches)
+						let total_treasury: U256 = pool
+							.tranches
+							.values()
+							.map(|t| t.treasury_liquidity())
+							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
+						let total_pool_value = oracle_nav.saturating_add(total_treasury);
+						let mut remaining = total_pool_value;
+
+						// Senior tranches claim first (BTreeMap order); junior takes the residual.
+						let mut tranche_navs: Vec<(TrancheId, U256)> = Vec::new();
+						for (id, tranche) in pool.tranches.iter() {
+							if let TrancheType::Senior { .. } = &tranche.tranche_type {
+								let share = remaining.min(tranche.accrued_nav);
+								remaining = remaining.saturating_sub(share);
+								tranche_navs.push((id.clone(), share));
+							}
+						}
+						for (id, tranche) in pool.tranches.iter() {
+							if tranche.tranche_type.is_junior() {
+								tranche_navs.push((id.clone(), remaining));
+								remaining = U256::zero();
+							}
+						}
+
+						// Step 3: Lock epoch_price for each tranche.
+						for (id, nav) in &tranche_navs {
+							if let Some(t) = pool.tranches.get_mut(id) {
+								if t.epoch_price.is_none() {
+									t.epoch_price = Some(t.token_price(*nav));
+								}
 							}
 						}
 
@@ -174,6 +211,11 @@ pub mod pallet {
 									);
 									tranche.invested = tranche.invested.saturating_add(confirmed);
 									tranche.pending_orders.deposit = U256::zero();
+									// Senior accrued_nav grows by the newly settled deposit.
+									if let TrancheType::Senior { .. } = &tranche.tranche_type {
+										tranche.accrued_nav =
+											tranche.accrued_nav.saturating_add(confirmed);
+									}
 								}
 							}
 						}
@@ -203,6 +245,11 @@ pub mod pallet {
 										.pending_orders
 										.redeem
 										.saturating_sub(tokens_settled);
+									// Senior accrued_nav shrinks by the redeemed asset payout.
+									if let TrancheType::Senior { .. } = &tranche.tranche_type {
+										tranche.accrued_nav =
+											tranche.accrued_nav.saturating_sub(asset_payout);
+									}
 								}
 							}
 						}
@@ -212,12 +259,12 @@ pub mod pallet {
 				}
 
 				// Epoch over: reset prices and advance.
-				if pool.epoch.should_advance(now) {
+				if pool.epoch.should_advance(now_secs) {
 					for (_, tranche) in pool.tranches.iter_mut() {
 						tranche.epoch_price = None;
 					}
 
-					pool.epoch.advance(now);
+					pool.epoch.advance(now_secs);
 					let new_epoch = pool.epoch.current_epoch;
 					changed = true;
 					Self::deposit_event(Event::EpochAdvanced { pool_id, new_epoch });
@@ -244,16 +291,16 @@ pub mod pallet {
 		/// `tranches` must end with exactly one junior tranche.
 		/// All preceding entries must be senior, ordered most-senior first.
 		///
-		/// `settlement_offset` is how many blocks before epoch end the settlement window opens.
-		/// During this window new orders are rejected.
+		/// `settlement_offset_secs` is how many seconds before epoch end the settlement window
+		/// opens. During this window new orders are rejected.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			borrower: T::AccountId,
 			collaterals: BoundedVec<CollateralAsset, ConstU32<MAX_COLLATERALS>>,
-			epoch_length: u32,
-			settlement_offset: u32,
+			epoch_length_secs: u64,
+			settlement_offset_secs: u64,
 			deposit_settlement: SettlementMode,
 			redeem_settlement: SettlementMode,
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
@@ -261,12 +308,12 @@ pub mod pallet {
 			ensure_root(origin)?;
 			ensure!(!collaterals.is_empty(), Error::<T>::MissingCollateral);
 			ensure!(
-				settlement_offset > 0 && settlement_offset < epoch_length,
+				settlement_offset_secs > 0 && settlement_offset_secs < epoch_length_secs,
 				Error::<T>::InvalidSettlementOffset
 			);
 
 			let pool_id = NextPoolId::<T>::get();
-			let now = Self::current_block();
+			let now_secs = T::Time::now().as_secs();
 
 			for collateral in collaterals.iter() {
 				ensure!(
@@ -282,17 +329,23 @@ pub mod pallet {
 					!Tranches::<T>::contains_key(tranche.tranche_id.clone()),
 					Error::<T>::TrancheAlreadyExists
 				);
+				let tranche_type = tranche
+					.tranche_type
+					.clone()
+					.try_into_tranche_type()
+					.ok_or(Error::<T>::InvalidRate)?;
 				built_tranches
 					.try_insert(
 						tranche.tranche_id.clone(),
 						Tranche {
-							tranche_type: tranche.tranche_type.clone(),
+							tranche_type,
 							max_deposits: tranche.max_deposits,
 							token_supply: U256::zero(),
 							invested: U256::zero(),
 							borrowed: U256::zero(),
 							pending_orders: TranchePendingOrders::default(),
 							epoch_price: None,
+							accrued_nav: U256::zero(),
 						},
 					)
 					.map_err(|_| Error::<T>::OutOfRange)?;
@@ -300,9 +353,8 @@ pub mod pallet {
 
 			let pool = PoolDetails {
 				borrower,
-				total: U256::zero(),
 				tranches: built_tranches.clone(),
-				epoch: EpochInfo::new(epoch_length, settlement_offset, now),
+				epoch: EpochInfo::new(epoch_length_secs, settlement_offset_secs, now_secs),
 				collaterals: collaterals.clone(),
 				deposit_settlement,
 				redeem_settlement,
@@ -317,7 +369,7 @@ pub mod pallet {
 			Pools::<T>::insert(pool_id, pool);
 			NextPoolId::<T>::put(pool_id.saturating_add(1));
 
-			Self::deposit_event(Event::PoolCreated { pool_id, epoch_length });
+			Self::deposit_event(Event::PoolCreated { pool_id, epoch_length_secs });
 			Ok(())
 		}
 
@@ -339,19 +391,25 @@ pub mod pallet {
 				Error::<T>::TrancheAlreadyExists
 			);
 
+			let tranche_type = tranche
+				.tranche_type
+				.clone()
+				.try_into_tranche_type()
+				.ok_or(Error::<T>::InvalidRate)?;
 			Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 				pool.tranches
 					.try_insert(
 						tranche.tranche_id.clone(),
 						Tranche {
-							tranche_type: tranche.tranche_type.clone(),
+							tranche_type,
 							max_deposits: tranche.max_deposits,
 							token_supply: U256::zero(),
 							invested: U256::zero(),
 							borrowed: U256::zero(),
 							pending_orders: TranchePendingOrders::default(),
 							epoch_price: None,
+							accrued_nav: U256::zero(),
 						},
 					)
 					.map_err(|_| Error::<T>::OutOfRange)?;
