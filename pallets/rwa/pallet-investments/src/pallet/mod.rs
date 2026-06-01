@@ -16,12 +16,6 @@ pub mod pallet {
 
 	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
-	#[pallet::origin]
-	pub enum Origin {
-		/// Dispatched by the investments precompile on behalf of the Gateway contract.
-		Gateway,
-	}
-
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
@@ -29,7 +23,7 @@ pub mod pallet {
 	#[pallet::config]
 	pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {
 		/// Only accepted origin for all investments extrinsics.
-		/// Wire as `pallet_investments::EnsureGateway` in the runtime so that only the
+		/// Wire as `pallet_pools::EnsureGateway` in the runtime so that only the
 		/// investments precompile (called by the Gateway contract) can invoke them.
 		type GatewayOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
 		/// Pool inspection and tranche mutation — implemented by pallet-pools.

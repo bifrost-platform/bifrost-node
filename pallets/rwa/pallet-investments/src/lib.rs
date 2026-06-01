@@ -7,7 +7,6 @@ pub use pallet_pools::{
 	EpochId, PoolId, PoolInspect, Settlement, SettlementMode, TrancheId, TrancheMutate,
 };
 
-use frame_support::traits::EnsureOrigin;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::U256;
@@ -131,31 +130,4 @@ pub struct ClaimableRedeemOrder {
 	pub epoch_id: EpochId,
 	/// Block number when the order was settled.
 	pub settled_at: u32,
-}
-
-// ---------------------------------------------------------------------------
-// Gateway origin
-// ---------------------------------------------------------------------------
-
-/// `EnsureOrigin` that accepts only the `Gateway` pallet origin.
-/// The investments precompile creates this origin before dispatching.
-/// Wire as `type GatewayOrigin = pallet_investments::EnsureGateway` in the runtime.
-pub struct EnsureGateway;
-
-impl<OuterOrigin> EnsureOrigin<OuterOrigin> for EnsureGateway
-where
-	OuterOrigin: Into<Result<Origin, OuterOrigin>> + From<Origin>,
-{
-	type Success = ();
-	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
-		match o.into() {
-			Ok(Origin::Gateway) => Ok(()),
-			Err(o) => Err(o),
-		}
-	}
-
-	#[cfg(feature = "runtime-benchmarks")]
-	fn try_successful_origin() -> Result<OuterOrigin, ()> {
-		Ok(OuterOrigin::from(Origin::Gateway))
-	}
 }

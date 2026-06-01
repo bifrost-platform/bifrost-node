@@ -23,7 +23,7 @@ impl<Runtime> InvestmentsPrecompile<Runtime>
 where
 	Runtime: pallet_investments::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_investments::Origin>,
+	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_pools::Origin>,
 	Runtime::RuntimeCall: From<InvestmentsCall<Runtime>>,
 	<Runtime as pallet_investments::Config>::Pools: PoolInspect<Runtime::AccountId>,
 {
@@ -66,7 +66,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_investments::Origin::Gateway.into(),
+			pallet_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -108,7 +108,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_investments::Origin::Gateway.into(),
+			pallet_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -148,7 +148,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_investments::Origin::Gateway.into(),
+			pallet_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -185,7 +185,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_investments::Origin::Gateway.into(),
+			pallet_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -223,7 +223,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_investments::Origin::Gateway.into(),
+			pallet_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -261,7 +261,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_investments::Origin::Gateway.into(),
+			pallet_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;

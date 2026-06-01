@@ -159,6 +159,11 @@ pub mod pallet {
 						let elapsed_secs = pool.epoch.epoch_length_secs;
 
 						// Step 1: Compound-accrue senior NAVs for the elapsed epoch.
+						// All deposits settled in this epoch — including those submitted
+						// mid-epoch — accrue interest for the full epoch_length_secs.
+						// This is an intentional approximation: tracking per-deposit
+						// timestamps to pro-rate within-epoch accrual would add significant
+						// complexity for a negligible per-epoch difference.
 						for (_, tranche) in pool.tranches.iter_mut() {
 							tranche.accrue_interest(elapsed_secs);
 						}
