@@ -171,7 +171,7 @@ impl Tranche {
 			if elapsed_secs == 0 || self.accrued_nav.is_zero() {
 				return;
 			}
-			let factor = fixed_u128_pow(interest_rate_per_sec, elapsed_secs as u32);
+			let factor = interest_rate_per_sec.saturating_pow(elapsed_secs as usize);
 			let nav: u128 = self.accrued_nav.try_into().unwrap_or(u128::MAX);
 			let new_nav = factor.checked_mul_int(nav).unwrap_or(nav);
 			self.accrued_nav = U256::from(new_nav);
@@ -181,19 +181,6 @@ impl Tranche {
 	pub fn treasury_liquidity(&self) -> U256 {
 		self.invested.saturating_sub(self.borrowed)
 	}
-}
-
-/// Binary exponentiation for FixedU128 in O(log exp) multiplications.
-pub fn fixed_u128_pow(mut base: FixedU128, mut exp: u32) -> FixedU128 {
-	let mut result = FixedU128::one();
-	while exp > 0 {
-		if exp % 2 == 1 {
-			result = result.saturating_mul(base);
-		}
-		base = base.saturating_mul(base);
-		exp /= 2;
-	}
-	result
 }
 
 // ---------------------------------------------------------------------------

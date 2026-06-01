@@ -170,6 +170,10 @@ pub mod pallet {
 
 						// Step 2: Waterfall — split total pool value between tranches.
 						// total_pool_value = oracle_nav + sum(treasury_liquidity across all tranches)
+						// Invariant: the NAV oracle must be finalized before epoch settlement
+						// begins (the Gateway refreshes it as the first step of the settlement
+						// flow). This ensures oracle_nav reflects only outstanding loan value
+						// and treasury_liquidity reflects only uninvested cash, with no overlap.
 						let total_treasury: U256 = pool
 							.tranches
 							.values()
