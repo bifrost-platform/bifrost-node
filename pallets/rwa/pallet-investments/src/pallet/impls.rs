@@ -1,6 +1,6 @@
 use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, PendingRedeemOrder};
 
-use pallet_pools::{PoolId, Settlement, TrancheId, TrancheMutate};
+use pallet_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate};
 use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedPointNumber, FixedU128};
 use sp_std::vec::Vec;
@@ -40,6 +40,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
+		epoch_id: EpochId,
 		epoch_price: FixedU128,
 	) -> Result<U256, DispatchError> {
 		let entries: Vec<(H160, PendingDepositOrder)> =
@@ -58,8 +59,6 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
 
 		let now = Self::current_block();
-		let epoch_id = <T::Pools as crate::PoolInspect<T::AccountId>>::current_epoch(pool_id)
-			.unwrap_or_default();
 
 		let mut shares_total = U256::zero();
 
@@ -115,6 +114,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 	fn settle_redeem_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
+		epoch_id: EpochId,
 		max_asset_payout: U256,
 		epoch_price: FixedU128,
 	) -> Result<(U256, U256), DispatchError> {
@@ -138,8 +138,6 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let _ = PendingRedeemOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
 
 		let now = Self::current_block();
-		let epoch_id = <T::Pools as crate::PoolInspect<T::AccountId>>::current_epoch(pool_id)
-			.unwrap_or_default();
 
 		let mut tokens_settled_total = U256::zero();
 		let mut asset_payout_total = U256::zero();

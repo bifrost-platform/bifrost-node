@@ -224,6 +224,7 @@ pub mod pallet {
 									if let Ok(confirmed) = T::Investments::settle_deposit_orders(
 										pool_id,
 										tranche_id.clone(),
+										pool.epoch.current_epoch,
 										epoch_price,
 									) {
 										tranche.invested =
@@ -254,6 +255,7 @@ pub mod pallet {
 										T::Investments::settle_redeem_orders(
 											pool_id,
 											tranche_id.clone(),
+											pool.epoch.current_epoch,
 											max_asset_payout,
 											epoch_price,
 										) {

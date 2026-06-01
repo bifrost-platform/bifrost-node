@@ -390,6 +390,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
+		epoch_id: EpochId,
 		epoch_price: FixedU128,
 	) -> Result<Balance, DispatchError>;
 
@@ -409,6 +410,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	fn settle_redeem_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
+		epoch_id: EpochId,
 		max_asset_payout: Balance,
 		epoch_price: FixedU128,
 	) -> Result<(Balance, Balance), DispatchError>;
