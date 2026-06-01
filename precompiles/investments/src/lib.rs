@@ -191,4 +191,80 @@ where
 		)?;
 		Ok(())
 	}
+
+	/// Automatic mode: claim settled deposit shares for an investor.
+	///
+	/// Called by the Gateway when a `requestTrancheClaim()` message for a deposit
+	/// arrives from the spoke chain. Moves the entry from `ClaimableDepositOrders`
+	/// to `ApprovedDepositOrders` so the Gateway can send the mint instruction.
+	///
+	/// Only the Gateway contract may call this function.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param investor_id   investor address on the external chain
+	#[precompile::public("claimShares(uint64,uint64,address,address)")]
+	fn claim_shares(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		investor_id: Address,
+	) -> EvmResult {
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+		let investor_id: H160 = investor_id.0;
+
+		let call = InvestmentsCall::<Runtime>::claim_shares { pool_id, tranche_id, investor_id };
+
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_investments::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
+		Ok(())
+	}
+
+	/// Automatic mode: claim settled redemption assets for an investor.
+	///
+	/// Called by the Gateway when a `requestTrancheClaim()` message for a redemption
+	/// arrives from the spoke chain. Moves the entry from `ClaimableRedeemOrders`
+	/// to `ApprovedRedeemOrders` so the Gateway can send the payout instruction.
+	///
+	/// Only the Gateway contract may call this function.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param investor_id   investor address on the external chain
+	#[precompile::public("claimAssets(uint64,uint64,address,address)")]
+	fn claim_assets(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		investor_id: Address,
+	) -> EvmResult {
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+		let investor_id: H160 = investor_id.0;
+
+		let call = InvestmentsCall::<Runtime>::claim_assets { pool_id, tranche_id, investor_id };
+
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_investments::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
+		Ok(())
+	}
 }

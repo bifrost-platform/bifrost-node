@@ -77,4 +77,40 @@ interface Investments {
         address vault_address,
         address[] calldata investor_ids
     ) external;
+
+    /**
+     * @notice Automatic mode: claim settled deposit shares for an investor.
+     * @dev Moves the investor's entry from ClaimableDepositOrders to
+     *      ApprovedDepositOrders. Called by the Gateway when a
+     *      requestTrancheClaim() message for a deposit arrives from the spoke chain.
+     *      Emits DepositClaimed on the substrate side.
+     * @param pool_id       The pool ID
+     * @param chain_id      EVM chain ID of the chain where the vault is deployed
+     * @param vault_address ERC-7540 vault contract address on that chain
+     * @param investor_id   Investor address on the external chain
+     */
+    function claimShares(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id
+    ) external;
+
+    /**
+     * @notice Automatic mode: claim settled redemption assets for an investor.
+     * @dev Moves the investor's entry from ClaimableRedeemOrders to
+     *      ApprovedRedeemOrders. Called by the Gateway when a
+     *      requestTrancheClaim() message for a redemption arrives from the spoke chain.
+     *      Emits RedeemClaimed on the substrate side.
+     * @param pool_id       The pool ID
+     * @param chain_id      EVM chain ID of the chain where the vault is deployed
+     * @param vault_address ERC-7540 vault contract address on that chain
+     * @param investor_id   Investor address on the external chain
+     */
+    function claimAssets(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id
+    ) external;
 }
