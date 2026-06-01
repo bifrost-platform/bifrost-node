@@ -391,12 +391,13 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	/// Settled orders move to `ClaimableDepositOrders`; investors pull-claim via
 	/// `claim_deposit`, which triggers outbound share minting on the spoke chain.
 	///
-	/// Returns the total amount settled (for `tranche.invested` accounting).
+	/// Returns the total amount settled (for `tranche.invested` accounting),
+	/// or `Err` if a required storage operation failed (e.g. pool not found).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_price: FixedU128,
-	) -> Balance;
+	) -> Result<Balance, DispatchError>;
 
 	/// Pro-rata settle pending redeem orders for a tranche up to `max_asset_payout`
 	/// (the tranche's available treasury liquidity).
@@ -409,13 +410,14 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	/// `claim_redeem`, which triggers outbound asset payout on the spoke chain.
 	///
 	/// Returns `(tokens_settled, asset_payout)` — used to decrement
-	/// `tranche.pending_orders.redeem` and `tranche.invested` in pallet-pools.
+	/// `tranche.pending_orders.redeem` and `tranche.invested` in pallet-pools,
+	/// or `Err` if a required storage operation failed.
 	fn settle_redeem_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		max_asset_payout: Balance,
 		epoch_price: FixedU128,
-	) -> (Balance, Balance);
+	) -> Result<(Balance, Balance), DispatchError>;
 }
 
 /// Implemented by pallet-pools. Called by pallet-investments to keep aggregate

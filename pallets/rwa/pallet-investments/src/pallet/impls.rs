@@ -2,7 +2,7 @@ use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, Pe
 
 use pallet_pools::{PoolId, Settlement, TrancheId, TrancheMutate};
 use sp_core::{H160, U256};
-use sp_runtime::{FixedPointNumber, FixedU128};
+use sp_runtime::{DispatchError, FixedPointNumber, FixedU128};
 use sp_std::vec::Vec;
 
 use super::pallet::*;
@@ -41,18 +41,18 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_price: FixedU128,
-	) -> U256 {
+	) -> Result<U256, DispatchError> {
 		let entries: Vec<(H160, PendingDepositOrder)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
-			return U256::zero();
+			return Ok(U256::zero());
 		}
 
 		let total = entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
 
 		if total.is_zero() {
-			return U256::zero();
+			return Ok(U256::zero());
 		}
 
 		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
@@ -99,10 +99,10 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		}
 
 		if !shares_total.is_zero() {
-			let _ = T::Pools::add_token_supply(pool_id, tranche_id, shares_total);
+			T::Pools::add_token_supply(pool_id, tranche_id, shares_total)?;
 		}
 
-		total
+		Ok(total)
 	}
 
 	/// Pro-rata settle pending redeem orders for a tranche up to `max_asset_payout`
@@ -117,19 +117,19 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		tranche_id: TrancheId,
 		max_asset_payout: U256,
 		epoch_price: FixedU128,
-	) -> (U256, U256) {
+	) -> Result<(U256, U256), DispatchError> {
 		let entries: Vec<(H160, PendingRedeemOrder)> =
 			PendingRedeemOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
-			return (U256::zero(), U256::zero());
+			return Ok((U256::zero(), U256::zero()));
 		}
 
 		let total_tokens =
 			entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
 
 		if total_tokens.is_zero() {
-			return (U256::zero(), U256::zero());
+			return Ok((U256::zero(), U256::zero()));
 		}
 
 		let total_asset_owed = Self::shares_to_assets(total_tokens, epoch_price);
@@ -237,6 +237,6 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 			}
 		}
 
-		(tokens_settled_total, asset_payout_total)
+		Ok((tokens_settled_total, asset_payout_total))
 	}
 }

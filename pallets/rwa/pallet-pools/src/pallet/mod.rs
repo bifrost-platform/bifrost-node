@@ -141,6 +141,13 @@ pub mod pallet {
 				// Settlement window just opened: lock epoch price and settle Automatic orders.
 				// `needs_finalization` is the once-only guard — after prices are set it
 				// stays false for the remainder of the window, preventing double-settlement.
+				//
+				// If no block was produced during a prior settlement window (e.g. validator
+				// outage), that epoch's window is simply skipped. Pending orders are NOT lost —
+				// they remain in PendingDepositOrders / PendingRedeemOrders and are carried
+				// forward to this window, where they settle at the current epoch's NAV price.
+				// Investors should expect settlement in the next available window, not
+				// necessarily the epoch in which they submitted.
 				if pool.epoch.in_settlement_window(now_secs) {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
@@ -204,17 +211,19 @@ pub mod pallet {
 								if !tranche.pending_orders.deposit.is_zero() {
 									let epoch_price =
 										tranche.epoch_price.unwrap_or(FixedU128::one());
-									let confirmed = T::Investments::settle_deposit_orders(
+									if let Ok(confirmed) = T::Investments::settle_deposit_orders(
 										pool_id,
 										tranche_id.clone(),
 										epoch_price,
-									);
-									tranche.invested = tranche.invested.saturating_add(confirmed);
-									tranche.pending_orders.deposit = U256::zero();
-									// Senior accrued_nav grows by the newly settled deposit.
-									if let TrancheType::Senior { .. } = &tranche.tranche_type {
-										tranche.accrued_nav =
-											tranche.accrued_nav.saturating_add(confirmed);
+									) {
+										tranche.invested =
+											tranche.invested.saturating_add(confirmed);
+										tranche.pending_orders.deposit = U256::zero();
+										// Senior accrued_nav grows by the newly settled deposit.
+										if let TrancheType::Senior { .. } = &tranche.tranche_type {
+											tranche.accrued_nav =
+												tranche.accrued_nav.saturating_add(confirmed);
+										}
 									}
 								}
 							}
@@ -232,23 +241,24 @@ pub mod pallet {
 								{
 									let epoch_price =
 										tranche.epoch_price.unwrap_or(FixedU128::one());
-									let (tokens_settled, asset_payout) =
+									if let Ok((tokens_settled, asset_payout)) =
 										T::Investments::settle_redeem_orders(
 											pool_id,
 											tranche_id.clone(),
 											max_asset_payout,
 											epoch_price,
-										);
-									tranche.invested =
-										tranche.invested.saturating_sub(asset_payout);
-									tranche.pending_orders.redeem = tranche
-										.pending_orders
-										.redeem
-										.saturating_sub(tokens_settled);
-									// Senior accrued_nav shrinks by the redeemed asset payout.
-									if let TrancheType::Senior { .. } = &tranche.tranche_type {
-										tranche.accrued_nav =
-											tranche.accrued_nav.saturating_sub(asset_payout);
+										) {
+										tranche.invested =
+											tranche.invested.saturating_sub(asset_payout);
+										tranche.pending_orders.redeem = tranche
+											.pending_orders
+											.redeem
+											.saturating_sub(tokens_settled);
+										// Senior accrued_nav shrinks by the redeemed asset payout.
+										if let TrancheType::Senior { .. } = &tranche.tranche_type {
+											tranche.accrued_nav =
+												tranche.accrued_nav.saturating_sub(asset_payout);
+										}
 									}
 								}
 							}
@@ -460,7 +470,14 @@ pub mod pallet {
 		///
 		/// Only callable through the Gateway origin — direct extrinsic calls are rejected.
 		/// Reduces `borrowed` by `amount`, restoring tranche treasury liquidity.
-		/// Saturates at zero — over-repayment does not error.
+		///
+		/// `borrowed` saturates to zero — this is intentional. The borrower repays
+		/// principal + accrued interest in a single transfer. Since `borrowed` only tracks
+		/// the principal drawn, the interest portion of the repayment causes `borrowed` to
+		/// underflow. The surplus USDC physically sits in the treasury and is distributed
+		/// to investors through the NAV waterfall at the next epoch settlement.
+		/// The Gateway contract is responsible for ensuring `amount` is backed by an actual
+		/// USDC transfer before dispatching this extrinsic.
 		#[pallet::call_index(3)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn repay(
