@@ -124,6 +124,13 @@ pub mod pallet {
 	/// Defaults to the zero address (disables precompile access) until set by sudo.
 	pub type GatewayAddress<T: Config> = StorageValue<_, H160, ValueQuery>;
 
+	#[pallet::storage]
+	/// Unix timestamp (seconds) of the next on_initialize action for each pool.
+	/// Set to the settlement window open time at pool creation, then updated after
+	/// each settlement (→ epoch end) and each epoch advance (→ next settlement open).
+	/// Allows on_initialize to skip idle pools without decoding their full PoolDetails.
+	pub type NextEpochAction<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, u64, ValueQuery>;
+
 	// -----------------------------------------------------------------------
 	// Hooks
 	// -----------------------------------------------------------------------
@@ -134,8 +141,17 @@ pub mod pallet {
 			let now_secs = T::Time::now().as_secs();
 			let mut weight = Weight::zero();
 
-			for (pool_id, mut pool) in Pools::<T>::iter() {
-				weight = weight.saturating_add(Weight::from_parts(1_000, 0));
+			// Iterate the lightweight NextEpochAction index (one u64 per pool) rather than
+			// decoding full PoolDetails for every pool every block. Only pools whose next
+			// scheduled action time has been reached incur the expensive Pools::get() decode.
+			for (pool_id, next_action_secs) in NextEpochAction::<T>::iter() {
+				weight = weight.saturating_add(Weight::from_parts(100, 0));
+				if next_action_secs > now_secs {
+					continue;
+				}
+
+				let Some(mut pool) = Pools::<T>::get(pool_id) else { continue };
+				weight = weight.saturating_add(Weight::from_parts(900, 0));
 				let mut changed = false;
 
 				// Settlement window just opened: lock epoch price and settle Automatic orders.
@@ -277,6 +293,13 @@ pub mod pallet {
 
 						changed = true;
 					}
+
+					// Settlement window was entered (finalized or already done).
+					// Next action: epoch end, when we need to advance.
+					NextEpochAction::<T>::insert(
+						pool_id,
+						pool.epoch.epoch_start_secs.saturating_add(pool.epoch.epoch_length_secs),
+					);
 				}
 
 				// Epoch over: reset prices and advance.
@@ -289,6 +312,9 @@ pub mod pallet {
 					let new_epoch = pool.epoch.current_epoch;
 					changed = true;
 					Self::deposit_event(Event::EpochAdvanced { pool_id, new_epoch });
+
+					// Next action: when the settlement window opens for the new epoch.
+					NextEpochAction::<T>::insert(pool_id, pool.epoch.settlement_start_secs());
 				}
 
 				if changed {
@@ -387,6 +413,10 @@ pub mod pallet {
 			for tranche in tranches.iter() {
 				Tranches::<T>::insert(tranche.tranche_id.clone(), pool_id);
 			}
+			// Initialise next action to the first settlement window open.
+			let first_action = EpochInfo::new(epoch_length_secs, settlement_offset_secs, now_secs)
+				.settlement_start_secs();
+			NextEpochAction::<T>::insert(pool_id, first_action);
 			Pools::<T>::insert(pool_id, pool);
 			NextPoolId::<T>::put(pool_id.saturating_add(1));
 
