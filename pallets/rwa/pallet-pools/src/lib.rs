@@ -35,6 +35,10 @@ pub const MAX_COLLATERALS: u32 = 10;
 /// Seconds in a 365-day year, used to convert APR → per-second rate factor.
 pub const SECONDS_PER_YEAR: u32 = 365 * 24 * 3600;
 
+/// Maximum accepted APR for a senior tranche (100%). Prevents an extreme rate
+/// from causing `accrued_nav` to overflow in a small number of epochs.
+pub const MAX_APR: Rate = FixedU128::from_u32(1);
+
 // ---------------------------------------------------------------------------
 // TrancheId
 // ---------------------------------------------------------------------------
@@ -213,11 +217,14 @@ pub enum TrancheTypeInput {
 
 impl TrancheTypeInput {
 	/// Convert to the storage type, computing `interest_rate_per_sec = 1 + apr / SECONDS_PER_YEAR`.
-	/// Returns `None` only if `apr` is so large that the division overflows (not realistic).
+	/// Returns `None` if `apr` exceeds `MAX_APR` (100%) or if the division overflows.
 	pub fn try_into_tranche_type(self) -> Option<TrancheType> {
 		match self {
 			TrancheTypeInput::Junior => Some(TrancheType::Junior),
 			TrancheTypeInput::Senior { apr } => {
+				if apr > MAX_APR {
+					return None;
+				}
 				let rate_delta =
 					Rate::from_inner(apr.into_inner().checked_div(SECONDS_PER_YEAR as u128)?);
 				let interest_rate_per_sec = Rate::one().saturating_add(rate_delta);
