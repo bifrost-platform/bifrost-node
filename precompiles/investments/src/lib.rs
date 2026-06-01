@@ -19,9 +19,9 @@ pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_APPROVED: [u8; 32] =
 pub(crate) const SELECTOR_LOG_REDEEM_ORDER_APPROVED: [u8; 32] =
 	keccak256!("RedeemOrderApproved(uint64,uint64,address,address)");
 pub(crate) const SELECTOR_LOG_SHARES_CLAIMED: [u8; 32] =
-	keccak256!("SharesClaimed(uint64,uint64,address,address)");
+	keccak256!("SharesClaimed(uint64,uint64,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_ASSETS_CLAIMED: [u8; 32] =
-	keccak256!("AssetsClaimed(uint64,uint64,address,address)");
+	keccak256!("AssetsClaimed(uint64,uint64,address,address,uint256)");
 
 /// A precompile that dispatches invest/redeem order requests to pallet-investments.
 ///
@@ -294,6 +294,12 @@ where
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let investor_id: H160 = investor_id.0;
 
+		// Read shares_to_mint before dispatch — the pallet removes the entry via take().
+		let shares_to_mint =
+			pallet_investments::ClaimableDepositOrders::<Runtime>::get(&tranche_id, investor_id)
+				.map(|o| o.shares_to_mint)
+				.unwrap_or_default();
+
 		let call = InvestmentsCall::<Runtime>::claim_shares { pool_id, tranche_id, investor_id };
 
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -311,6 +317,7 @@ where
 				U256::from(chain_id),
 				vault_address,
 				Address(investor_id),
+				shares_to_mint,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -346,6 +353,12 @@ where
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let investor_id: H160 = investor_id.0;
 
+		// Read payout before dispatch — the pallet removes the entry via take().
+		let payout =
+			pallet_investments::ClaimableRedeemOrders::<Runtime>::get(&tranche_id, investor_id)
+				.map(|o| o.payout)
+				.unwrap_or_default();
+
 		let call = InvestmentsCall::<Runtime>::claim_assets { pool_id, tranche_id, investor_id };
 
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -363,6 +376,7 @@ where
 				U256::from(chain_id),
 				vault_address,
 				Address(investor_id),
+				payout,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;

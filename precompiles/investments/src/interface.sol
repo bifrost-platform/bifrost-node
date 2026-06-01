@@ -38,13 +38,15 @@ interface Investments {
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
-        address investor_id
+        address investor_id,
+        uint256 shares_to_mint
     );
     event AssetsClaimed(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
-        address investor_id
+        address investor_id,
+        uint256 payout
     );
 
     /**
