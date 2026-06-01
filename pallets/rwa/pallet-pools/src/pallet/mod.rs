@@ -9,7 +9,7 @@ use frame_support::{pallet_prelude::*, traits::StorageVersion, traits::UnixTime}
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::{DispatchError, FixedU128};
-use sp_std::vec::Vec;
+use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -209,7 +209,8 @@ pub mod pallet {
 
 						// Snapshot liquidity before deposit settlement so that freshly settled
 						// deposits cannot immediately fund same-epoch redeem payouts.
-						let pre_deposit_liquidity: Vec<(TrancheId, U256)> = pool
+						// BTreeMap gives O(log n) lookup in the redeem loop vs O(n²) with Vec::find.
+						let pre_deposit_liquidity: BTreeMap<TrancheId, U256> = pool
 							.tranches
 							.iter()
 							.map(|(id, t)| (id.clone(), t.treasury_liquidity()))
@@ -241,9 +242,8 @@ pub mod pallet {
 						if pool.redeem_settlement == SettlementMode::Automatic {
 							for (tranche_id, tranche) in pool.tranches.iter_mut() {
 								let max_asset_payout = pre_deposit_liquidity
-									.iter()
-									.find(|(id, _)| id == tranche_id)
-									.map(|(_, v)| *v)
+									.get(tranche_id)
+									.copied()
 									.unwrap_or_default();
 								if !max_asset_payout.is_zero()
 									&& !tranche.pending_orders.redeem.is_zero()
