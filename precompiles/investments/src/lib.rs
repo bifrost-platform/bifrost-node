@@ -10,6 +10,19 @@ use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::marker::PhantomData;
 
+pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_SUBMITTED: [u8; 32] =
+	keccak256!("DepositOrderSubmitted(uint64,uint64,address,address,uint256)");
+pub(crate) const SELECTOR_LOG_REDEEM_ORDER_SUBMITTED: [u8; 32] =
+	keccak256!("RedeemOrderSubmitted(uint64,uint64,address,address,uint256)");
+pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_APPROVED: [u8; 32] =
+	keccak256!("DepositOrderApproved(uint64,uint64,address,address)");
+pub(crate) const SELECTOR_LOG_REDEEM_ORDER_APPROVED: [u8; 32] =
+	keccak256!("RedeemOrderApproved(uint64,uint64,address,address)");
+pub(crate) const SELECTOR_LOG_SHARES_CLAIMED: [u8; 32] =
+	keccak256!("SharesClaimed(uint64,uint64,address,address)");
+pub(crate) const SELECTOR_LOG_ASSETS_CLAIMED: [u8; 32] =
+	keccak256!("AssetsClaimed(uint64,uint64,address,address)");
+
 /// A precompile that dispatches invest/redeem order requests to pallet-investments.
 ///
 /// Only callable by the Gateway contract whose address is stored in
@@ -70,6 +83,21 @@ where
 			call,
 			0,
 		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_DEPOSIT_ORDER_SUBMITTED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				vault_address,
+				Address(investor_id),
+				amount,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
 		Ok(())
 	}
 
@@ -112,6 +140,21 @@ where
 			call,
 			0,
 		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_REDEEM_ORDER_SUBMITTED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				vault_address,
+				Address(investor_id),
+				amount,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
 		Ok(())
 	}
 
@@ -138,7 +181,7 @@ where
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let ids: sp_std::vec::Vec<H160> = investor_ids.into_iter().map(|a| a.0).collect();
 		let investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
-			ids.try_into().map_err(|_| revert("too many investor IDs"))?;
+			ids.clone().try_into().map_err(|_| revert("too many investor IDs"))?;
 
 		let call = InvestmentsCall::<Runtime>::approve_deposit_orders {
 			pool_id,
@@ -152,6 +195,22 @@ where
 			call,
 			0,
 		)?;
+
+		for investor_id in &ids {
+			let event = log1(
+				handle.context().address,
+				SELECTOR_LOG_DEPOSIT_ORDER_APPROVED,
+				solidity::encode_event_data((
+					U256::from(pool_id),
+					U256::from(chain_id),
+					vault_address,
+					Address(*investor_id),
+				)),
+			);
+			handle.record_log_costs(&[&event])?;
+			event.record(handle)?;
+		}
+
 		Ok(())
 	}
 
@@ -178,7 +237,7 @@ where
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let ids: sp_std::vec::Vec<H160> = investor_ids.into_iter().map(|a| a.0).collect();
 		let investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
-			ids.try_into().map_err(|_| revert("too many investor IDs"))?;
+			ids.clone().try_into().map_err(|_| revert("too many investor IDs"))?;
 
 		let call =
 			InvestmentsCall::<Runtime>::approve_redeem_orders { pool_id, tranche_id, investor_ids };
@@ -189,6 +248,22 @@ where
 			call,
 			0,
 		)?;
+
+		for investor_id in &ids {
+			let event = log1(
+				handle.context().address,
+				SELECTOR_LOG_REDEEM_ORDER_APPROVED,
+				solidity::encode_event_data((
+					U256::from(pool_id),
+					U256::from(chain_id),
+					vault_address,
+					Address(*investor_id),
+				)),
+			);
+			handle.record_log_costs(&[&event])?;
+			event.record(handle)?;
+		}
+
 		Ok(())
 	}
 
@@ -227,6 +302,20 @@ where
 			call,
 			0,
 		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_SHARES_CLAIMED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				vault_address,
+				Address(investor_id),
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
 		Ok(())
 	}
 
@@ -265,6 +354,20 @@ where
 			call,
 			0,
 		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_ASSETS_CLAIMED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				vault_address,
+				Address(investor_id),
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
 		Ok(())
 	}
 }

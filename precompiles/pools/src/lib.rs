@@ -8,6 +8,11 @@ use sp_core::{H160, U256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::marker::PhantomData;
 
+pub(crate) const SELECTOR_LOG_BORROWED: [u8; 32] =
+	keccak256!("Borrowed(uint64,uint64,address,uint256)");
+pub(crate) const SELECTOR_LOG_REPAID: [u8; 32] =
+	keccak256!("Repaid(uint64,uint64,address,uint256)");
+
 /// A precompile that dispatches borrow and repay requests to pallet-pools.
 ///
 /// Only callable by the Gateway contract whose address is stored in
@@ -54,6 +59,20 @@ where
 			call,
 			0,
 		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_BORROWED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				Address(vault_address),
+				amount,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
 		Ok(())
 	}
 
@@ -86,6 +105,20 @@ where
 			call,
 			0,
 		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_REPAID,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				Address(vault_address),
+				amount,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
 		Ok(())
 	}
 }

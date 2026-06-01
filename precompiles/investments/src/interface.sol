@@ -8,6 +8,45 @@ pragma solidity >=0.8.0;
  * Address: 0x0000000000000000000000000000000000000200
  */
 interface Investments {
+    event DepositOrderSubmitted(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id,
+        uint256 amount
+    );
+    event RedeemOrderSubmitted(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id,
+        uint256 amount
+    );
+    event DepositOrderApproved(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id
+    );
+    event RedeemOrderApproved(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id
+    );
+    event SharesClaimed(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id
+    );
+    event AssetsClaimed(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id
+    );
+
     /**
      * @notice Submit a pending deposit order for epoch settlement.
      * @dev Accumulates the USDC amount into PendingDepositOrders storage.

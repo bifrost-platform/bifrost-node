@@ -8,6 +8,19 @@ pragma solidity >=0.8.0;
  * Address: 0x0000000000000000000000000000000000000201
  */
 interface Pools {
+    event Borrowed(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        uint256 amount
+    );
+    event Repaid(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        uint256 amount
+    );
+
     /**
      * @notice Draw funds from a tranche treasury.
      * @dev Increments the tranche's `borrowed` counter on the Hub chain.
