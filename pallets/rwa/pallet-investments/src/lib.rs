@@ -4,7 +4,8 @@ mod pallet;
 
 pub use pallet::pallet::*;
 pub use pallet_pools::{
-	EpochId, PoolId, PoolInspect, Settlement, SettlementMode, TrancheId, TrancheMutate,
+	EpochId, PermissionInspect, PoolId, PoolInspect, Settlement, SettlementMode, TrancheId,
+	TrancheMutate,
 };
 
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};

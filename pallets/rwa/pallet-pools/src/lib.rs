@@ -331,9 +331,7 @@ impl EpochInfo {
 #[derive(
 	Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen, DecodeWithMemTracking,
 )]
-pub struct PoolDetails<AccountId> {
-	/// The institution (borrower) EOA authorized to borrow, repay, and approve orders.
-	pub borrower: AccountId,
+pub struct PoolDetails {
 	/// Mapped tranche IDs to tranches.
 	pub tranches: BoundedBTreeMap<TrancheId, Tranche, ConstU32<MAX_TRANCHES>>,
 	/// Block-number-based epoch tracking.
@@ -351,11 +349,9 @@ pub struct PoolDetails<AccountId> {
 // ---------------------------------------------------------------------------
 
 /// Implemented by pallet-pools. Called by pallet-investments and the gateway
-/// to validate pool/tranche existence, resolve the borrower, and query epoch state.
-pub trait PoolInspect<AccountId> {
+/// to validate pool/tranche existence and query epoch state.
+pub trait PoolInspect {
 	fn pool_exists(pool_id: PoolId) -> bool;
-	/// Returns the borrower (institution EOA) authorized for this pool.
-	fn pool_borrower(pool_id: PoolId) -> Option<AccountId>;
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
 	/// True when the pool is currently inside its settlement window.
 	fn in_settlement_window(pool_id: PoolId) -> bool;
@@ -484,6 +480,22 @@ pub trait TrancheMutate<Balance> {
 		tranche_id: TrancheId,
 		amount: Balance,
 	) -> frame_support::dispatch::DispatchResult;
+}
+
+/// Implemented by pallet-permissions. Called by pallet-pools and pallet-investments
+/// to gate-check caller roles and perform atomic role grants during pool lifecycle.
+pub trait PermissionInspect<AccountId> {
+	/// Returns `true` if `who` holds the PoolAdmin role for `pool_id`.
+	fn is_pool_admin(pool_id: PoolId, who: &AccountId) -> bool;
+	/// Returns `true` if `who` holds the Borrower role for `pool_id`.
+	fn is_borrower(pool_id: PoolId, who: &AccountId) -> bool;
+	/// Returns `true` if `who` holds the OracleFeeder role for `pool_id`.
+	fn is_oracle_feeder(pool_id: PoolId, who: &AccountId) -> bool;
+	/// Returns `true` if `who` holds the TrancheInvestor role for the given pool and tranche.
+	fn is_tranche_investor(tranche_id: &TrancheId, who: &AccountId) -> bool;
+	/// Grant the Borrower role to `who` for `pool_id`.
+	/// Called atomically inside `create_pool` to set the initial borrower.
+	fn grant_borrower(pool_id: PoolId, who: AccountId);
 }
 
 /// Implemented by pallet-nav-oracle. Called by pallet-pools to fetch the current

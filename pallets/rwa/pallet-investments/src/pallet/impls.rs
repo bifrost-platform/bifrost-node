@@ -1,7 +1,7 @@
 use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, PendingRedeemOrder};
 
 use pallet_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate};
-use sp_core::{H160, U256};
+use sp_core::U256;
 use sp_runtime::{DispatchError, FixedPointNumber, FixedU128};
 use sp_std::vec::Vec;
 
@@ -43,7 +43,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		epoch_id: EpochId,
 		epoch_price: FixedU128,
 	) -> Result<U256, DispatchError> {
-		let entries: Vec<(H160, PendingDepositOrder)> =
+		let entries: Vec<(T::AccountId, PendingDepositOrder)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
@@ -90,7 +90,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 			Self::deposit_event(Event::DepositOrderSettled {
 				pool_id,
 				tranche_id: tranche_id.clone(),
-				investor_id: *investor_id,
+				investor_id: investor_id.clone(),
 				amount: order.amount,
 				shares_to_mint,
 			});
@@ -118,7 +118,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		max_asset_payout: U256,
 		epoch_price: FixedU128,
 	) -> Result<(U256, U256), DispatchError> {
-		let entries: Vec<(H160, PendingRedeemOrder)> =
+		let entries: Vec<(T::AccountId, PendingRedeemOrder)> =
 			PendingRedeemOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
@@ -170,7 +170,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 				Self::deposit_event(Event::RedeemOrderSettled {
 					pool_id,
 					tranche_id: tranche_id.clone(),
-					investor_id: *investor_id,
+					investor_id: investor_id.clone(),
 					shares_redeemed: order.amount,
 					payout,
 				});
@@ -211,7 +211,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 					Self::deposit_event(Event::RedeemOrderSettled {
 						pool_id,
 						tranche_id: tranche_id.clone(),
-						investor_id: *investor_id,
+						investor_id: investor_id.clone(),
 						shares_redeemed: tokens_confirmed,
 						payout,
 					});

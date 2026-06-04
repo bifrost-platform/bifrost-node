@@ -22,6 +22,7 @@ members = [
 	"pallets/cccp-relay-queue",
 	"pallets/rwa/pallet-pools",
 	"pallets/rwa/pallet-investments",
+	"pallets/rwa/pallet-permissions",
 	"precompiles/investments",
 	"precompiles/pools",
 	"precompiles/bfc-staking",

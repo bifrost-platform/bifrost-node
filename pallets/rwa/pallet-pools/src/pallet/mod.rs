@@ -1,8 +1,9 @@
 mod impls;
 
 use crate::{
-	CollateralAsset, EpochInfo, PoolDetails, PoolId, PoolNAV, Settlement, SettlementMode, Tranche,
-	TrancheId, TrancheInput, TranchePendingOrders, TrancheType, MAX_COLLATERALS, MAX_TRANCHES,
+	CollateralAsset, EpochInfo, PermissionInspect, PoolDetails, PoolId, PoolNAV, Settlement,
+	SettlementMode, Tranche, TrancheId, TrancheInput, TranchePendingOrders, TrancheType,
+	MAX_COLLATERALS, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion, traits::UnixTime};
@@ -44,6 +45,9 @@ pub mod pallet {
 		/// Used for timestamp-based epoch advancement and interest accrual, so that skipped
 		/// Aura slots (each 3 s) do not distort elapsed-time calculations.
 		type Time: UnixTime;
+		/// Permission inspector — implemented by pallet-permissions.
+		/// Used to gate `create_pool`, `add_vault`, and other pool-admin actions.
+		type Permissions: PermissionInspect<Self::AccountId>;
 	}
 
 	// -----------------------------------------------------------------------
@@ -74,6 +78,10 @@ pub mod pallet {
 		InvalidSettlementOffset,
 		/// The provided APR could not be converted to a per-second rate factor.
 		InvalidRate,
+		/// Caller does not hold the required role for this pool.
+		Unauthorized,
+		/// A pool with this ID already exists.
+		PoolAlreadyExists,
 	}
 
 	// -----------------------------------------------------------------------
@@ -104,7 +112,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// All active pools, keyed by pool ID.
-	pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails<T::AccountId>>;
+	pub type Pools<T: Config> = StorageMap<_, Blake2_128Concat, PoolId, PoolDetails>;
 
 	#[pallet::storage]
 	/// Mapped collateral assets to pool IDs.
@@ -113,10 +121,6 @@ pub mod pallet {
 	#[pallet::storage]
 	/// Mapped tranche IDs to pool IDs.
 	pub type Tranches<T: Config> = StorageMap<_, Blake2_128Concat, TrancheId, PoolId>;
-
-	#[pallet::storage]
-	/// Monotonically increasing pool ID counter.
-	pub type NextPoolId<T: Config> = StorageValue<_, PoolId, ValueQuery>;
 
 	#[pallet::storage]
 	/// The EVM address of the deployed Gateway contract.
@@ -334,9 +338,10 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Create a new RWA pool.
 		///
+		/// Caller must hold the `PoolAdmin` role for `pool_id` (granted by sudo in advance).
+		/// `pool_id` is caller-specified; returns `PoolAlreadyExists` if already taken.
 		/// `collaterals` must contain at least one NFT; each must not already be registered.
-		/// `tranches` must end with exactly one junior tranche.
-		/// All preceding entries must be senior, ordered most-senior first.
+		/// `tranches` must end with exactly one junior tranche, preceded by seniors.
 		///
 		/// `settlement_offset_secs` is how many seconds before epoch end the settlement window
 		/// opens. During this window new orders are rejected.
@@ -344,6 +349,7 @@ pub mod pallet {
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn create_pool(
 			origin: OriginFor<T>,
+			pool_id: PoolId,
 			borrower: T::AccountId,
 			collaterals: BoundedVec<CollateralAsset, ConstU32<MAX_COLLATERALS>>,
 			epoch_length_secs: u64,
@@ -352,14 +358,15 @@ pub mod pallet {
 			redeem_settlement: SettlementMode,
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
 		) -> DispatchResult {
-			ensure_root(origin)?;
+			let caller = ensure_signed(origin)?;
+			ensure!(T::Permissions::is_pool_admin(pool_id, &caller), Error::<T>::Unauthorized);
+			ensure!(!Pools::<T>::contains_key(pool_id), Error::<T>::PoolAlreadyExists);
 			ensure!(!collaterals.is_empty(), Error::<T>::MissingCollateral);
 			ensure!(
 				settlement_offset_secs > 0 && settlement_offset_secs < epoch_length_secs,
 				Error::<T>::InvalidSettlementOffset
 			);
 
-			let pool_id = NextPoolId::<T>::get();
 			let now_secs = T::Time::now().as_secs();
 
 			for collateral in collaterals.iter() {
@@ -399,7 +406,6 @@ pub mod pallet {
 			}
 
 			let pool = PoolDetails {
-				borrower,
 				tranches: built_tranches.clone(),
 				epoch: EpochInfo::new(epoch_length_secs, settlement_offset_secs, now_secs),
 				collaterals: collaterals.clone(),
@@ -418,14 +424,15 @@ pub mod pallet {
 				.settlement_start_secs();
 			NextEpochAction::<T>::insert(pool_id, first_action);
 			Pools::<T>::insert(pool_id, pool);
-			NextPoolId::<T>::put(pool_id.saturating_add(1));
+			T::Permissions::grant_borrower(pool_id, borrower);
 
 			Self::deposit_event(Event::PoolCreated { pool_id, epoch_length_secs });
 			Ok(())
 		}
 
-		/// Register an ERC-7540 vault (chain_id + vault_address) to a tranche (admin only).
+		/// Register an ERC-7540 vault (chain_id + vault_address) to a tranche.
 		///
+		/// Caller must hold the `PoolAdmin` role for `pool_id`.
 		/// Each tranche slot is created at pool creation; this call associates it with
 		/// the deployed vault contract on the external EVM chain.
 		#[pallet::call_index(1)]
@@ -435,7 +442,8 @@ pub mod pallet {
 			pool_id: PoolId,
 			tranche: TrancheInput,
 		) -> DispatchResult {
-			ensure_root(origin)?;
+			let caller = ensure_signed(origin)?;
+			ensure!(T::Permissions::is_pool_admin(pool_id, &caller), Error::<T>::Unauthorized);
 
 			ensure!(
 				!Tranches::<T>::contains_key(tranche.tranche_id.clone()),
@@ -473,6 +481,9 @@ pub mod pallet {
 		/// Called by the pools precompile (via Gateway) when a borrow request arrives.
 		///
 		/// Only callable through the Gateway origin — direct extrinsic calls are rejected.
+		/// `borrower` must hold the Borrower role for `pool_id`; the address is forwarded
+		/// from the originating EVM call so the pallet can verify it independently of the
+		/// Gateway caller.
 		/// Draws `amount` from the tranche treasury by incrementing `borrowed`.
 		/// Fails if available liquidity (invested − borrowed) is less than `amount`.
 		#[pallet::call_index(2)]
@@ -482,9 +493,11 @@ pub mod pallet {
 			pool_id: PoolId,
 			chain_id: u64,
 			vault_address: H160,
+			borrower: T::AccountId,
 			amount: U256,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
+			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 
 			let tranche_id = TrancheId { chain_id, vault_address };
@@ -510,6 +523,9 @@ pub mod pallet {
 		/// Called by the pools precompile (via Gateway) when a repay message arrives.
 		///
 		/// Only callable through the Gateway origin — direct extrinsic calls are rejected.
+		/// `borrower` must hold the Borrower role for `pool_id`; the address is forwarded
+		/// from the originating EVM call so the pallet can verify it independently of the
+		/// Gateway caller.
 		/// Reduces `borrowed` by `amount`, restoring tranche treasury liquidity.
 		///
 		/// `borrowed` saturates to zero — this is intentional. The borrower repays
@@ -526,9 +542,11 @@ pub mod pallet {
 			pool_id: PoolId,
 			chain_id: u64,
 			vault_address: H160,
+			borrower: T::AccountId,
 			amount: U256,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
+			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 
 			let tranche_id = TrancheId { chain_id, vault_address };

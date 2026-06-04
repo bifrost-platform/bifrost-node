@@ -2,13 +2,13 @@ mod impls;
 
 use crate::{
 	ApprovedDepositOrder, ApprovedRedeemOrder, ClaimableDepositOrder, ClaimableRedeemOrder,
-	PendingDepositOrder, PendingRedeemOrder, PoolId, PoolInspect, SettlementMode, TrancheId,
-	TrancheMutate, MAX_INVESTORS_PER_APPROVAL,
+	PendingDepositOrder, PendingRedeemOrder, PermissionInspect, PoolId, PoolInspect,
+	SettlementMode, TrancheId, TrancheMutate, MAX_INVESTORS_PER_APPROVAL,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
-use sp_core::{H160, U256};
+use sp_core::U256;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -27,7 +27,11 @@ pub mod pallet {
 		/// investments precompile (called by the Gateway contract) can invoke them.
 		type GatewayOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
 		/// Pool inspection and tranche mutation — implemented by pallet-pools.
-		type Pools: PoolInspect<Self::AccountId> + TrancheMutate<U256>;
+		type Pools: PoolInspect + TrancheMutate<U256>;
+		/// Permission inspector — implemented by pallet-permissions.
+		/// Used to verify the Borrower role on `approve_deposit_orders` and
+		/// `approve_redeem_orders`.
+		type Permissions: PermissionInspect<Self::AccountId>;
 	}
 
 	// -----------------------------------------------------------------------
@@ -56,6 +60,10 @@ pub mod pallet {
 		NoClaimableRedeem,
 		/// Approval extrinsic called on a pool that is not in Approval settlement mode.
 		WrongSettlementMode,
+		/// Caller does not hold the Borrower role for this pool.
+		Unauthorized,
+		/// Investor is not whitelisted as a TrancheInvestor for this tranche.
+		NotWhitelisted,
 	}
 
 	// -----------------------------------------------------------------------
@@ -69,14 +77,14 @@ pub mod pallet {
 		DepositOrderSubmitted {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 		},
 		/// A redeem order was submitted and is pending epoch settlement.
 		RedeemOrderSubmitted {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 		},
 		/// Automatic mode: a pending deposit order was settled into `ClaimableDepositOrders`.
@@ -84,7 +92,7 @@ pub mod pallet {
 		DepositOrderSettled {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 			shares_to_mint: U256,
 		},
@@ -93,7 +101,7 @@ pub mod pallet {
 		RedeemOrderSettled {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			shares_redeemed: U256,
 			payout: U256,
 		},
@@ -102,7 +110,7 @@ pub mod pallet {
 		DepositOrderApproved {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 			shares_to_mint: U256,
 		},
@@ -111,7 +119,7 @@ pub mod pallet {
 		RedeemOrderApproved {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			shares_redeemed: U256,
 			payout: U256,
 		},
@@ -121,7 +129,7 @@ pub mod pallet {
 		DepositClaimed {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 			shares_to_mint: U256,
 		},
@@ -131,7 +139,7 @@ pub mod pallet {
 		RedeemClaimed {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			shares_redeemed: U256,
 			payout: U256,
 		},
@@ -149,7 +157,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		TrancheId,
 		Blake2_128Concat,
-		H160,
+		T::AccountId,
 		PendingDepositOrder,
 	>;
 
@@ -163,7 +171,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		TrancheId,
 		Blake2_128Concat,
-		H160,
+		T::AccountId,
 		ClaimableDepositOrder,
 	>;
 
@@ -176,7 +184,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		TrancheId,
 		Blake2_128Concat,
-		H160,
+		T::AccountId,
 		ApprovedDepositOrder,
 	>;
 
@@ -188,7 +196,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		TrancheId,
 		Blake2_128Concat,
-		H160,
+		T::AccountId,
 		PendingRedeemOrder,
 	>;
 
@@ -202,7 +210,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		TrancheId,
 		Blake2_128Concat,
-		H160,
+		T::AccountId,
 		ClaimableRedeemOrder,
 	>;
 
@@ -215,7 +223,7 @@ pub mod pallet {
 		Blake2_128Concat,
 		TrancheId,
 		Blake2_128Concat,
-		H160,
+		T::AccountId,
 		ApprovedRedeemOrder,
 	>;
 
@@ -236,13 +244,17 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
+			);
+			ensure!(
+				T::Permissions::is_tranche_investor(&tranche_id, &investor_id),
+				Error::<T>::NotWhitelisted
 			);
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
@@ -254,7 +266,7 @@ pub mod pallet {
 			let now = Self::current_block();
 			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
 
-			PendingDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+			PendingDepositOrders::<T>::mutate(tranche_id.clone(), &investor_id, |entry| {
 				match entry {
 					Some(existing) => {
 						// Accumulate amount; preserve original epoch/block metadata.
@@ -289,13 +301,17 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 			amount: U256,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
+			);
+			ensure!(
+				T::Permissions::is_tranche_investor(&tranche_id, &investor_id),
+				Error::<T>::NotWhitelisted
 			);
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
@@ -305,7 +321,7 @@ pub mod pallet {
 
 			PendingRedeemOrders::<T>::mutate(
 				tranche_id.clone(),
-				investor_id,
+				&investor_id,
 				|entry| match entry {
 					Some(existing) => {
 						existing.amount = existing.amount.saturating_add(amount);
@@ -329,9 +345,12 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Approval mode: pool admin approves a batch of pending deposit orders during
+		/// Approval mode: pool borrower approves a batch of pending deposit orders during
 		/// the settlement window.
 		///
+		/// `borrower` must hold the Borrower role for `pool_id`; the address is forwarded
+		/// from the originating EVM call so the pallet can verify it independently of the
+		/// Gateway caller.
 		/// Moves each investor's entry from `PendingDepositOrders` to `ApprovedDepositOrders`.
 		/// Investors without a pending order are silently skipped.
 		/// The Gateway smart contract observes the `DepositOrderApproved` events and sends
@@ -342,9 +361,11 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
+			borrower: T::AccountId,
+			investor_ids: BoundedVec<T::AccountId, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
+			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
 			ensure!(T::Pools::pool_exists(pool_id), Error::<T>::PoolOrTrancheNotFound);
 			ensure!(
 				T::Pools::deposit_settlement_mode(pool_id) == Some(SettlementMode::Approval),
@@ -363,14 +384,14 @@ pub mod pallet {
 
 			for investor_id in investor_ids {
 				let Some(pending) =
-					PendingDepositOrders::<T>::take(tranche_id.clone(), investor_id)
+					PendingDepositOrders::<T>::take(tranche_id.clone(), &investor_id)
 				else {
 					continue;
 				};
 
 				let shares_to_mint = Self::assets_to_shares(pending.amount, epoch_price);
 
-				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), &investor_id, |entry| {
 					match entry {
 						Some(existing) => {
 							existing.amount = existing.amount.saturating_add(pending.amount);
@@ -411,9 +432,12 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Approval mode: pool admin approves a batch of pending redeem orders during
+		/// Approval mode: pool borrower approves a batch of pending redeem orders during
 		/// the settlement window.
 		///
+		/// `borrower` must hold the Borrower role for `pool_id`; the address is forwarded
+		/// from the originating EVM call so the pallet can verify it independently of the
+		/// Gateway caller.
 		/// Moves each investor's entry from `PendingRedeemOrders` to `ApprovedRedeemOrders`.
 		/// Investors without a pending order are silently skipped.
 		/// The Gateway smart contract observes the `RedeemOrderApproved` events and sends
@@ -424,9 +448,11 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_ids: BoundedVec<H160, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
+			borrower: T::AccountId,
+			investor_ids: BoundedVec<T::AccountId, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
+			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
 			ensure!(T::Pools::pool_exists(pool_id), Error::<T>::PoolOrTrancheNotFound);
 			ensure!(
 				T::Pools::redeem_settlement_mode(pool_id) == Some(SettlementMode::Approval),
@@ -441,7 +467,7 @@ pub mod pallet {
 			// arithmetic, so the check must cover the full batch.
 			let expected_total_payout =
 				investor_ids.iter().fold(U256::zero(), |acc, investor_id| {
-					PendingRedeemOrders::<T>::get(tranche_id.clone(), *investor_id)
+					PendingRedeemOrders::<T>::get(tranche_id.clone(), investor_id)
 						.map_or(acc, |p| {
 							acc.saturating_add(Self::shares_to_assets(p.amount, epoch_price))
 						})
@@ -458,14 +484,15 @@ pub mod pallet {
 			let mut total_payout = U256::zero();
 
 			for investor_id in investor_ids {
-				let Some(pending) = PendingRedeemOrders::<T>::take(tranche_id.clone(), investor_id)
+				let Some(pending) =
+					PendingRedeemOrders::<T>::take(tranche_id.clone(), &investor_id)
 				else {
 					continue;
 				};
 
 				let payout = Self::shares_to_assets(pending.amount, epoch_price);
 
-				ApprovedRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
+				ApprovedRedeemOrders::<T>::mutate(tranche_id.clone(), &investor_id, |entry| {
 					match entry {
 						Some(existing) => {
 							existing.shares_redeemed =
@@ -517,22 +544,26 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
 			);
+			ensure!(
+				T::Permissions::is_tranche_investor(&tranche_id, &investor_id),
+				Error::<T>::NotWhitelisted
+			);
 
-			let claimable = ClaimableDepositOrders::<T>::take(tranche_id.clone(), investor_id)
+			let claimable = ClaimableDepositOrders::<T>::take(tranche_id.clone(), &investor_id)
 				.ok_or(Error::<T>::NoClaimableDeposit)?;
 
 			let now = Self::current_block();
 
 			ApprovedDepositOrders::<T>::mutate(
 				tranche_id.clone(),
-				investor_id,
+				&investor_id,
 				|entry| match entry {
 					Some(existing) => {
 						existing.amount = existing.amount.saturating_add(claimable.amount);
@@ -574,22 +605,26 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			pool_id: PoolId,
 			tranche_id: TrancheId,
-			investor_id: H160,
+			investor_id: T::AccountId,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
 			);
+			ensure!(
+				T::Permissions::is_tranche_investor(&tranche_id, &investor_id),
+				Error::<T>::NotWhitelisted
+			);
 
-			let claimable = ClaimableRedeemOrders::<T>::take(tranche_id.clone(), investor_id)
+			let claimable = ClaimableRedeemOrders::<T>::take(tranche_id.clone(), &investor_id)
 				.ok_or(Error::<T>::NoClaimableRedeem)?;
 
 			let now = Self::current_block();
 
 			ApprovedRedeemOrders::<T>::mutate(
 				tranche_id.clone(),
-				investor_id,
+				&investor_id,
 				|entry| match entry {
 					Some(existing) => {
 						existing.shares_redeemed =

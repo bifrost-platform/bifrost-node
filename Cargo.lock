@@ -8239,6 +8239,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-permissions"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-pools",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-pools"
 version = "1.0.0"
 dependencies = [
