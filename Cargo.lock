@@ -9447,6 +9447,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-permissions"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-permissions",
+ "pallet-pools",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-pools"
 version = "1.0.0"
 dependencies = [

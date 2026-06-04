@@ -24,6 +24,7 @@ members = [
 	"pallets/rwa/pallet-investments",
 	"pallets/rwa/pallet-permissions",
 	"precompiles/investments",
+	"precompiles/permissions",
 	"precompiles/pools",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
@@ -129,6 +130,7 @@ precompile-btc-socket-queue = { default-features = false, path = "precompiles/bt
 precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
 precompile-investments = { default-features = false, path = "precompiles/investments" }
+precompile-permissions = { default-features = false, path = "precompiles/permissions" }
 precompile-pools = { default-features = false, path = "precompiles/pools" }
 
 # Substrate Client
