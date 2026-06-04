@@ -91,8 +91,10 @@ pub mod pallet {
 		///
 		/// Authorization:
 		/// - `Role::PoolAdmin` → caller must be sudo (root).
-		/// - `Role::Borrower` | `Role::OracleFeeder` | `Role::TrancheInvestor`
+		/// - `Role::OracleFeeder` | `Role::TrancheInvestor`
 		///   → caller must hold `PoolAdmin` for the given pool.
+		///
+		/// `Role::Borrower` cannot be granted here; it is set atomically by `create_pool`.
 		#[pallet::call_index(0)]
 		#[pallet::weight(Weight::from_parts(5_000, 0))]
 		pub fn grant_permission(
@@ -142,8 +144,10 @@ pub mod pallet {
 		///
 		/// Authorization:
 		/// - `Role::PoolAdmin` → caller must be sudo (root).
-		/// - `Role::Borrower` | `Role::OracleFeeder` | `Role::TrancheInvestor`
+		/// - `Role::OracleFeeder` | `Role::TrancheInvestor`
 		///   → caller must hold `PoolAdmin` for the given pool.
+		///
+		/// `Role::Borrower` cannot be revoked here; it is tied to the pool lifecycle.
 		#[pallet::call_index(1)]
 		#[pallet::weight(Weight::from_parts(5_000, 0))]
 		pub fn revoke_permission(
@@ -164,6 +168,12 @@ pub mod pallet {
 						Error::<T>::NotPoolAdmin
 					);
 				},
+			}
+			if let Role::TrancheInvestor(tranche_id) = &role {
+				ensure!(
+					T::Pools::tranche_exists(pool_id, tranche_id.clone()),
+					Error::<T>::PoolOrTrancheNotFound
+				);
 			}
 			ensure!(Self::has_role(pool_id, &who, &role), Error::<T>::NotGranted);
 			Self::remove_role(pool_id, &who, &role);
