@@ -39,6 +39,11 @@ pub const SECONDS_PER_YEAR: u32 = 365 * 24 * 3600;
 /// from causing `accrued_nav` to overflow in a small number of epochs.
 pub const MAX_APR: Rate = FixedU128::from_u32(1);
 
+/// 1.0 in 18-decimal WAD format (10^18).
+/// NAV oracle feeders submit prices in this format:
+/// `price = asset_value_per_share * 10^18` (both assets and shares use 18 decimals).
+pub const WAD: U256 = U256([1_000_000_000_000_000_000u64, 0, 0, 0]);
+
 // ---------------------------------------------------------------------------
 // TrancheId
 // ---------------------------------------------------------------------------
@@ -142,8 +147,9 @@ pub struct Tranche {
 	/// Aggregate pending invest/redeem orders for the current epoch.
 	pub pending_orders: TranchePendingOrders,
 	/// Token price locked at the start of the settlement window, derived from the finalized NAV.
-	/// None outside the settlement window. Reset to None when the epoch advances.
-	pub epoch_price: Option<FixedU128>,
+	/// Stored in WAD format (10^18 = 1.0). None outside the settlement window.
+	/// Reset to None when the epoch advances.
+	pub epoch_price: Option<U256>,
 	/// Running accrued NAV for senior tranches.
 	/// Grows by settled deposit amounts, shrinks by redeem payouts, and is compounded
 	/// by `interest_rate_per_sec^elapsed_secs` at each epoch-open.
@@ -152,17 +158,15 @@ pub struct Tranche {
 }
 
 impl Tranche {
-	/// Token price = tranche_nav / token_supply.
+	/// Token price = tranche_nav / token_supply, in WAD format (10^18 = 1.0).
 	///
 	/// `tranche_nav` is this tranche's share of total pool value after the waterfall split
-	/// (oracle NAV + all treasury liquidity). Returns ONE when no tokens are outstanding.
-	pub fn token_price(&self, tranche_nav: U256) -> FixedU128 {
-		let supply: u128 = self.token_supply.try_into().unwrap_or(u128::MAX);
-		if supply == 0 {
-			return FixedU128::one();
+	/// (oracle NAV + all treasury liquidity). Returns WAD (1.0) when no tokens are outstanding.
+	pub fn token_price(&self, tranche_nav: U256) -> U256 {
+		if self.token_supply.is_zero() {
+			return WAD;
 		}
-		let nav: u128 = tranche_nav.try_into().unwrap_or(u128::MAX);
-		FixedU128::from_rational(nav, supply)
+		tranche_nav.saturating_mul(WAD).checked_div(self.token_supply).unwrap_or(WAD)
 	}
 
 	/// Compound-accrue `accrued_nav` for `elapsed_secs` seconds. No-op for junior tranches.
@@ -360,8 +364,8 @@ pub trait PoolInspect {
 	fn deposit_cap_exceeded(pool_id: PoolId, tranche_id: TrancheId, amount: U256) -> bool;
 	/// Returns `invested - borrowed` for the tranche — assets available to cover redemptions.
 	fn treasury_liquidity(pool_id: PoolId, tranche_id: TrancheId) -> U256;
-	/// Returns the token price locked at settlement start for this tranche, if finalized.
-	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<FixedU128>;
+	/// Returns the token price (WAD format) locked at settlement start for this tranche, if finalized.
+	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<U256>;
 	/// Returns the current Gateway EVM contract address stored on-chain.
 	/// Both precompiles read this to verify the EVM-level caller before dispatching.
 	fn gateway_address() -> H160;
@@ -387,7 +391,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
-		epoch_price: FixedU128,
+		epoch_price: U256,
 	) -> Result<Balance, DispatchError>;
 
 	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`
@@ -408,7 +412,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
 		max_liquidity: Balance,
-		epoch_price: FixedU128,
+		epoch_price: U256,
 	) -> Result<(Balance, Balance), DispatchError>;
 }
 

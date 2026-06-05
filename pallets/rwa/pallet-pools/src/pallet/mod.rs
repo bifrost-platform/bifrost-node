@@ -9,7 +9,7 @@ use crate::{
 use frame_support::{pallet_prelude::*, traits::StorageVersion, traits::UnixTime};
 use frame_system::pallet_prelude::*;
 use sp_core::{H160, U256};
-use sp_runtime::{DispatchError, FixedU128};
+use sp_runtime::DispatchError;
 use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 
 #[frame_support::pallet]
@@ -250,7 +250,7 @@ pub mod pallet {
 							for (tranche_id, tranche) in pool.tranches.iter_mut() {
 								if !tranche.pending_orders.deposit.is_zero() {
 									let epoch_price =
-										tranche.epoch_price.unwrap_or(FixedU128::one());
+										tranche.epoch_price.unwrap_or(crate::WAD);
 									if let Ok(confirmed) = T::Investments::settle_deposit_orders(
 										pool_id,
 										tranche_id.clone(),
@@ -280,7 +280,7 @@ pub mod pallet {
 									&& !tranche.pending_orders.redeem.is_zero()
 								{
 									let epoch_price =
-										tranche.epoch_price.unwrap_or(FixedU128::one());
+										tranche.epoch_price.unwrap_or(crate::WAD);
 									if let Ok((tokens_settled, asset_payout)) =
 										T::Investments::settle_redeem_orders(
 											pool_id,

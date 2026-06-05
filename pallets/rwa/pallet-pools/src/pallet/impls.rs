@@ -1,7 +1,7 @@
 use crate::{EpochId, PoolId, PoolInspect, TrancheId, TrancheMutate};
 use frame_support::traits::UnixTime;
 use sp_core::{H160, U256};
-use sp_runtime::{DispatchError, FixedU128};
+use sp_runtime::DispatchError;
 
 use super::pallet::*;
 
@@ -50,7 +50,7 @@ impl<T: Config> PoolInspect for Pallet<T> {
 			.unwrap_or_default()
 	}
 
-	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<FixedU128> {
+	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<U256> {
 		Pools::<T>::get(pool_id)
 			.and_then(|pool| pool.tranches.get(&tranche_id).cloned())
 			.and_then(|tranche| tranche.epoch_price)

@@ -1,8 +1,8 @@
 use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, PendingRedeemOrder};
 
-use pallet_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate};
+use pallet_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate, WAD};
 use sp_core::U256;
-use sp_runtime::{DispatchError, FixedPointNumber, FixedU128};
+use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
 
 use super::pallet::*;
@@ -14,19 +14,15 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Converts a deposit asset amount to tranche shares at the given epoch price.
-	/// shares = assets * accuracy / price_inner
-	pub(crate) fn assets_to_shares(assets: U256, price: FixedU128) -> U256 {
-		let price_inner = U256::from(price.into_inner());
-		if price_inner.is_zero() {
-			return assets;
-		}
-		assets.saturating_mul(U256::from(FixedU128::accuracy())) / price_inner
+	/// shares = floor(assets * WAD / price)
+	pub(crate) fn assets_to_shares(assets: U256, price: U256) -> U256 {
+		assets.saturating_mul(WAD).checked_div(price).unwrap_or(U256::zero())
 	}
 
 	/// Converts a tranche share amount to deposit assets at the given epoch price.
-	/// assets = shares * price_inner / accuracy
-	pub(crate) fn shares_to_assets(shares: U256, price: FixedU128) -> U256 {
-		shares.saturating_mul(U256::from(price.into_inner())) / U256::from(FixedU128::accuracy())
+	/// assets = floor(shares * price / WAD)
+	pub(crate) fn shares_to_assets(shares: U256, price: U256) -> U256 {
+		shares.saturating_mul(price).checked_div(WAD).unwrap_or(U256::zero())
 	}
 }
 
@@ -41,7 +37,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
-		epoch_price: FixedU128,
+		epoch_price: U256,
 	) -> Result<U256, DispatchError> {
 		let entries: Vec<(T::AccountId, PendingDepositOrder)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
@@ -116,7 +112,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
 		max_liquidity: U256,
-		epoch_price: FixedU128,
+		epoch_price: U256,
 	) -> Result<(U256, U256), DispatchError> {
 		let entries: Vec<(T::AccountId, PendingRedeemOrder)> =
 			PendingRedeemOrders::<T>::iter_prefix(&tranche_id).collect();
@@ -179,9 +175,14 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 				asset_payout_total = asset_payout_total.saturating_add(payout);
 			}
 		} else {
-			// Partial fill — each investor receives floor(tokens * max_liquidity / total_payout).
+			// Partial fill — pro-rata in share space.
+			// Converting max_liquidity to shares (one floor, conservative direction) and dividing
+			// by total_tokens (exact integer) avoids the unsafe double-floor from using the
+			// floored total_payout as a denominator, which could cause Σ payout > max_liquidity.
+			let max_shares_fillable = Self::assets_to_shares(max_liquidity, epoch_price);
 			for (investor_id, order) in &entries {
-				let tokens_confirmed = order.amount.saturating_mul(max_liquidity) / total_payout;
+				let tokens_confirmed =
+					order.amount.saturating_mul(max_shares_fillable) / total_tokens;
 				let tokens_remainder = order.amount.saturating_sub(tokens_confirmed);
 
 				if !tokens_confirmed.is_zero() {
