@@ -55,7 +55,6 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param investor_id   investor address on the external chain
 	/// @param amount        USDC amount to deposit
-	#[precompile::public("submitDepositOrder(uint64,uint64,address,address,uint256)")]
 	#[precompile::public("submit_deposit_order(uint64,uint64,address,address,uint256)")]
 	fn submit_deposit_order(
 		handle: &mut impl PrecompileHandle,
@@ -113,7 +112,6 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param investor_id   investor address on the external chain
 	/// @param amount        tranche token amount to redeem
-	#[precompile::public("submitRedeemOrder(uint64,uint64,address,address,uint256)")]
 	#[precompile::public("submit_redeem_order(uint64,uint64,address,address,uint256)")]
 	fn submit_redeem_order(
 		handle: &mut impl PrecompileHandle,
@@ -171,7 +169,7 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param borrower      EVM address of the institution approving the orders
 	/// @param investor_ids  list of investor addresses to approve (max 100)
-	#[precompile::public("approveDepositOrders(uint64,uint64,address,address,address[])")]
+	#[precompile::public("approve_deposit_orders(uint64,uint64,address,address,address[])")]
 	fn approve_deposit_orders(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -235,7 +233,7 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param borrower      EVM address of the institution approving the orders
 	/// @param investor_ids  list of investor addresses to approve (max 100)
-	#[precompile::public("approveRedeemOrders(uint64,uint64,address,address,address[])")]
+	#[precompile::public("approve_redeem_orders(uint64,uint64,address,address,address[])")]
 	fn approve_redeem_orders(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -302,7 +300,7 @@ where
 	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param investor_id   investor address on the external chain
-	#[precompile::public("claimShares(uint64,uint64,address,address)")]
+	#[precompile::public("claim_shares(uint64,uint64,address,address)")]
 	fn claim_shares(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -368,7 +366,7 @@ where
 	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param investor_id   investor address on the external chain
-	#[precompile::public("claimAssets(uint64,uint64,address,address)")]
+	#[precompile::public("claim_assets(uint64,uint64,address,address)")]
 	fn claim_assets(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,

@@ -26,12 +26,14 @@ interface Investments {
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
+        address borrower,
         address investor_id
     );
     event RedeemOrderApproved(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
+        address borrower,
         address investor_id
     );
     event SharesClaimed(
@@ -51,15 +53,16 @@ interface Investments {
 
     /**
      * @notice Submit a pending deposit order for epoch settlement.
-     * @dev Accumulates the USDC amount into PendingDepositOrders storage.
-     *      Emits DepositOrderSubmitted on the substrate side.
+     * @dev Only callable by the Gateway contract.
+     *      Accumulates the USDC amount into PendingDepositOrders storage.
+     *      Emits DepositOrderSubmitted on success.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param investor_id   Investor address on the external chain
      * @param amount        USDC amount to deposit (18-decimal U256)
      */
-    function submitDepositOrder(
+    function submit_deposit_order(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
@@ -69,15 +72,16 @@ interface Investments {
 
     /**
      * @notice Submit a pending redeem order for epoch settlement.
-     * @dev Accumulates the tranche token amount into PendingRedeemOrders storage.
-     *      Emits RedeemOrderSubmitted on the substrate side.
+     * @dev Only callable by the Gateway contract.
+     *      Accumulates the tranche token amount into PendingRedeemOrders storage.
+     *      Emits RedeemOrderSubmitted on success.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param investor_id   Investor address on the external chain
      * @param amount        Tranche token amount to redeem (18-decimal U256)
      */
-    function submitRedeemOrder(
+    function submit_redeem_order(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
@@ -86,51 +90,57 @@ interface Investments {
     ) external;
 
     /**
-     * @notice Approve a selected set of investors' pending deposit orders.
-     * @dev Settlement window must be open. Converts USDC amounts to tokens-to-mint
+     * @notice Approve a selected set of investors' pending deposit orders (Approval mode).
+     * @dev Only callable by the Gateway contract.
+     *      Settlement window must be open. Converts USDC amounts to tokens-to-mint
      *      at the locked epoch price and moves entries to ApprovedDepositOrders.
-     *      Emits DepositOrderConfirmed per investor.
+     *      Emits DepositOrderApproved per investor.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
+     * @param borrower      EVM address of the institution approving the orders
      * @param investor_ids  Investor addresses to approve (max 100)
      */
-    function approveDepositOrders(
+    function approve_deposit_orders(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
+        address borrower,
         address[] calldata investor_ids
     ) external;
 
     /**
-     * @notice Approve a selected set of investors' pending redeem orders.
-     * @dev Settlement window must be open. Converts token amounts to USDC-to-distribute
+     * @notice Approve a selected set of investors' pending redeem orders (Approval mode).
+     * @dev Only callable by the Gateway contract.
+     *      Settlement window must be open. Converts token amounts to USDC-to-distribute
      *      at the locked epoch price and moves entries to ApprovedRedeemOrders.
-     *      Emits RedeemOrderConfirmed per investor.
+     *      Emits RedeemOrderApproved per investor.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
+     * @param borrower      EVM address of the institution approving the orders
      * @param investor_ids  Investor addresses to approve (max 100)
      */
-    function approveRedeemOrders(
+    function approve_redeem_orders(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
+        address borrower,
         address[] calldata investor_ids
     ) external;
 
     /**
      * @notice Automatic mode: claim settled deposit shares for an investor.
-     * @dev Moves the investor's entry from ClaimableDepositOrders to
-     *      ApprovedDepositOrders. Called by the Gateway when a
-     *      requestTrancheClaim() message for a deposit arrives from the spoke chain.
-     *      Emits DepositClaimed on the substrate side.
+     * @dev Only callable by the Gateway contract.
+     *      Moves the investor's entry from ClaimableDepositOrders to
+     *      ApprovedDepositOrders so the Gateway can send the mint instruction.
+     *      Emits SharesClaimed on success.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param investor_id   Investor address on the external chain
      */
-    function claimShares(
+    function claim_shares(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
@@ -139,16 +149,16 @@ interface Investments {
 
     /**
      * @notice Automatic mode: claim settled redemption assets for an investor.
-     * @dev Moves the investor's entry from ClaimableRedeemOrders to
-     *      ApprovedRedeemOrders. Called by the Gateway when a
-     *      requestTrancheClaim() message for a redemption arrives from the spoke chain.
-     *      Emits RedeemClaimed on the substrate side.
+     * @dev Only callable by the Gateway contract.
+     *      Moves the investor's entry from ClaimableRedeemOrders to
+     *      ApprovedRedeemOrders so the Gateway can send the payout instruction.
+     *      Emits AssetsClaimed on success.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param investor_id   Investor address on the external chain
      */
-    function claimAssets(
+    function claim_assets(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,

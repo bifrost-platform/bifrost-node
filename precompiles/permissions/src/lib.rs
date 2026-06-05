@@ -62,7 +62,7 @@ where
 	/// @param chain_id      EVM chain ID where the vault is deployed
 	/// @param vault_address ERC-7540 vault contract address on the Spoke chain
 	/// @param investor_id   Investor address to whitelist
-	#[precompile::public("addTrancheInvestor(uint64,uint64,address,address)")]
+	#[precompile::public("add_tranche_investor(uint64,uint64,address,address)")]
 	fn add_tranche_investor(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -122,7 +122,7 @@ where
 	/// @param chain_id      EVM chain ID where the vault is deployed
 	/// @param vault_address ERC-7540 vault contract address on the Spoke chain
 	/// @param investor_id   Investor address to remove
-	#[precompile::public("removeTrancheInvestor(uint64,uint64,address,address)")]
+	#[precompile::public("remove_tranche_investor(uint64,uint64,address,address)")]
 	fn remove_tranche_investor(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -195,7 +195,7 @@ where
 
 		let mut input: Vec<u8> = Vec::with_capacity(4 + 96);
 		input.extend_from_slice(&selector_full[..4]);
-		input.extend_from_slice(&solidity::encode_event_data((
+		input.extend_from_slice(&solidity::encode_arguments((
 			U256::from(chain_id),
 			Address(vault_address),
 			Address(investor_id),

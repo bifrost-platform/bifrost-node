@@ -26,6 +26,11 @@ pub mod pallet {
 	pub enum Origin {
 		/// Dispatched by the pools precompile on behalf of the Gateway contract.
 		Gateway,
+		/// Dispatched by the pools precompile on behalf of a Pool Admin EOA.
+		/// Used to ensure `create_pool` can only be called through the precompile,
+		/// guaranteeing the Gateway vault-deployment message is always sent alongside
+		/// the Hub state change.
+		PoolAdmin,
 	}
 
 	#[pallet::config]
@@ -34,6 +39,11 @@ pub mod pallet {
 		/// Wire as `pallet_pools::EnsureGateway` in the runtime so that only the
 		/// pools precompile (called by the Gateway contract) can invoke those extrinsics.
 		type GatewayOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
+		/// Only accepted origin for `create_pool`.
+		/// Wire as `pallet_pools::EnsurePoolAdmin` in the runtime so that only the
+		/// pools precompile can invoke that extrinsic, ensuring the Gateway message
+		/// that deploys Spoke-chain vaults is always sent alongside the Hub state change.
+		type PoolAdminOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
 		/// Order settlement — implemented by pallet-investments.
 		/// Called during `on_initialize` to settle pending deposit and redeem orders when
 		/// epochs advance in Automatic mode.
@@ -338,11 +348,13 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Create a new RWA pool.
 		///
-		/// Caller must hold the `PoolAdmin` role for `pool_id` (granted by sudo in advance).
+		/// Must be called through the pools precompile — direct extrinsic submission is rejected.
+		/// The precompile also dispatches a Gateway vault-deployment message to the Spoke chain,
+		/// so bypassing it would leave the pool with no deployed vaults.
+		///
+		/// `pool_admin` must hold the `PoolAdmin` role for `pool_id` (granted by sudo in advance).
 		/// `pool_id` is caller-specified; returns `PoolAlreadyExists` if already taken.
 		/// `collaterals` must contain at least one NFT; each must not already be registered.
-		/// `tranches` must end with exactly one junior tranche, preceded by seniors.
-		///
 		/// `settlement_offset_secs` is how many seconds before epoch end the settlement window
 		/// opens. During this window new orders are rejected.
 		#[pallet::call_index(0)]
@@ -350,6 +362,7 @@ pub mod pallet {
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
+			pool_admin: T::AccountId,
 			borrower: T::AccountId,
 			collaterals: BoundedVec<CollateralAsset, ConstU32<MAX_COLLATERALS>>,
 			epoch_length_secs: u64,
@@ -358,8 +371,8 @@ pub mod pallet {
 			redeem_settlement: SettlementMode,
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			ensure!(T::Permissions::is_pool_admin(pool_id, &caller), Error::<T>::Unauthorized);
+			T::PoolAdminOrigin::ensure_origin(origin)?;
+			ensure!(T::Permissions::is_pool_admin(pool_id, &pool_admin), Error::<T>::Unauthorized);
 			ensure!(!Pools::<T>::contains_key(pool_id), Error::<T>::PoolAlreadyExists);
 			ensure!(!collaterals.is_empty(), Error::<T>::MissingCollateral);
 			ensure!(

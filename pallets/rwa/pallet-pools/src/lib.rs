@@ -525,6 +525,7 @@ where
 	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
 		match o.into() {
 			Ok(Origin::Gateway) => Ok(()),
+			Ok(other) => Err(OuterOrigin::from(other)), // reject other pallet origins (e.g. PoolAdmin)
 			Err(o) => Err(o),
 		}
 	}
@@ -532,5 +533,29 @@ where
 	#[cfg(feature = "runtime-benchmarks")]
 	fn try_successful_origin() -> Result<OuterOrigin, ()> {
 		Ok(OuterOrigin::from(Origin::Gateway))
+	}
+}
+
+/// `EnsureOrigin` that accepts only the `PoolAdmin` pallet origin.
+/// The pools precompile creates this origin before dispatching to `create_pool`.
+/// Wire as `type PoolAdminOrigin = pallet_pools::EnsurePoolAdmin` in the runtime.
+pub struct EnsurePoolAdmin;
+
+impl<OuterOrigin> EnsureOrigin<OuterOrigin> for EnsurePoolAdmin
+where
+	OuterOrigin: Into<Result<Origin, OuterOrigin>> + From<Origin>,
+{
+	type Success = ();
+	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
+		match o.into() {
+			Ok(Origin::PoolAdmin) => Ok(()),
+			Ok(other) => Err(OuterOrigin::from(other)), // reject other pallet origins (e.g. Gateway)
+			Err(o) => Err(o),
+		}
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<OuterOrigin, ()> {
+		Ok(OuterOrigin::from(Origin::PoolAdmin))
 	}
 }
