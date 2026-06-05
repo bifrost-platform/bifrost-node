@@ -390,11 +390,11 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 		epoch_price: FixedU128,
 	) -> Result<Balance, DispatchError>;
 
-	/// Pro-rata settle pending redeem orders for a tranche up to `max_asset_payout`
+	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`
 	/// (the tranche's available treasury liquidity).
 	///
-	/// If total asset value owed <= `max_asset_payout`, all orders are settled in full.
-	/// If total asset value owed > `max_asset_payout`, each order is scaled proportionally
+	/// If total payout owed <= `max_liquidity`, all orders are settled in full.
+	/// If total payout owed > `max_liquidity`, each order is scaled proportionally
 	/// and the remainder stays in `PendingRedeemOrders` for the next epoch.
 	///
 	/// Settled orders move to `ClaimableRedeemOrders`; investors pull-claim via
@@ -407,7 +407,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
-		max_asset_payout: Balance,
+		max_liquidity: Balance,
 		epoch_price: FixedU128,
 	) -> Result<(Balance, Balance), DispatchError>;
 }

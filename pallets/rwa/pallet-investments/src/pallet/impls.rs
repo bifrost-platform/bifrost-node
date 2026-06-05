@@ -104,7 +104,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		Ok(total)
 	}
 
-	/// Pro-rata settle pending redeem orders for a tranche up to `max_asset_payout`
+	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`
 	/// (the tranche's available treasury liquidity).
 	///
 	/// Settled orders move to `ClaimableRedeemOrders`.
@@ -115,7 +115,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
-		max_asset_payout: U256,
+		max_liquidity: U256,
 		epoch_price: FixedU128,
 	) -> Result<(U256, U256), DispatchError> {
 		let entries: Vec<(T::AccountId, PendingRedeemOrder)> =
@@ -132,7 +132,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 			return Ok((U256::zero(), U256::zero()));
 		}
 
-		let total_asset_owed = Self::shares_to_assets(total_tokens, epoch_price);
+		let total_payout = Self::shares_to_assets(total_tokens, epoch_price);
 
 		// Clear all pending; partial-fill remainders are re-inserted below.
 		let _ = PendingRedeemOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
@@ -142,7 +142,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let mut tokens_settled_total = U256::zero();
 		let mut asset_payout_total = U256::zero();
 
-		if total_asset_owed <= max_asset_payout {
+		if total_payout <= max_liquidity {
 			// Full fill — settle every investor's order as-is.
 			for (investor_id, order) in &entries {
 				let payout = Self::shares_to_assets(order.amount, epoch_price);
@@ -179,10 +179,9 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 				asset_payout_total = asset_payout_total.saturating_add(payout);
 			}
 		} else {
-			// Partial fill — each investor receives floor(tokens * max_asset_payout / total_asset_owed).
+			// Partial fill — each investor receives floor(tokens * max_liquidity / total_payout).
 			for (investor_id, order) in &entries {
-				let tokens_confirmed =
-					order.amount.saturating_mul(max_asset_payout) / total_asset_owed;
+				let tokens_confirmed = order.amount.saturating_mul(max_liquidity) / total_payout;
 				let tokens_remainder = order.amount.saturating_sub(tokens_confirmed);
 
 				if !tokens_confirmed.is_zero() {

@@ -272,11 +272,11 @@ pub mod pallet {
 
 						if pool.redeem_settlement == SettlementMode::Automatic {
 							for (tranche_id, tranche) in pool.tranches.iter_mut() {
-								let max_asset_payout = pre_deposit_liquidity
+								let max_liquidity = pre_deposit_liquidity
 									.get(tranche_id)
 									.copied()
 									.unwrap_or_default();
-								if !max_asset_payout.is_zero()
+								if !max_liquidity.is_zero()
 									&& !tranche.pending_orders.redeem.is_zero()
 								{
 									let epoch_price =
@@ -286,7 +286,7 @@ pub mod pallet {
 											pool_id,
 											tranche_id.clone(),
 											pool.epoch.current_epoch,
-											max_asset_payout,
+											max_liquidity,
 											epoch_price,
 										) {
 										tranche.invested =
