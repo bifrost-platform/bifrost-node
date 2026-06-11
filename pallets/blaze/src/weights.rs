@@ -124,19 +124,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Each message triggers a `verify_socket_message` call that reads `Authority` and `Socket`,
 	/// plus an EVM contract call for on-chain validation. Message bytes incur additional cost
 	/// from cloning, SCALE decoding/encoding, and keccak256 hashing.
+	/// Sized so that at most 5 worst-case calls (n=10, total_msg_bytes=20480) fit per block
+	/// (Normal class budget: 375_000_000_000; target per call: 75_000_000_000).
 	fn submit_outbound_requests(n: u32, total_msg_bytes: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `1485`
 		// Minimum execution time: 18_800_000 picoseconds.
-		Weight::from_parts(19_410_000, 0)
+		Weight::from_parts(60_000_000_000, 0)
 			// base: OutboundPool read + write
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 			// per message: Authority + Socket reads for verify_socket_message
 			.saturating_add(T::DbWeight::get().reads(2_u64.saturating_mul(n as u64)))
 			// per byte: clone, SCALE decode/encode, keccak256 hashing, storage encoding
-			.saturating_add(Weight::from_parts(1_500_u64.saturating_mul(total_msg_bytes as u64), 0))
+			.saturating_add(Weight::from_parts(700_000_u64.saturating_mul(total_msg_bytes as u64), 0))
 	}
 	/// Storage: `Blaze::IsActivated` (r:1 w:0)
 	/// Proof: `Blaze::IsActivated` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
@@ -246,19 +248,21 @@ impl WeightInfo for () {
 	/// Each message triggers a `verify_socket_message` call that reads `Authority` and `Socket`,
 	/// plus an EVM contract call for on-chain validation. Message bytes incur additional cost
 	/// from cloning, SCALE decoding/encoding, and keccak256 hashing.
+	/// Sized so that at most 5 worst-case calls (n=10, total_msg_bytes=20480) fit per block
+	/// (Normal class budget: 375_000_000_000; target per call: 75_000_000_000).
 	fn submit_outbound_requests(n: u32, total_msg_bytes: u32) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `0`
 		//  Estimated: `1485`
 		// Minimum execution time: 18_800_000 picoseconds.
-		Weight::from_parts(19_410_000, 0)
+		Weight::from_parts(60_000_000_000, 0)
 			// base: OutboundPool read + write
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 			// per message: Authority + Socket reads for verify_socket_message
 			.saturating_add(RocksDbWeight::get().reads(2_u64.saturating_mul(n as u64)))
 			// per byte: clone, SCALE decode/encode, keccak256 hashing, storage encoding
-			.saturating_add(Weight::from_parts(1_500_u64.saturating_mul(total_msg_bytes as u64), 0))
+			.saturating_add(Weight::from_parts(700_000_u64.saturating_mul(total_msg_bytes as u64), 0))
 	}
 	/// Storage: `Blaze::IsActivated` (r:1 w:0)
 	/// Proof: `Blaze::IsActivated` (`max_values`: Some(1), `max_size`: Some(1), added: 496, mode: `MaxEncodedLen`)
