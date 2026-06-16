@@ -10,7 +10,7 @@
     "experimentalDecorators": true,
     "forceConsistentCasingInFileNames": true,
     "lib": [
-      "es2017",
+      "es2020",
       "esnext.asynciterable"
     ],
     "module": "esnext",
@@ -21,7 +21,7 @@
     "removeComments": true,
     "resolveJsonModule": true,
     "sourceMap": true,
-    "target": "es2017",
+    "target": "es2020",
     "outDir": "build",
     "moduleResolution": "node",
     "strict": true,

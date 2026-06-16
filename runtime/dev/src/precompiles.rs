@@ -66,17 +66,9 @@ pub type BifrostPrecompilesAt<R> = (
 	>,
 );
 
-/// The PrecompileSet installed in the BIFROST runtime.
-/// We include the nine Istanbul precompiles
-/// (https://github.com/ethereum/go-ethereum/blob/3c46f557/core/vm/contracts.go#L69)
-/// as well as a special precompile for dispatching Substrate extrinsics
-/// The following distribution has been decided for the precompiles
-/// 0-1023: Ethereum Mainnet Precompiles
-/// 1024-8192 BIFROST Mainnet specific precompiles
-pub type BifrostPrecompiles<R> = PrecompileSetBuilder<
+type BifrostPrecompilesInner<R> = PrecompileSetBuilder<
 	R,
-	(
-		// Skip precompiles if out of range.
-		PrecompilesInRangeInclusive<(AddressU64<1>, AddressU64<8192>), BifrostPrecompilesAt<R>>,
-	),
+	(PrecompilesInRangeInclusive<(AddressU64<1>, AddressU64<8192>), BifrostPrecompilesAt<R>>,),
 >;
+
+bifrost_common_runtime::impl_bifrost_precompiles!(crate::Runtime, BifrostPrecompilesInner);
