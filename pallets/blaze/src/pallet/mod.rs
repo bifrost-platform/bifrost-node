@@ -117,6 +117,15 @@ pub mod pallet {
 	pub type Utxos<T: Config> = StorageMap<_, Twox64Concat, H256, Utxo<T::AccountId>>;
 
 	#[pallet::storage]
+	/// The number of unconfirmed UTXOs each relayer currently has pending.
+	/// Purpose: To prevent a single relayer from submitting too many UTXOs leading to storage growth.
+	///
+	/// Key: Relayer account id (original submitter)
+	/// Value: Count of unconfirmed UTXOs
+	pub type UnconfirmedUtxoCount<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, u32, ValueQuery>;
+
+	#[pallet::storage]
 	#[pallet::unbounded]
 	/// The UTXOs that are locked to a specific PSBT.
 	///
@@ -223,6 +232,12 @@ pub mod pallet {
 					// check if the utxo majority is reached
 					if u.voters.len() as u32 >= T::Relayers::majority() {
 						u.status = UtxoStatus::Available;
+						// decrement the original submitter's unconfirmed count
+						if let Some(submitter) = u.voters.first() {
+							<UnconfirmedUtxoCount<T>>::mutate(submitter, |c| {
+								*c = c.saturating_sub(1)
+							});
+						}
 					}
 					<Utxos<T>>::insert(&utxo_hash, u.clone());
 					Self::deposit_event(Event::UtxoSubmitted {
@@ -231,6 +246,12 @@ pub mod pallet {
 						status: u.status,
 					});
 				} else {
+					// enforce per-relayer unconfirmed UTXO cap
+					let count = <UnconfirmedUtxoCount<T>>::get(&authority_id);
+					if count >= crate::MAX_UNCONFIRMED_UTXOS_PER_RELAYER {
+						continue;
+					}
+
 					let voters = vec![authority_id.clone()];
 					let input_vbytes = if let Some(input_vbytes) =
 						estimate_finalized_input_size(&descriptor.script_code().unwrap(), None)
@@ -255,6 +276,7 @@ pub mod pallet {
 								.map_err(|_| Error::<T>::OutOfRange)?,
 						},
 					);
+					<UnconfirmedUtxoCount<T>>::insert(&authority_id, count + 1);
 					Self::deposit_event(Event::UtxoSubmitted {
 						authority_id: authority_id.clone(),
 						utxo_hash,
@@ -357,7 +379,10 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::submit_outbound_requests())]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_outbound_requests(
+			outbound_request_submission.messages.len() as u32,
+			outbound_request_submission.messages.iter().map(|m| m.len() as u32).sum::<u32>(),
+		))]
 		/// Submit Socket messages originated from a Bitcoin outbound request.
 		pub fn submit_outbound_requests(
 			origin: OriginFor<T>,

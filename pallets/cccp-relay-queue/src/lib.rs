@@ -15,6 +15,9 @@ use scale_info::TypeInfo;
 use sp_core::{ConstU32, RuntimeDebug, H160, H256, U256};
 use sp_runtime::BoundedVec;
 
+/// Maximum number of pending transfers a single relayer may have at any time.
+pub const MAX_PENDING_TRANSFERS_PER_RELAYER: u32 = 100;
+
 /// Chain ID type.
 pub type ChainId = u32;
 

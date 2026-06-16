@@ -159,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 506,
+	spec_version: 507,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -1114,6 +1114,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Blaze = Blaze;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
 }
 
 parameter_types! {
@@ -1121,6 +1122,7 @@ parameter_types! {
 	pub const BitcoinNetwork: Network = Network::Testnet;
 	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
 	pub const DefaultMaxFeeRate: u64 = 15;
+	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {

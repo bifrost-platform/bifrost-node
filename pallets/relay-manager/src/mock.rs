@@ -165,6 +165,10 @@ impl SocketQueueManager<AccountId> for MockSocketQueue {
 		Ok(())
 	}
 
+	fn verify_legacy_authority(_: &AccountId) -> Result<(), TransactionValidityError> {
+		Ok(())
+	}
+
 	fn replace_authority(_: &AccountId, _: &AccountId) {}
 
 	fn get_max_fee_rate() -> u64 {
@@ -178,6 +182,10 @@ impl SocketQueueManager<AccountId> for MockSocketQueue {
 impl SocketVerifier<AccountId> for MockSocketQueue {
 	fn verify_socket_message(_: &UnboundedBytes) -> Result<(), DispatchError> {
 		Ok(())
+	}
+
+	fn get_max_socket_message_bytes() -> u32 {
+		2 * 1024
 	}
 }
 

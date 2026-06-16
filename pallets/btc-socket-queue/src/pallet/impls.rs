@@ -95,6 +95,10 @@ where
 		}
 		Ok(())
 	}
+
+	fn get_max_socket_message_bytes() -> u32 {
+		<MaxSocketMessageBytes<T>>::get()
+	}
 }
 
 impl<T: Config> SocketQueueManager<T::AccountId> for Pallet<T> {
