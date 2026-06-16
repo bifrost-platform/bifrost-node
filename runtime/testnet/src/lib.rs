@@ -855,6 +855,7 @@ impl pallet_cccp_relay_queue::Config for Runtime {
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Relayers = RelayManager;
+	type SocketQueue = BtcSocketQueue;
 	type WeightInfo = pallet_cccp_relay_queue::weights::SubstrateWeight<Runtime>;
 }
 
