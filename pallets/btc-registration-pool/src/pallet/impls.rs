@@ -142,6 +142,10 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 		});
 	}
 
+	fn get_relay_executives(round: u32) -> Vec<T::AccountId> {
+		RelayExecutives::<T>::get(round)
+	}
+
 	fn process_set_refunds() {
 		let round = <CurrentRound<T>>::get();
 		<PendingSetRefunds<T>>::iter_prefix(round).for_each(|(who, state)| {

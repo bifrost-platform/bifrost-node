@@ -701,10 +701,6 @@ pub mod pallet {
 					);
 					Self::deposit_event(Event::MigrationStarted);
 					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
-					<RelayExecutives<T>>::insert(
-						CurrentRound::<T>::get(),
-						&T::Executives::sorted_members(),
-					);
 				},
 				MigrationSequence::SetExecutiveMembers => {
 					<ServiceState<T>>::put(MigrationSequence::PrepareNextSystemVault);
