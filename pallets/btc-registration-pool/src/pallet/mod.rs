@@ -30,7 +30,7 @@ use sp_std::{
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -147,6 +147,12 @@ pub mod pallet {
 	pub type CurrentRound<T: Config> = StorageValue<_, PoolRound, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
+	/// The relay executive members. Snapshot of the executive members for vault migration.
+	pub type RelayExecutives<T: Config> =
+		StorageMap<_, Twox64Concat, PoolRound, Vec<T::AccountId>, ValueQuery>;
+
+	#[pallet::storage]
 	/// The migration sequence of the registration pool.
 	pub type ServiceState<T: Config> = StorageValue<_, MigrationSequence, ValueQuery>;
 
@@ -253,7 +259,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+			migrations::v2::V2::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -695,6 +701,10 @@ pub mod pallet {
 					);
 					Self::deposit_event(Event::MigrationStarted);
 					<ServiceState<T>>::put(MigrationSequence::SetExecutiveMembers);
+					<RelayExecutives<T>>::insert(
+						CurrentRound::<T>::get(),
+						&T::Executives::sorted_members(),
+					);
 				},
 				MigrationSequence::SetExecutiveMembers => {
 					<ServiceState<T>>::put(MigrationSequence::PrepareNextSystemVault);
@@ -721,6 +731,10 @@ pub mod pallet {
 					<CurrentRound<T>>::mutate(|r| *r += 1);
 					<ServiceState<T>>::put(MigrationSequence::Normal);
 					<OngoingVaultMigration<T>>::put::<BTreeMap<H256, bool>>(Default::default());
+					<RelayExecutives<T>>::insert(
+						CurrentRound::<T>::get(),
+						&T::Executives::sorted_members(),
+					);
 				},
 			}
 

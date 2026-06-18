@@ -21,6 +21,14 @@ interface BtcRegistrationPool {
     /// @param refund_address The registered refund address.
     event VaultPending(address user_bfc_address, string refund_address);
 
+    /// @dev Returns the relay executives of the given round.
+    /// @custom:selector 6c657541
+    /// @param pool_round The round number.
+    /// @return The relay executives of the given round.
+    function relay_executives(
+        uint32 pool_round
+    ) external view returns (address[] memory);
+
     /// @dev Returns the current round number.
     /// @custom:selector 319c068c
     /// @return The current round number.
