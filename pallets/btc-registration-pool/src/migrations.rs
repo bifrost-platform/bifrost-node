@@ -1,5 +1,38 @@
 use super::*;
 
+pub mod v2 {
+	use super::*;
+	use core::marker::PhantomData;
+	use frame_support::{
+		traits::{Get, GetStorageVersion, OnRuntimeUpgrade, SortedMembers},
+		weights::Weight,
+	};
+
+	pub struct V2<T>(PhantomData<T>);
+
+	impl<T: Config> OnRuntimeUpgrade for V2<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let current = Pallet::<T>::in_code_storage_version();
+			let onchain = Pallet::<T>::on_chain_storage_version();
+
+			if current == 2 && onchain == 1 {
+				<RelayExecutives<T>>::insert(
+					CurrentRound::<T>::get(),
+					&T::Executives::sorted_members(),
+				);
+				current.put::<Pallet<T>>();
+				weight = weight.saturating_add(T::DbWeight::get().writes(1));
+				log!(info, "btc-registration-pool storage migration passes v2 update ✅");
+			} else {
+				log!(warn, "Skipping btc-registration-pool storage v2 💤");
+			}
+			weight
+		}
+	}
+}
+
 pub mod init_v1 {
 	use core::marker::PhantomData;
 

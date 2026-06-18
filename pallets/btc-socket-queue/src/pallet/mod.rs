@@ -1024,8 +1024,18 @@ pub mod pallet {
 				Call::submit_signed_psbt { msg, signature } => {
 					let SignedPsbtMessage { authority_id, signed_psbt, .. } = msg;
 
-					// verify if the authority is a relay executive member.
-					if !T::Executives::contains(&authority_id) {
+					// During UTXOTransfer the executive set may have rotated since the vault was
+					// built, so validate against the historical snapshot stored in the registration
+					// pool rather than the live T::Executives membership.
+					let is_valid_signer = if T::RegistrationPool::get_service_state()
+						== MigrationSequence::UTXOTransfer
+					{
+						let round = T::RegistrationPool::get_current_round();
+						T::RegistrationPool::get_relay_executives(round).contains(authority_id)
+					} else {
+						T::Executives::contains(authority_id)
+					};
+					if !is_valid_signer {
 						return InvalidTransaction::BadSigner.into();
 					}
 

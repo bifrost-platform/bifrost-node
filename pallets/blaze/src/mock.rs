@@ -184,6 +184,10 @@ impl PoolManager<AccountId> for MockPoolManager {
 
 	fn process_set_refunds() {}
 
+	fn get_relay_executives(_: u32) -> Vec<AccountId> {
+		vec![]
+	}
+
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_benchmark(_: &[AccountId], _: &AccountId) -> Result<(), DispatchError> {
 		Ok(())
