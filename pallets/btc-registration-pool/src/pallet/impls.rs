@@ -3,7 +3,7 @@ use bp_btc_relay::{
 	Address, AddressState, Descriptor, FromSliceError as KeyError, MigrationSequence,
 	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
-use frame_support::traits::SortedMembers;
+use frame_support::traits::{ChangeMembers, InitializeMembers, SortedMembers};
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::{
 	format,
@@ -140,6 +140,10 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 				});
 			}
 		});
+	}
+
+	fn get_relay_executives(round: u32) -> Vec<T::AccountId> {
+		RelayExecutives::<T>::get(round)
 	}
 
 	fn process_set_refunds() {
@@ -288,6 +292,28 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	fn set_service_state(state: MigrationSequence) -> Result<(), DispatchError> {
 		<ServiceState<T>>::put(state);
 		Ok(())
+	}
+}
+
+impl<T: Config> ChangeMembers<T::AccountId> for Pallet<T> {
+	fn change_members_sorted(
+		_incoming: &[T::AccountId],
+		_outgoing: &[T::AccountId],
+		new: &[T::AccountId],
+	) {
+		// During migration the new executives are for the upcoming round's vault,
+		// so write to current+1. In Normal state the current round is updated in place.
+		let round = match ServiceState::<T>::get() {
+			MigrationSequence::Normal => CurrentRound::<T>::get(),
+			_ => CurrentRound::<T>::get() + 1,
+		};
+		<RelayExecutives<T>>::insert(round, new.to_vec());
+	}
+}
+
+impl<T: Config> InitializeMembers<T::AccountId> for Pallet<T> {
+	fn initialize_members(members: &[T::AccountId]) {
+		<RelayExecutives<T>>::insert(1u32, members.to_vec());
 	}
 }
 

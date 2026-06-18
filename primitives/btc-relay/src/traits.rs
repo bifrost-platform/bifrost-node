@@ -52,6 +52,9 @@ pub trait PoolManager<AccountId> {
 	/// Process the pending set refunds.
 	fn process_set_refunds();
 
+	/// Get the relay executive members snapshot for the given round.
+	fn get_relay_executives(round: u32) -> Vec<AccountId>;
+
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_benchmark(executives: &[AccountId], user: &AccountId) -> Result<(), DispatchError>;
 

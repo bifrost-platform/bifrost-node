@@ -38,6 +38,22 @@ where
 	Runtime::RuntimeCall: From<BtcRegistrationPoolCall<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
+	#[precompile::public("relayExecutives(uint32)")]
+	#[precompile::public("relay_executives(uint32)")]
+	#[precompile::view]
+	fn relay_executives(
+		handle: &mut impl PrecompileHandle,
+		pool_round: PoolRound,
+	) -> EvmResult<Vec<Address>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+
+		let relay_executives =
+			pallet_btc_registration_pool::RelayExecutives::<Runtime>::get(pool_round);
+		let relay_executives =
+			relay_executives.into_iter().map(|address| Address(address.into())).collect();
+		Ok(relay_executives)
+	}
+
 	#[precompile::public("currentRound()")]
 	#[precompile::public("current_round()")]
 	#[precompile::view]

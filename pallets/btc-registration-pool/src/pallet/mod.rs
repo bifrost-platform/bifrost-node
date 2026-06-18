@@ -30,7 +30,7 @@ use sp_std::{
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -147,6 +147,12 @@ pub mod pallet {
 	pub type CurrentRound<T: Config> = StorageValue<_, PoolRound, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::unbounded]
+	/// The relay executive members per round, kept in sync with T::Executives via ChangeMembers.
+	pub type RelayExecutives<T: Config> =
+		StorageMap<_, Twox64Concat, PoolRound, Vec<T::AccountId>, ValueQuery>;
+
+	#[pallet::storage]
 	/// The migration sequence of the registration pool.
 	pub type ServiceState<T: Config> = StorageValue<_, MigrationSequence, ValueQuery>;
 
@@ -253,7 +259,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::init_v1::InitV1::<T>::on_runtime_upgrade()
+			migrations::v2::V2::<T>::on_runtime_upgrade()
 		}
 	}
 
