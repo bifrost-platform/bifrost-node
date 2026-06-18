@@ -148,7 +148,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::unbounded]
-	/// The relay executive members. Snapshot of the executive members for vault migration.
+	/// The relay executive members per round, kept in sync with T::Executives via ChangeMembers.
 	pub type RelayExecutives<T: Config> =
 		StorageMap<_, Twox64Concat, PoolRound, Vec<T::AccountId>, ValueQuery>;
 
@@ -727,10 +727,6 @@ pub mod pallet {
 					<CurrentRound<T>>::mutate(|r| *r += 1);
 					<ServiceState<T>>::put(MigrationSequence::Normal);
 					<OngoingVaultMigration<T>>::put::<BTreeMap<H256, bool>>(Default::default());
-					<RelayExecutives<T>>::insert(
-						CurrentRound::<T>::get(),
-						&T::Executives::sorted_members(),
-					);
 				},
 			}
 
