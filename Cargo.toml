@@ -267,3 +267,7 @@ precompile-utils = { default-features = false, git = "https://github.com/bifrost
 # pallet-evm-precompile-modexp = { path = "../bifrost-frontier/frame/evm/precompile/modexp" }
 # pallet-evm-precompile-blake2 = { path = "../bifrost-frontier/frame/evm/precompile/blake2" }
 # precompile-utils = { path = "../bifrost-frontier/precompiles" }
+
+# core2 was yanked from crates.io (RUSTSEC-2026-0105); required by multihash/litep2p/sc-network.
+[patch.crates-io]
+core2 = { git = "https://github.com/technocreatives/core2", rev = "545e84bcb0f235b12e21351e0c69767958efe2a7" }
