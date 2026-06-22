@@ -1041,6 +1041,7 @@ where
 	#[precompile::public("goOffline()")]
 	#[precompile::public("go_offline()")]
 	fn go_offline(handle: &mut impl PrecompileHandle) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::go_offline {};
 
@@ -1052,6 +1053,7 @@ where
 	#[precompile::public("goOnline()")]
 	#[precompile::public("go_online()")]
 	fn go_online(handle: &mut impl PrecompileHandle) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::go_online {};
 
@@ -1071,6 +1073,7 @@ where
 		bond: U256,
 		candidate_count: u32,
 	) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let bond = Self::u256_to_amount(bond).in_field("bond")?;
 		let zero_address = Address(Default::default());
 
@@ -1102,6 +1105,7 @@ where
 	#[precompile::public("candidateBondMore(uint256)")]
 	#[precompile::public("candidate_bond_more(uint256)")]
 	fn candidate_bond_more(handle: &mut impl PrecompileHandle, more: U256) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let more = Self::u256_to_amount(more).in_field("more")?;
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -1118,6 +1122,7 @@ where
 		handle: &mut impl PrecompileHandle,
 		candidate_count: u32,
 	) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::schedule_leave_candidates { candidate_count };
 
@@ -1129,6 +1134,7 @@ where
 	#[precompile::public("scheduleCandidateBondLess(uint256)")]
 	#[precompile::public("schedule_candidate_bond_less(uint256)")]
 	fn schedule_candidate_bond_less(handle: &mut impl PrecompileHandle, less: U256) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let less = Self::u256_to_amount(less).in_field("less")?;
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -1145,6 +1151,7 @@ where
 		handle: &mut impl PrecompileHandle,
 		candidate_nomination_count: u32,
 	) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_leave_candidates { candidate_nomination_count };
 
@@ -1156,6 +1163,7 @@ where
 	#[precompile::public("executeCandidateBondLess()")]
 	#[precompile::public("execute_candidate_bond_less()")]
 	fn execute_candidate_bond_less(handle: &mut impl PrecompileHandle) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::execute_candidate_bond_less {};
 
@@ -1170,6 +1178,7 @@ where
 		handle: &mut impl PrecompileHandle,
 		candidate_count: u32,
 	) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_leave_candidates { candidate_count };
 
@@ -1181,6 +1190,7 @@ where
 	#[precompile::public("cancelCandidateBondLess()")]
 	#[precompile::public("cancel_candidate_bond_less()")]
 	fn cancel_candidate_bond_less(handle: &mut impl PrecompileHandle) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_candidate_bond_less {};
 
@@ -1192,6 +1202,7 @@ where
 	#[precompile::public("setValidatorCommission(uint256)")]
 	#[precompile::public("set_validator_commission(uint256)")]
 	fn set_validator_commission(handle: &mut impl PrecompileHandle, new: u32) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call =
 			StakingCall::<Runtime>::set_validator_commission { new: Perbill::from_parts(new) };
@@ -1204,6 +1215,7 @@ where
 	#[precompile::public("cancelValidatorCommissionSet()")]
 	#[precompile::public("cancel_validator_commission_set()")]
 	fn cancel_validator_commission_set(handle: &mut impl PrecompileHandle) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_validator_commission_set {};
 
@@ -1220,6 +1232,7 @@ where
 		tier: u32,
 		relayer: Address,
 	) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let more = Self::u256_to_amount(more).in_field("more")?;
 		let tier = match tier {
 			1 => TierType::Basic,
@@ -1243,6 +1256,7 @@ where
 	#[precompile::public("setController(address)")]
 	#[precompile::public("set_controller(address)")]
 	fn set_controller(handle: &mut impl PrecompileHandle, new: Address) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let new = Runtime::AddressMapping::into_account_id(new.0);
 
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -1256,6 +1270,7 @@ where
 	#[precompile::public("cancelControllerSet()")]
 	#[precompile::public("cancel_controller_set()")]
 	fn cancel_controller_set(handle: &mut impl PrecompileHandle) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = StakingCall::<Runtime>::cancel_controller_set {};
 
@@ -1267,6 +1282,7 @@ where
 	#[precompile::public("setCandidateRewardDst(uint256)")]
 	#[precompile::public("set_candidate_reward_dst(uint256)")]
 	fn set_candidate_reward_dst(handle: &mut impl PrecompileHandle, reward_dst: u8) -> EvmResult {
+		Self::ensure_caller_is_eoa(handle)?;
 		let new_reward_dst = match reward_dst {
 			0 => RewardDestination::Staked,
 			1 => RewardDestination::Account,
@@ -1511,5 +1527,20 @@ where
 		value
 			.try_into()
 			.map_err(|_| RevertReason::value_is_too_large("balance type").into())
+	}
+
+	// Rejects the call if the immediate caller is not a plain EOA — no contracts and no
+	// EIP-7702 delegated accounts. Applied to all candidate state-mutating functions so
+	// that validator keys can never be puppeteered through delegated code.
+	fn ensure_caller_is_eoa(handle: &mut impl PrecompileHandle) -> EvmResult {
+		let caller = handle.context().caller;
+		if handle.is_contract_being_constructed(caller) {
+			return Err(revert("caller must be a plain EOA"));
+		}
+		handle.record_db_read::<Runtime>(fp_evm::ACCOUNT_CODES_METADATA_PROOF_SIZE as usize)?;
+		if pallet_evm::Pallet::<Runtime>::account_code_metadata(caller).size > 0 {
+			return Err(revert("caller must be a plain EOA"));
+		}
+		Ok(())
 	}
 }

@@ -8,6 +8,7 @@ use sc_client_api::{
 	backend::{Backend, StateBackend},
 	AuxStore, StorageProvider,
 };
+use sc_executor::{HeapAllocStrategy, WasmExecutor};
 use sc_service::Configuration;
 
 use bp_core::Block;
@@ -29,6 +30,27 @@ pub type HostFunctions = (
 	fp_ext::bifrost_ext::HostFunctions,
 	cumulus_primitives_proof_size_hostfunction::storage_proof_size::HostFunctions,
 );
+
+/// Default extra heap pages for the WASM executor (4096 pages = 256MB).
+const DEFAULT_EXTRA_HEAP_PAGES: u32 = 4096;
+
+/// Create a WASM executor with increased heap allocation (256MB).
+pub fn new_wasm_executor(
+	config: &sc_service::config::ExecutorConfiguration,
+) -> WasmExecutor<HostFunctions> {
+	let strategy = config
+		.default_heap_pages
+		.map_or(HeapAllocStrategy::Static { extra_pages: DEFAULT_EXTRA_HEAP_PAGES }, |p| {
+			HeapAllocStrategy::Static { extra_pages: p as _ }
+		});
+	WasmExecutor::<HostFunctions>::builder()
+		.with_execution_method(config.wasm_method)
+		.with_onchain_heap_alloc_strategy(strategy)
+		.with_offchain_heap_alloc_strategy(strategy)
+		.with_max_runtime_instances(config.max_runtime_instances)
+		.with_runtime_cache_size(config.runtime_cache_size)
+		.build()
+}
 
 /// Configure frontier database.
 pub fn frontier_database_dir(config: &Configuration, path: &str) -> std::path::PathBuf {

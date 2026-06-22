@@ -145,7 +145,7 @@ pub fn new_partial(
 		})
 		.transpose()?;
 
-	let executor = sc_service::new_wasm_executor(&config.executor);
+	let executor = bifrost_common_node::service::new_wasm_executor(&config.executor);
 
 	let (client, backend, keystore_container, task_manager) =
 		sc_service::new_full_parts_record_import::<Block, testnet::RuntimeApi, _>(

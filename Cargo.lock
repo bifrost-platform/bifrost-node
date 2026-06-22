@@ -929,6 +929,7 @@ dependencies = [
  "sc-client-api",
  "sc-consensus-grandpa",
  "sc-consensus-manual-seal",
+ "sc-executor",
  "sc-network",
  "sc-network-sync",
  "sc-rpc",
@@ -1389,6 +1390,7 @@ dependencies = [
  "pallet-blaze",
  "pallet-btc-registration-pool",
  "pallet-btc-socket-queue",
+ "pallet-cccp-relay-queue",
  "pallet-collective",
  "pallet-democracy",
  "pallet-ethereum",
@@ -2253,8 +2255,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 [[package]]
 name = "core2"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b49ba7ef1ad6107f8824dbe97de947cbaac53c44e7f9756a1fba0d37c1eec505"
+source = "git+https://github.com/bbqsrc/core2?rev=545e84bcb0f235b12e21351e0c69767958efe2a7#545e84bcb0f235b12e21351e0c69767958efe2a7"
 dependencies = [
  "memchr",
 ]

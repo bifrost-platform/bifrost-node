@@ -159,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 500,
+	spec_version: 506,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -850,6 +850,15 @@ impl pallet_relay_manager::Config for Runtime {
 	type WeightInfo = pallet_relay_manager::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_cccp_relay_queue::Config for Runtime {
+	type Currency = Balances;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type SocketQueue = BtcSocketQueue;
+	type WeightInfo = pallet_cccp_relay_queue::weights::SubstrateWeight<Runtime>;
+}
+
 parameter_types! {
 	/// Minimum round length that can be set by the system.
 	pub const MinBlocksPerRound: u32 = 10;
@@ -1283,6 +1292,9 @@ mod runtime {
 
 	#[runtime::pallet_index(62)]
 	pub type Blaze = pallet_blaze;
+
+	#[runtime::pallet_index(63)]
+	pub type CCCPRelayQueue = pallet_cccp_relay_queue;
 
 	#[runtime::pallet_index(64)]
 	pub type OracleRegistry = pallet_oracle_registry;

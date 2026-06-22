@@ -159,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2040,
+	spec_version: 2044,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -1023,8 +1023,7 @@ impl pallet_evm::Config for Runtime {
 	type Timestamp = Timestamp;
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
-	// TODO: Enable BifrostFeelessCalls<Runtime> when pallet_bifrost_evm_tx_payment is added
-	type FeelessCallFilter = ();
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 

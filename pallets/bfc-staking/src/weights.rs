@@ -142,11 +142,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	}
 	fn execute_leave_candidates(x: u32) -> Weight {
 		Weight::from_parts(8_634_000, 0)
-			.saturating_add(Weight::from_parts(26_979_000, 0).saturating_mul(x as u64))
+			.saturating_add(Weight::from_parts(1_000_000, 0).saturating_mul(x as u64))
 			.saturating_add(T::DbWeight::get().reads(8 as u64))
-			.saturating_add(T::DbWeight::get().reads((2 as u64).saturating_mul(x as u64)))
+			.saturating_add(T::DbWeight::get().reads((1 as u64).saturating_mul(x as u64)))
 			.saturating_add(T::DbWeight::get().writes(5 as u64))
-			.saturating_add(T::DbWeight::get().writes((2 as u64).saturating_mul(x as u64)))
+			.saturating_add(T::DbWeight::get().writes((1 as u64).saturating_mul(x as u64)))
 	}
 	fn cancel_leave_candidates(x: u32) -> Weight {
 		Weight::from_parts(43_482_000, 0)
@@ -355,11 +355,11 @@ impl WeightInfo for () {
 	}
 	fn execute_leave_candidates(x: u32) -> Weight {
 		Weight::from_parts(8_634_000, 0)
-			.saturating_add(Weight::from_parts(26_979_000, 0).saturating_mul(x as u64))
+			.saturating_add(Weight::from_parts(1_000_000, 0).saturating_mul(x as u64))
 			.saturating_add(RocksDbWeight::get().reads(8 as u64))
-			.saturating_add(RocksDbWeight::get().reads((2 as u64).saturating_mul(x as u64)))
+			.saturating_add(RocksDbWeight::get().reads((1 as u64).saturating_mul(x as u64)))
 			.saturating_add(RocksDbWeight::get().writes(5 as u64))
-			.saturating_add(RocksDbWeight::get().writes((2 as u64).saturating_mul(x as u64)))
+			.saturating_add(RocksDbWeight::get().writes((1 as u64).saturating_mul(x as u64)))
 	}
 	fn cancel_leave_candidates(x: u32) -> Weight {
 		Weight::from_parts(43_482_000, 0)

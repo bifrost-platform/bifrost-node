@@ -15,7 +15,7 @@ pub mod pallet {
 	use super::*;
 
 	/// The current storage version.
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 	/// Pallet for bfc utility
 	#[pallet::pallet]
@@ -61,19 +61,19 @@ pub mod pallet {
 	pub type ProposalIndex<T: Config> = StorageValue<_, PropIndex, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::unbounded]
-	pub type BlockedAccounts<T: Config> = StorageValue<_, Vec<T::AccountId>, ValueQuery>;
+	pub type BlockedAccounts<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::AccountId, (), OptionQuery>;
 
 	impl<T: Config> Pallet<T> {
 		pub fn is_blocked_account(account: &T::AccountId) -> bool {
-			BlockedAccounts::<T>::get().contains(account)
+			BlockedAccounts::<T>::contains_key(account)
 		}
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v3_update::MigrateToV3Update::<T>::on_runtime_upgrade()
+			migrations::v4::MigrateToV4::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -140,7 +140,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight((T::DbWeight::get().writes(1), DispatchClass::Operational,))]
+		#[pallet::weight((T::DbWeight::get().reads_writes(1, 1), DispatchClass::Operational,))]
 		/// Add an account to the blocked accounts list.
 		pub fn add_blocked_account(
 			origin: OriginFor<T>,
@@ -148,14 +148,12 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			ensure!(!Self::is_blocked_account(&account), Error::<T>::AccountAlreadyBlocked);
-			let mut blocked_accounts = BlockedAccounts::<T>::get();
-			blocked_accounts.push(account);
-			BlockedAccounts::<T>::put(blocked_accounts);
+			BlockedAccounts::<T>::insert(&account, ());
 			Ok(().into())
 		}
 
 		#[pallet::call_index(3)]
-		#[pallet::weight((T::DbWeight::get().writes(1), DispatchClass::Operational,))]
+		#[pallet::weight((T::DbWeight::get().reads_writes(1, 1), DispatchClass::Operational,))]
 		/// Remove an account from the blocked accounts list.
 		pub fn remove_blocked_account(
 			origin: OriginFor<T>,
@@ -163,9 +161,7 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_root(origin)?;
 			ensure!(Self::is_blocked_account(&account), Error::<T>::AccountNotBlocked);
-			let mut blocked_accounts = BlockedAccounts::<T>::get();
-			blocked_accounts.retain(|a| a != &account);
-			BlockedAccounts::<T>::put(blocked_accounts);
+			BlockedAccounts::<T>::remove(&account);
 			Ok(().into())
 		}
 	}

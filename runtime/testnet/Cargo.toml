@@ -93,6 +93,7 @@ pallet-btc-registration-pool = { workspace = true }
 pallet-blaze = { workspace = true }
 pallet-bifrost-evm-tx-payment = { workspace = true }
 pallet-oracle-registry = { workspace = true }
+pallet-cccp-relay-queue = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -153,6 +154,7 @@ std = [
 	"pallet-blaze/std",
 	"pallet-bifrost-evm-tx-payment/std",
 	"pallet-oracle-registry/std",
+	"pallet-cccp-relay-queue/std",
 	"pallet-migrations/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",

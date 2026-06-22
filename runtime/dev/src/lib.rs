@@ -589,8 +589,10 @@ impl pallet_membership::Config<pallet_membership::Instance3> for Runtime {
 	type AddOrigin = MoreThanTwoThirdsRelayExecutives;
 	type RuntimeEvent = RuntimeEvent;
 	type MaxMembers = RelayExecutivesMaxMembers;
-	type MembershipChanged = RelayExecutive;
-	type MembershipInitialized = RelayExecutive;
+	type MembershipChanged =
+		pallet_btc_registration_pool::MembershipHook<RelayExecutive, BtcRegistrationPool>;
+	type MembershipInitialized =
+		pallet_btc_registration_pool::MembershipHook<RelayExecutive, BtcRegistrationPool>;
 	type PrimeOrigin = MoreThanTwoThirdsRelayExecutives;
 	type RemoveOrigin = MoreThanTwoThirdsRelayExecutives;
 	type ResetOrigin = MoreThanTwoThirdsRelayExecutives;

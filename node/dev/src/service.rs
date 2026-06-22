@@ -16,7 +16,6 @@ use bifrost_common_node::{
 use fc_mapping_sync::{kv::MappingSyncWorker, SyncStrategy};
 use fc_rpc::{EthTask, StorageOverrideHandler};
 use fc_rpc_core::types::{FeeHistoryCache, FilterPool};
-
 use sc_client_api::{Backend, BlockBackend, BlockchainEvents};
 use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
 use sc_consensus_manual_seal::EngineCommand;
