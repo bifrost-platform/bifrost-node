@@ -17,7 +17,7 @@ use pallet_evm::FeeCalculator;
 use sp_core::{H256, U256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
-	BuildStorage, DispatchError,
+	DispatchError,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -50,6 +50,7 @@ parameter_types! {
 	pub const SS58Prefix: u8 = 42;
 	pub const ExistentialDeposit: u128 = 1;
 	pub const DefaultMaxFeeRate: u64 = 1000;
+	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
 	pub const MinimumPeriod: u64 = 6000;
 	pub PrecompilesValue: MockPrecompiles = MockPrecompiles;
 	pub WeightPerGas: frame_support::weights::Weight = frame_support::weights::Weight::from_parts(1, 0);
@@ -85,6 +86,7 @@ impl frame_system::Config for Test {
 	type PreInherents = ();
 	type PostInherents = ();
 	type PostTransactions = ();
+	type ExtensionsWeightInfo = ();
 }
 
 impl pallet_balances::Config for Test {
@@ -101,6 +103,7 @@ impl pallet_balances::Config for Test {
 	type RuntimeFreezeReason = ();
 	type FreezeIdentifier = ();
 	type MaxFreezes = ();
+	type DoneSlashHandler = ();
 }
 
 pub struct MockFeeCalculator;
@@ -111,6 +114,7 @@ impl FeeCalculator for MockFeeCalculator {
 }
 
 impl pallet_evm::Config for Test {
+	type AccountProvider = pallet_evm::FrameSystemAccountProvider<Self>;
 	type FeeCalculator = MockFeeCalculator;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
@@ -119,7 +123,6 @@ impl pallet_evm::Config for Test {
 	type WithdrawOrigin = pallet_evm::EnsureAddressNever<AccountId>;
 	type AddressMapping = pallet_evm::IdentityAddressMapping;
 	type Currency = Balances;
-	type RuntimeEvent = RuntimeEvent;
 	type PrecompilesType = MockPrecompiles;
 	type PrecompilesValue = PrecompilesValue;
 	type ChainId = ();
@@ -129,7 +132,10 @@ impl pallet_evm::Config for Test {
 	type OnCreate = ();
 	type FindAuthor = ();
 	type GasLimitPovSizeRatio = ();
-	type SuicideQuickClearLimit = ();
+	type GasLimitStorageGrowthRatio = frame_support::traits::ConstU64<2>;
+	type CreateOriginFilter = ();
+	type CreateInnerOriginFilter = ();
+	type FeelessCallFilter = ();
 	type Timestamp = Timestamp;
 	type WeightInfo = ();
 }
@@ -217,6 +223,10 @@ impl PoolManager<AccountId> for MockPoolManager {
 
 	fn process_set_refunds() {}
 
+	fn get_relay_executives(_: u32) -> Vec<AccountId> {
+		vec![]
+	}
+
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_benchmark(_: &[AccountId], _: &AccountId) -> Result<(), DispatchError> {
 		Ok(())
@@ -230,6 +240,8 @@ impl PoolManager<AccountId> for MockPoolManager {
 
 pub struct MockBlazeManager;
 impl BlazeManager<Test> for MockBlazeManager {
+	fn replace_authority(_: &AccountId, _: &AccountId) {}
+
 	fn is_activated() -> bool {
 		true
 	}
@@ -290,7 +302,6 @@ impl BlazeManager<Test> for MockBlazeManager {
 }
 
 impl pallet_btc_socket_queue::Config for Test {
-	type RuntimeEvent = RuntimeEvent;
 	type Signature = EthereumSignature;
 	type Signer = EthereumSigner;
 	type Executives = MockExecutives;
@@ -299,8 +310,10 @@ impl pallet_btc_socket_queue::Config for Test {
 	type Blaze = MockBlazeManager;
 	type WeightInfo = ();
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
 }
 
+#[cfg(feature = "runtime-benchmarks")]
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }

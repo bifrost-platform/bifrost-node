@@ -1,23 +1,28 @@
 use bp_btc_relay::{
-	traits::PoolManager, Address, AddressState, Descriptor, FromSliceError as KeyError,
-	MigrationSequence, MultiSigAccount, Network, PublicKey, UnboundedBytes,
+	traits::{PoolManager, SocketQueueManager},
+	Address, AddressState, Descriptor, FromSliceError as KeyError, MigrationSequence,
+	MultiSigAccount, Network, PublicKey, UnboundedBytes,
 };
-use frame_support::traits::SortedMembers;
+use frame_support::traits::{ChangeMembers, InitializeMembers, SortedMembers};
+use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::{
 	format,
 	string::{String, ToString},
 };
 use sp_core::{Get, H256};
+use sp_io::hashing::keccak_256;
 use sp_runtime::{
-	traits::Verify,
+	traits::{Block, Header, Verify},
 	transaction_validity::{
 		InvalidTransaction, TransactionPriority, TransactionValidity, ValidTransaction,
 	},
 	BoundedVec, DispatchError,
 };
-use sp_std::{str, str::FromStr, vec::Vec};
+use sp_std::{fmt::Display, str, str::FromStr, vec::Vec};
 
-use crate::{BoundedBitcoinAddress, Public, VaultKeyPreSubmission, VaultKeySubmission};
+use crate::{
+	BoundedBitcoinAddress, Public, SetRefundsApproval, VaultKeyPreSubmission, VaultKeySubmission,
+};
 
 use super::pallet::*;
 
@@ -135,6 +140,10 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 				});
 			}
 		});
+	}
+
+	fn get_relay_executives(round: u32) -> Vec<T::AccountId> {
+		RelayExecutives::<T>::get(round)
 	}
 
 	fn process_set_refunds() {
@@ -286,6 +295,28 @@ impl<T: Config> PoolManager<T::AccountId> for Pallet<T> {
 	}
 }
 
+impl<T: Config> ChangeMembers<T::AccountId> for Pallet<T> {
+	fn change_members_sorted(
+		_incoming: &[T::AccountId],
+		_outgoing: &[T::AccountId],
+		new: &[T::AccountId],
+	) {
+		// During migration the new executives are for the upcoming round's vault,
+		// so write to current+1. In Normal state the current round is updated in place.
+		let round = match ServiceState::<T>::get() {
+			MigrationSequence::Normal => CurrentRound::<T>::get(),
+			_ => CurrentRound::<T>::get() + 1,
+		};
+		<RelayExecutives<T>>::insert(round, new.to_vec());
+	}
+}
+
+impl<T: Config> InitializeMembers<T::AccountId> for Pallet<T> {
+	fn initialize_members(members: &[T::AccountId]) {
+		<RelayExecutives<T>>::insert(1u32, members.to_vec());
+	}
+}
+
 impl<T: Config> Pallet<T> {
 	/// Get the `m` value.
 	pub fn get_m() -> u32 {
@@ -351,6 +382,11 @@ impl<T: Config> Pallet<T> {
 	) -> Result<(), DispatchError> {
 		// generate vault address
 		let (vault_address, descriptor) = Self::generate_vault_address(vault.pub_keys())?;
+
+		// check if the vault address is the same as the refund address
+		if vault_address == *refund_address {
+			return Err(Error::<T>::AddressAlreadyRegistered.into());
+		}
 
 		// check if address is already in used as a refund address
 		if <BondedRefund<T>>::contains_key(current_round, &vault_address) {
@@ -442,6 +478,53 @@ impl<T: Config> Pallet<T> {
 		ValidTransaction::with_tag_prefix("KeyPreSubmission")
 			.priority(TransactionPriority::MAX)
 			.and_provides((authority_id, pub_keys, signature))
+			.propagate(true)
+			.build()
+	}
+
+	/// Verifies the refund set approval signature.
+	pub fn verify_set_refunds_approval(
+		approval: &SetRefundsApproval<T::AccountId, BlockNumberFor<T>>,
+		signature: &T::Signature,
+	) -> TransactionValidity
+	where
+		<T as frame_system::Config>::AccountId: AsRef<[u8]>,
+		<<<T as frame_system::Config>::Block as Block>::Header as Header>::Number: Display,
+	{
+		let SetRefundsApproval { authority_id, refund_sets, pool_round, deadline } = approval;
+
+		// verify if the authority matches with the `SocketQueue::Authority`.
+		T::SocketQueue::verify_legacy_authority(authority_id)?;
+
+		// verify if the deadline is not expired.
+		let now = <frame_system::Pallet<T>>::block_number();
+		if now > *deadline {
+			return Err(InvalidTransaction::Stale.into());
+		}
+
+		// verify if the signature was originated from the authority.
+		let message = [
+			keccak_256("SetRefundsApproval".as_bytes()).as_slice(),
+			format!(
+				"{}:{}:{}",
+				pool_round,
+				deadline,
+				refund_sets
+					.into_iter()
+					.map(|x| hex::encode(x.0.clone()))
+					.collect::<Vec<String>>()
+					.concat()
+			)
+			.as_bytes(),
+		]
+		.concat();
+		if !signature.verify(&*message, &authority_id) {
+			return Err(InvalidTransaction::BadProof.into());
+		}
+
+		ValidTransaction::with_tag_prefix("SetRefundsApproval")
+			.priority(TransactionPriority::MAX)
+			.and_provides((authority_id, refund_sets))
 			.propagate(true)
 			.build()
 	}

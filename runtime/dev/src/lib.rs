@@ -29,8 +29,9 @@ pub use sp_runtime::BuildStorage;
 use sp_runtime::{
 	generic, impl_opaque_keys,
 	traits::{
-		BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf, Dispatchable, IdentityLookup,
-		NumberFor, OpaqueKeys, PostDispatchInfoOf, UniqueSaturatedInto,
+		AccountIdConversion, BlakeTwo256, Block as BlockT, ConvertInto, DispatchInfoOf,
+		Dispatchable, IdentityLookup, NumberFor, OpaqueKeys, PostDispatchInfoOf,
+		UniqueSaturatedInto,
 	},
 	transaction_validity::{
 		TransactionPriority, TransactionSource, TransactionValidity, TransactionValidityError,
@@ -47,12 +48,13 @@ use parity_scale_codec::{Decode, Encode};
 
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
+use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
 use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
 use pallet_evm::{
-	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
+	IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -117,7 +119,7 @@ pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type Migrations = ();
+type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -126,7 +128,6 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
-	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -157,7 +158,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 415,
+	spec_version: 418,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -228,6 +229,8 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	/// Single block migrations
+	type SingleBlockMigrations = SingleBlockMigrations;
 	/// migrations pallet
 	type MultiBlockMigrator = MultiBlockMigrations;
 }
@@ -431,6 +434,8 @@ impl pallet_session::Config for Runtime {
 	type Keys = opaque::SessionKeys;
 	type DisablingStrategy = ();
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+	type Currency = Balances;
+	type KeyDeposit = ConstU128<0>;
 }
 
 impl pallet_session::historical::Config for Runtime {
@@ -584,8 +589,10 @@ impl pallet_membership::Config<pallet_membership::Instance3> for Runtime {
 	type AddOrigin = MoreThanTwoThirdsRelayExecutives;
 	type RuntimeEvent = RuntimeEvent;
 	type MaxMembers = RelayExecutivesMaxMembers;
-	type MembershipChanged = RelayExecutive;
-	type MembershipInitialized = RelayExecutive;
+	type MembershipChanged =
+		pallet_btc_registration_pool::MembershipHook<RelayExecutive, BtcRegistrationPool>;
+	type MembershipInitialized =
+		pallet_btc_registration_pool::MembershipHook<RelayExecutive, BtcRegistrationPool>;
 	type PrimeOrigin = MoreThanTwoThirdsRelayExecutives;
 	type RemoveOrigin = MoreThanTwoThirdsRelayExecutives;
 	type ResetOrigin = MoreThanTwoThirdsRelayExecutives;
@@ -827,14 +834,25 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
+	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayQueue = CCCPRelayQueue;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
 	type IsHeartbeatOffenceActive = IsHeartbeatOffenceActive;
 	type DefaultHeartbeatSlashFraction = DefaultHeartbeatSlashFraction;
 	type WeightInfo = pallet_relay_manager::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_cccp_relay_queue::Config for Runtime {
+	type Currency = Balances;
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type SocketQueue = BtcSocketQueue;
+	type WeightInfo = pallet_cccp_relay_queue::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1006,7 +1024,7 @@ impl pallet_evm::Config for Runtime {
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
-	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
+	type OnChargeTransaction = BifrostFeeAdapter<Self, Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
@@ -1017,6 +1035,7 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
 }
 
 parameter_types! {
@@ -1064,6 +1083,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Blaze = Blaze;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
 }
 
 parameter_types! {
@@ -1071,6 +1091,7 @@ parameter_types! {
 	pub const BitcoinNetwork: Network = Network::Regtest;
 	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
 	pub const DefaultMaxFeeRate: u64 = 15;
+	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {
@@ -1101,6 +1122,30 @@ impl pallet_blaze::Config for Runtime {
 }
 
 parameter_types! {
+	/// Pallet ID for ERC20 gas fee collection.
+	/// Used to derive a deterministic EOA address outside the precompile range.
+	pub const EVMTxPaymentPalletId: PalletId = PalletId(*b"bfc/txpy");
+	/// Fee collector address for ERC20 gas fee payments.
+	/// Derived from PalletId to ensure it's outside the precompile range (0x0800-0x0FFF).
+	/// AccountId (AccountId20) directly converts to H160.
+	pub FeeCollectorAddress: H160 = EVMTxPaymentPalletId::get().into_account_truncating();
+	/// Cooldown period (in blocks) between fee token preference changes.
+	/// 100 blocks ≈ 5 minutes (3 second block time).
+	/// Set to 0 to disable rate limiting.
+	pub const FeeTokenUpdateCooldown: BlockNumber = 100;
+}
+
+/// Bifrost Transaction Payment pallet configuration
+impl pallet_bifrost_evm_tx_payment::Config for Runtime {
+	type AdminOrigin = EnsureRoot<AccountId>;
+	type FeeCollectorAddress = FeeCollectorAddress;
+	type FeeTokenUpdateCooldown = FeeTokenUpdateCooldown;
+	type OracleRegistry = OracleRegistry;
+	type NativeChainId = BifrostChainId;
+	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
 	pub MbmServiceWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
 }
 
@@ -1113,6 +1158,10 @@ impl pallet_migrations::Config for Runtime {
 	type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
 	type MaxServiceWeight = MbmServiceWeight;
 	type WeightInfo = pallet_migrations::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_oracle_registry::Config for Runtime {
+	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -1237,11 +1286,31 @@ mod runtime {
 	#[runtime::pallet_index(62)]
 	pub type Blaze = pallet_blaze;
 
+	#[runtime::pallet_index(63)]
+	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
+
+	#[runtime::pallet_index(64)]
+	pub type CCCPRelayQueue = pallet_cccp_relay_queue;
+
+	#[runtime::pallet_index(65)]
+	pub type OracleRegistry = pallet_oracle_registry;
+
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
 
 	#[runtime::pallet_index(100)]
 	pub type MultiBlockMigrations = pallet_migrations;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benches {
+	frame_benchmarking::define_benchmarks!(
+		[frame_system, SystemBench::<Runtime>]
+		[pallet_relay_manager, RelayManager]
+		[pallet_blaze, Blaze]
+		[pallet_btc_registration_pool, BtcRegistrationPool]
+		[pallet_btc_socket_queue, BtcSocketQueue]
+	);
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();

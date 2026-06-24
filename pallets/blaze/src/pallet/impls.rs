@@ -8,6 +8,7 @@ use bp_btc_relay::{
 	traits::{BlazeManager, SocketQueueManager},
 	Hash, Psbt, UnboundedBytes,
 };
+use bp_cccp::traits::SocketVerifier;
 use bp_staking::traits::Authorities;
 use frame_support::{
 	ensure,
@@ -27,6 +28,39 @@ use sp_runtime::{
 use sp_std::{fmt::Display, vec, vec::Vec};
 
 impl<T: Config> BlazeManager<T> for Pallet<T> {
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId) {
+		// Migrate unconfirmed UTXO count from old to new authority.
+		let old_count = <UnconfirmedUtxoCount<T>>::take(old);
+		if old_count > 0 {
+			<UnconfirmedUtxoCount<T>>::insert(new, old_count);
+		}
+
+		// Replace authority in unconfirmed UTXOs (still accumulating votes)
+		<Utxos<T>>::iter().for_each(|(hash, mut utxo)| {
+			if utxo.status == UtxoStatus::Unconfirmed && utxo.voters.contains(old) {
+				utxo.replace_authority(old, new);
+				<Utxos<T>>::insert(hash, utxo);
+			}
+		});
+
+		// Replace authority in pending PSBTs (waiting for broadcast confirmation votes)
+		<PendingTxs<T>>::iter().for_each(|(txid, mut tx)| {
+			if tx.voters.contains(old) {
+				tx.replace_authority(old, new);
+				<PendingTxs<T>>::insert(txid, tx);
+			}
+		});
+
+		// Replace authority in fee rates map
+		let mut fee_rates = <FeeRates<T>>::get();
+		if let Some(val) = fee_rates.remove(old) {
+			fee_rates
+				.try_insert(new.clone(), val)
+				.expect("Should not fail as we just removed an element");
+			<FeeRates<T>>::put(fee_rates);
+		}
+	}
+
 	fn is_activated() -> bool {
 		<IsActivated<T>>::get()
 	}
@@ -49,6 +83,11 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 		let utxos = <Utxos<T>>::iter().collect::<Vec<_>>();
 		for (hash, utxo) in utxos {
 			if utxo.status != UtxoStatus::Used {
+				if utxo.status == UtxoStatus::Unconfirmed {
+					if let Some(submitter) = utxo.voters.first() {
+						<UnconfirmedUtxoCount<T>>::mutate(submitter, |c| *c = c.saturating_sub(1));
+					}
+				}
 				<Utxos<T>>::remove(hash);
 			}
 		}
@@ -105,16 +144,22 @@ impl<T: Config> BlazeManager<T> for Pallet<T> {
 				unreachable!()
 			};
 
-			let hash = H256::from_slice(
-				keccak_256(&Encode::encode(&(H256::from(txid), vout as u32, amount.to_sat())))
-					.as_ref(),
-			);
-			match <Utxos<T>>::get(&hash) {
-				Some(utxo) => inputs.push(utxo.inner.clone()),
-				None => {
-					return Err(Error::<T>::UtxoDNE.into());
-				},
-			}
+			let target_txid = H256::from(txid);
+			let target_vout = vout as u32;
+			let target_amount = amount.to_sat();
+
+			// Look up UTXO by (txid, vout, amount) since the hash now includes
+			// the address which is not available from the PSBT.
+			let utxo = <Utxos<T>>::iter()
+				.find(|(_, u)| {
+					u.inner.txid == target_txid
+						&& u.inner.vout == target_vout
+						&& u.inner.amount == target_amount
+				})
+				.map(|(_, u)| u.inner.clone())
+				.ok_or(Error::<T>::UtxoDNE)?;
+
+			inputs.push(utxo);
 		}
 		Ok(inputs)
 	}
@@ -216,13 +261,21 @@ impl<T: Config> Pallet<T> {
 		max_tries: usize,
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
 		pool.sort_by(|a, b| {
-			b.effective_value
-				.cmp(&a.effective_value)
-				.then((a.fee - a.long_term_fee).cmp(&(b.fee - b.long_term_fee)))
+			b.effective_value.cmp(&a.effective_value).then(
+				a.fee
+					.saturating_sub(a.long_term_fee)
+					.cmp(&b.fee.saturating_sub(b.long_term_fee)),
+			)
 		});
 
 		let mut best_selection = Vec::new();
 		let mut best_waste = u64::MAX;
+
+		// precompute suffix sums for O(1) remaining value lookup
+		let mut suffix_sums = vec![0u64; pool.len() + 1];
+		for i in (0..pool.len()).rev() {
+			suffix_sums[i] = suffix_sums[i + 1].saturating_add(pool[i].effective_value);
+		}
 
 		let mut curr_selection = Vec::new();
 
@@ -230,6 +283,7 @@ impl<T: Config> Pallet<T> {
 			index: usize,
 			tries: &mut usize,
 			pool: &[ScoredUtxo],
+			suffix_sums: &[u64],
 			curr_selection: &mut Vec<ScoredUtxo>,
 			curr_value: u64,
 			curr_weight: u64,
@@ -245,8 +299,7 @@ impl<T: Config> Pallet<T> {
 			}
 			*tries += 1;
 
-			let available_remaining = pool[index..].iter().map(|x| x.effective_value).sum::<u64>();
-			if curr_value + available_remaining < target {
+			if curr_value + suffix_sums[index] < target {
 				return;
 			}
 			if curr_value > target + cost_of_change {
@@ -257,11 +310,18 @@ impl<T: Config> Pallet<T> {
 			}
 			if curr_value >= target {
 				let waste = curr_value - target
-					+ curr_selection.iter().map(|x| x.fee - x.long_term_fee).sum::<u64>();
+					+ curr_selection
+						.iter()
+						.map(|x| x.fee.saturating_sub(x.long_term_fee))
+						.sum::<u64>();
 				if waste < *best_waste {
 					*best_waste = waste;
 					*best_selection = curr_selection.iter().map(|x| x.utxo.clone()).collect();
 				}
+				return;
+			}
+			// perfect match found, no need to explore further
+			if *best_waste == 0 {
 				return;
 			}
 
@@ -274,6 +334,7 @@ impl<T: Config> Pallet<T> {
 				index + 1,
 				tries,
 				pool,
+				suffix_sums,
 				curr_selection,
 				curr_value + pool[index].effective_value,
 				curr_weight + pool[index].utxo.input_vbytes,
@@ -290,6 +351,7 @@ impl<T: Config> Pallet<T> {
 				index + 1,
 				tries,
 				pool,
+				suffix_sums,
 				curr_selection,
 				curr_value,
 				curr_weight,
@@ -307,6 +369,7 @@ impl<T: Config> Pallet<T> {
 			0,
 			&mut tries,
 			&pool,
+			&suffix_sums,
 			&mut curr_selection,
 			0,
 			0,
@@ -326,68 +389,177 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Coin selection by knapsack solver.
+	///
+	/// Modeled after Bitcoin Core's `KnapsackSolver`. The stochastic
+	/// `ApproximateBestSubset` is replaced with a deterministic bounded DFS
+	/// suitable for on-chain (consensus-critical) execution.
 	fn select_coins_knapsack(
 		pool: Vec<ScoredUtxo>,
 		target: u64,
 		change_target: u64,
 		max_weight: u64,
 	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
-		let mut applicable = vec![];
-		let mut total_lower = 0u64;
-		let mut lowest_larger: Option<&UtxoInfoWithSize> = None;
+		// Phase 1 — categorize UTXOs (mirrors Bitcoin Core's KnapsackSolver).
+		let mut applicable: Vec<ScoredUtxo> = vec![];
+		let mut lowest_larger: Option<ScoredUtxo> = None;
+		let mut best_exact: Option<ScoredUtxo> = None;
 
-		for scored in &pool {
-			if scored.effective_value >= target && scored.effective_value <= target + change_target
+		for scored in pool.iter() {
+			if scored.effective_value >= target
+				&& scored.effective_value <= target + change_target
+				&& scored.utxo.input_vbytes <= max_weight
 			{
-				return Some((vec![scored.utxo.clone()], SelectionStrategy::Knapsack));
+				if best_exact.as_ref().map_or(true, |x| scored.effective_value < x.effective_value)
+				{
+					best_exact = Some(scored.clone());
+				}
 			} else if scored.effective_value < target + change_target {
-				applicable.push(scored);
-				total_lower += scored.effective_value;
-			} else if lowest_larger.map_or(true, |x| scored.utxo.amount < x.amount) {
-				lowest_larger = Some(&scored.utxo);
+				applicable.push(scored.clone());
+			} else if lowest_larger
+				.as_ref()
+				.map_or(true, |x| scored.effective_value < x.effective_value)
+			{
+				lowest_larger = Some(scored.clone());
 			}
 		}
 
-		if total_lower == target {
-			return Some((
-				applicable.iter().map(|x| x.utxo.clone()).collect(),
-				SelectionStrategy::Knapsack,
-			));
-		}
-		if total_lower < target {
-			return lowest_larger.map(|x| (vec![x.clone()], SelectionStrategy::Knapsack));
+		// Single UTXO covers target within acceptable change range.
+		if let Some(exact) = best_exact {
+			return Some((vec![exact.utxo], SelectionStrategy::Knapsack));
 		}
 
+		let total_lower: u64 = applicable.iter().map(|x| x.effective_value).sum();
+
+		// Not enough value even with all applicable UTXOs — fall back to
+		// the smallest single UTXO that exceeds target.
+		if total_lower < target {
+			return lowest_larger
+				.filter(|x| x.utxo.input_vbytes <= max_weight)
+				.map(|x| (vec![x.utxo], SelectionStrategy::Knapsack));
+		}
+
+		// Phase 2 — bounded DFS subset search.
+		// Replaces Bitcoin Core's stochastic ApproximateBestSubset with a
+		// deterministic branch-and-bound that explores non-contiguous subsets.
 		applicable.sort_by(|a, b| b.effective_value.cmp(&a.effective_value));
 
-		let mut best = vec![];
-		let mut best_total = u64::MAX;
-
-		for i in 0..applicable.len() {
-			let mut selected = vec![];
-			let mut total = 0;
-			let mut weight = 0;
-
-			for j in i..applicable.len() {
-				let scored = applicable[j];
-				total += scored.effective_value;
-				weight += scored.utxo.input_vbytes;
-				selected.push(scored.utxo.clone());
-
-				if total >= target && weight <= max_weight {
-					if total < best_total {
-						best_total = total;
-						best = selected.clone();
-					}
-					break;
-				}
-			}
+		let mut suffix_sums = vec![0u64; applicable.len() + 1];
+		for i in (0..applicable.len()).rev() {
+			suffix_sums[i] = suffix_sums[i + 1].saturating_add(applicable[i].effective_value);
 		}
 
-		if !best.is_empty() {
-			Some((best, SelectionStrategy::Knapsack))
+		let mut best_selection: Vec<UtxoInfoWithSize> = Vec::new();
+		let mut best_total = u64::MAX;
+		let mut curr_selection: Vec<ScoredUtxo> = Vec::new();
+
+		fn dfs(
+			index: usize,
+			tries: &mut usize,
+			applicable: &[ScoredUtxo],
+			suffix_sums: &[u64],
+			curr_selection: &mut Vec<ScoredUtxo>,
+			curr_value: u64,
+			curr_weight: u64,
+			target: u64,
+			max_weight: u64,
+			best_selection: &mut Vec<UtxoInfoWithSize>,
+			best_total: &mut u64,
+			max_tries: usize,
+		) {
+			if *tries >= max_tries {
+				return;
+			}
+			*tries += 1;
+
+			// Prune: cannot reach target with remaining UTXOs.
+			if curr_value + suffix_sums[index] < target {
+				return;
+			}
+			// Prune: weight already exceeded.
+			if curr_weight > max_weight {
+				return;
+			}
+			// Solution found — record if it is the best so far.
+			if curr_value >= target {
+				if curr_value < *best_total {
+					*best_total = curr_value;
+					*best_selection = curr_selection.iter().map(|x| x.utxo.clone()).collect();
+				}
+				return;
+			}
+			// Optimal (exact match) already found.
+			if *best_total == target {
+				return;
+			}
+
+			if index >= applicable.len() {
+				return;
+			}
+
+			// Include current UTXO.
+			curr_selection.push(applicable[index].clone());
+			dfs(
+				index + 1,
+				tries,
+				applicable,
+				suffix_sums,
+				curr_selection,
+				curr_value + applicable[index].effective_value,
+				curr_weight + applicable[index].utxo.input_vbytes,
+				target,
+				max_weight,
+				best_selection,
+				best_total,
+				max_tries,
+			);
+			curr_selection.pop();
+
+			// Exclude current UTXO.
+			dfs(
+				index + 1,
+				tries,
+				applicable,
+				suffix_sums,
+				curr_selection,
+				curr_value,
+				curr_weight,
+				target,
+				max_weight,
+				best_selection,
+				best_total,
+				max_tries,
+			);
+		}
+
+		let mut tries = 0;
+		dfs(
+			0,
+			&mut tries,
+			&applicable,
+			&suffix_sums,
+			&mut curr_selection,
+			0,
+			0,
+			target,
+			max_weight,
+			&mut best_selection,
+			&mut best_total,
+			100_000,
+		);
+
+		// Phase 3 — compare DFS result with lowest_larger.
+		// A single larger UTXO may be preferable (fewer inputs = smaller tx).
+		if !best_selection.is_empty() {
+			if let Some(ref larger) = lowest_larger {
+				if larger.utxo.input_vbytes <= max_weight && larger.effective_value <= best_total {
+					return Some((vec![larger.utxo.clone()], SelectionStrategy::Knapsack));
+				}
+			}
+			Some((best_selection, SelectionStrategy::Knapsack))
 		} else {
-			lowest_larger.map(|x| (vec![x.clone()], SelectionStrategy::Knapsack))
+			lowest_larger
+				.filter(|x| x.utxo.input_vbytes <= max_weight)
+				.map(|x| (vec![x.utxo], SelectionStrategy::Knapsack))
 		}
 	}
 
@@ -418,6 +590,11 @@ impl<T: Config> Pallet<T> {
 	) -> TransactionValidity {
 		let UtxoSubmission { authority_id, utxos } = utxo_submission;
 
+		// reject if the number of UTXOs exceeds the per-submission limit.
+		if utxos.len() > crate::MAX_UTXOS_PER_SUBMISSION {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
+
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;
 
@@ -430,7 +607,13 @@ impl<T: Config> Pallet<T> {
 					.iter()
 					.map(|x| {
 						let utxo_hash = H256::from_slice(
-							keccak_256(&Encode::encode(&(x.txid, x.vout, x.amount))).as_ref(),
+							keccak_256(&Encode::encode(&(
+								x.txid,
+								x.vout,
+								x.amount,
+								x.address.clone(),
+							)))
+							.as_ref(),
 						);
 						hex::encode(utxo_hash)
 					})
@@ -507,6 +690,17 @@ impl<T: Config> Pallet<T> {
 		signature: &T::Signature,
 	) -> TransactionValidity {
 		let SocketMessagesSubmission { authority_id, messages } = outbound_request_submission;
+
+		// reject if the number of messages exceeds the per-submission limit.
+		if messages.len() > crate::MAX_SOCKET_MESSAGES_PER_SUBMISSION {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
+
+		// reject if any individual message exceeds the configured size limit.
+		let max_bytes = T::SocketQueue::get_max_socket_message_bytes() as usize;
+		if messages.iter().any(|m| m.len() > max_bytes) {
+			return InvalidTransaction::ExhaustsResources.into();
+		}
 
 		// verify if the authority is a selected relayer.
 		Self::verify_authority(authority_id)?;

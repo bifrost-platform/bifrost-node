@@ -13,6 +13,32 @@ pub mod weights;
 pub use pallet::pallet::*;
 use weights::WeightInfo;
 
+use frame_support::traits::{ChangeMembers, InitializeMembers};
+use sp_std::marker::PhantomData;
+
+/// Composes two [`ChangeMembers`] + [`InitializeMembers`] impls into one.
+/// Useful for wiring `pallet_membership::MembershipChanged` to multiple targets
+/// when the SDK does not provide blanket tuple impls for these traits.
+pub struct MembershipHook<A, B>(PhantomData<(A, B)>);
+
+impl<AccountId: Clone + Ord, A: ChangeMembers<AccountId>, B: ChangeMembers<AccountId>>
+	ChangeMembers<AccountId> for MembershipHook<A, B>
+{
+	fn change_members_sorted(incoming: &[AccountId], outgoing: &[AccountId], new: &[AccountId]) {
+		A::change_members_sorted(incoming, outgoing, new);
+		B::change_members_sorted(incoming, outgoing, new);
+	}
+}
+
+impl<AccountId, A: InitializeMembers<AccountId>, B: InitializeMembers<AccountId>>
+	InitializeMembers<AccountId> for MembershipHook<A, B>
+{
+	fn initialize_members(members: &[AccountId]) {
+		A::initialize_members(members);
+		B::initialize_members(members);
+	}
+}
+
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode};
 use scale_info::TypeInfo;
 use sp_core::RuntimeDebug;

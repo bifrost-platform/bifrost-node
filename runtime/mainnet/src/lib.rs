@@ -49,8 +49,8 @@ use pallet_ethereum::{
 	Call::transact, EthereumBlockHashMapping, PostLogContent, Transaction as EthereumTransaction,
 };
 use pallet_evm::{
-	Account as EVMAccount, EVMCurrencyAdapter, EnsureAddressNever, EnsureAddressRoot,
-	FeeCalculator, IdentityAddressMapping, Runner,
+	Account as EVMAccount, EnsureAddressNever, EnsureAddressRoot, FeeCalculator,
+	IdentityAddressMapping, Runner,
 };
 use pallet_grandpa::{
 	fg_primitives, AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList,
@@ -117,7 +117,7 @@ pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
-type Migrations = ();
+type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -126,7 +126,6 @@ pub type Executive = frame_executive::Executive<
 	frame_system::ChainContext<Runtime>,
 	Runtime,
 	AllPalletsWithSystem,
-	Migrations,
 >;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
@@ -158,7 +157,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 2044,
+	spec_version: 2045,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -228,6 +227,8 @@ impl frame_system::Config for Runtime {
 	type SS58Prefix = SS58Prefix;
 	/// The maximum number of consumers allowed on a single account.
 	type MaxConsumers = ConstU32<16>;
+	/// Single block migrations
+	type SingleBlockMigrations = SingleBlockMigrations;
 	/// migrations pallet
 	type MultiBlockMigrator = MultiBlockMigrations;
 }
@@ -431,6 +432,8 @@ impl pallet_session::Config for Runtime {
 	type Keys = opaque::SessionKeys;
 	type DisablingStrategy = ();
 	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+	type Currency = Balances;
+	type KeyDeposit = ConstU128<0>;
 }
 
 impl pallet_session::historical::Config for Runtime {
@@ -827,8 +830,10 @@ parameter_types! {
 
 /// A module that manages registered relayers for cross chain interoperability
 impl pallet_relay_manager::Config for Runtime {
+	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayQueue = ();
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
@@ -1006,7 +1011,7 @@ impl pallet_evm::Config for Runtime {
 	type FeeCalculator = FixedGasPrice;
 	type GasWeightMapping = pallet_evm::FixedGasWeightMapping<Self>;
 	type WeightPerGas = WeightPerGas;
-	type OnChargeTransaction = EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
+	type OnChargeTransaction = pallet_evm::EVMCurrencyAdapter<Balances, DealWithFees<Runtime>>;
 	type FindAuthor = FindAuthorAccountId<Aura>;
 	type PrecompilesType = BifrostPrecompiles<Self>;
 	type PrecompilesValue = PrecompilesValue;
@@ -1016,6 +1021,7 @@ impl pallet_evm::Config for Runtime {
 	type Timestamp = Timestamp;
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
+	type FeelessCallFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1064,6 +1070,7 @@ impl pallet_btc_socket_queue::Config for Runtime {
 	type Blaze = Blaze;
 	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
 	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
 }
 
 parameter_types! {
@@ -1071,6 +1078,7 @@ parameter_types! {
 	pub const BitcoinNetwork: Network = Network::Bitcoin;
 	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(60);
 	pub const DefaultMaxFeeRate: u64 = 100;
+	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
 }
 
 impl pallet_btc_registration_pool::Config for Runtime {

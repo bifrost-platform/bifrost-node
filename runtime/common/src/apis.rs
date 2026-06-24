@@ -2,6 +2,7 @@
 macro_rules! impl_common_runtime_apis {
 	{$($custom:tt)*} => {
 		use ethereum::AuthorizationList;
+		use pallet_evm::FeelessCallFilter;
 
 		impl_runtime_apis! {
 			$($custom)*
@@ -10,7 +11,7 @@ macro_rules! impl_common_runtime_apis {
 				fn version() -> RuntimeVersion {
 					VERSION
 				}
-				fn execute_block(block: Block) {
+				fn execute_block(block: <Block as BlockT>::LazyBlock) {
 					Executive::execute_block(block);
 				}
 				fn initialize_block(header: &<Block as BlockT>::Header) -> ExtrinsicInclusionMode {
@@ -39,7 +40,7 @@ macro_rules! impl_common_runtime_apis {
 					data.create_extrinsics()
 				}
 				fn check_inherents(
-					block: Block,
+					block: <Block as BlockT>::LazyBlock,
 					data: sp_inherents::InherentData,
 				) -> sp_inherents::CheckInherentsResult {
 					data.check_extrinsics(&block)
@@ -509,6 +510,21 @@ macro_rules! impl_common_runtime_apis {
 					Some(pallet_base_fee::Elasticity::<Runtime>::get())
 				}
 				fn gas_limit_multiplier_support() {}
+				fn is_zero_balance_callable(
+					caller: H160,
+					target: Option<H160>,
+					input: Vec<u8>,
+					gas_limit: U256,
+					base_fee: U256,
+				) -> bool {
+					<Runtime as pallet_evm::Config>::FeelessCallFilter::is_zero_balance_callable(
+						caller,
+						target,
+						&input,
+						gas_limit,
+						base_fee,
+					)
+				}
 				fn pending_block(
 					xts: Vec<<Block as BlockT>::Extrinsic>,
 				) -> (Option<pallet_ethereum::Block>, Option<Vec<TransactionStatus>>) {

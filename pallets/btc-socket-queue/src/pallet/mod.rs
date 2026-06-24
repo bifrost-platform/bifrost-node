@@ -2,8 +2,7 @@ mod impls;
 
 use crate::{
 	migrations, ExecutedPsbtMessage, PsbtRequest, RequestType, RollbackPollMessage,
-	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, SocketMessage, UnsignedPsbtMessage,
-	WeightInfo,
+	RollbackPsbtMessage, RollbackRequest, SignedPsbtMessage, UnsignedPsbtMessage, WeightInfo,
 };
 
 use frame_support::{
@@ -17,19 +16,22 @@ use bp_btc_relay::{
 	traits::{BlazeManager, PoolManager, SocketQueueManager},
 	Amount, BoundedBitcoinAddress, MigrationSequence, UnboundedBytes,
 };
-use bp_staking::traits::Authorities;
+use bp_cccp::SocketMessage;
+use bp_staking::{traits::Authorities, MAX_AUTHORITIES};
 use miniscript::bitcoin::FeeRate;
 use scale_info::prelude::string::ToString;
+use sp_core::ConstU32;
 use sp_core::{H160, H256, U256};
 use sp_io::hashing::keccak_256;
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use sp_runtime::BoundedBTreeMap;
 use sp_std::{vec, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -53,12 +55,16 @@ pub mod pallet {
 		type WeightInfo: WeightInfo;
 		/// The maximum fee rate that can be set for PSBT.
 		type DefaultMaxFeeRate: Get<u64>;
+		/// The default maximum byte size of a single socket message.
+		type DefaultMaxSocketMessageBytes: Get<u32>;
 	}
 
 	#[pallet::error]
 	pub enum Error<T> {
 		/// The authority has already submitted a signed PSBT.
 		AuthorityAlreadySubmitted,
+		/// The authority has already confirmed the broadcast of this request.
+		BroadcastAlreadyConfirmed,
 		/// The signed PSBT is already submitted by an authority.
 		SignedPsbtAlreadySubmitted,
 		/// The socket message is already submitted.
@@ -134,6 +140,10 @@ pub mod pallet {
 		SocketSet { new: T::AccountId, is_bitcoin: bool },
 		/// The maximum PSBT fee rate has been set.
 		MaxFeeRateSet { new: u64 },
+		/// The maximum socket message byte size has been set.
+		MaxSocketMessageBytesSet { new: u32 },
+		/// A relayer has confirmed the broadcast of an executed request.
+		BroadcastConfirmed { txid: H256, authority_id: T::AccountId },
 	}
 
 	#[pallet::storage]
@@ -209,6 +219,21 @@ pub mod pallet {
 	/// The maximum fee rate(sat/vb) that can be set for PSBT.
 	pub type MaxFeeRate<T: Config> = StorageValue<_, u64, ValueQuery>;
 
+	#[pallet::storage]
+	/// The maximum allowed byte size of a single socket message.
+	pub type MaxSocketMessageBytes<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
+	/// Broadcast confirmation votes for finalized requests (Blaze mode only).
+	/// key: The PSBT's txid.
+	/// value: The set of relayers that have confirmed broadcast.
+	pub type BroadcastConfirmations<T: Config> = StorageMap<
+		_,
+		Twox64Concat,
+		H256,
+		BoundedBTreeMap<T::AccountId, bool, ConstU32<MAX_AUTHORITIES>>,
+	>;
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
 	where
@@ -216,23 +241,27 @@ pub mod pallet {
 		H160: Into<T::AccountId>,
 	{
 		fn on_runtime_upgrade() -> Weight {
-			migrations::init_v2::InitV2::<T>::on_runtime_upgrade()
+			migrations::v3::V3::<T>::on_runtime_upgrade()
 		}
 
 		fn on_initialize(n: BlockNumberFor<T>) -> Weight {
 			let mut weight = Weight::from_parts(1_000_000, 0);
 
-			T::RegistrationPool::process_set_refunds();
-
 			if T::Blaze::is_activated()
 				&& matches!(T::RegistrationPool::get_service_state(), MigrationSequence::Normal)
 			{
+				T::RegistrationPool::process_set_refunds();
+
 				if let Some((long_term_fee_rate, fee_rate)) = T::Blaze::try_fee_rate_finalization(n)
 				{
 					let outbound_pool = T::Blaze::get_outbound_pool();
 					if !outbound_pool.is_empty() {
 						let (filtered_outbound_pool, outbound_requests) =
 							Self::filter_unregistered_outbounds(outbound_pool);
+
+						if filtered_outbound_pool.is_empty() {
+							return weight;
+						}
 
 						let utxos = T::Blaze::get_utxos();
 
@@ -246,6 +275,16 @@ pub mod pallet {
 							T::Blaze::handle_tolerance_counter(true);
 							return weight;
 						}
+
+						// estimate output vbytes for fee-adjusted target
+						// TxOut size = 8 (value) + 1 (script_len varint) + script_len
+						let unique_scripts: sp_std::collections::btree_set::BTreeSet<_> =
+							outbound_requests.iter().map(|x| x.1.clone()).collect();
+						let output_vbytes: u64 =
+							unique_scripts.iter().map(|s| 9u64 + s.len() as u64).sum();
+						// 11 = version(4) + locktime(4) + input_count(1) + output_count(1) + segwit(1)
+						let base_fee = fee_rate * (11 + output_vbytes);
+						let target = outbound_amount_sum.saturating_add(base_fee);
 
 						let scored_utxos = utxos
 							.iter()
@@ -265,11 +304,11 @@ pub mod pallet {
 
 						let (selected_utxos, strategy) = match T::Blaze::select_coins(
 							scored_utxos,
-							outbound_amount_sum,
+							target,
 							43 * fee_rate,
 							200_000,
 							100_000,
-							546,
+							bp_btc_relay::DUST_LIMIT,
 						) {
 							Some(utxos) => utxos,
 							None => {
@@ -297,7 +336,7 @@ pub mod pallet {
 								Self::deposit_event(Event::UnsignedPsbtSubmitted { txid });
 
 								for msg in filtered_outbound_pool.iter() {
-									let msg = Self::try_decode_socket_message(msg).unwrap();
+									let msg = SocketMessage::try_from(msg.clone()).unwrap();
 									<SocketMessages<T>>::insert(msg.req_id.sequence, (txid, msg));
 								}
 
@@ -337,6 +376,7 @@ pub mod pallet {
 				Authority::<T>::put(a);
 			}
 			<MaxFeeRate<T>>::put(T::DefaultMaxFeeRate::get());
+			<MaxSocketMessageBytes<T>>::put(T::DefaultMaxSocketMessageBytes::get());
 		}
 	}
 
@@ -511,6 +551,9 @@ pub mod pallet {
 		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::submit_executed_request())]
 		/// Submit an executed PSBT request.
+		/// When Blaze is disabled, the single authority immediately marks the request as executed.
+		/// When Blaze is enabled, each relayer votes to confirm broadcast; the request moves to
+		/// `ExecutedRequests` only once a majority of relayers have confirmed.
 		pub fn submit_executed_request(
 			origin: OriginFor<T>,
 			msg: ExecutedPsbtMessage<T::AccountId>,
@@ -518,15 +561,44 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
-			let ExecutedPsbtMessage { txid, .. } = msg;
+			let ExecutedPsbtMessage { authority_id, txid } = msg;
 
 			let request = <FinalizedRequests<T>>::get(&txid).ok_or(Error::<T>::RequestDNE)?;
-			if request.request_type == RequestType::Migration {
-				T::RegistrationPool::execute_migration_tx(txid.clone());
+
+			let should_execute = if T::Blaze::is_activated() {
+				let mut confirmations = <BroadcastConfirmations<T>>::get(&txid).unwrap_or_default();
+
+				ensure!(
+					!confirmations.contains_key(&authority_id),
+					Error::<T>::BroadcastAlreadyConfirmed
+				);
+				confirmations
+					.try_insert(authority_id.clone(), true)
+					.map_err(|_| Error::<T>::OutOfRange)?;
+
+				Self::deposit_event(Event::BroadcastConfirmed { txid, authority_id });
+
+				if confirmations.len() as u32 >= T::Relayers::majority() {
+					<BroadcastConfirmations<T>>::remove(&txid);
+					true
+				} else {
+					<BroadcastConfirmations<T>>::insert(&txid, confirmations);
+					false
+				}
+			} else {
+				// Clean up any stale broadcast confirmations accumulated before Blaze fallback.
+				<BroadcastConfirmations<T>>::remove(&txid);
+				true
+			};
+
+			if should_execute {
+				if request.request_type == RequestType::Migration {
+					T::RegistrationPool::execute_migration_tx(txid.clone());
+				}
+				<FinalizedRequests<T>>::remove(&txid);
+				<ExecutedRequests<T>>::insert(&txid, request);
+				Self::deposit_event(Event::RequestExecuted { txid });
 			}
-			<FinalizedRequests<T>>::remove(&txid);
-			<ExecutedRequests<T>>::insert(&txid, request);
-			Self::deposit_event(Event::RequestExecuted { txid });
 
 			Ok(().into())
 		}
@@ -826,7 +898,7 @@ pub mod pallet {
 				RequestType::Normal => {
 					// replace stored `SocketMessages` to pair with the new txid
 					for socket_message in old_request.socket_messages.clone() {
-						let msg = Self::try_decode_socket_message(&socket_message)
+						let msg = SocketMessage::try_from(socket_message.clone())
 							.map_err(|_| Error::<T>::InvalidSocketMessage)?;
 						<SocketMessages<T>>::insert(msg.req_id.sequence, (new_txid, msg));
 					}
@@ -903,6 +975,24 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		#[pallet::call_index(11)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_max_socket_message_bytes())]
+		/// Set the maximum allowed byte size of a single socket message.
+		pub fn set_max_socket_message_bytes(
+			origin: OriginFor<T>,
+			new: u32,
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+
+			let old = <MaxSocketMessageBytes<T>>::get();
+			ensure!(old != new, Error::<T>::NoWritingSameValue);
+
+			<MaxSocketMessageBytes<T>>::put(new);
+			Self::deposit_event(Event::MaxSocketMessageBytesSet { new });
+
+			Ok(().into())
+		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -934,8 +1024,18 @@ pub mod pallet {
 				Call::submit_signed_psbt { msg, signature } => {
 					let SignedPsbtMessage { authority_id, signed_psbt, .. } = msg;
 
-					// verify if the authority is a relay executive member.
-					if !T::Executives::contains(&authority_id) {
+					// During UTXOTransfer the executive set may have rotated since the vault was
+					// built, so validate against the historical snapshot stored in the registration
+					// pool rather than the live T::Executives membership.
+					let is_valid_signer = if T::RegistrationPool::get_service_state()
+						== MigrationSequence::UTXOTransfer
+					{
+						let round = T::RegistrationPool::get_current_round();
+						T::RegistrationPool::get_relay_executives(round).contains(authority_id)
+					} else {
+						T::Executives::contains(authority_id)
+					};
+					if !is_valid_signer {
 						return InvalidTransaction::BadSigner.into();
 					}
 

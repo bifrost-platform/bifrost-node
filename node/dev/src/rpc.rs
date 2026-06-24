@@ -96,6 +96,7 @@ where
 		grandpa,
 		command_sink,
 		max_past_logs,
+		max_block_range,
 		logs_request_timeout,
 		forced_parent_hashes,
 		sync_service,
@@ -129,11 +130,12 @@ where
 		EthFilter::new(
 			client.clone(),
 			frontier_backend.clone(),
-			graph.clone(),
+			pool.clone(),
 			filter_pool,
 			500_usize, // max stored filters
 			max_past_logs,
 			logs_request_timeout,
+			max_block_range,
 			block_data_cache.clone(),
 		)
 		.into_rpc(),
@@ -188,7 +190,6 @@ where
 		Eth::<_, _, _, _, _, _, DefaultEthConfig<C, BE>>::new(
 			Arc::clone(&client),
 			Arc::clone(&pool),
-			graph.clone(),
 			convert_transaction,
 			Arc::clone(&sync_service),
 			signers,

@@ -145,7 +145,7 @@ pub fn new_partial(
 		})
 		.transpose()?;
 
-	let executor = sc_service::new_wasm_executor(&config.executor);
+	let executor = bifrost_common_node::service::new_wasm_executor(&config.executor);
 
 	let (client, backend, keystore_container, task_manager) =
 		sc_service::new_full_parts_record_import::<Block, mainnet::RuntimeApi, _>(
@@ -344,6 +344,7 @@ where
 		tx_handler_controller,
 		sync_service: sync_service.clone(),
 		telemetry: telemetry.as_mut(),
+		tracing_execute_block: None,
 	})
 	.ok();
 
@@ -612,6 +613,7 @@ pub fn build_rpc_extensions_builder(
 				finality_provider: finality_proof_provider.clone(),
 			},
 			max_past_logs: rpc_config.max_past_logs,
+			max_block_range: rpc_config.max_block_range,
 			logs_request_timeout: rpc_config.logs_request_timeout,
 			forced_parent_hashes: None,
 			sync_service: sync_service.clone(),

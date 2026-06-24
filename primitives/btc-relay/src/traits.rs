@@ -52,6 +52,9 @@ pub trait PoolManager<AccountId> {
 	/// Process the pending set refunds.
 	fn process_set_refunds();
 
+	/// Get the relay executive members snapshot for the given round.
+	fn get_relay_executives(round: u32) -> Vec<AccountId>;
+
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_benchmark(executives: &[AccountId], user: &AccountId) -> Result<(), DispatchError>;
 
@@ -66,6 +69,9 @@ pub trait SocketQueueManager<AccountId> {
 	/// Verify if the `authority_id` is valid.
 	fn verify_authority(authority_id: &AccountId) -> Result<(), TransactionValidityError>;
 
+	/// Verify if the `authority_id` is valid for legacy authority.
+	fn verify_legacy_authority(authority_id: &AccountId) -> Result<(), TransactionValidityError>;
+
 	/// Replace an authority.
 	fn replace_authority(old: &AccountId, new: &AccountId);
 
@@ -74,11 +80,6 @@ pub trait SocketQueueManager<AccountId> {
 
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_max_fee_rate(rate: u64);
-}
-
-pub trait SocketVerifier<AccountId> {
-	/// Verify a Socket message whether it is valid.
-	fn verify_socket_message(msg: &UnboundedBytes) -> Result<(), DispatchError>;
 }
 
 pub trait BlazeManager<T: frame_system::Config> {
@@ -127,6 +128,9 @@ pub trait BlazeManager<T: frame_system::Config> {
 
 	/// Ensure the activation status.
 	fn ensure_activation(is_activated: bool) -> Result<(), DispatchError>;
+
+	/// Replace an authority.
+	fn replace_authority(old: &T::AccountId, new: &T::AccountId);
 
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_activation(activate: bool) -> Result<(), DispatchError>;
