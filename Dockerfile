@@ -1,38 +1,43 @@
 # build stage: where we create binary
-FROM rust:latest AS builder
+FROM rust:1.94.0 AS builder
 
-RUN apt update && apt install -y make clang pkg-config libssl-dev protobuf-compiler
-RUN rustup default stable && \
-  rustup update && \
-  rustup update nightly && \
-  rustup target add wasm32-unknown-unknown --toolchain nightly
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git clang curl llvm libclang-dev libssl-dev libudev-dev make protobuf-compiler pkg-config \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /bifrost
-ENV CARGO_HOME=/bifrost/.cargo
-COPY . /bifrost
-RUN cargo build --release
+COPY . .
 
-# 2nd stage: where we run bifrost-node binary
-FROM ubuntu:22.04
+RUN rustup target add wasm32v1-none --toolchain 1.94.0
+RUN cargo build --release --locked -p bifrost-node
 
-RUN apt update && apt install -y curl unzip
+FROM node:22-slim AS tools
+WORKDIR /tools
+COPY tools/package.json tools/package-lock.json ./
+RUN npm ci --omit=dev
+COPY tools/ ./
 
-RUN curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "/root/.fnm"
-RUN /root/.fnm/fnm install 16.19.1
+# runtime stage: Ubuntu 24.04
+FROM ubuntu:24.04
 
-COPY --from=builder /bifrost/target/release/bifrost-node /usr/local/bin
-COPY --from=builder /bifrost/tools /tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libssl3t64 libudev1 \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=tools /usr/local/ /usr/local/
+COPY --from=tools /tools /tools
+
+COPY --from=builder /bifrost/target/release/bifrost-node /usr/local/bin/
 COPY --from=builder /bifrost/specs /specs
 
-RUN mkdir -p /data /bifrost/.local/share/bifrost && \
+RUN mkdir -p /data /bifrost/.local/share && \
   ln -s /data /bifrost/.local/share/bifrost && \
   /usr/local/bin/bifrost-node --version
 
 # 30333 for p2p
-# 9933 for RPC call
-# 9944 for Websocket
+# 9944 for RPC/Websocket
 # 9615 for Prometheus exporter
-EXPOSE 30333 9933 9944 9615
+EXPOSE 30333 9944 9615
 
 VOLUME ["/data"]
 
