@@ -425,7 +425,7 @@ pub mod pallet {
 
 			if !total_approved.is_zero() {
 				T::Pools::sub_pending_deposit(pool_id, tranche_id.clone(), total_approved)?;
-				T::Pools::add_invested(pool_id, tranche_id.clone(), total_approved)?;
+				T::Pools::add_reserve(pool_id, tranche_id.clone(), total_approved)?;
 				T::Pools::add_token_supply(pool_id, tranche_id, total_shares_minted)?;
 			}
 
@@ -463,7 +463,7 @@ pub mod pallet {
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
 
-			// Validate aggregate payout before mutating state — sub_invested uses saturating
+			// Validate aggregate payout before mutating state — sub_reserve uses saturating
 			// arithmetic, so the check must cover the full batch.
 			let expected_total_payout =
 				investor_ids.iter().fold(U256::zero(), |acc, investor_id| {
@@ -473,7 +473,7 @@ pub mod pallet {
 						})
 				});
 			ensure!(
-				expected_total_payout <= T::Pools::treasury_liquidity(pool_id, tranche_id.clone()),
+				expected_total_payout <= T::Pools::reserve(pool_id, tranche_id.clone()),
 				Error::<T>::InsufficientLiquidity
 			);
 
@@ -526,7 +526,7 @@ pub mod pallet {
 
 			if !total_tokens_approved.is_zero() {
 				T::Pools::sub_pending_redeem(pool_id, tranche_id.clone(), total_tokens_approved)?;
-				T::Pools::sub_invested(pool_id, tranche_id, total_payout)?;
+				T::Pools::sub_reserve(pool_id, tranche_id, total_payout)?;
 			}
 
 			Ok(())

@@ -139,11 +139,17 @@ pub struct Tranche {
 	pub max_deposits: Option<U256>,
 	/// Number of tranche tokens currently outstanding (minted − burned).
 	pub token_supply: U256,
-	/// The total amount of assets invested into the tranche (cumulative inflow).
-	/// The available amount to redeem or borrow from the tranche treasury will be (invested - borrowed).
-	pub invested: U256,
+	/// Actual USDC balance held in the tranche treasury at any point in time.
+	/// Increases on deposit settlement and borrower repayment; decreases on borrow and redeem settlement.
+	pub reserve: U256,
 	/// The amount of assets borrowed from the tranche treasury.
 	pub borrowed: U256,
+	/// Cumulative interest received from borrower repayments.
+	/// Tracks the portion of repayments that exceeded the outstanding principal (i.e. the interest
+	/// cash already collected). Used to avoid double-counting in oracle NAV: the NAV oracle reports
+	/// cumulative earnings generated off-chain, so this on-chain counter is subtracted to obtain
+	/// only the outstanding (not-yet-repaid) earnings.
+	pub repaid_earnings: U256,
 	/// Aggregate pending invest/redeem orders for the current epoch.
 	pub pending_orders: TranchePendingOrders,
 	/// Token price locked at the start of the settlement window, derived from the finalized NAV.
@@ -180,10 +186,6 @@ impl Tranche {
 			let new_nav = factor.checked_mul_int(nav).unwrap_or(nav);
 			self.accrued_nav = U256::from(new_nav);
 		}
-	}
-
-	pub fn treasury_liquidity(&self) -> U256 {
-		self.invested.saturating_sub(self.borrowed)
 	}
 }
 
@@ -359,11 +361,11 @@ pub trait PoolInspect {
 	fn tranche_exists(pool_id: PoolId, tranche_id: TrancheId) -> bool;
 	/// True when the pool is currently inside its settlement window.
 	fn in_settlement_window(pool_id: PoolId) -> bool;
-	/// True when adding `amount` would push `invested + pending_deposit` above
+	/// True when adding `amount` would push `(reserve + borrowed) + pending_deposit` above
 	/// the tranche's `max_deposits` cap. Always false if the tranche is uncapped.
 	fn deposit_cap_exceeded(pool_id: PoolId, tranche_id: TrancheId, amount: U256) -> bool;
-	/// Returns `invested - borrowed` for the tranche — assets available to cover redemptions.
-	fn treasury_liquidity(pool_id: PoolId, tranche_id: TrancheId) -> U256;
+	/// Returns the tranche's current reserve — USDC available in the treasury.
+	fn reserve(pool_id: PoolId, tranche_id: TrancheId) -> U256;
 	/// Returns the token price (WAD format) locked at settlement start for this tranche, if finalized.
 	fn epoch_price(pool_id: PoolId, tranche_id: TrancheId) -> Option<U256>;
 	/// Returns the current Gateway EVM contract address stored on-chain.
@@ -385,7 +387,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	/// Settled orders move to `ClaimableDepositOrders`; investors pull-claim via
 	/// `claim_deposit`, which triggers outbound share minting on the spoke chain.
 	///
-	/// Returns the total amount settled (for `tranche.invested` accounting),
+	/// Returns the total amount settled (for `tranche.reserve` accounting),
 	/// or `Err` if a required storage operation failed (e.g. pool not found).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
@@ -405,7 +407,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	/// `claim_redeem`, which triggers outbound asset payout on the spoke chain.
 	///
 	/// Returns `(tokens_settled, asset_payout)` — used to decrement
-	/// `tranche.pending_orders.redeem` and `tranche.invested` in pallet-pools,
+	/// `tranche.pending_orders.redeem` and `tranche.reserve` in pallet-pools,
 	/// or `Err` if a required storage operation failed.
 	fn settle_redeem_orders(
 		pool_id: PoolId,
@@ -467,19 +469,17 @@ pub trait TrancheMutate<Balance> {
 		amount: Balance,
 	) -> frame_support::dispatch::DispatchResult;
 
-	/// Increment the tranche's cumulative invested total.
-	/// Called when deposit orders are approved (Approval mode) so that
-	/// `treasury_liquidity` (`invested - borrowed`) stays accurate.
-	fn add_invested(
+	/// Increment the tranche reserve.
+	/// Called when deposit orders are approved (Approval mode).
+	fn add_reserve(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		amount: Balance,
 	) -> frame_support::dispatch::DispatchResult;
 
-	/// Decrement the tranche's cumulative invested total.
-	/// Called when redeem orders are approved (Approval mode) so that
-	/// `treasury_liquidity` (`invested - borrowed`) stays accurate.
-	fn sub_invested(
+	/// Decrement the tranche reserve.
+	/// Called when redeem payout orders are approved (Approval mode).
+	fn sub_reserve(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		amount: Balance,

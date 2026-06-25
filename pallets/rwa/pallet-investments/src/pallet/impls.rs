@@ -32,7 +32,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 	/// Settled orders move to `ClaimableDepositOrders`. Token supply is incremented
 	/// immediately so `token_price()` stays accurate for subsequent epochs.
 	///
-	/// Returns the total amount settled (for `tranche.invested` accounting).
+	/// Returns the total amount settled (for `tranche.reserve` accounting).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
@@ -106,7 +106,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 	/// Settled orders move to `ClaimableRedeemOrders`.
 	///
 	/// Returns `(tokens_settled, asset_payout)` for `pending_orders.redeem` and
-	/// `tranche.invested` accounting in pallet-pools.
+	/// `tranche.reserve` accounting in pallet-pools.
 	fn settle_redeem_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,

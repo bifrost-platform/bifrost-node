@@ -37,16 +37,19 @@ impl<T: Config> PoolInspect for Pallet<T> {
 				let Some(cap) = tranche.max_deposits else {
 					return false;
 				};
-				let current = tranche.invested.saturating_add(tranche.pending_orders.deposit);
+				let current = tranche
+					.reserve
+					.saturating_add(tranche.borrowed)
+					.saturating_add(tranche.pending_orders.deposit);
 				current.saturating_add(amount) > cap
 			})
 			.unwrap_or(false)
 	}
 
-	fn treasury_liquidity(pool_id: PoolId, tranche_id: TrancheId) -> U256 {
+	fn reserve(pool_id: PoolId, tranche_id: TrancheId) -> U256 {
 		Pools::<T>::get(pool_id)
 			.and_then(|pool| pool.tranches.get(&tranche_id).cloned())
-			.map(|tranche| tranche.treasury_liquidity())
+			.map(|tranche| tranche.reserve)
 			.unwrap_or_default()
 	}
 
@@ -152,7 +155,7 @@ impl<T: Config> TrancheMutate<U256> for Pallet<T> {
 		})
 	}
 
-	fn add_invested(
+	fn add_reserve(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		amount: U256,
@@ -160,12 +163,12 @@ impl<T: Config> TrancheMutate<U256> for Pallet<T> {
 		Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
-			tranche.invested = tranche.invested.saturating_add(amount);
+			tranche.reserve = tranche.reserve.saturating_add(amount);
 			Ok(())
 		})
 	}
 
-	fn sub_invested(
+	fn sub_reserve(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		amount: U256,
@@ -173,7 +176,7 @@ impl<T: Config> TrancheMutate<U256> for Pallet<T> {
 		Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
 			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
-			tranche.invested = tranche.invested.saturating_sub(amount);
+			tranche.reserve = tranche.reserve.saturating_sub(amount);
 			Ok(())
 		})
 	}

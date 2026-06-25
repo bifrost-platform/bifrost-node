@@ -182,7 +182,21 @@ pub mod pallet {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
 					if needs_finalization {
-						let oracle_nav = T::NAV::nav(pool_id).map(|(n, _)| n).unwrap_or_default();
+						let cumulative_earnings =
+							T::NAV::nav(pool_id).map(|(n, _)| n).unwrap_or_default();
+						let total_borrowed: U256 = pool
+							.tranches
+							.values()
+							.map(|t| t.borrowed)
+							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
+						let total_repaid_earnings: U256 = pool
+							.tranches
+							.values()
+							.map(|t| t.repaid_earnings)
+							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
+						let oracle_nav = total_borrowed.saturating_add(
+							cumulative_earnings.saturating_sub(total_repaid_earnings),
+						);
 						// Accrue for the full intended epoch duration, not `now - epoch_start_secs`.
 						// The settlement window opens `settlement_offset_secs` before epoch end,
 						// so using the real elapsed time would under-accrue by that offset.
@@ -199,17 +213,17 @@ pub mod pallet {
 						}
 
 						// Step 2: Waterfall — split total pool value between tranches.
-						// total_pool_value = oracle_nav + sum(treasury_liquidity across all tranches)
+						// total_pool_value = oracle_nav + sum(reserve across all tranches)
 						// Invariant: the NAV oracle must be finalized before epoch settlement
 						// begins (the Gateway refreshes it as the first step of the settlement
 						// flow). This ensures oracle_nav reflects only outstanding loan value
-						// and treasury_liquidity reflects only uninvested cash, with no overlap.
-						let total_treasury: U256 = pool
+						// and reserve reflects only uninvested cash, with no overlap.
+						let total_reserve: U256 = pool
 							.tranches
 							.values()
-							.map(|t| t.treasury_liquidity())
+							.map(|t| t.reserve)
 							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
-						let total_pool_value = oracle_nav.saturating_add(total_treasury);
+						let total_pool_value = oracle_nav.saturating_add(total_reserve);
 						let mut remaining = total_pool_value;
 
 						// Senior tranches claim first (BTreeMap order); junior takes the residual.
@@ -240,25 +254,20 @@ pub mod pallet {
 						// Snapshot liquidity before deposit settlement so that freshly settled
 						// deposits cannot immediately fund same-epoch redeem payouts.
 						// BTreeMap gives O(log n) lookup in the redeem loop vs O(n²) with Vec::find.
-						let pre_deposit_liquidity: BTreeMap<TrancheId, U256> = pool
-							.tranches
-							.iter()
-							.map(|(id, t)| (id.clone(), t.treasury_liquidity()))
-							.collect();
+						let pre_deposit_reserve: BTreeMap<TrancheId, U256> =
+							pool.tranches.iter().map(|(id, t)| (id.clone(), t.reserve)).collect();
 
 						if pool.deposit_settlement == SettlementMode::Automatic {
 							for (tranche_id, tranche) in pool.tranches.iter_mut() {
 								if !tranche.pending_orders.deposit.is_zero() {
-									let epoch_price =
-										tranche.epoch_price.unwrap_or(crate::WAD);
+									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
 									if let Ok(confirmed) = T::Investments::settle_deposit_orders(
 										pool_id,
 										tranche_id.clone(),
 										pool.epoch.current_epoch,
 										epoch_price,
 									) {
-										tranche.invested =
-											tranche.invested.saturating_add(confirmed);
+										tranche.reserve = tranche.reserve.saturating_add(confirmed);
 										tranche.pending_orders.deposit = U256::zero();
 										// Senior accrued_nav grows by the newly settled deposit.
 										if let TrancheType::Senior { .. } = &tranche.tranche_type {
@@ -272,25 +281,24 @@ pub mod pallet {
 
 						if pool.redeem_settlement == SettlementMode::Automatic {
 							for (tranche_id, tranche) in pool.tranches.iter_mut() {
-								let max_liquidity = pre_deposit_liquidity
+								let max_reserve = pre_deposit_reserve
 									.get(tranche_id)
 									.copied()
 									.unwrap_or_default();
-								if !max_liquidity.is_zero()
+								if !max_reserve.is_zero()
 									&& !tranche.pending_orders.redeem.is_zero()
 								{
-									let epoch_price =
-										tranche.epoch_price.unwrap_or(crate::WAD);
+									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
 									if let Ok((tokens_settled, asset_payout)) =
 										T::Investments::settle_redeem_orders(
 											pool_id,
 											tranche_id.clone(),
 											pool.epoch.current_epoch,
-											max_liquidity,
+											max_reserve,
 											epoch_price,
 										) {
-										tranche.invested =
-											tranche.invested.saturating_sub(asset_payout);
+										tranche.reserve =
+											tranche.reserve.saturating_sub(asset_payout);
 										tranche.pending_orders.redeem = tranche
 											.pending_orders
 											.redeem
@@ -408,8 +416,9 @@ pub mod pallet {
 							tranche_type,
 							max_deposits: tranche.max_deposits,
 							token_supply: U256::zero(),
-							invested: U256::zero(),
+							reserve: U256::zero(),
 							borrowed: U256::zero(),
+							repaid_earnings: U256::zero(),
 							pending_orders: TranchePendingOrders::default(),
 							epoch_price: None,
 							accrued_nav: U256::zero(),
@@ -477,8 +486,9 @@ pub mod pallet {
 							tranche_type,
 							max_deposits: tranche.max_deposits,
 							token_supply: U256::zero(),
-							invested: U256::zero(),
+							reserve: U256::zero(),
 							borrowed: U256::zero(),
+							repaid_earnings: U256::zero(),
 							pending_orders: TranchePendingOrders::default(),
 							epoch_price: None,
 							accrued_nav: U256::zero(),
@@ -497,8 +507,8 @@ pub mod pallet {
 		/// `borrower` must hold the Borrower role for `pool_id`; the address is forwarded
 		/// from the originating EVM call so the pallet can verify it independently of the
 		/// Gateway caller.
-		/// Draws `amount` from the tranche treasury by incrementing `borrowed`.
-		/// Fails if available liquidity (invested − borrowed) is less than `amount`.
+		/// Draws `amount` from the tranche treasury by decrementing `reserve` and incrementing `borrowed`.
+		/// Fails if `reserve` is less than `amount`.
 		#[pallet::call_index(2)]
 		#[pallet::weight(Weight::from_parts(10_000, 0))]
 		pub fn borrow(
@@ -520,13 +530,11 @@ pub mod pallet {
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 
-				ensure!(
-					tranche.treasury_liquidity() >= amount,
-					Error::<T>::InsufficientTreasuryLiquidity
-				);
+				ensure!(tranche.reserve >= amount, Error::<T>::InsufficientTreasuryLiquidity);
 
+				tranche.reserve = tranche.reserve.saturating_sub(amount);
 				tranche.borrowed = tranche.borrowed.saturating_add(amount);
-				let available = tranche.treasury_liquidity();
+				let available = tranche.reserve;
 
 				Self::deposit_event(Event::Borrowed { pool_id, tranche_id, amount, available });
 				Ok(())
@@ -539,13 +547,9 @@ pub mod pallet {
 		/// `borrower` must hold the Borrower role for `pool_id`; the address is forwarded
 		/// from the originating EVM call so the pallet can verify it independently of the
 		/// Gateway caller.
-		/// Reduces `borrowed` by `amount`, restoring tranche treasury liquidity.
-		///
-		/// `borrowed` saturates to zero — this is intentional. The borrower repays
-		/// principal + accrued interest in a single transfer. Since `borrowed` only tracks
-		/// the principal drawn, the interest portion of the repayment causes `borrowed` to
-		/// underflow. The surplus USDC physically sits in the treasury and is distributed
-		/// to investors through the NAV waterfall at the next epoch settlement.
+		/// Adds `amount` to `reserve` and reduces `borrowed` by `amount` (saturating to zero).
+		/// The full repayment amount — principal and any interest — flows into `reserve`,
+		/// so the interest portion is automatically captured in the treasury balance.
 		/// The Gateway contract is responsible for ensuring `amount` is backed by an actual
 		/// USDC transfer before dispatching this extrinsic.
 		#[pallet::call_index(3)]
@@ -569,8 +573,14 @@ pub mod pallet {
 				let tranche =
 					pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
 
+				tranche.reserve = tranche.reserve.saturating_add(amount);
+				let interest_portion = amount.saturating_sub(tranche.borrowed);
 				tranche.borrowed = tranche.borrowed.saturating_sub(amount);
-				let available = tranche.treasury_liquidity();
+				if !interest_portion.is_zero() {
+					tranche.repaid_earnings =
+						tranche.repaid_earnings.saturating_add(interest_portion);
+				}
+				let available = tranche.reserve;
 
 				Self::deposit_event(Event::Repaid { pool_id, tranche_id, amount, available });
 				Ok(())
