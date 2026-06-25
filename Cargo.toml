@@ -23,6 +23,7 @@ members = [
 	"pallets/rwa/pallet-pools",
 	"pallets/rwa/pallet-investments",
 	"pallets/rwa/pallet-permissions",
+	"pallets/rwa/pallet-nav-oracle",
 	"precompiles/investments",
 	"precompiles/permissions",
 	"precompiles/pools",
