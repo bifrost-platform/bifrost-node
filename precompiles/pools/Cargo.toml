@@ -10,7 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 # Bifrost RWA
-pallet-pools = { path = "../../pallets/rwa/pallet-pools", default-features = false }
+pallet-pools = { path = "../../pallets/rwa/pools", default-features = false }
 precompile-utils = { workspace = true }
 
 # Substrate
