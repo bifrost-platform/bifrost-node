@@ -1,6 +1,6 @@
 use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, PendingRedeemOrder};
 
-use pallet_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate, WAD};
+use pallet_rwa_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate, WAD};
 use sp_core::U256;
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;

@@ -23,6 +23,17 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	#[pallet::origin]
+	#[derive(
+		Clone,
+		PartialEq,
+		Eq,
+		RuntimeDebug,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
 	pub enum Origin {
 		/// Dispatched by the pools precompile on behalf of the Gateway contract.
 		Gateway,

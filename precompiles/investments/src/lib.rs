@@ -3,13 +3,13 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::AddressMapping;
-use pallet_investments::Call as InvestmentsCall;
-use pallet_investments::MAX_INVESTORS_PER_APPROVAL;
-use pallet_pools::{PoolInspect, TrancheId};
+use pallet_rwa_investments::Call as InvestmentsCall;
+use pallet_rwa_investments::MAX_INVESTORS_PER_APPROVAL;
+use pallet_rwa_pools::{PoolInspect, TrancheId};
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
-use sp_std::marker::PhantomData;
+use sp_std::{marker::PhantomData, vec::Vec};
 
 pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_SUBMITTED: [u8; 32] =
 	keccak256!("DepositOrderSubmitted(uint64,uint64,address,address,uint256)");
@@ -27,23 +27,23 @@ pub(crate) const SELECTOR_LOG_ASSETS_CLAIMED: [u8; 32] =
 /// A precompile that dispatches invest/redeem order requests to pallet-investments.
 ///
 /// Only callable by the Gateway contract whose address is stored in
-/// `pallet_pools::GatewayAddress` storage. Calls are dispatched with the
-/// `pallet_investments::Origin::Gateway` origin so the pallet rejects any
+/// `pallet_rwa_pools::GatewayAddress` storage. Calls are dispatched with the
+/// `pallet_rwa_investments::Origin::Gateway` origin so the pallet rejects any
 /// direct extrinsic submissions.
 pub struct InvestmentsPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
 impl<Runtime> InvestmentsPrecompile<Runtime>
 where
-	Runtime: pallet_investments::Config + pallet_evm::Config + frame_system::Config,
+	Runtime: pallet_rwa_investments::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_pools::Origin>,
+	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_rwa_pools::Origin>,
 	Runtime::RuntimeCall: From<InvestmentsCall<Runtime>>,
-	<Runtime as pallet_investments::Config>::Pools: PoolInspect,
+	<Runtime as pallet_rwa_investments::Config>::Pools: PoolInspect,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	fn gateway_address() -> H160 {
-		<Runtime as pallet_investments::Config>::Pools::gateway_address()
+		<Runtime as pallet_rwa_investments::Config>::Pools::gateway_address()
 	}
 
 	/// Submit a pending deposit order for epoch settlement.
@@ -81,7 +81,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -138,7 +138,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -200,7 +200,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -264,7 +264,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -317,7 +317,7 @@ where
 		let investor_account = Runtime::AddressMapping::into_account_id(investor_id);
 
 		// Read shares_to_mint before dispatch — the pallet removes the entry via take().
-		let shares_to_mint = pallet_investments::ClaimableDepositOrders::<Runtime>::get(
+		let shares_to_mint = pallet_rwa_investments::ClaimableDepositOrders::<Runtime>::get(
 			&tranche_id,
 			&investor_account,
 		)
@@ -332,7 +332,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -383,7 +383,7 @@ where
 		let investor_account = Runtime::AddressMapping::into_account_id(investor_id);
 
 		// Read payout before dispatch — the pallet removes the entry via take().
-		let payout = pallet_investments::ClaimableRedeemOrders::<Runtime>::get(
+		let payout = pallet_rwa_investments::ClaimableRedeemOrders::<Runtime>::get(
 			&tranche_id,
 			&investor_account,
 		)
@@ -398,7 +398,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;

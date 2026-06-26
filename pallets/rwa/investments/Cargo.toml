@@ -1,5 +1,5 @@
 [package]
-name = "pallet-investments"
+name = "pallet-rwa-investments"
 version = "1.0.0"
 description = "A pallet for RWA investment management"
 authors = { workspace = true }
@@ -22,7 +22,7 @@ sp-core = { workspace = true }
 sp-std = { workspace = true }
 
 # RWA
-pallet-pools = { path = "../pools", default-features = false }
+pallet-rwa-pools = { workspace = true }
 
 [features]
 default = ["std"]
@@ -35,7 +35,7 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-core/std",
-	"pallet-pools/std",
+	"pallet-rwa-pools/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = ["frame-support/runtime-benchmarks"]

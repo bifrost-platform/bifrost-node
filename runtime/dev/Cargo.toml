@@ -95,6 +95,12 @@ pallet-bifrost-evm-tx-payment = { workspace = true }
 pallet-oracle-registry = { workspace = true }
 pallet-cccp-relay-queue = { workspace = true }
 
+# RWA Pallets
+pallet-rwa-pools = { workspace = true }
+pallet-rwa-permissions = { workspace = true }
+pallet-rwa-investments = { workspace = true }
+pallet-rwa-nav-oracle = { workspace = true }
+
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
 pallet-evm-precompile-bn128 = { workspace = true }
@@ -111,6 +117,11 @@ precompile-btc-registration-pool = { workspace = true }
 precompile-btc-socket-queue = { workspace = true }
 precompile-blaze = { workspace = true }
 precompile-bifrost-evm-tx-payment = { workspace = true }
+
+# RWA Precompiles
+precompile-rwa-pools = { workspace = true }
+precompile-rwa-permissions = { workspace = true }
+precompile-rwa-investments = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -161,6 +172,10 @@ std = [
 	"pallet-preimage/std",
 	"pallet-safe-mode/std",
 	"pallet-tx-pause/std",
+	"pallet-rwa-pools/std",
+	"pallet-rwa-permissions/std",
+	"pallet-rwa-investments/std",
+	"pallet-rwa-nav-oracle/std",
 	"pallet-evm-precompile-simple/std",
 	"pallet-evm-precompile-bn128/std",
 	"pallet-evm-precompile-modexp/std",
@@ -194,6 +209,9 @@ std = [
 	"precompile-btc-socket-queue/std",
 	"precompile-blaze/std",
 	"precompile-bifrost-evm-tx-payment/std",
+	"precompile-rwa-pools/std",
+	"precompile-rwa-permissions/std",
+	"precompile-rwa-investments/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]

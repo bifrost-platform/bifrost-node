@@ -1,5 +1,5 @@
 [package]
-name = "precompile-pools"
+name = "precompile-rwa-pools"
 version = "1.0.0"
 description = "A precompile that makes pallet-pools accessible to pallet-evm"
 authors = { workspace = true }
@@ -10,7 +10,7 @@ repository = { workspace = true }
 
 [dependencies]
 # Bifrost RWA
-pallet-pools = { path = "../../pallets/rwa/pools", default-features = false }
+pallet-rwa-pools = { workspace = true }
 precompile-utils = { workspace = true }
 
 # Substrate
@@ -30,7 +30,7 @@ std = [
 	"fp-evm/std",
 	"frame-support/std",
 	"frame-system/std",
-	"pallet-pools/std",
+	"pallet-rwa-pools/std",
 	"pallet-evm/std",
 	"precompile-utils/std",
 	"sp-core/std",

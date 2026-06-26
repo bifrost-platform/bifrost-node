@@ -1,5 +1,5 @@
 [package]
-name = "pallet-nav-oracle"
+name = "pallet-rwa-nav-oracle"
 version = "1.0.0"
 description = "A pallet for RWA NAV oracle — receives cumulative earnings from permissioned feeders"
 authors = { workspace = true }
@@ -23,7 +23,7 @@ sp-core = { workspace = true }
 sp-std = { workspace = true }
 
 # RWA
-pallet-pools = { path = "../pools", default-features = false }
+pallet-rwa-pools = { workspace = true }
 
 [features]
 default = ["std"]
@@ -36,7 +36,7 @@ std = [
 	"sp-runtime/std",
 	"sp-core/std",
 	"sp-std/std",
-	"pallet-pools/std",
+	"pallet-rwa-pools/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [

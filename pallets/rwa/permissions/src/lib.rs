@@ -6,7 +6,7 @@ pub mod weights;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
-use pallet_pools::{PoolId, TrancheId};
+use pallet_rwa_pools::{PoolId, TrancheId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;

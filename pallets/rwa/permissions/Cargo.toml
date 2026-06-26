@@ -1,5 +1,5 @@
 [package]
-name = "pallet-permissions"
+name = "pallet-rwa-permissions"
 version = "1.0.0"
 description = "A pallet for RWA role-based permission management"
 authors = { workspace = true }
@@ -22,7 +22,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # RWA
-pallet-pools = { path = "../pools", default-features = false }
+pallet-rwa-pools = { workspace = true }
 
 [features]
 default = ["std"]
@@ -34,7 +34,7 @@ std = [
 	"frame-system/std",
 	"sp-runtime/std",
 	"sp-std/std",
-	"pallet-pools/std",
+	"pallet-rwa-pools/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [

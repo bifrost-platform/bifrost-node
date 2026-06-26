@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{PoolId, Role, WeightInfo};
-use pallet_pools::{PoolInspect, TrancheId};
+use pallet_rwa_pools::{PoolInspect, TrancheId};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;

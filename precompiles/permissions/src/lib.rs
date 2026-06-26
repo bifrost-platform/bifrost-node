@@ -3,8 +3,8 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::{AddressMapping, Runner};
-use pallet_permissions::{Call as PermissionsCall, Role};
-use pallet_pools::{PoolInspect, TrancheId};
+use pallet_rwa_permissions::{Call as PermissionsCall, Role};
+use pallet_rwa_pools::{PoolInspect, TrancheId};
 use precompile_utils::prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::traits::Dispatchable;
@@ -47,11 +47,11 @@ pub struct PermissionsPrecompile<Runtime>(PhantomData<Runtime>);
 #[precompile_utils::precompile]
 impl<Runtime> PermissionsPrecompile<Runtime>
 where
-	Runtime: pallet_permissions::Config + pallet_evm::Config + frame_system::Config,
+	Runtime: pallet_rwa_permissions::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	Runtime::RuntimeCall: From<PermissionsCall<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
-	<Runtime as pallet_permissions::Config>::Pools: PoolInspect,
+	<Runtime as pallet_rwa_permissions::Config>::Pools: PoolInspect,
 {
 	/// Whitelist `investor` as a TrancheInvestor on the Hub, then propagate
 	/// the grant to the Spoke chain via the Gateway.
@@ -188,7 +188,7 @@ where
 		investor_id: H160,
 		revert_msg: &'static str,
 	) -> EvmResult {
-		let gateway = <Runtime as pallet_permissions::Config>::Pools::gateway_address();
+		let gateway = <Runtime as pallet_rwa_permissions::Config>::Pools::gateway_address();
 		if gateway == H160::zero() {
 			return Ok(());
 		}

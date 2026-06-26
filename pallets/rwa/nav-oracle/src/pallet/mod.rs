@@ -1,6 +1,6 @@
 use crate::{EarningsEntry, EpochId, PoolId, WeightInfo};
 
-use pallet_pools::{PermissionInspect, PoolInspect, PoolNAV};
+use pallet_rwa_pools::{PermissionInspect, PoolInspect, PoolNAV};
 use sp_core::U256;
 use sp_runtime::DispatchError;
 

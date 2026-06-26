@@ -1,5 +1,5 @@
 [package]
-name = "pallet-pools"
+name = "pallet-rwa-pools"
 version = "1.0.0"
 description = "A pallet for RWA pool management"
 authors = { workspace = true }

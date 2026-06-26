@@ -4,7 +4,7 @@ mod pallet;
 pub mod weights;
 
 pub use pallet::pallet::*;
-pub use pallet_pools::{
+pub use pallet_rwa_pools::{
 	EpochId, PermissionInspect, PoolId, PoolInspect, Settlement, SettlementMode, TrancheId,
 	TrancheMutate,
 };

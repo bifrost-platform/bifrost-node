@@ -3,7 +3,7 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::{AddressMapping, Runner};
-use pallet_pools::{
+use pallet_rwa_pools::{
 	Call as PoolsCall, CollateralAsset, PoolInspect, SettlementMode, TrancheId, TrancheInput,
 	TrancheTypeInput, MAX_COLLATERALS, MAX_TRANCHES,
 };
@@ -37,11 +37,11 @@ pub struct PoolsPrecompile<Runtime>(PhantomData<Runtime>);
 #[precompile_utils::precompile]
 impl<Runtime> PoolsPrecompile<Runtime>
 where
-	Runtime: pallet_pools::Config + pallet_evm::Config + frame_system::Config,
+	Runtime: pallet_rwa_pools::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
-	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_pools::Origin>,
+	<Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<pallet_rwa_pools::Origin>,
 	Runtime::RuntimeCall: From<PoolsCall<Runtime>>,
-	pallet_pools::Pallet<Runtime>: PoolInspect,
+	pallet_rwa_pools::Pallet<Runtime>: PoolInspect,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	/// Create a new RWA pool on the Hub and deploy its vaults on the Spoke chain via the Gateway.
@@ -134,7 +134,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::PoolAdmin.into(),
+			pallet_rwa_pools::Origin::PoolAdmin.into(),
 			call,
 			0,
 		)?;
@@ -177,7 +177,7 @@ where
 		borrower: Address,
 		amount: U256,
 	) -> EvmResult {
-		if handle.context().caller != pallet_pools::Pallet::<Runtime>::gateway_address() {
+		if handle.context().caller != pallet_rwa_pools::Pallet::<Runtime>::gateway_address() {
 			return Err(revert("caller is not the gateway"));
 		}
 
@@ -194,7 +194,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -234,7 +234,7 @@ where
 		borrower: Address,
 		amount: U256,
 	) -> EvmResult {
-		if handle.context().caller != pallet_pools::Pallet::<Runtime>::gateway_address() {
+		if handle.context().caller != pallet_rwa_pools::Pallet::<Runtime>::gateway_address() {
 			return Err(revert("caller is not the gateway"));
 		}
 
@@ -251,7 +251,7 @@ where
 
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_pools::Origin::Gateway.into(),
+			pallet_rwa_pools::Origin::Gateway.into(),
 			call,
 			0,
 		)?;
@@ -288,7 +288,7 @@ where
 		borrower_id: H160,
 		tranches: &[(u64, Address, bool, U256, U256)],
 	) -> EvmResult {
-		let gateway = pallet_pools::Pallet::<Runtime>::gateway_address();
+		let gateway = pallet_rwa_pools::Pallet::<Runtime>::gateway_address();
 		if gateway == H160::zero() {
 			return Ok(());
 		}

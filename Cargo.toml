@@ -119,6 +119,12 @@ pallet-bifrost-evm-tx-payment = { default-features = false, path = "pallets/bifr
 pallet-oracle-registry = { default-features = false, path = "pallets/oracle-registry" }
 pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay-queue" }
 
+# RWA Pallets
+pallet-rwa-pools = { default-features = false, path = "pallets/rwa/pools" }
+pallet-rwa-permissions = { default-features = false, path = "pallets/rwa/permissions" }
+pallet-rwa-investments = { default-features = false, path = "pallets/rwa/investments" }
+pallet-rwa-nav-oracle = { default-features = false, path = "pallets/rwa/nav-oracle" }
+
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
 precompile-bfc-offences = { default-features = false, path = "precompiles/bfc-offences" }
@@ -130,9 +136,9 @@ precompile-btc-registration-pool = { default-features = false, path = "precompil
 precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
-precompile-investments = { default-features = false, path = "precompiles/investments" }
-precompile-permissions = { default-features = false, path = "precompiles/permissions" }
-precompile-pools = { default-features = false, path = "precompiles/pools" }
+precompile-rwa-investments = { default-features = false, path = "precompiles/investments" }
+precompile-rwa-permissions = { default-features = false, path = "precompiles/permissions" }
+precompile-rwa-pools = { default-features = false, path = "precompiles/pools" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

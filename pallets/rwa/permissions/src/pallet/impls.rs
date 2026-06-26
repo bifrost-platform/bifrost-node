@@ -1,6 +1,6 @@
 use crate::Role;
 
-use pallet_pools::{PermissionInspect, PoolId, TrancheId};
+use pallet_rwa_pools::{PermissionInspect, PoolId, TrancheId};
 
 use super::pallet::*;
 
