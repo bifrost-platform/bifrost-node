@@ -4,7 +4,7 @@ mod pallet;
 
 pub use pallet::pallet::*;
 
-use pallet_pools::PoolId;
+use pallet_pools::{EpochId, PoolId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::U256;
