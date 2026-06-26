@@ -1,4 +1,5 @@
-use crate::{EarningsEntry, EpochId, PoolId};
+use crate::{EarningsEntry, EpochId, PoolId, WeightInfo};
+
 use pallet_pools::{PermissionInspect, PoolInspect, PoolNAV};
 use sp_core::U256;
 use sp_runtime::DispatchError;
@@ -24,6 +25,8 @@ pub mod pallet {
 		/// Permission inspection — implemented by pallet-permissions.
 		/// Used to verify that the caller holds the `OracleFeeder` role for the pool.
 		type Permissions: PermissionInspect<Self::AccountId>;
+		/// Weight information for extrinsics in this pallet.
+		type WeightInfo: WeightInfo;
 	}
 
 	// -----------------------------------------------------------------------
@@ -103,7 +106,7 @@ pub mod pallet {
 		/// `pallet-pools` computes the final oracle NAV as:
 		///   `oracle_nav = total_borrowed + (cumulative_earnings − repaid_earnings)`
 		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn submit_earnings(
 			origin: OriginFor<T>,
 			pool_id: PoolId,

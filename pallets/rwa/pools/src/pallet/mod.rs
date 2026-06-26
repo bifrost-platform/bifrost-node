@@ -3,7 +3,7 @@ mod impls;
 use crate::{
 	CollateralAsset, EpochInfo, PermissionInspect, PoolDetails, PoolId, PoolNAV, Settlement,
 	SettlementMode, Tranche, TrancheId, TrancheInput, TranchePendingOrders, TrancheType,
-	TrancheTypeInput, MAX_COLLATERALS, MAX_TRANCHES,
+	TrancheTypeInput, WeightInfo, MAX_COLLATERALS, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion, traits::UnixTime};
@@ -58,6 +58,8 @@ pub mod pallet {
 		/// Permission inspector — implemented by pallet-permissions.
 		/// Used to gate `create_pool`, `add_vault`, and other pool-admin actions.
 		type Permissions: PermissionInspect<Self::AccountId>;
+		/// Weight information for extrinsics in this pallet.
+		type WeightInfo: WeightInfo;
 	}
 
 	// -----------------------------------------------------------------------
@@ -379,7 +381,7 @@ pub mod pallet {
 		/// `settlement_offset_secs` is how many seconds before epoch end the settlement window
 		/// opens. During this window new orders are rejected.
 		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn create_pool(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -481,7 +483,7 @@ pub mod pallet {
 		/// Each tranche slot is created at pool creation; this call associates it with
 		/// the deployed vault contract on the external EVM chain.
 		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn add_vault(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -542,7 +544,7 @@ pub mod pallet {
 		/// Draws `amount` from the tranche treasury by decrementing `reserve` and incrementing `borrowed`.
 		/// Fails if `reserve` is less than `amount`.
 		#[pallet::call_index(2)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn borrow(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -585,7 +587,7 @@ pub mod pallet {
 		/// The Gateway contract is responsible for ensuring `amount` is backed by an actual
 		/// USDC transfer before dispatching this extrinsic.
 		#[pallet::call_index(3)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn repay(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -624,7 +626,7 @@ pub mod pallet {
 		/// Both pool and investment precompiles read this address to enforce that only
 		/// the Gateway contract can trigger pallet dispatch.
 		#[pallet::call_index(4)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn set_gateway(origin: OriginFor<T>, address: H160) -> DispatchResult {
 			ensure_root(origin)?;
 			GatewayAddress::<T>::put(address);

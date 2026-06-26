@@ -3,7 +3,7 @@ mod impls;
 use crate::{
 	ApprovedDepositOrder, ApprovedRedeemOrder, ClaimableDepositOrder, ClaimableRedeemOrder,
 	PendingDepositOrder, PendingRedeemOrder, PermissionInspect, PoolId, PoolInspect,
-	SettlementMode, TrancheId, TrancheMutate, MAX_INVESTORS_PER_APPROVAL,
+	SettlementMode, TrancheId, TrancheMutate, WeightInfo, MAX_INVESTORS_PER_APPROVAL,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -32,6 +32,8 @@ pub mod pallet {
 		/// Used to verify the Borrower role on `approve_deposit_orders` and
 		/// `approve_redeem_orders`.
 		type Permissions: PermissionInspect<Self::AccountId>;
+		/// Weight information for extrinsics in this pallet.
+		type WeightInfo: WeightInfo;
 	}
 
 	// -----------------------------------------------------------------------
@@ -239,7 +241,7 @@ pub mod pallet {
 		/// Rejected during the pool's settlement window.
 		/// Updates the tranche's aggregate pending deposit total.
 		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn submit_deposit_order(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -296,7 +298,7 @@ pub mod pallet {
 		/// so `token_supply` is decremented here immediately.
 		/// Rejected during the pool's settlement window.
 		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn submit_redeem_order(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -356,7 +358,7 @@ pub mod pallet {
 		/// The Gateway smart contract observes the `DepositOrderApproved` events and sends
 		/// mint instructions to the spoke chain.
 		#[pallet::call_index(2)]
-		#[pallet::weight(Weight::from_parts(10_000, 0).saturating_mul(investor_ids.len() as u64))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn approve_deposit_orders(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -443,7 +445,7 @@ pub mod pallet {
 		/// The Gateway smart contract observes the `RedeemOrderApproved` events and sends
 		/// payout instructions to the spoke chain.
 		#[pallet::call_index(3)]
-		#[pallet::weight(Weight::from_parts(10_000, 0).saturating_mul(investor_ids.len() as u64))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn approve_redeem_orders(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -539,7 +541,7 @@ pub mod pallet {
 		/// Moves the entry from `ClaimableDepositOrders` to `ApprovedDepositOrders` and
 		/// emits `DepositClaimed` — the Gateway smart contract then sends the mint instruction.
 		#[pallet::call_index(4)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn claim_shares(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -600,7 +602,7 @@ pub mod pallet {
 		/// Moves the entry from `ClaimableRedeemOrders` to `ApprovedRedeemOrders` and
 		/// emits `RedeemClaimed` — the Gateway smart contract then sends the payout instruction.
 		#[pallet::call_index(5)]
-		#[pallet::weight(Weight::from_parts(10_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn claim_assets(
 			origin: OriginFor<T>,
 			pool_id: PoolId,

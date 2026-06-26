@@ -1,12 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod pallet;
+pub mod weights;
 
 pub use pallet::pallet::*;
 pub use pallet_pools::{
 	EpochId, PermissionInspect, PoolId, PoolInspect, Settlement, SettlementMode, TrancheId,
 	TrancheMutate,
 };
+pub use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;

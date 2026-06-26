@@ -1,6 +1,6 @@
 mod impls;
 
-use crate::{PoolId, Role};
+use crate::{PoolId, Role, WeightInfo};
 use pallet_pools::{PoolInspect, TrancheId};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -22,6 +22,8 @@ pub mod pallet {
 		/// Used to verify that a tranche belongs to the given pool before
 		/// granting the `TrancheInvestor` role.
 		type Pools: PoolInspect;
+		/// Weight information for extrinsics in this pallet.
+		type WeightInfo: WeightInfo;
 	}
 
 	// -----------------------------------------------------------------------
@@ -96,7 +98,7 @@ pub mod pallet {
 		///
 		/// `Role::Borrower` cannot be granted here; it is set atomically by `create_pool`.
 		#[pallet::call_index(0)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn grant_permission(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
@@ -149,7 +151,7 @@ pub mod pallet {
 		///
 		/// `Role::Borrower` cannot be revoked here; it is tied to the pool lifecycle.
 		#[pallet::call_index(1)]
-		#[pallet::weight(Weight::from_parts(5_000, 0))]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
 		pub fn revoke_permission(
 			origin: OriginFor<T>,
 			pool_id: PoolId,
