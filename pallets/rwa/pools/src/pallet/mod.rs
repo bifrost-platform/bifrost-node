@@ -3,7 +3,7 @@ mod impls;
 use crate::{
 	CollateralAsset, EpochInfo, PermissionInspect, PoolDetails, PoolId, PoolNAV, Settlement,
 	SettlementMode, Tranche, TrancheId, TrancheInput, TranchePendingOrders, TrancheType,
-	MAX_COLLATERALS, MAX_TRANCHES,
+	TrancheTypeInput, MAX_COLLATERALS, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion, traits::UnixTime};
@@ -78,7 +78,7 @@ pub mod pallet {
 		TrancheAlreadyExists,
 		/// Out of range.
 		OutOfRange,
-		/// Borrow amount exceeds available tranche treasury liquidity (invested − borrowed).
+		/// Borrow amount exceeds the tranche's available reserve.
 		InsufficientTreasuryLiquidity,
 		/// Amount must be greater than zero.
 		ZeroAmount,
@@ -92,6 +92,9 @@ pub mod pallet {
 		Unauthorized,
 		/// A pool with this ID already exists.
 		PoolAlreadyExists,
+		/// A tranche of this type (Senior or Junior) already exists in the pool.
+		/// Each pool supports exactly one senior tranche and one junior tranche.
+		DuplicateTrancheType,
 	}
 
 	// -----------------------------------------------------------------------
@@ -218,6 +221,16 @@ pub mod pallet {
 						// begins (the Gateway refreshes it as the first step of the settlement
 						// flow). This ensures oracle_nav reflects only outstanding loan value
 						// and reserve reflects only uninvested cash, with no overlap.
+						//
+						// Design constraint: exactly one senior tranche and one junior tranche
+						// per pool (enforced by create_pool / add_vault). The senior claims
+						// first up to its accrued_nav; the junior receives the residual.
+						// If total_pool_value < accrued_nav (loss epoch), the senior is capped
+						// at total_pool_value and the junior receives zero. accrued_nav is NOT
+						// reset on a loss epoch — the senior's contractual claim persists and
+						// continues compounding; the min() cap here prevents overpayment in any
+						// single epoch. If the pool recovers, the senior collects the shortfall
+						// in future epochs.
 						let total_reserve: U256 = pool
 							.tranches
 							.values()
@@ -387,6 +400,16 @@ pub mod pallet {
 				settlement_offset_secs > 0 && settlement_offset_secs < epoch_length_secs,
 				Error::<T>::InvalidSettlementOffset
 			);
+			// Each pool supports exactly one senior tranche and one junior tranche.
+			let junior_count = tranches
+				.iter()
+				.filter(|t| matches!(t.tranche_type, TrancheTypeInput::Junior))
+				.count();
+			let senior_count = tranches
+				.iter()
+				.filter(|t| matches!(t.tranche_type, TrancheTypeInput::Senior { .. }))
+				.count();
+			ensure!(junior_count <= 1 && senior_count <= 1, Error::<T>::DuplicateTrancheType);
 
 			let now_secs = T::Time::now().as_secs();
 
@@ -479,6 +502,15 @@ pub mod pallet {
 				.ok_or(Error::<T>::InvalidRate)?;
 			Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
 				let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+				// Enforce one senior + one junior maximum per pool.
+				let duplicate = pool.tranches.values().any(|t| {
+					matches!(
+						(&tranche_type, &t.tranche_type),
+						(TrancheType::Junior, TrancheType::Junior)
+							| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
+					)
+				});
+				ensure!(!duplicate, Error::<T>::DuplicateTrancheType);
 				pool.tranches
 					.try_insert(
 						tranche.tranche_id.clone(),
