@@ -545,6 +545,7 @@ pub mod pallet {
 					.map_err(|_| Error::<T>::OutOfRange)?;
 				Ok(())
 			})?;
+			Tranches::<T>::insert(tranche.tranche_id.clone(), pool_id);
 			Self::deposit_event(Event::VaultAdded { pool_id, tranche_id: tranche.tranche_id });
 			Ok(())
 		}
