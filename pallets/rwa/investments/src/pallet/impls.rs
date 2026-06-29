@@ -1,6 +1,6 @@
 use crate::{ClaimableDepositOrder, ClaimableRedeemOrder, PendingDepositOrder, PendingRedeemOrder};
 
-use pallet_rwa_pools::{EpochId, PoolId, Settlement, TrancheId, TrancheMutate, WAD};
+use pallet_rwa_pools::{EpochId, PoolId, Settlement, TrancheId, WAD};
 use sp_core::U256;
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
@@ -38,18 +38,18 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
 		epoch_price: U256,
-	) -> Result<U256, DispatchError> {
+	) -> Result<(U256, U256), DispatchError> {
 		let entries: Vec<(T::AccountId, PendingDepositOrder)> =
 			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
 
 		if entries.is_empty() {
-			return Ok(U256::zero());
+			return Ok((U256::zero(), U256::zero()));
 		}
 
 		let total = entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
 
 		if total.is_zero() {
-			return Ok(U256::zero());
+			return Ok((U256::zero(), U256::zero()));
 		}
 
 		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
@@ -93,11 +93,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 			shares_total = shares_total.saturating_add(shares_to_mint);
 		}
 
-		if !shares_total.is_zero() {
-			T::Pools::add_token_supply(pool_id, tranche_id, shares_total)?;
-		}
-
-		Ok(total)
+		Ok((total, shares_total))
 	}
 
 	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`

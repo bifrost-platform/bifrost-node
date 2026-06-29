@@ -287,13 +287,16 @@ pub mod pallet {
 							for (tranche_id, tranche) in pool.tranches.iter_mut() {
 								if !tranche.pending_orders.deposit.is_zero() {
 									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
-									if let Ok(confirmed) = T::Investments::settle_deposit_orders(
-										pool_id,
-										tranche_id.clone(),
-										pool.epoch.current_epoch,
-										epoch_price,
-									) {
+									if let Ok((confirmed, shares_minted)) =
+										T::Investments::settle_deposit_orders(
+											pool_id,
+											tranche_id.clone(),
+											pool.epoch.current_epoch,
+											epoch_price,
+										) {
 										tranche.reserve = tranche.reserve.saturating_add(confirmed);
+										tranche.token_supply =
+											tranche.token_supply.saturating_add(shares_minted);
 										tranche.pending_orders.deposit = U256::zero();
 										// Senior accrued_nav grows by the newly settled deposit.
 										if let TrancheType::Senior { .. } = &tranche.tranche_type {

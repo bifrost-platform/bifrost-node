@@ -389,14 +389,15 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 	/// Settled orders move to `ClaimableDepositOrders`; investors pull-claim via
 	/// `claim_deposit`, which triggers outbound share minting on the spoke chain.
 	///
-	/// Returns the total amount settled (for `tranche.reserve` accounting),
+	/// Returns `(total_assets_settled, shares_minted)` — used to update
+	/// `tranche.reserve` and `tranche.token_supply` in pallet-pools,
 	/// or `Err` if a required storage operation failed (e.g. pool not found).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
 		epoch_price: U256,
-	) -> Result<Balance, DispatchError>;
+	) -> Result<(Balance, Balance), DispatchError>;
 
 	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`
 	/// (the tranche's available treasury liquidity).
