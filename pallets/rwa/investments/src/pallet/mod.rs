@@ -428,7 +428,8 @@ pub mod pallet {
 			if !total_approved.is_zero() {
 				T::Pools::sub_pending_deposit(pool_id, tranche_id.clone(), total_approved)?;
 				T::Pools::add_reserve(pool_id, tranche_id.clone(), total_approved)?;
-				T::Pools::add_token_supply(pool_id, tranche_id, total_shares_minted)?;
+				T::Pools::add_token_supply(pool_id, tranche_id.clone(), total_shares_minted)?;
+				T::Pools::add_accrued_nav(pool_id, tranche_id, total_approved)?;
 			}
 
 			Ok(())
@@ -528,7 +529,8 @@ pub mod pallet {
 
 			if !total_tokens_approved.is_zero() {
 				T::Pools::sub_pending_redeem(pool_id, tranche_id.clone(), total_tokens_approved)?;
-				T::Pools::sub_reserve(pool_id, tranche_id, total_payout)?;
+				T::Pools::sub_reserve(pool_id, tranche_id.clone(), total_payout)?;
+				T::Pools::sub_accrued_nav(pool_id, tranche_id, total_payout)?;
 			}
 
 			Ok(())

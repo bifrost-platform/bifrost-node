@@ -487,6 +487,24 @@ pub trait TrancheMutate<Balance> {
 		tranche_id: TrancheId,
 		amount: Balance,
 	) -> frame_support::dispatch::DispatchResult;
+
+	/// Increment the senior tranche's accrued NAV by the settled deposit amount.
+	/// No-op for junior tranches. Called when deposit orders are approved (Approval mode)
+	/// so the waterfall correctly allocates the senior's claim in future epochs.
+	fn add_accrued_nav(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
+
+	/// Decrement the senior tranche's accrued NAV by the redeemed asset payout.
+	/// No-op for junior tranches. Called when redeem orders are approved (Approval mode)
+	/// so the waterfall does not over-allocate to the senior in future epochs.
+	fn sub_accrued_nav(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: Balance,
+	) -> frame_support::dispatch::DispatchResult;
 }
 
 /// Implemented by pallet-permissions. Called by pallet-pools and pallet-investments

@@ -180,4 +180,34 @@ impl<T: Config> TrancheMutate<U256> for Pallet<T> {
 			Ok(())
 		})
 	}
+
+	fn add_accrued_nav(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: U256,
+	) -> frame_support::dispatch::DispatchResult {
+		Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
+			if let crate::TrancheType::Senior { .. } = tranche.tranche_type {
+				tranche.accrued_nav = tranche.accrued_nav.saturating_add(amount);
+			}
+			Ok(())
+		})
+	}
+
+	fn sub_accrued_nav(
+		pool_id: PoolId,
+		tranche_id: TrancheId,
+		amount: U256,
+	) -> frame_support::dispatch::DispatchResult {
+		Pools::<T>::try_mutate(pool_id, |maybe_pool| -> Result<(), DispatchError> {
+			let pool = maybe_pool.as_mut().ok_or(Error::<T>::PoolNotFound)?;
+			let tranche = pool.tranches.get_mut(&tranche_id).ok_or(Error::<T>::TrancheNotFound)?;
+			if let crate::TrancheType::Senior { .. } = tranche.tranche_type {
+				tranche.accrued_nav = tranche.accrued_nav.saturating_sub(amount);
+			}
+			Ok(())
+		})
+	}
 }
