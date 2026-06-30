@@ -198,152 +198,163 @@ pub mod pallet {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
 					if needs_finalization {
-						let cumulative_earnings =
-							T::NAV::nav(pool_id).map(|(n, _)| n).unwrap_or_default();
-						let total_borrowed: U256 = pool
-							.tranches
-							.values()
-							.map(|t| t.borrowed)
-							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
-						let total_repaid_earnings: U256 = pool
-							.tranches
-							.values()
-							.map(|t| t.repaid_earnings)
-							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
-						let oracle_nav = total_borrowed.saturating_add(
-							cumulative_earnings.saturating_sub(total_repaid_earnings),
-						);
-						// Accrue for the full intended epoch duration, not `now - epoch_start_secs`.
-						// The settlement window opens `settlement_offset_secs` before epoch end,
-						// so using the real elapsed time would under-accrue by that offset.
-						let elapsed_secs = pool.epoch.epoch_length_secs;
+						if let Some(cumulative_earnings) = T::NAV::nav(pool_id).map(|(n, _)| n) {
+							// Oracle hasn't submitted yet → do nothing this block; fall through to
+							// the epoch advance check below so the pool is never stuck.
+							let total_borrowed: U256 = pool
+								.tranches
+								.values()
+								.map(|t| t.borrowed)
+								.fold(U256::zero(), |acc, v| acc.saturating_add(v));
+							let total_repaid_earnings: U256 = pool
+								.tranches
+								.values()
+								.map(|t| t.repaid_earnings)
+								.fold(U256::zero(), |acc, v| acc.saturating_add(v));
+							let oracle_nav = total_borrowed.saturating_add(
+								cumulative_earnings.saturating_sub(total_repaid_earnings),
+							);
+							// Accrue for the full intended epoch duration, not `now - epoch_start_secs`.
+							// The settlement window opens `settlement_offset_secs` before epoch end,
+							// so using the real elapsed time would under-accrue by that offset.
+							let elapsed_secs = pool.epoch.epoch_length_secs;
 
-						// Step 1: Compound-accrue senior NAVs for the elapsed epoch.
-						// All deposits settled in this epoch — including those submitted
-						// mid-epoch — accrue interest for the full epoch_length_secs.
-						// This is an intentional approximation: tracking per-deposit
-						// timestamps to pro-rate within-epoch accrual would add significant
-						// complexity for a negligible per-epoch difference.
-						for (_, tranche) in pool.tranches.iter_mut() {
-							tranche.accrue_interest(elapsed_secs);
-						}
-
-						// Step 2: Waterfall — split total pool value between tranches.
-						// total_pool_value = oracle_nav + sum(reserve across all tranches)
-						// Invariant: the NAV oracle must be finalized before epoch settlement
-						// begins (the Gateway refreshes it as the first step of the settlement
-						// flow). This ensures oracle_nav reflects only outstanding loan value
-						// and reserve reflects only uninvested cash, with no overlap.
-						//
-						// Design constraint: exactly one senior tranche and one junior tranche
-						// per pool (enforced by create_pool / add_vault). The senior claims
-						// first up to its accrued_nav; the junior receives the residual.
-						// If total_pool_value < accrued_nav (loss epoch), the senior is capped
-						// at total_pool_value and the junior receives zero. accrued_nav is NOT
-						// reset on a loss epoch — the senior's contractual claim persists and
-						// continues compounding; the min() cap here prevents overpayment in any
-						// single epoch. If the pool recovers, the senior collects the shortfall
-						// in future epochs.
-						let total_reserve: U256 = pool
-							.tranches
-							.values()
-							.map(|t| t.reserve)
-							.fold(U256::zero(), |acc, v| acc.saturating_add(v));
-						let total_pool_value = oracle_nav.saturating_add(total_reserve);
-						let mut remaining = total_pool_value;
-
-						// Senior tranches claim first (BTreeMap order); junior takes the residual.
-						let mut tranche_navs: Vec<(TrancheId, U256)> = Vec::new();
-						for (id, tranche) in pool.tranches.iter() {
-							if let TrancheType::Senior { .. } = &tranche.tranche_type {
-								let share = remaining.min(tranche.accrued_nav);
-								remaining = remaining.saturating_sub(share);
-								tranche_navs.push((id.clone(), share));
+							// Step 1: Compound-accrue senior NAVs for the elapsed epoch.
+							// All deposits settled in this epoch — including those submitted
+							// mid-epoch — accrue interest for the full epoch_length_secs.
+							// This is an intentional approximation: tracking per-deposit
+							// timestamps to pro-rate within-epoch accrual would add significant
+							// complexity for a negligible per-epoch difference.
+							for (_, tranche) in pool.tranches.iter_mut() {
+								tranche.accrue_interest(elapsed_secs);
 							}
-						}
-						for (id, tranche) in pool.tranches.iter() {
-							if tranche.tranche_type.is_junior() {
-								tranche_navs.push((id.clone(), remaining));
-								remaining = U256::zero();
-							}
-						}
 
-						// Step 3: Lock epoch_price for each tranche.
-						for (id, nav) in &tranche_navs {
-							if let Some(t) = pool.tranches.get_mut(id) {
-								if t.epoch_price.is_none() {
-									t.epoch_price = Some(t.token_price(*nav));
+							// Step 2: Waterfall — split total pool value between tranches.
+							// total_pool_value = oracle_nav + sum(reserve across all tranches)
+							// Invariant: the NAV oracle must be finalized before epoch settlement
+							// begins (the Gateway refreshes it as the first step of the settlement
+							// flow). This ensures oracle_nav reflects only outstanding loan value
+							// and reserve reflects only uninvested cash, with no overlap.
+							//
+							// Design constraint: exactly one senior tranche and one junior tranche
+							// per pool (enforced by create_pool / add_vault). The senior claims
+							// first up to its accrued_nav; the junior receives the residual.
+							// If total_pool_value < accrued_nav (loss epoch), the senior is capped
+							// at total_pool_value and the junior receives zero. accrued_nav is NOT
+							// reset on a loss epoch — the senior's contractual claim persists and
+							// continues compounding; the min() cap here prevents overpayment in any
+							// single epoch. If the pool recovers, the senior collects the shortfall
+							// in future epochs.
+							let total_reserve: U256 = pool
+								.tranches
+								.values()
+								.map(|t| t.reserve)
+								.fold(U256::zero(), |acc, v| acc.saturating_add(v));
+							let total_pool_value = oracle_nav.saturating_add(total_reserve);
+							let mut remaining = total_pool_value;
+
+							// Senior tranches claim first (BTreeMap order); junior takes the residual.
+							let mut tranche_navs: Vec<(TrancheId, U256)> = Vec::new();
+							for (id, tranche) in pool.tranches.iter() {
+								if let TrancheType::Senior { .. } = &tranche.tranche_type {
+									let share = remaining.min(tranche.accrued_nav);
+									remaining = remaining.saturating_sub(share);
+									tranche_navs.push((id.clone(), share));
 								}
 							}
-						}
+							for (id, tranche) in pool.tranches.iter() {
+								if tranche.tranche_type.is_junior() {
+									tranche_navs.push((id.clone(), remaining));
+									remaining = U256::zero();
+								}
+							}
 
-						// Snapshot liquidity before deposit settlement so that freshly settled
-						// deposits cannot immediately fund same-epoch redeem payouts.
-						// BTreeMap gives O(log n) lookup in the redeem loop vs O(n²) with Vec::find.
-						let pre_deposit_reserve: BTreeMap<TrancheId, U256> =
-							pool.tranches.iter().map(|(id, t)| (id.clone(), t.reserve)).collect();
+							// Step 3: Lock epoch_price for each tranche.
+							for (id, nav) in &tranche_navs {
+								if let Some(t) = pool.tranches.get_mut(id) {
+									if t.epoch_price.is_none() {
+										t.epoch_price = Some(t.token_price(*nav));
+									}
+								}
+							}
 
-						if pool.deposit_settlement == SettlementMode::Automatic {
-							for (tranche_id, tranche) in pool.tranches.iter_mut() {
-								if !tranche.pending_orders.deposit.is_zero() {
-									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
-									if let Ok((confirmed, shares_minted)) =
-										T::Investments::settle_deposit_orders(
-											pool_id,
-											tranche_id.clone(),
-											pool.epoch.current_epoch,
-											epoch_price,
-										) {
-										tranche.reserve = tranche.reserve.saturating_add(confirmed);
-										tranche.token_supply =
-											tranche.token_supply.saturating_add(shares_minted);
-										tranche.pending_orders.deposit = U256::zero();
-										// Senior accrued_nav grows by the newly settled deposit.
-										if let TrancheType::Senior { .. } = &tranche.tranche_type {
-											tranche.accrued_nav =
-												tranche.accrued_nav.saturating_add(confirmed);
+							// Snapshot liquidity before deposit settlement so that freshly settled
+							// deposits cannot immediately fund same-epoch redeem payouts.
+							// BTreeMap gives O(log n) lookup in the redeem loop vs O(n²) with Vec::find.
+							let pre_deposit_reserve: BTreeMap<TrancheId, U256> = pool
+								.tranches
+								.iter()
+								.map(|(id, t)| (id.clone(), t.reserve))
+								.collect();
+
+							if pool.deposit_settlement == SettlementMode::Automatic {
+								for (tranche_id, tranche) in pool.tranches.iter_mut() {
+									if !tranche.pending_orders.deposit.is_zero() {
+										let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
+										if let Ok((confirmed, shares_minted)) =
+											T::Investments::settle_deposit_orders(
+												pool_id,
+												tranche_id.clone(),
+												pool.epoch.current_epoch,
+												epoch_price,
+											) {
+											tranche.reserve =
+												tranche.reserve.saturating_add(confirmed);
+											tranche.token_supply =
+												tranche.token_supply.saturating_add(shares_minted);
+											tranche.pending_orders.deposit = U256::zero();
+											// Senior accrued_nav grows by the newly settled deposit.
+											if let TrancheType::Senior { .. } =
+												&tranche.tranche_type
+											{
+												tranche.accrued_nav =
+													tranche.accrued_nav.saturating_add(confirmed);
+											}
 										}
 									}
 								}
 							}
-						}
 
-						if pool.redeem_settlement == SettlementMode::Automatic {
-							for (tranche_id, tranche) in pool.tranches.iter_mut() {
-								let max_reserve = pre_deposit_reserve
-									.get(tranche_id)
-									.copied()
-									.unwrap_or_default();
-								if !max_reserve.is_zero()
-									&& !tranche.pending_orders.redeem.is_zero()
-								{
-									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
-									if let Ok((tokens_settled, asset_payout)) =
-										T::Investments::settle_redeem_orders(
-											pool_id,
-											tranche_id.clone(),
-											pool.epoch.current_epoch,
-											max_reserve,
-											epoch_price,
-										) {
-										tranche.reserve =
-											tranche.reserve.saturating_sub(asset_payout);
-										tranche.pending_orders.redeem = tranche
-											.pending_orders
-											.redeem
-											.saturating_sub(tokens_settled);
-										// Senior accrued_nav shrinks by the redeemed asset payout.
-										if let TrancheType::Senior { .. } = &tranche.tranche_type {
-											tranche.accrued_nav =
-												tranche.accrued_nav.saturating_sub(asset_payout);
+							if pool.redeem_settlement == SettlementMode::Automatic {
+								for (tranche_id, tranche) in pool.tranches.iter_mut() {
+									let max_reserve = pre_deposit_reserve
+										.get(tranche_id)
+										.copied()
+										.unwrap_or_default();
+									if !max_reserve.is_zero()
+										&& !tranche.pending_orders.redeem.is_zero()
+									{
+										let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
+										if let Ok((tokens_settled, asset_payout)) =
+											T::Investments::settle_redeem_orders(
+												pool_id,
+												tranche_id.clone(),
+												pool.epoch.current_epoch,
+												max_reserve,
+												epoch_price,
+											) {
+											tranche.reserve =
+												tranche.reserve.saturating_sub(asset_payout);
+											tranche.pending_orders.redeem = tranche
+												.pending_orders
+												.redeem
+												.saturating_sub(tokens_settled);
+											// Senior accrued_nav shrinks by the redeemed asset payout.
+											if let TrancheType::Senior { .. } =
+												&tranche.tranche_type
+											{
+												tranche.accrued_nav = tranche
+													.accrued_nav
+													.saturating_sub(asset_payout);
+											}
 										}
 									}
 								}
 							}
-						}
 
-						changed = true;
-					}
+							changed = true;
+						} // if let Some(cumulative_earnings)
+					} // if needs_finalization
 
 					// Settlement window was entered (finalized or already done).
 					// Next action: epoch end, when we need to advance.
