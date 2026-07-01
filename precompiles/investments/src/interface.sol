@@ -28,6 +28,7 @@ interface Investments {
         address vault_address,
         address borrower,
         address investor_id,
+        uint64 epoch_id,
         uint256 shares_to_mint
     );
     event RedeemOrderApproved(
@@ -36,6 +37,7 @@ interface Investments {
         address vault_address,
         address borrower,
         address investor_id,
+        uint64 epoch_id,
         uint256 payout_amount
     );
     event SharesClaimed(
@@ -101,14 +103,16 @@ interface Investments {
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param borrower      EVM address of the institution approving the orders
-     * @param investor_ids  Investor addresses to approve (max 100)
+     * @param investor_ids  Investor addresses to approve (max 100, parallel with epoch_ids)
+     * @param epoch_ids     Epoch IDs of the pending orders to approve (parallel with investor_ids)
      */
     function approve_deposit_orders(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
         address borrower,
-        address[] calldata investor_ids
+        address[] calldata investor_ids,
+        uint64[] calldata epoch_ids
     ) external;
 
     /**
@@ -116,19 +120,21 @@ interface Investments {
      * @dev Only callable by the Gateway contract.
      *      Settlement window must be open. Converts token amounts to USDC-to-distribute
      *      at the locked epoch price and moves entries to ApprovedRedeemOrders.
-     *      Emits RedeemOrderApproved per investor.
+     *      Emits RedeemOrderApproved per approved (investor, epoch) pair.
      * @param pool_id       The pool ID
      * @param chain_id      EVM chain ID of the chain where the vault is deployed
      * @param vault_address ERC-7540 vault contract address on that chain
      * @param borrower      EVM address of the institution approving the orders
-     * @param investor_ids  Investor addresses to approve (max 100)
+     * @param investor_ids  Investor addresses to approve (max 100, parallel with epoch_ids)
+     * @param epoch_ids     Epoch IDs of the pending orders to approve (parallel with investor_ids)
      */
     function approve_redeem_orders(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
         address borrower,
-        address[] calldata investor_ids
+        address[] calldata investor_ids,
+        uint64[] calldata epoch_ids
     ) external;
 
     /**

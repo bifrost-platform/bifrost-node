@@ -17,6 +17,28 @@ use sp_runtime::RuntimeDebug;
 
 pub const MAX_INVESTORS_PER_APPROVAL: u32 = 100;
 
+/// Identifies a single pending order to approve.
+/// Used as the element type of `orders` in `approve_deposit_orders` and
+/// `approve_redeem_orders` so callers target a specific (investor, epoch) entry
+/// rather than approving all epochs for an investor at once.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub struct OrderKey<AccountId> {
+	pub investor_id: AccountId,
+	pub epoch_id: EpochId,
+}
+
 // ---------------------------------------------------------------------------
 // Order structs
 // ---------------------------------------------------------------------------

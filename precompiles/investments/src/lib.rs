@@ -4,8 +4,8 @@
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::AddressMapping;
 use pallet_rwa_investments::Call as InvestmentsCall;
-use pallet_rwa_investments::MAX_INVESTORS_PER_APPROVAL;
-use pallet_rwa_pools::{PoolInspect, TrancheId};
+use pallet_rwa_investments::{OrderKey, MAX_INVESTORS_PER_APPROVAL};
+use pallet_rwa_pools::{EpochId, PoolInspect, TrancheId};
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
@@ -16,9 +16,9 @@ pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_SUBMITTED: [u8; 32] =
 pub(crate) const SELECTOR_LOG_REDEEM_ORDER_SUBMITTED: [u8; 32] =
 	keccak256!("RedeemOrderSubmitted(uint64,uint64,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_APPROVED: [u8; 32] =
-	keccak256!("DepositOrderApproved(uint64,uint64,address,address,address,uint256)");
+	keccak256!("DepositOrderApproved(uint64,uint64,address,address,address,uint64,uint256)");
 pub(crate) const SELECTOR_LOG_REDEEM_ORDER_APPROVED: [u8; 32] =
-	keccak256!("RedeemOrderApproved(uint64,uint64,address,address,address,uint256)");
+	keccak256!("RedeemOrderApproved(uint64,uint64,address,address,address,uint64,uint256)");
 pub(crate) const SELECTOR_LOG_SHARES_CLAIMED: [u8; 32] =
 	keccak256!("SharesClaimed(uint64,uint64,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_ASSETS_CLAIMED: [u8; 32] =
@@ -169,7 +169,7 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param borrower      EVM address of the institution approving the orders
 	/// @param investor_ids  list of investor addresses to approve (max 100)
-	#[precompile::public("approve_deposit_orders(uint64,uint64,address,address,address[])")]
+	#[precompile::public("approve_deposit_orders(uint64,uint64,address,address,address[],uint64[])")]
 	fn approve_deposit_orders(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -177,25 +177,36 @@ where
 		vault_address: Address,
 		borrower: Address,
 		investor_ids: Vec<Address>,
+		epoch_ids: Vec<u64>,
 	) -> EvmResult {
 		if handle.context().caller != Self::gateway_address() {
 			return Err(revert("caller is not the gateway"));
+		}
+		if investor_ids.len() != epoch_ids.len() {
+			return Err(revert("investor_ids and epoch_ids length mismatch"));
 		}
 
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let borrower: H160 = borrower.0;
 		let borrower_account = Runtime::AddressMapping::into_account_id(borrower);
-		let ids: sp_std::vec::Vec<H160> = investor_ids.into_iter().map(|a| a.0).collect();
-		let investor_accounts: sp_std::vec::Vec<Runtime::AccountId> =
-			ids.iter().map(|a| Runtime::AddressMapping::into_account_id(*a)).collect();
-		let investor_ids: BoundedVec<Runtime::AccountId, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
-			investor_accounts.try_into().map_err(|_| revert("too many investor IDs"))?;
+
+		let order_keys: BoundedVec<OrderKey<Runtime::AccountId>, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
+			investor_ids
+				.iter()
+				.zip(epoch_ids.iter())
+				.map(|(addr, epoch_id)| OrderKey {
+					investor_id: Runtime::AddressMapping::into_account_id(addr.0),
+					epoch_id: *epoch_id as EpochId,
+				})
+				.collect::<sp_std::vec::Vec<_>>()
+				.try_into()
+				.map_err(|_| revert("too many orders"))?;
 
 		let call = InvestmentsCall::<Runtime>::approve_deposit_orders {
 			pool_id,
 			tranche_id,
 			borrower: borrower_account,
-			investor_ids,
+			orders: order_keys,
 		};
 
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -207,14 +218,20 @@ where
 
 		let tranche_id_for_log =
 			pallet_rwa_pools::TrancheId { chain_id, vault_address: vault_address.0 };
-		for investor_id in &ids {
-			let investor_account = Runtime::AddressMapping::into_account_id(*investor_id);
-			let shares_to_mint = pallet_rwa_investments::ApprovedDepositOrders::<Runtime>::get(
+		for (investor_addr, epoch_id) in investor_ids.iter().zip(epoch_ids.iter()) {
+			let investor_account =
+				Runtime::AddressMapping::into_account_id(investor_addr.0);
+			let epoch_id = *epoch_id as EpochId;
+			let shares_to_mint = pallet_rwa_investments::ApprovedDepositOrders::<Runtime>::get((
 				tranche_id_for_log.clone(),
-				&investor_account,
-			)
+				investor_account,
+				epoch_id,
+			))
 			.map(|o| o.shares_to_mint)
 			.unwrap_or_default();
+			if shares_to_mint.is_zero() {
+				continue;
+			}
 			let event = log1(
 				handle.context().address,
 				SELECTOR_LOG_DEPOSIT_ORDER_APPROVED,
@@ -223,7 +240,8 @@ where
 					U256::from(chain_id),
 					vault_address,
 					Address(borrower),
-					Address(*investor_id),
+					*investor_addr,
+					U256::from(epoch_id),
 					shares_to_mint,
 				)),
 			);
@@ -243,7 +261,7 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param borrower      EVM address of the institution approving the orders
 	/// @param investor_ids  list of investor addresses to approve (max 100)
-	#[precompile::public("approve_redeem_orders(uint64,uint64,address,address,address[])")]
+	#[precompile::public("approve_redeem_orders(uint64,uint64,address,address,address[],uint64[])")]
 	fn approve_redeem_orders(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -251,25 +269,36 @@ where
 		vault_address: Address,
 		borrower: Address,
 		investor_ids: Vec<Address>,
+		epoch_ids: Vec<u64>,
 	) -> EvmResult {
 		if handle.context().caller != Self::gateway_address() {
 			return Err(revert("caller is not the gateway"));
+		}
+		if investor_ids.len() != epoch_ids.len() {
+			return Err(revert("investor_ids and epoch_ids length mismatch"));
 		}
 
 		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
 		let borrower: H160 = borrower.0;
 		let borrower_account = Runtime::AddressMapping::into_account_id(borrower);
-		let ids: sp_std::vec::Vec<H160> = investor_ids.into_iter().map(|a| a.0).collect();
-		let investor_accounts: sp_std::vec::Vec<Runtime::AccountId> =
-			ids.iter().map(|a| Runtime::AddressMapping::into_account_id(*a)).collect();
-		let investor_ids: BoundedVec<Runtime::AccountId, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
-			investor_accounts.try_into().map_err(|_| revert("too many investor IDs"))?;
+
+		let order_keys: BoundedVec<OrderKey<Runtime::AccountId>, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
+			investor_ids
+				.iter()
+				.zip(epoch_ids.iter())
+				.map(|(addr, epoch_id)| OrderKey {
+					investor_id: Runtime::AddressMapping::into_account_id(addr.0),
+					epoch_id: *epoch_id as EpochId,
+				})
+				.collect::<sp_std::vec::Vec<_>>()
+				.try_into()
+				.map_err(|_| revert("too many orders"))?;
 
 		let call = InvestmentsCall::<Runtime>::approve_redeem_orders {
 			pool_id,
 			tranche_id,
 			borrower: borrower_account,
-			investor_ids,
+			orders: order_keys,
 		};
 
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -281,14 +310,20 @@ where
 
 		let tranche_id_for_log =
 			pallet_rwa_pools::TrancheId { chain_id, vault_address: vault_address.0 };
-		for investor_id in &ids {
-			let investor_account = Runtime::AddressMapping::into_account_id(*investor_id);
-			let payout_amount = pallet_rwa_investments::ApprovedRedeemOrders::<Runtime>::get(
+		for (investor_addr, epoch_id) in investor_ids.iter().zip(epoch_ids.iter()) {
+			let investor_account =
+				Runtime::AddressMapping::into_account_id(investor_addr.0);
+			let epoch_id = *epoch_id as EpochId;
+			let payout_amount = pallet_rwa_investments::ApprovedRedeemOrders::<Runtime>::get((
 				tranche_id_for_log.clone(),
-				&investor_account,
-			)
+				investor_account,
+				epoch_id,
+			))
 			.map(|o| o.payout)
 			.unwrap_or_default();
+			if payout_amount.is_zero() {
+				continue;
+			}
 			let event = log1(
 				handle.context().address,
 				SELECTOR_LOG_REDEEM_ORDER_APPROVED,
@@ -297,7 +332,8 @@ where
 					U256::from(chain_id),
 					vault_address,
 					Address(borrower),
-					Address(*investor_id),
+					*investor_addr,
+					U256::from(epoch_id),
 					payout_amount,
 				)),
 			);
@@ -336,18 +372,10 @@ where
 		let investor_id: H160 = investor_id.0;
 		let investor_account = Runtime::AddressMapping::into_account_id(investor_id);
 
-		// Read shares_to_mint before dispatch — the pallet removes the entry via take().
-		let shares_to_mint = pallet_rwa_investments::ClaimableDepositOrders::<Runtime>::get(
-			&tranche_id,
-			&investor_account,
-		)
-		.map(|o| o.shares_to_mint)
-		.unwrap_or_default();
-
 		let call = InvestmentsCall::<Runtime>::claim_shares {
 			pool_id,
-			tranche_id,
-			investor_id: investor_account,
+			tranche_id: tranche_id.clone(),
+			investor_id: investor_account.clone(),
 		};
 
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -356,6 +384,19 @@ where
 			call,
 			0,
 		)?;
+
+		// Read from ApprovedDepositOrders after dispatch — the pallet inserts a fresh entry
+		// at current_epoch keyed by (tranche_id, investor_id, epoch_id).
+		let epoch_id: EpochId =
+			<Runtime as pallet_rwa_investments::Config>::Pools::current_epoch(pool_id)
+				.unwrap_or_default();
+		let shares_to_mint = pallet_rwa_investments::ApprovedDepositOrders::<Runtime>::get((
+			tranche_id,
+			investor_account,
+			epoch_id,
+		))
+		.map(|o| o.shares_to_mint)
+		.unwrap_or_default();
 
 		let event = log1(
 			handle.context().address,
@@ -402,18 +443,10 @@ where
 		let investor_id: H160 = investor_id.0;
 		let investor_account = Runtime::AddressMapping::into_account_id(investor_id);
 
-		// Read payout before dispatch — the pallet removes the entry via take().
-		let payout = pallet_rwa_investments::ClaimableRedeemOrders::<Runtime>::get(
-			&tranche_id,
-			&investor_account,
-		)
-		.map(|o| o.payout)
-		.unwrap_or_default();
-
 		let call = InvestmentsCall::<Runtime>::claim_assets {
 			pool_id,
-			tranche_id,
-			investor_id: investor_account,
+			tranche_id: tranche_id.clone(),
+			investor_id: investor_account.clone(),
 		};
 
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -422,6 +455,19 @@ where
 			call,
 			0,
 		)?;
+
+		// Read from ApprovedRedeemOrders after dispatch — the pallet inserts a fresh entry
+		// at current_epoch keyed by (tranche_id, investor_id, epoch_id).
+		let epoch_id: EpochId =
+			<Runtime as pallet_rwa_investments::Config>::Pools::current_epoch(pool_id)
+				.unwrap_or_default();
+		let payout = pallet_rwa_investments::ApprovedRedeemOrders::<Runtime>::get((
+			tranche_id,
+			investor_account,
+			epoch_id,
+		))
+		.map(|o| o.payout)
+		.unwrap_or_default();
 
 		let event = log1(
 			handle.context().address,

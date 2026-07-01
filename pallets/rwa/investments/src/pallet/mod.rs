@@ -2,13 +2,14 @@ mod impls;
 
 use crate::{
 	ApprovedDepositOrder, ApprovedRedeemOrder, ClaimableDepositOrder, ClaimableRedeemOrder,
-	PendingDepositOrder, PendingRedeemOrder, PermissionInspect, PoolId, PoolInspect,
-	SettlementMode, TrancheId, TrancheMutate, WeightInfo, MAX_INVESTORS_PER_APPROVAL,
+	EpochId, OrderKey, PendingDepositOrder, PendingRedeemOrder, PermissionInspect, PoolId,
+	PoolInspect, SettlementMode, TrancheId, TrancheMutate, WeightInfo, MAX_INVESTORS_PER_APPROVAL,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::U256;
+use sp_std::collections::btree_set::BTreeSet;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -66,6 +67,10 @@ pub mod pallet {
 		Unauthorized,
 		/// Investor is not whitelisted as a TrancheInvestor for this tranche.
 		NotWhitelisted,
+		/// The orders list contains a duplicate (investor_id, epoch_id) pair.
+		DuplicateOrderKey,
+		/// No pending order exists for the given (investor, epoch) key.
+		PendingOrderNotFound,
 	}
 
 	// -----------------------------------------------------------------------
@@ -152,80 +157,89 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 
 	/// Pending deposit orders awaiting epoch settlement.
-	/// tranche_id → investor → order (amount + epoch/block metadata)
+	/// (tranche_id, investor_id, epoch_id) → order
+	/// Top-ups in the same epoch accumulate at the same key; orders opened in later epochs
+	/// get separate keys. `iter_prefix((tranche_id,))` covers the full tranche for settlement;
+	/// `iter_prefix((tranche_id, investor_id))` covers all pending epochs for one investor.
 	#[pallet::storage]
-	pub type PendingDepositOrders<T: Config> = StorageDoubleMap<
+	pub type PendingDepositOrders<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		TrancheId,
-		Blake2_128Concat,
-		T::AccountId,
+		(
+			NMapKey<Blake2_128Concat, TrancheId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, EpochId>,
+		),
 		PendingDepositOrder,
 	>;
 
 	/// Claimable deposit orders awaiting investor pull-claim (Automatic mode).
-	/// Written by `settle_deposit_orders` during `on_initialize`.
-	/// Cleared by `claim_shares` when the investor initiates from the spoke.
-	/// tranche_id → investor_id → order (shares-to-mint + epoch/block metadata)
+	/// (tranche_id, investor_id, settlement_epoch_id) → order
+	/// Written by `settle_deposit_orders`; cleared by `claim_shares`.
 	#[pallet::storage]
-	pub type ClaimableDepositOrders<T: Config> = StorageDoubleMap<
+	pub type ClaimableDepositOrders<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		TrancheId,
-		Blake2_128Concat,
-		T::AccountId,
+		(
+			NMapKey<Blake2_128Concat, TrancheId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, EpochId>,
+		),
 		ClaimableDepositOrder,
 	>;
 
 	/// Approved deposit orders ready for outbound mint.
-	/// Written by `approve_deposit_orders` (Approval mode) or `claim_shares` (Automatic mode).
-	/// tranche_id → investor_id → order (shares-to-mint + epoch/block metadata)
+	/// (tranche_id, investor_id, approval_epoch_id) → order
+	/// Written by `approve_deposit_orders` (Approval) or `claim_shares` (Automatic).
+	/// Each epoch gets a separate entry — no cross-epoch accumulation.
 	#[pallet::storage]
-	pub type ApprovedDepositOrders<T: Config> = StorageDoubleMap<
+	pub type ApprovedDepositOrders<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		TrancheId,
-		Blake2_128Concat,
-		T::AccountId,
+		(
+			NMapKey<Blake2_128Concat, TrancheId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, EpochId>,
+		),
 		ApprovedDepositOrder,
 	>;
 
 	/// Pending redeem orders awaiting epoch settlement.
-	/// tranche_id → investor → order (amount + epoch/block metadata)
+	/// (tranche_id, investor_id, epoch_id) → order
 	#[pallet::storage]
-	pub type PendingRedeemOrders<T: Config> = StorageDoubleMap<
+	pub type PendingRedeemOrders<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		TrancheId,
-		Blake2_128Concat,
-		T::AccountId,
+		(
+			NMapKey<Blake2_128Concat, TrancheId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, EpochId>,
+		),
 		PendingRedeemOrder,
 	>;
 
 	/// Claimable redeem orders awaiting investor pull-claim (Automatic mode).
-	/// Written by `settle_redeem_orders` during `on_initialize`.
-	/// Cleared by `claim_assets` when the investor initiates from the spoke.
-	/// tranche_id → investor_id → order (payout + epoch/block metadata)
+	/// (tranche_id, investor_id, settlement_epoch_id) → order
+	/// Written by `settle_redeem_orders`; cleared by `claim_assets`.
 	#[pallet::storage]
-	pub type ClaimableRedeemOrders<T: Config> = StorageDoubleMap<
+	pub type ClaimableRedeemOrders<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		TrancheId,
-		Blake2_128Concat,
-		T::AccountId,
+		(
+			NMapKey<Blake2_128Concat, TrancheId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, EpochId>,
+		),
 		ClaimableRedeemOrder,
 	>;
 
 	/// Approved redeem orders ready for outbound payout.
-	/// Written by `approve_redeem_orders` (Approval mode) or `claim_assets` (Automatic mode).
-	/// tranche_id → investor_id → order (payout + epoch/block metadata)
+	/// (tranche_id, investor_id, approval_epoch_id) → order
+	/// Written by `approve_redeem_orders` (Approval) or `claim_assets` (Automatic).
+	/// Each epoch gets a separate entry — no cross-epoch accumulation.
 	#[pallet::storage]
-	pub type ApprovedRedeemOrders<T: Config> = StorageDoubleMap<
+	pub type ApprovedRedeemOrders<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		TrancheId,
-		Blake2_128Concat,
-		T::AccountId,
+		(
+			NMapKey<Blake2_128Concat, TrancheId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, EpochId>,
+		),
 		ApprovedRedeemOrder,
 	>;
 
@@ -268,17 +282,17 @@ pub mod pallet {
 			let now = Self::current_block();
 			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
 
-			PendingDepositOrders::<T>::mutate(tranche_id.clone(), &investor_id, |entry| {
-				match entry {
+			PendingDepositOrders::<T>::mutate(
+				(tranche_id.clone(), investor_id.clone(), epoch_id),
+				|entry| match entry {
 					Some(existing) => {
-						// Accumulate amount; preserve original epoch/block metadata.
 						existing.amount = existing.amount.saturating_add(amount);
 					},
 					None => {
 						*entry = Some(PendingDepositOrder { amount, epoch_id, submitted_at: now });
 					},
-				}
-			});
+				},
+			);
 
 			T::Pools::add_pending_deposit(pool_id, tranche_id.clone(), amount)?;
 
@@ -322,8 +336,7 @@ pub mod pallet {
 			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
 
 			PendingRedeemOrders::<T>::mutate(
-				tranche_id.clone(),
-				&investor_id,
+				(tranche_id.clone(), investor_id.clone(), epoch_id),
 				|entry| match entry {
 					Some(existing) => {
 						existing.amount = existing.amount.saturating_add(amount);
@@ -354,7 +367,7 @@ pub mod pallet {
 		/// from the originating EVM call so the pallet can verify it independently of the
 		/// Gateway caller.
 		/// Moves each investor's entry from `PendingDepositOrders` to `ApprovedDepositOrders`.
-		/// Investors without a pending order are silently skipped.
+		/// Returns `PendingOrderNotFound` if any (investor, epoch) key has no pending order.
 		/// The Gateway smart contract observes the `DepositOrderApproved` events and sends
 		/// mint instructions to the spoke chain.
 		#[pallet::call_index(2)]
@@ -364,7 +377,7 @@ pub mod pallet {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			borrower: T::AccountId,
-			investor_ids: BoundedVec<T::AccountId, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
+			orders: BoundedVec<OrderKey<T::AccountId>, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
@@ -379,39 +392,34 @@ pub mod pallet {
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
 
 			let now = Self::current_block();
-			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
+
+			let mut seen: BTreeSet<OrderKey<T::AccountId>> = BTreeSet::new();
+			for key in orders.iter() {
+				ensure!(seen.insert(key.clone()), Error::<T>::DuplicateOrderKey);
+			}
 
 			let mut total_approved = U256::zero();
 			let mut total_shares_minted = U256::zero();
 
-			for investor_id in investor_ids {
-				let Some(pending) =
-					PendingDepositOrders::<T>::take(tranche_id.clone(), &investor_id)
-				else {
-					continue;
-				};
+			for OrderKey { investor_id, epoch_id } in orders {
+				let pending = PendingDepositOrders::<T>::take((
+					tranche_id.clone(),
+					investor_id.clone(),
+					epoch_id,
+				))
+				.ok_or(Error::<T>::PendingOrderNotFound)?;
 
 				let shares_to_mint = Self::assets_to_shares(pending.amount, epoch_price);
 
-				ApprovedDepositOrders::<T>::mutate(tranche_id.clone(), &investor_id, |entry| {
-					match entry {
-						Some(existing) => {
-							existing.amount = existing.amount.saturating_add(pending.amount);
-							existing.shares_to_mint =
-								existing.shares_to_mint.saturating_add(shares_to_mint);
-							existing.epoch_id = epoch_id;
-							existing.approved_at = now;
-						},
-						None => {
-							*entry = Some(ApprovedDepositOrder {
-								amount: pending.amount,
-								shares_to_mint,
-								epoch_id,
-								approved_at: now,
-							});
-						},
-					}
-				});
+				ApprovedDepositOrders::<T>::insert(
+					(tranche_id.clone(), investor_id.clone(), epoch_id),
+					ApprovedDepositOrder {
+						amount: pending.amount,
+						shares_to_mint,
+						epoch_id,
+						approved_at: now,
+					},
+				);
 
 				total_approved = total_approved.saturating_add(pending.amount);
 				total_shares_minted = total_shares_minted.saturating_add(shares_to_mint);
@@ -442,7 +450,7 @@ pub mod pallet {
 		/// from the originating EVM call so the pallet can verify it independently of the
 		/// Gateway caller.
 		/// Moves each investor's entry from `PendingRedeemOrders` to `ApprovedRedeemOrders`.
-		/// Investors without a pending order are silently skipped.
+		/// Returns `PendingOrderNotFound` if any (investor, epoch) key has no pending order.
 		/// The Gateway smart contract observes the `RedeemOrderApproved` events and sends
 		/// payout instructions to the spoke chain.
 		#[pallet::call_index(3)]
@@ -452,7 +460,7 @@ pub mod pallet {
 			pool_id: PoolId,
 			tranche_id: TrancheId,
 			borrower: T::AccountId,
-			investor_ids: BoundedVec<T::AccountId, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
+			orders: BoundedVec<OrderKey<T::AccountId>, ConstU32<MAX_INVESTORS_PER_APPROVAL>>,
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
@@ -466,54 +474,54 @@ pub mod pallet {
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
 
-			// Validate aggregate payout before mutating state — sub_reserve uses saturating
-			// arithmetic, so the check must cover the full batch.
-			let expected_total_payout =
-				investor_ids.iter().fold(U256::zero(), |acc, investor_id| {
-					PendingRedeemOrders::<T>::get(tranche_id.clone(), investor_id)
-						.map_or(acc, |p| {
-							acc.saturating_add(Self::shares_to_assets(p.amount, epoch_price))
-						})
-				});
+			// Duplicate check — read-only, fires before any state mutation.
+			let mut seen: BTreeSet<OrderKey<T::AccountId>> = BTreeSet::new();
+			for key in orders.iter() {
+				ensure!(seen.insert(key.clone()), Error::<T>::DuplicateOrderKey);
+			}
+
+			// Pre-flight liquidity check — errors on any missing key before any state mutation.
+			let expected_total_payout = orders.iter().try_fold(
+				U256::zero(),
+				|acc, OrderKey { investor_id, epoch_id }| {
+					PendingRedeemOrders::<T>::get((
+						tranche_id.clone(),
+						investor_id.clone(),
+						*epoch_id,
+					))
+					.ok_or(Error::<T>::PendingOrderNotFound)
+					.map(|p| acc.saturating_add(Self::shares_to_assets(p.amount, epoch_price)))
+				},
+			)?;
 			ensure!(
 				expected_total_payout <= T::Pools::reserve(pool_id, tranche_id.clone()),
 				Error::<T>::InsufficientLiquidity
 			);
 
 			let now = Self::current_block();
-			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
 
 			let mut total_tokens_approved = U256::zero();
 			let mut total_payout = U256::zero();
 
-			for investor_id in investor_ids {
-				let Some(pending) =
-					PendingRedeemOrders::<T>::take(tranche_id.clone(), &investor_id)
-				else {
-					continue;
-				};
+			for OrderKey { investor_id, epoch_id } in orders {
+				let pending = PendingRedeemOrders::<T>::take((
+					tranche_id.clone(),
+					investor_id.clone(),
+					epoch_id,
+				))
+				.ok_or(Error::<T>::PendingOrderNotFound)?;
 
 				let payout = Self::shares_to_assets(pending.amount, epoch_price);
 
-				ApprovedRedeemOrders::<T>::mutate(tranche_id.clone(), &investor_id, |entry| {
-					match entry {
-						Some(existing) => {
-							existing.shares_redeemed =
-								existing.shares_redeemed.saturating_add(pending.amount);
-							existing.payout = existing.payout.saturating_add(payout);
-							existing.epoch_id = epoch_id;
-							existing.approved_at = now;
-						},
-						None => {
-							*entry = Some(ApprovedRedeemOrder {
-								shares_redeemed: pending.amount,
-								payout,
-								epoch_id,
-								approved_at: now,
-							});
-						},
-					}
-				});
+				ApprovedRedeemOrders::<T>::insert(
+					(tranche_id.clone(), investor_id.clone(), epoch_id),
+					ApprovedRedeemOrder {
+						shares_redeemed: pending.amount,
+						payout,
+						epoch_id,
+						approved_at: now,
+					},
+				);
 
 				total_tokens_approved = total_tokens_approved.saturating_add(pending.amount);
 				total_payout = total_payout.saturating_add(payout);
@@ -560,30 +568,33 @@ pub mod pallet {
 				Error::<T>::NotWhitelisted
 			);
 
-			let claimable = ClaimableDepositOrders::<T>::take(tranche_id.clone(), &investor_id)
-				.ok_or(Error::<T>::NoClaimableDeposit)?;
+			let entries: sp_std::vec::Vec<(EpochId, ClaimableDepositOrder)> =
+				ClaimableDepositOrders::<T>::iter_prefix((&tranche_id, &investor_id)).collect();
+
+			ensure!(!entries.is_empty(), Error::<T>::NoClaimableDeposit);
+
+			let total_amount =
+				entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
+			let total_shares = entries
+				.iter()
+				.fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.shares_to_mint));
+
+			let _ = ClaimableDepositOrders::<T>::clear_prefix(
+				(&tranche_id, &investor_id),
+				entries.len() as u32,
+				None,
+			);
 
 			let now = Self::current_block();
+			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
 
-			ApprovedDepositOrders::<T>::mutate(
-				tranche_id.clone(),
-				&investor_id,
-				|entry| match entry {
-					Some(existing) => {
-						existing.amount = existing.amount.saturating_add(claimable.amount);
-						existing.shares_to_mint =
-							existing.shares_to_mint.saturating_add(claimable.shares_to_mint);
-						existing.epoch_id = claimable.epoch_id;
-						existing.approved_at = now;
-					},
-					None => {
-						*entry = Some(ApprovedDepositOrder {
-							amount: claimable.amount,
-							shares_to_mint: claimable.shares_to_mint,
-							epoch_id: claimable.epoch_id,
-							approved_at: now,
-						});
-					},
+			ApprovedDepositOrders::<T>::insert(
+				(tranche_id.clone(), investor_id.clone(), epoch_id),
+				ApprovedDepositOrder {
+					amount: total_amount,
+					shares_to_mint: total_shares,
+					epoch_id,
+					approved_at: now,
 				},
 			);
 
@@ -591,8 +602,8 @@ pub mod pallet {
 				pool_id,
 				tranche_id,
 				investor_id,
-				amount: claimable.amount,
-				shares_to_mint: claimable.shares_to_mint,
+				amount: total_amount,
+				shares_to_mint: total_shares,
 			});
 			Ok(())
 		}
@@ -621,30 +632,33 @@ pub mod pallet {
 				Error::<T>::NotWhitelisted
 			);
 
-			let claimable = ClaimableRedeemOrders::<T>::take(tranche_id.clone(), &investor_id)
-				.ok_or(Error::<T>::NoClaimableRedeem)?;
+			let entries: sp_std::vec::Vec<(EpochId, ClaimableRedeemOrder)> =
+				ClaimableRedeemOrders::<T>::iter_prefix((&tranche_id, &investor_id)).collect();
+
+			ensure!(!entries.is_empty(), Error::<T>::NoClaimableRedeem);
+
+			let total_shares_redeemed = entries
+				.iter()
+				.fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.shares_redeemed));
+			let total_payout =
+				entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.payout));
+
+			let _ = ClaimableRedeemOrders::<T>::clear_prefix(
+				(&tranche_id, &investor_id),
+				entries.len() as u32,
+				None,
+			);
 
 			let now = Self::current_block();
+			let epoch_id = T::Pools::current_epoch(pool_id).unwrap_or_default();
 
-			ApprovedRedeemOrders::<T>::mutate(
-				tranche_id.clone(),
-				&investor_id,
-				|entry| match entry {
-					Some(existing) => {
-						existing.shares_redeemed =
-							existing.shares_redeemed.saturating_add(claimable.shares_redeemed);
-						existing.payout = existing.payout.saturating_add(claimable.payout);
-						existing.epoch_id = claimable.epoch_id;
-						existing.approved_at = now;
-					},
-					None => {
-						*entry = Some(ApprovedRedeemOrder {
-							shares_redeemed: claimable.shares_redeemed,
-							payout: claimable.payout,
-							epoch_id: claimable.epoch_id,
-							approved_at: now,
-						});
-					},
+			ApprovedRedeemOrders::<T>::insert(
+				(tranche_id.clone(), investor_id.clone(), epoch_id),
+				ApprovedRedeemOrder {
+					shares_redeemed: total_shares_redeemed,
+					payout: total_payout,
+					epoch_id,
+					approved_at: now,
 				},
 			);
 
@@ -652,8 +666,8 @@ pub mod pallet {
 				pool_id,
 				tranche_id,
 				investor_id,
-				shares_redeemed: claimable.shares_redeemed,
-				payout: claimable.payout,
+				shares_redeemed: total_shares_redeemed,
+				payout: total_payout,
 			});
 			Ok(())
 		}

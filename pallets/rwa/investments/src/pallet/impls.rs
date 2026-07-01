@@ -39,31 +39,34 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		epoch_id: EpochId,
 		epoch_price: U256,
 	) -> Result<(U256, U256), DispatchError> {
-		let entries: Vec<(T::AccountId, PendingDepositOrder)> =
-			PendingDepositOrders::<T>::iter_prefix(&tranche_id).collect();
+		let entries: Vec<((T::AccountId, EpochId), PendingDepositOrder)> =
+			PendingDepositOrders::<T>::iter_prefix((&tranche_id,)).collect();
 
 		if entries.is_empty() {
 			return Ok((U256::zero(), U256::zero()));
 		}
 
-		let total = entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
+		let total = entries
+			.iter()
+			.fold(U256::zero(), |acc, ((_, _), o)| acc.saturating_add(o.amount));
 
 		if total.is_zero() {
 			return Ok((U256::zero(), U256::zero()));
 		}
 
-		let _ = PendingDepositOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
+		let _ = PendingDepositOrders::<T>::clear_prefix((&tranche_id,), entries.len() as u32, None);
 
 		let now = Self::current_block();
 
 		let mut shares_total = U256::zero();
 
-		for (investor_id, order) in &entries {
+		for ((investor_id, _orig_epoch), order) in &entries {
 			let shares_to_mint = Self::assets_to_shares(order.amount, epoch_price);
 
+			// Accumulate into the settlement-epoch key; multiple carry-over entries from the
+			// same investor collapse into one ClaimableDepositOrders entry per epoch.
 			ClaimableDepositOrders::<T>::mutate(
-				tranche_id.clone(),
-				investor_id,
+				(tranche_id.clone(), investor_id.clone(), epoch_id),
 				|entry| match entry {
 					Some(existing) => {
 						existing.amount = existing.amount.saturating_add(order.amount);
@@ -110,15 +113,16 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		max_liquidity: U256,
 		epoch_price: U256,
 	) -> Result<(U256, U256), DispatchError> {
-		let entries: Vec<(T::AccountId, PendingRedeemOrder)> =
-			PendingRedeemOrders::<T>::iter_prefix(&tranche_id).collect();
+		let entries: Vec<((T::AccountId, EpochId), PendingRedeemOrder)> =
+			PendingRedeemOrders::<T>::iter_prefix((&tranche_id,)).collect();
 
 		if entries.is_empty() {
 			return Ok((U256::zero(), U256::zero()));
 		}
 
-		let total_tokens =
-			entries.iter().fold(U256::zero(), |acc, (_, o)| acc.saturating_add(o.amount));
+		let total_tokens = entries
+			.iter()
+			.fold(U256::zero(), |acc, ((_, _), o)| acc.saturating_add(o.amount));
 
 		if total_tokens.is_zero() {
 			return Ok((U256::zero(), U256::zero()));
@@ -127,7 +131,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let total_payout = Self::shares_to_assets(total_tokens, epoch_price);
 
 		// Clear all pending; partial-fill remainders are re-inserted below.
-		let _ = PendingRedeemOrders::<T>::clear_prefix(&tranche_id, entries.len() as u32, None);
+		let _ = PendingRedeemOrders::<T>::clear_prefix((&tranche_id,), entries.len() as u32, None);
 
 		let now = Self::current_block();
 
@@ -135,12 +139,14 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		let mut asset_payout_total = U256::zero();
 
 		if total_payout <= max_liquidity {
-			// Full fill — settle every investor's order as-is.
-			for (investor_id, order) in &entries {
+			// Full fill — settle every entry as-is; entries from the same investor but
+			// different submission epochs accumulate into one ClaimableRedeemOrders entry.
+			for ((investor_id, _orig_epoch), order) in &entries {
 				let payout = Self::shares_to_assets(order.amount, epoch_price);
 
-				ClaimableRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-					match entry {
+				ClaimableRedeemOrders::<T>::mutate(
+					(tranche_id.clone(), investor_id.clone(), epoch_id),
+					|entry| match entry {
 						Some(existing) => {
 							existing.shares_redeemed =
 								existing.shares_redeemed.saturating_add(order.amount);
@@ -156,8 +162,8 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 								settled_at: now,
 							});
 						},
-					}
-				});
+					},
+				);
 
 				Self::deposit_event(Event::RedeemOrderSettled {
 					pool_id,
@@ -176,7 +182,7 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 			// by total_tokens (exact integer) avoids the unsafe double-floor from using the
 			// floored total_payout as a denominator, which could cause Σ payout > max_liquidity.
 			let max_shares_fillable = Self::assets_to_shares(max_liquidity, epoch_price);
-			for (investor_id, order) in &entries {
+			for ((investor_id, orig_epoch), order) in &entries {
 				let tokens_confirmed =
 					order.amount.saturating_mul(max_shares_fillable) / total_tokens;
 				let tokens_remainder = order.amount.saturating_sub(tokens_confirmed);
@@ -184,8 +190,9 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 				if !tokens_confirmed.is_zero() {
 					let payout = Self::shares_to_assets(tokens_confirmed, epoch_price);
 
-					ClaimableRedeemOrders::<T>::mutate(tranche_id.clone(), investor_id, |entry| {
-						match entry {
+					ClaimableRedeemOrders::<T>::mutate(
+						(tranche_id.clone(), investor_id.clone(), epoch_id),
+						|entry| match entry {
 							Some(existing) => {
 								existing.shares_redeemed =
 									existing.shares_redeemed.saturating_add(tokens_confirmed);
@@ -201,8 +208,8 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 									settled_at: now,
 								});
 							},
-						}
-					});
+						},
+					);
 
 					Self::deposit_event(Event::RedeemOrderSettled {
 						pool_id,
@@ -216,11 +223,10 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 					asset_payout_total = asset_payout_total.saturating_add(payout);
 				}
 
-				// Re-insert unconfirmed remainder preserving original epoch/block metadata.
+				// Re-insert remainder at its original submission epoch key.
 				if !tokens_remainder.is_zero() {
 					PendingRedeemOrders::<T>::insert(
-						tranche_id.clone(),
-						investor_id,
+						(tranche_id.clone(), investor_id.clone(), *orig_epoch),
 						PendingRedeemOrder {
 							amount: tokens_remainder,
 							epoch_id: order.epoch_id,
