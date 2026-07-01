@@ -16,9 +16,9 @@ pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_SUBMITTED: [u8; 32] =
 pub(crate) const SELECTOR_LOG_REDEEM_ORDER_SUBMITTED: [u8; 32] =
 	keccak256!("RedeemOrderSubmitted(uint64,uint64,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_APPROVED: [u8; 32] =
-	keccak256!("DepositOrderApproved(uint64,uint64,address,address,address)");
+	keccak256!("DepositOrderApproved(uint64,uint64,address,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_REDEEM_ORDER_APPROVED: [u8; 32] =
-	keccak256!("RedeemOrderApproved(uint64,uint64,address,address,address)");
+	keccak256!("RedeemOrderApproved(uint64,uint64,address,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_SHARES_CLAIMED: [u8; 32] =
 	keccak256!("SharesClaimed(uint64,uint64,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_ASSETS_CLAIMED: [u8; 32] =
@@ -205,7 +205,16 @@ where
 			0,
 		)?;
 
+		let tranche_id_for_log =
+			pallet_rwa_pools::TrancheId { chain_id, vault_address: vault_address.0 };
 		for investor_id in &ids {
+			let investor_account = Runtime::AddressMapping::into_account_id(*investor_id);
+			let shares_to_mint = pallet_rwa_investments::ApprovedDepositOrders::<Runtime>::get(
+				tranche_id_for_log.clone(),
+				&investor_account,
+			)
+			.map(|o| o.shares_to_mint)
+			.unwrap_or_default();
 			let event = log1(
 				handle.context().address,
 				SELECTOR_LOG_DEPOSIT_ORDER_APPROVED,
@@ -215,6 +224,7 @@ where
 					vault_address,
 					Address(borrower),
 					Address(*investor_id),
+					shares_to_mint,
 				)),
 			);
 			handle.record_log_costs(&[&event])?;
@@ -269,7 +279,16 @@ where
 			0,
 		)?;
 
+		let tranche_id_for_log =
+			pallet_rwa_pools::TrancheId { chain_id, vault_address: vault_address.0 };
 		for investor_id in &ids {
+			let investor_account = Runtime::AddressMapping::into_account_id(*investor_id);
+			let payout_amount = pallet_rwa_investments::ApprovedRedeemOrders::<Runtime>::get(
+				tranche_id_for_log.clone(),
+				&investor_account,
+			)
+			.map(|o| o.payout)
+			.unwrap_or_default();
 			let event = log1(
 				handle.context().address,
 				SELECTOR_LOG_REDEEM_ORDER_APPROVED,
@@ -279,6 +298,7 @@ where
 					vault_address,
 					Address(borrower),
 					Address(*investor_id),
+					payout_amount,
 				)),
 			);
 			handle.record_log_costs(&[&event])?;

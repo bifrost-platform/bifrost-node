@@ -27,14 +27,16 @@ interface Investments {
         uint64 chain_id,
         address vault_address,
         address borrower,
-        address investor_id
+        address investor_id,
+        uint256 shares_to_mint
     );
     event RedeemOrderApproved(
         uint64 pool_id,
         uint64 chain_id,
         address vault_address,
         address borrower,
-        address investor_id
+        address investor_id,
+        uint256 payout_amount
     );
     event SharesClaimed(
         uint64 pool_id,
