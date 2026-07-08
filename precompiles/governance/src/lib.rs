@@ -63,6 +63,16 @@ where
 		Ok(prop_count)
 	}
 
+	#[precompile::public("referendumCount()")]
+	#[precompile::public("referendum_count()")]
+	#[precompile::view]
+	fn referendum_count(handle: &mut impl PrecompileHandle) -> EvmResult<u32> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let referendum_count = pallet_democracy::ReferendumCount::<Runtime>::get();
+
+		Ok(referendum_count)
+	}
+
 	#[precompile::public("depositOf(uint256)")]
 	#[precompile::public("deposit_of(uint256)")]
 	#[precompile::view]

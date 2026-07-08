@@ -25,11 +25,18 @@ interface Governance {
     }
 
     /**
-     * Get The total number of public proposals
+     * Get the number of (public) proposals that have been made so far.
      * Selector: 56fdf547
-     * @return The total number of public proposals
+     * @return The number of (public) proposals that have been made so far.
      */
     function public_prop_count() external view returns (uint256);
+
+    /**
+     * Get the number of referendums that have been made so far.
+     * Selector: a714ae54
+     * @return The total number of referendums that have been made so far.
+     */
+    function referendum_count() external view returns (uint256);
 
     /**
      * Get details of the deposit for a proposal.
@@ -37,14 +44,9 @@ interface Governance {
      * @param prop_index The index of the proposal you are interested in
      * @return (total deposit, initial deposit, depositors)
      */
-    function deposit_of(uint256 prop_index)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            address[] memory
-        );
+    function deposit_of(
+        uint256 prop_index
+    ) external view returns (uint256, uint256, address[] memory);
 
     /**
      * Get details of the votes for a referendum.
@@ -52,7 +54,9 @@ interface Governance {
      * @param ref_index The index of the referendum you are interested in
      * @return (referenda index, voters, voting powers, voting sides, convictions)
      */
-    function voting_of(uint256 ref_index)
+    function voting_of(
+        uint256 ref_index
+    )
         external
         view
         returns (
@@ -77,7 +81,9 @@ interface Governance {
      * * The block number that expires the locked balance
      * * The balance locked to the network
      */
-    function account_votes(address account)
+    function account_votes(
+        address account
+    )
         external
         view
         returns (
@@ -114,10 +120,9 @@ interface Governance {
      * * The total nay vote (including conviction)
      * * The total turnout (not including conviction)
      */
-    function ongoing_referendum_info(uint256 ref_index)
-        external
-        view
-        returns (ongoing_referendum_info_meta_data memory);
+    function ongoing_referendum_info(
+        uint256 ref_index
+    ) external view returns (ongoing_referendum_info_meta_data memory);
 
     /**
      * Get the details about a finished referendum.
@@ -128,10 +133,9 @@ interface Governance {
      * @param ref_index The index of the referendum you are interested in
      * @return A tuple including whether the referendum passed, and the block at which it finished.
      */
-    function finished_referendum_info(uint256 ref_index)
-        external
-        view
-        returns (finished_referendum_info_meta_data memory);
+    function finished_referendum_info(
+        uint256 ref_index
+    ) external view returns (finished_referendum_info_meta_data memory);
 
     /**
      * Make a new proposal
