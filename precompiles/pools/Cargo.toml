@@ -9,6 +9,8 @@ license = { workspace = true }
 repository = { workspace = true }
 
 [dependencies]
+log = { workspace = true }
+
 # Bifrost RWA
 pallet-rwa-pools = { workspace = true }
 precompile-utils = { workspace = true }

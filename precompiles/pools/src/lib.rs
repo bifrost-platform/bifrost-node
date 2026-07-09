@@ -1,6 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
+extern crate alloc;
+
+use alloc::format;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::{AddressMapping, Runner};
 use pallet_rwa_pools::{
@@ -312,6 +315,11 @@ where
 		let source = handle.context().address;
 		let gas_limit = handle.remaining_gas();
 
+		log::info!("gateway: deployPoolVaults input: {:?}", input);
+		log::info!("gateway: deployPoolVaults source: {:?}", source);
+		log::info!("gateway: deployPoolVaults gateway: {:?}", gateway);
+		log::info!("gateway: deployPoolVaults gas_limit: {:?}", gas_limit);
+
 		let call_info = <Runtime as pallet_evm::Config>::Runner::call(
 			source,
 			gateway,
@@ -329,10 +337,18 @@ where
 			None,
 			<Runtime as pallet_evm::Config>::config(),
 		)
-		.map_err(|_| revert("gateway: deployPoolVaults failed"))?;
+		.map_err(|e| {
+			let error: sp_runtime::DispatchError = e.error.into();
+			log::error!("gateway: deployPoolVaults failed: {:?}", error);
+			revert(format!("gateway: deployPoolVaults failed: {:?}", error))
+		})?;
 
 		if !matches!(call_info.exit_reason, pallet_evm::ExitReason::Succeed(_)) {
-			return Err(revert("gateway: deployPoolVaults failed"));
+			log::error!("gateway: deployPoolVaults exit_reason: {:?}", call_info.exit_reason);
+			return Err(revert(format!(
+				"gateway: deployPoolVaults failed: {:?}",
+				call_info.exit_reason
+			)));
 		}
 
 		handle.record_cost(call_info.used_gas.standard.low_u64())?;
