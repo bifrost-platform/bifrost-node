@@ -339,6 +339,10 @@ pub mod pallet {
 												.pending_orders
 												.redeem
 												.saturating_sub(tokens_settled);
+											// Tranche tokens are burned on the spoke chain at
+											// settlement (Automatic mode's order approval).
+											tranche.token_supply =
+												tranche.token_supply.saturating_sub(tokens_settled);
 											// Senior accrued_nav shrinks by the redeemed asset payout.
 											if let TrancheType::Senior { .. } =
 												&tranche.tranche_type

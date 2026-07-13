@@ -23,6 +23,10 @@ pub(crate) const SELECTOR_LOG_SHARES_CLAIMED: [u8; 32] =
 	keccak256!("SharesClaimed(uint64,uint64,address,address,uint256)");
 pub(crate) const SELECTOR_LOG_ASSETS_CLAIMED: [u8; 32] =
 	keccak256!("AssetsClaimed(uint64,uint64,address,address,uint256)");
+pub(crate) const SELECTOR_LOG_DEPOSIT_ORDER_CANCELLED: [u8; 32] =
+	keccak256!("DepositOrderCancelled(uint64,uint64,address,address,uint64,uint256)");
+pub(crate) const SELECTOR_LOG_REDEEM_ORDER_CANCELLED: [u8; 32] =
+	keccak256!("RedeemOrderCancelled(uint64,uint64,address,address,uint64,uint256)");
 
 /// A precompile that dispatches invest/redeem order requests to pallet-investments.
 ///
@@ -169,7 +173,9 @@ where
 	/// @param vault_address ERC-7540 vault contract address on that chain
 	/// @param borrower      EVM address of the institution approving the orders
 	/// @param investor_ids  list of investor addresses to approve (max 100)
-	#[precompile::public("approve_deposit_orders(uint64,uint64,address,address,address[],uint64[])")]
+	#[precompile::public(
+		"approve_deposit_orders(uint64,uint64,address,address,address[],uint64[])"
+	)]
 	fn approve_deposit_orders(
 		handle: &mut impl PrecompileHandle,
 		pool_id: u64,
@@ -190,17 +196,19 @@ where
 		let borrower: H160 = borrower.0;
 		let borrower_account = Runtime::AddressMapping::into_account_id(borrower);
 
-		let order_keys: BoundedVec<OrderKey<Runtime::AccountId>, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
-			investor_ids
-				.iter()
-				.zip(epoch_ids.iter())
-				.map(|(addr, epoch_id)| OrderKey {
-					investor_id: Runtime::AddressMapping::into_account_id(addr.0),
-					epoch_id: *epoch_id as EpochId,
-				})
-				.collect::<sp_std::vec::Vec<_>>()
-				.try_into()
-				.map_err(|_| revert("too many orders"))?;
+		let order_keys: BoundedVec<
+			OrderKey<Runtime::AccountId>,
+			ConstU32<MAX_INVESTORS_PER_APPROVAL>,
+		> = investor_ids
+			.iter()
+			.zip(epoch_ids.iter())
+			.map(|(addr, epoch_id)| OrderKey {
+				investor_id: Runtime::AddressMapping::into_account_id(addr.0),
+				epoch_id: *epoch_id as EpochId,
+			})
+			.collect::<sp_std::vec::Vec<_>>()
+			.try_into()
+			.map_err(|_| revert("too many orders"))?;
 
 		let call = InvestmentsCall::<Runtime>::approve_deposit_orders {
 			pool_id,
@@ -219,8 +227,7 @@ where
 		let tranche_id_for_log =
 			pallet_rwa_pools::TrancheId { chain_id, vault_address: vault_address.0 };
 		for (investor_addr, epoch_id) in investor_ids.iter().zip(epoch_ids.iter()) {
-			let investor_account =
-				Runtime::AddressMapping::into_account_id(investor_addr.0);
+			let investor_account = Runtime::AddressMapping::into_account_id(investor_addr.0);
 			let epoch_id = *epoch_id as EpochId;
 			let shares_to_mint = pallet_rwa_investments::ApprovedDepositOrders::<Runtime>::get((
 				tranche_id_for_log.clone(),
@@ -282,17 +289,19 @@ where
 		let borrower: H160 = borrower.0;
 		let borrower_account = Runtime::AddressMapping::into_account_id(borrower);
 
-		let order_keys: BoundedVec<OrderKey<Runtime::AccountId>, ConstU32<MAX_INVESTORS_PER_APPROVAL>> =
-			investor_ids
-				.iter()
-				.zip(epoch_ids.iter())
-				.map(|(addr, epoch_id)| OrderKey {
-					investor_id: Runtime::AddressMapping::into_account_id(addr.0),
-					epoch_id: *epoch_id as EpochId,
-				})
-				.collect::<sp_std::vec::Vec<_>>()
-				.try_into()
-				.map_err(|_| revert("too many orders"))?;
+		let order_keys: BoundedVec<
+			OrderKey<Runtime::AccountId>,
+			ConstU32<MAX_INVESTORS_PER_APPROVAL>,
+		> = investor_ids
+			.iter()
+			.zip(epoch_ids.iter())
+			.map(|(addr, epoch_id)| OrderKey {
+				investor_id: Runtime::AddressMapping::into_account_id(addr.0),
+				epoch_id: *epoch_id as EpochId,
+			})
+			.collect::<sp_std::vec::Vec<_>>()
+			.try_into()
+			.map_err(|_| revert("too many orders"))?;
 
 		let call = InvestmentsCall::<Runtime>::approve_redeem_orders {
 			pool_id,
@@ -311,8 +320,7 @@ where
 		let tranche_id_for_log =
 			pallet_rwa_pools::TrancheId { chain_id, vault_address: vault_address.0 };
 		for (investor_addr, epoch_id) in investor_ids.iter().zip(epoch_ids.iter()) {
-			let investor_account =
-				Runtime::AddressMapping::into_account_id(investor_addr.0);
+			let investor_account = Runtime::AddressMapping::into_account_id(investor_addr.0);
 			let epoch_id = *epoch_id as EpochId;
 			let payout_amount = pallet_rwa_investments::ApprovedRedeemOrders::<Runtime>::get((
 				tranche_id_for_log.clone(),
@@ -478,6 +486,145 @@ where
 				vault_address,
 				Address(investor_id),
 				payout,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Investor cancels their own pending deposit order before it settles.
+	///
+	/// Only the Gateway contract may call this function.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param investor_id   investor address on the external chain
+	/// @param epoch_id      epoch the pending order was submitted in
+	#[precompile::public("cancel_deposit_order(uint64,uint64,address,address,uint64)")]
+	fn cancel_deposit_order(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		investor_id: Address,
+		epoch_id: u64,
+	) -> EvmResult {
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+		let investor_id: H160 = investor_id.0;
+		let investor_account = Runtime::AddressMapping::into_account_id(investor_id);
+		let epoch_id: EpochId = epoch_id as EpochId;
+
+		// Capture the pending amount before dispatch clears the entry.
+		let cancelled_amount = pallet_rwa_investments::PendingDepositOrders::<Runtime>::get((
+			tranche_id.clone(),
+			investor_account.clone(),
+			epoch_id,
+		))
+		.map(|o| o.amount)
+		.unwrap_or_default();
+
+		let call = InvestmentsCall::<Runtime>::cancel_deposit_order {
+			pool_id,
+			tranche_id,
+			investor_id: investor_account,
+			epoch_id,
+		};
+
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_rwa_pools::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_DEPOSIT_ORDER_CANCELLED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				vault_address,
+				Address(investor_id),
+				U256::from(epoch_id),
+				cancelled_amount,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Investor cancels their own pending redeem order before it settles.
+	///
+	/// Tranche tokens were burned on the spoke chain at `submit_redeem_order` time; the
+	/// Gateway observes `RedeemOrderCancelled` and re-mints them back to the investor.
+	///
+	/// Only the Gateway contract may call this function.
+	///
+	/// @param pool_id       the pool ID
+	/// @param chain_id      EVM chain ID of the chain where the vault is deployed
+	/// @param vault_address ERC-7540 vault contract address on that chain
+	/// @param investor_id   investor address on the external chain
+	/// @param epoch_id      epoch the pending order was submitted in
+	#[precompile::public("cancel_redeem_order(uint64,uint64,address,address,uint64)")]
+	fn cancel_redeem_order(
+		handle: &mut impl PrecompileHandle,
+		pool_id: u64,
+		chain_id: u64,
+		vault_address: Address,
+		investor_id: Address,
+		epoch_id: u64,
+	) -> EvmResult {
+		if handle.context().caller != Self::gateway_address() {
+			return Err(revert("caller is not the gateway"));
+		}
+
+		let tranche_id = TrancheId { chain_id, vault_address: vault_address.0 };
+		let investor_id: H160 = investor_id.0;
+		let investor_account = Runtime::AddressMapping::into_account_id(investor_id);
+		let epoch_id: EpochId = epoch_id as EpochId;
+
+		// Capture the pending amount before dispatch clears the entry.
+		let cancelled_amount = pallet_rwa_investments::PendingRedeemOrders::<Runtime>::get((
+			tranche_id.clone(),
+			investor_account.clone(),
+			epoch_id,
+		))
+		.map(|o| o.amount)
+		.unwrap_or_default();
+
+		let call = InvestmentsCall::<Runtime>::cancel_redeem_order {
+			pool_id,
+			tranche_id,
+			investor_id: investor_account,
+			epoch_id,
+		};
+
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_rwa_pools::Origin::Gateway.into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_REDEEM_ORDER_CANCELLED,
+			solidity::encode_event_data((
+				U256::from(pool_id),
+				U256::from(chain_id),
+				vault_address,
+				Address(investor_id),
+				U256::from(epoch_id),
+				cancelled_amount,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;
