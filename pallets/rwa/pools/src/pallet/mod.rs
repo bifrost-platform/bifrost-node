@@ -397,8 +397,9 @@ pub mod pallet {
 		/// Create a new RWA pool.
 		///
 		/// Must be called through the pools precompile — direct extrinsic submission is rejected.
-		/// The precompile also dispatches a Gateway vault-deployment message to the Spoke chain,
-		/// so bypassing it would leave the pool with no deployed vaults.
+		/// Spoke-chain vaults are deployed independently via a factory contract on the Spoke
+		/// chain and must already exist (i.e. each tranche's `vault_address` is live) before
+		/// this is called; this pallet does not deploy or verify vaults itself.
 		///
 		/// `pool_admin` must hold the `PoolAdmin` role for `pool_id` (granted by sudo in advance).
 		/// `pool_id` is caller-specified; returns `PoolAlreadyExists` if already taken.
