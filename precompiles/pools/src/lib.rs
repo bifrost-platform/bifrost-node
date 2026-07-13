@@ -2,7 +2,7 @@
 #![warn(unused_crate_dependencies)]
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
-use pallet_evm::{AddressMapping, Runner};
+use pallet_evm::AddressMapping;
 use pallet_rwa_pools::{
 	Call as PoolsCall, CollateralAsset, PoolInspect, SettlementMode, TrancheId, TrancheInput,
 	TrancheTypeInput, MAX_COLLATERALS, MAX_TRANCHES,
@@ -19,19 +19,13 @@ pub(crate) const SELECTOR_LOG_REPAID: [u8; 32] =
 pub(crate) const SELECTOR_LOG_POOL_CREATED: [u8; 32] =
 	keccak256!("PoolCreated(uint64,address,uint64,uint64)");
 
-// ---------------------------------------------------------------------------
-// Gateway call selectors (provisional — will be finalised with the Gateway contract)
-// ---------------------------------------------------------------------------
-
-/// Gateway::deployPoolVaults(uint64 poolId, address borrower, (uint64,address,bool,uint256)[] tranches)
-const GATEWAY_DEPLOY_POOL_VAULTS: [u8; 32] =
-	keccak256!("deployPoolVaults(uint64,address,(uint64,address,bool,uint256)[])");
-
 /// A precompile that dispatches pool management requests to pallet-pools.
 ///
 /// `borrow` and `repay` are only callable by the Gateway contract (cross-chain messages).
-/// `create_pool` is callable directly by Pool Admin EOAs; it dispatches the pallet
-/// extrinsic with `Origin::PoolAdmin` and then calls the Gateway to deploy Spoke-chain vaults.
+/// `create_pool` is callable directly by Pool Admin EOAs; it dispatches the pallet extrinsic
+/// with `Origin::PoolAdmin`. Spoke-chain vaults are now deployed independently via a factory
+/// contract on the Spoke chain, as a prerequisite to `create_pool` on the Hub — this precompile
+/// no longer triggers vault deployment via the Gateway.
 pub struct PoolsPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
@@ -138,10 +132,6 @@ where
 			call,
 			0,
 		)?;
-
-		// Instruct the Spoke chain to deploy ERC-7540 Vault + ERC-1404 Tranche Token
-		// contracts for each tranche via the Gateway cross-chain message.
-		Self::gateway_deploy_pool_vaults(handle, pool_id, borrower_id, &tranches)?;
 
 		let event = log1(
 			handle.context().address,
@@ -269,73 +259,6 @@ where
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
-
-		Ok(())
-	}
-
-	// -------------------------------------------------------------------------
-	// Helpers
-	// -------------------------------------------------------------------------
-
-	/// ABI-encode and dispatch `deployPoolVaults(poolId, borrower, tranches)` to the
-	/// Bifrost Gateway contract via the EVM Runner, instructing the Spoke chain to deploy
-	/// ERC-7540 Vault and ERC-1404 Tranche Token contracts for each tranche.
-	///
-	/// Skipped silently when the Gateway address is zero (not yet configured).
-	fn gateway_deploy_pool_vaults(
-		handle: &mut impl PrecompileHandle,
-		pool_id: u64,
-		borrower_id: H160,
-		tranches: &[(u64, Address, bool, U256, U256)],
-	) -> EvmResult {
-		let gateway = pallet_rwa_pools::Pallet::<Runtime>::gateway_address();
-		if gateway == H160::zero() {
-			return Ok(());
-		}
-
-		// Encode (chainId, vaultAddress, isSenior, apr) per tranche for the Gateway call.
-		let tranche_data: Vec<(u64, Address, bool, U256)> = tranches
-			.iter()
-			.map(|(chain_id, vault_address, is_senior, apr, _)| {
-				(*chain_id, *vault_address, *is_senior, *apr)
-			})
-			.collect();
-
-		let mut input: Vec<u8> = Vec::new();
-		input.extend_from_slice(&GATEWAY_DEPLOY_POOL_VAULTS[..4]);
-		input.extend_from_slice(&solidity::encode_arguments((
-			U256::from(pool_id),
-			Address(borrower_id),
-			tranche_data,
-		)));
-
-		let source = handle.context().address;
-		let gas_limit = handle.remaining_gas();
-
-		let call_info = <Runtime as pallet_evm::Config>::Runner::call(
-			source,
-			gateway,
-			input,
-			U256::zero(),
-			gas_limit,
-			None,
-			None,
-			None,
-			Vec::new(),
-			Vec::new(),
-			false,
-			false,
-			None,
-			None,
-			<Runtime as pallet_evm::Config>::config(),
-		)
-		.map_err(|_| revert("gateway: deployPoolVaults failed"))?;
-
-		if !matches!(call_info.exit_reason, pallet_evm::ExitReason::Succeed(_)) {
-			return Err(revert("gateway: deployPoolVaults failed"));
-		}
-
-		handle.record_cost(call_info.used_gas.standard.low_u64())?;
 
 		Ok(())
 	}
