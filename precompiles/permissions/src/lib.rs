@@ -2,7 +2,7 @@
 #![warn(unused_crate_dependencies)]
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
-use pallet_evm::{AddressMapping, Runner};
+use pallet_evm::AddressMapping;
 use pallet_rwa_permissions::{Call as PermissionsCall, Role};
 use pallet_rwa_pools::{PoolInspect, TrancheId};
 use precompile_utils::prelude::*;
@@ -177,9 +177,13 @@ where
 	// Helpers
 	// -------------------------------------------------------------------------
 
-	/// ABI-encode and dispatch a call to the Bifrost Gateway contract via the
-	/// EVM Runner.  Skipped silently when the Gateway address is zero (not yet
-	/// configured), allowing Hub-side logic to be exercised independently.
+	/// ABI-encode and dispatch a call to the Bifrost Gateway contract as a nested EVM
+	/// sub-call.  Skipped silently when the Gateway address is zero (not yet configured),
+	/// allowing Hub-side logic to be exercised independently.
+	///
+	/// This must go through `handle.call(..)` (a sub-call within the current EVM execution)
+	/// rather than `Runner::call(..)`, which starts a brand-new top-level EVM execution and
+	/// trips pallet-evm's `forbid-evm-reentrancy` guard since we're already inside one.
 	fn gateway_subcall(
 		handle: &mut impl PrecompileHandle,
 		selector_full: &[u8; 32],
@@ -201,35 +205,19 @@ where
 			Address(investor_id),
 		)));
 
-		let source = handle.context().address;
+		let context = pallet_evm::Context {
+			address: gateway,
+			caller: handle.context().address,
+			apparent_value: U256::zero(),
+		};
 		let gas_limit = handle.remaining_gas();
 
-		let call_info = <Runtime as pallet_evm::Config>::Runner::call(
-			source,
-			gateway,
-			input,
-			U256::zero(),
-			gas_limit,
-			None,
-			None,
-			None,
-			Vec::new(),
-			Vec::new(), // AuthorizationList — inferred from Runner::call signature
-			false,
-			false,
-			None,
-			None,
-			<Runtime as pallet_evm::Config>::config(),
-		)
-		.map_err(|_| revert(revert_msg))?;
+		let (exit_reason, _output) =
+			handle.call(gateway, None, input, Some(gas_limit), false, &context);
 
-		if !matches!(call_info.exit_reason, pallet_evm::ExitReason::Succeed(_)) {
+		if !matches!(exit_reason, pallet_evm::ExitReason::Succeed(_)) {
 			return Err(revert(revert_msg));
 		}
-
-		// Charge the precompile caller for gas consumed by the Gateway call.
-		let used: u64 = call_info.used_gas.standard.low_u64();
-		handle.record_cost(used)?;
 
 		Ok(())
 	}
