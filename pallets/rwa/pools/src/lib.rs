@@ -455,8 +455,8 @@ pub trait TrancheMutate<Balance> {
 	) -> frame_support::dispatch::DispatchResult;
 
 	/// Decrement outstanding token supply.
-	/// Called when a redeem request is submitted — tokens are burned on the Spoke
-	/// chain at request time, so Hub state must reflect the burn immediately.
+	/// Called when a redeem order is approved (Approval mode) or settled (Automatic
+	/// mode) — tokens are burned on the Spoke chain at that point, not at submission.
 	fn sub_token_supply(
 		pool_id: PoolId,
 		tranche_id: TrancheId,

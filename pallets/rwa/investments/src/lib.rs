@@ -85,8 +85,9 @@ pub struct ApprovedDepositOrder {
 /// A pending redeem order held in `PendingRedeemOrders` storage.
 ///
 /// `epoch_id` and `submitted_at` are set on first insertion and preserved across
-/// top-up submissions. Tokens are burned on the Spoke chain at submission time so
-/// the Hub reflects the burn immediately via `sub_token_supply`.
+/// top-up submissions. Tokens are only locked in the Spoke-chain Treasury at
+/// submission time, not burned — burning (and the corresponding `sub_token_supply`
+/// on the Hub) happens at order approval, not here.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]

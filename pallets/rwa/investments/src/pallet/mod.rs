@@ -150,6 +150,23 @@ pub mod pallet {
 			shares_redeemed: U256,
 			payout: U256,
 		},
+		/// A pending deposit order was cancelled by the investor before settlement.
+		DepositOrderCancelled {
+			pool_id: PoolId,
+			tranche_id: TrancheId,
+			investor_id: T::AccountId,
+			amount: U256,
+		},
+		/// A pending redeem order was cancelled by the investor before settlement.
+		/// The Gateway smart contract observes this event and unlocks the tranche
+		/// tokens held in the spoke-chain Treasury back to the investor (they were
+		/// only locked, not burned — burning happens at order approval).
+		RedeemOrderCancelled {
+			pool_id: PoolId,
+			tranche_id: TrancheId,
+			investor_id: T::AccountId,
+			amount: U256,
+		},
 	}
 
 	// -----------------------------------------------------------------------
@@ -348,8 +365,9 @@ pub mod pallet {
 			);
 
 			T::Pools::add_pending_redeem(pool_id, tranche_id.clone(), amount)?;
-			// Tokens were burned on the spoke chain at request time.
-			T::Pools::sub_token_supply(pool_id, tranche_id.clone(), amount)?;
+			// Tokens are only locked in the spoke-chain Treasury at request time, not burned —
+			// burning happens at order approval (see `approve_redeem_orders` / pallet-pools
+			// `on_initialize`), so a pending order can still be cancelled and unlocked.
 
 			Self::deposit_event(Event::RedeemOrderSubmitted {
 				pool_id,
@@ -538,7 +556,9 @@ pub mod pallet {
 			if !total_tokens_approved.is_zero() {
 				T::Pools::sub_pending_redeem(pool_id, tranche_id.clone(), total_tokens_approved)?;
 				T::Pools::sub_reserve(pool_id, tranche_id.clone(), total_payout)?;
-				T::Pools::sub_accrued_nav(pool_id, tranche_id, total_payout)?;
+				T::Pools::sub_accrued_nav(pool_id, tranche_id.clone(), total_payout)?;
+				// Tranche tokens are burned on the spoke chain at order approval time.
+				T::Pools::sub_token_supply(pool_id, tranche_id, total_tokens_approved)?;
 			}
 
 			Ok(())
@@ -668,6 +688,89 @@ pub mod pallet {
 				investor_id,
 				shares_redeemed: total_shares_redeemed,
 				payout: total_payout,
+			});
+			Ok(())
+		}
+
+		/// Investor cancels their own pending deposit order before it settles.
+		///
+		/// Called by the investments precompile when a `requestCancelDeposit` message
+		/// arrives on Bifrost via CCCP. Rejected during the pool's settlement window,
+		/// since the order may already be mid-settlement.
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn cancel_deposit_order(
+			origin: OriginFor<T>,
+			pool_id: PoolId,
+			tranche_id: TrancheId,
+			investor_id: T::AccountId,
+			epoch_id: EpochId,
+		) -> DispatchResult {
+			T::GatewayOrigin::ensure_origin(origin)?;
+			ensure!(
+				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
+				Error::<T>::PoolOrTrancheNotFound
+			);
+			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
+
+			let order = PendingDepositOrders::<T>::take((
+				tranche_id.clone(),
+				investor_id.clone(),
+				epoch_id,
+			))
+			.ok_or(Error::<T>::PendingOrderNotFound)?;
+
+			T::Pools::sub_pending_deposit(pool_id, tranche_id.clone(), order.amount)?;
+
+			Self::deposit_event(Event::DepositOrderCancelled {
+				pool_id,
+				tranche_id,
+				investor_id,
+				amount: order.amount,
+			});
+			Ok(())
+		}
+
+		/// Investor cancels their own pending redeem order before it settles.
+		///
+		/// Called by the investments precompile when a `requestCancelRedeem` message
+		/// arrives on Bifrost via CCCP. Rejected during the pool's settlement window,
+		/// since the order may already be mid-settlement.
+		///
+		/// Tranche tokens are only locked in the spoke-chain Treasury at submission time,
+		/// not burned — burning happens at order approval — so `token_supply` needs no
+		/// adjustment here; the Gateway observes `RedeemOrderCancelled` and unlocks the
+		/// tokens back to the investor on the spoke chain.
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn cancel_redeem_order(
+			origin: OriginFor<T>,
+			pool_id: PoolId,
+			tranche_id: TrancheId,
+			investor_id: T::AccountId,
+			epoch_id: EpochId,
+		) -> DispatchResult {
+			T::GatewayOrigin::ensure_origin(origin)?;
+			ensure!(
+				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
+				Error::<T>::PoolOrTrancheNotFound
+			);
+			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
+
+			let order =
+				PendingRedeemOrders::<T>::take((tranche_id.clone(), investor_id.clone(), epoch_id))
+					.ok_or(Error::<T>::PendingOrderNotFound)?;
+
+			// Pending tokens are only locked (not burned) on the spoke chain, so no
+			// `token_supply` adjustment is needed here — the Gateway unlocks them back
+			// to the investor directly.
+			T::Pools::sub_pending_redeem(pool_id, tranche_id.clone(), order.amount)?;
+
+			Self::deposit_event(Event::RedeemOrderCancelled {
+				pool_id,
+				tranche_id,
+				investor_id,
+				amount: order.amount,
 			});
 			Ok(())
 		}
