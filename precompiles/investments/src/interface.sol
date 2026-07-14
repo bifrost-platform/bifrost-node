@@ -54,6 +54,22 @@ interface Investments {
         address investor_id,
         uint256 payout
     );
+    event DepositOrderCancelled(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id,
+        uint64 epoch_id,
+        uint256 amount
+    );
+    event RedeemOrderCancelled(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id,
+        uint64 epoch_id,
+        uint256 amount
+    );
 
     /**
      * @notice Submit a pending deposit order for epoch settlement.
@@ -171,5 +187,48 @@ interface Investments {
         uint64 chain_id,
         address vault_address,
         address investor_id
+    ) external;
+
+    /**
+     * @notice Investor cancels their own pending deposit order before it settles.
+     * @dev Only callable by the Gateway contract.
+     *      Rejected while the pool is in its settlement window.
+     *      Removes the entry from PendingDepositOrders.
+     *      Emits DepositOrderCancelled on success.
+     * @param pool_id       The pool ID
+     * @param chain_id      EVM chain ID of the chain where the vault is deployed
+     * @param vault_address ERC-7540 vault contract address on that chain
+     * @param investor_id   Investor address on the external chain
+     * @param epoch_id      Epoch the pending order was submitted in
+     */
+    function cancel_deposit_order(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id,
+        uint64 epoch_id
+    ) external;
+
+    /**
+     * @notice Investor cancels their own pending redeem order before it settles.
+     * @dev Only callable by the Gateway contract.
+     *      Rejected while the pool is in its settlement window.
+     *      Tranche tokens are only locked (not burned) on the spoke chain at submission
+     *      time, so the Gateway unlocks them back to the investor on
+     *      RedeemOrderCancelled rather than re-minting.
+     *      Removes the entry from PendingRedeemOrders.
+     *      Emits RedeemOrderCancelled on success.
+     * @param pool_id       The pool ID
+     * @param chain_id      EVM chain ID of the chain where the vault is deployed
+     * @param vault_address ERC-7540 vault contract address on that chain
+     * @param investor_id   Investor address on the external chain
+     * @param epoch_id      Epoch the pending order was submitted in
+     */
+    function cancel_redeem_order(
+        uint64 pool_id,
+        uint64 chain_id,
+        address vault_address,
+        address investor_id,
+        uint64 epoch_id
     ) external;
 }

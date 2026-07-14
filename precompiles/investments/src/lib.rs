@@ -564,8 +564,9 @@ where
 
 	/// Investor cancels their own pending redeem order before it settles.
 	///
-	/// Tranche tokens were burned on the spoke chain at `submit_redeem_order` time; the
-	/// Gateway observes `RedeemOrderCancelled` and re-mints them back to the investor.
+	/// Tranche tokens are only locked (not burned) on the spoke chain at
+	/// `submit_redeem_order` time; the Gateway observes `RedeemOrderCancelled` and
+	/// unlocks them back to the investor.
 	///
 	/// Only the Gateway contract may call this function.
 	///
