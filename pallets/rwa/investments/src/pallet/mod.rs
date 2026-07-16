@@ -403,7 +403,10 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
-			ensure!(T::Pools::pool_exists(pool_id), Error::<T>::PoolOrTrancheNotFound);
+			ensure!(
+				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
+				Error::<T>::PoolOrTrancheNotFound
+			);
 			ensure!(
 				T::Pools::deposit_settlement_mode(pool_id) == Some(SettlementMode::Approval),
 				Error::<T>::WrongSettlementMode
@@ -487,7 +490,10 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::GatewayOrigin::ensure_origin(origin)?;
 			ensure!(T::Permissions::is_borrower(pool_id, &borrower), Error::<T>::Unauthorized);
-			ensure!(T::Pools::pool_exists(pool_id), Error::<T>::PoolOrTrancheNotFound);
+			ensure!(
+				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
+				Error::<T>::PoolOrTrancheNotFound
+			);
 			ensure!(
 				T::Pools::redeem_settlement_mode(pool_id) == Some(SettlementMode::Approval),
 				Error::<T>::WrongSettlementMode
