@@ -408,3 +408,77 @@ describeDevNode('pallet_rwa_pools / precompile_rwa_investments - Automatic-mode 
     expect(BigInt(claimable.sharesToMint.toJSON())).eq(200n);
   });
 });
+
+describeDevNode('pallet_rwa_pools - on_initialize retries NAV finalization every block within an open settlement window', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const poolAdmin: { public: string, private: string } = TEST_CONTROLLERS[1];
+  const poolAdminSigner = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const borrower: { public: string, private: string } = TEST_CONTROLLERS[2];
+  const gateway: { public: string, private: string } = TEST_CONTROLLERS[3];
+  const investor: { public: string, private: string } = TEST_CONTROLLERS[4];
+  const feeder = keyring.addFromUri(TEST_CONTROLLERS[5].private);
+  const feederPublic: { public: string, private: string } = TEST_CONTROLLERS[5];
+  // A wider offset than the usual 10s, so there's comfortable buffer between the deliberately
+  // skipped first window block and the late P&L submission without racing epoch end.
+  const WIDE_SETTLEMENT_OFFSET_SECS = 30;
+  let alithNonce: number;
+  let poolAdminNonce: number;
+
+  before('should create a pool, whitelist an investor, and submit a pending deposit with no P&L yet', async function () {
+    const alithAccount = await context.polkadotApi.query.system.account(alith.address);
+    alithNonce = alithAccount.nonce.toNumber();
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.rwaPools.setGateway(gateway.public)
+    ).signAndSend(alith, { nonce: alithNonce++ });
+    await context.createBlock();
+
+    await grantPermission(context, alith, () => alithNonce++, 1, 'PoolAdmin', poolAdmin.public, true);
+    const data = encodeCreatePool(
+      context, 1, borrower.public, EPOCH_LENGTH_SECS, WIDE_SETTLEMENT_OFFSET_SECS, false, false,
+      [{ nftContract: NFT_CONTRACT, nftTokenId: '1' }],
+      [{ chainId: CHAIN_ID, vaultAddress: VAULT_ADDRESS_A, isSenior: true, apr: FIVE_PERCENT_APR, maxDeposits: '0' }],
+    );
+    const createBlock = await sendPrecompileTx(
+      context, POOLS_PRECOMPILE_ADDRESS, POOLS_SELECTORS, poolAdmin.public, poolAdmin.private, 'create_pool', [data],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(createBlock.txResults[0])).status)).eq(true);
+
+    const poolAdminAccount = await context.polkadotApi.query.system.account(poolAdminSigner.address);
+    poolAdminNonce = poolAdminAccount.nonce.toNumber();
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, { TrancheInvestor: TRANCHE_ID }, investor.public, false);
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, 'OracleFeeder', feederPublic.public, false);
+
+    const depositBlock = await sendPrecompileTx(
+      context, INVESTMENTS_PRECOMPILE_ADDRESS, INVESTMENTS_SELECTORS, gateway.public, gateway.private,
+      'submit_deposit_order', [encodeOrder(context, 1, investor.public, 1_000)],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(depositBlock.txResults[0])).status)).eq(true);
+    // Deliberately no submitPnl call here — the whole point of this block is to exercise the
+    // "oracle hasn't submitted yet when the window opens" path.
+  });
+
+  it('should leave epoch_price unset when the window opens with no oracle submission yet', async function () {
+    await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, WIDE_SETTLEMENT_OFFSET_SECS);
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(tranche.epochPrice).eq(null);
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(1_000n);
+  });
+
+  it('should retry and successfully finalize once the oracle submits later within the same still-open window', async function () {
+    const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, 0, 0, false).signAndSend(feeder, { nonce: feederNonce });
+    await context.createBlock();
+    // One more block for on_initialize to observe the just-submitted value (same timestamp-lag
+    // reasoning documented on advanceToSettlementWindow itself).
+    await context.createBlock();
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.epochPrice)).eq(WAD); // first-ever mint, despite missing the window's first block
+    expect(BigInt(tranche.reserve)).eq(1_000n);
+    expect(BigInt(tranche.tokenSupply)).eq(1_000n);
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(0n);
+  });
+});
