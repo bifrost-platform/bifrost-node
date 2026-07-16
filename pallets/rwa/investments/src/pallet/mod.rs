@@ -722,6 +722,10 @@ pub mod pallet {
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
 			);
+			ensure!(
+				T::Permissions::is_tranche_investor(&tranche_id, &investor_id),
+				Error::<T>::NotWhitelisted
+			);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
 
 			let order = PendingDepositOrders::<T>::take((
@@ -765,6 +769,10 @@ pub mod pallet {
 			ensure!(
 				T::Pools::tranche_exists(pool_id, tranche_id.clone()),
 				Error::<T>::PoolOrTrancheNotFound
+			);
+			ensure!(
+				T::Permissions::is_tranche_investor(&tranche_id, &investor_id),
+				Error::<T>::NotWhitelisted
 			);
 			ensure!(!T::Pools::in_settlement_window(pool_id), Error::<T>::PoolInSettlementWindow);
 
