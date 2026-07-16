@@ -95,7 +95,7 @@ describeDevNode('pallet_rwa_pools / precompile_rwa_investments - Automatic-mode 
 
     settledEpoch = await currentEpoch(context, 1);
     const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(1, settledEpoch, 0).signAndSend(feeder, { nonce: feederNonce });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, settledEpoch, 0, false).signAndSend(feeder, { nonce: feederNonce });
     await context.createBlock();
 
     await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
@@ -196,7 +196,7 @@ describeDevNode('pallet_rwa_pools / precompile_rwa_investments - Automatic-mode 
 
     depositEpoch = await currentEpoch(context, 1);
     let feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(1, depositEpoch, 0).signAndSend(feeder, { nonce: feederNonce++ });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, depositEpoch, 0, false).signAndSend(feeder, { nonce: feederNonce++ });
     await context.createBlock();
 
     await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
@@ -216,7 +216,7 @@ describeDevNode('pallet_rwa_pools / precompile_rwa_investments - Automatic-mode 
 
     redeemEpoch = await currentEpoch(context, 1);
     feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(1, redeemEpoch, 0).signAndSend(feeder, { nonce: feederNonce });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, redeemEpoch, 0, false).signAndSend(feeder, { nonce: feederNonce });
     await context.createBlock();
 
     const trancheBeforeRedeemSettles = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);

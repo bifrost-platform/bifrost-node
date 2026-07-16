@@ -357,7 +357,7 @@ describeDevNode('precompile_rwa_investments - approve_deposit_orders (Approval m
 
     const oracleFeederSigner = keyring.addFromUri(TEST_CONTROLLERS[6].private);
     const feederNonce = (await context.polkadotApi.query.system.account(oracleFeederSigner.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(1, 1, 0).signAndSend(oracleFeederSigner, { nonce: feederNonce });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, 1, 0, false).signAndSend(oracleFeederSigner, { nonce: feederNonce });
     await context.createBlock();
 
     const rawPool: any = await context.polkadotApi.query.rwaPools.pools(1);

@@ -198,7 +198,9 @@ pub mod pallet {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
 					if needs_finalization {
-						if let Some(cumulative_earnings) = T::NAV::nav(pool_id).map(|(n, _)| n) {
+						if let Some((pnl_magnitude, pnl_is_loss)) =
+							T::NAV::nav(pool_id).map(|(n, l, _)| (n, l))
+						{
 							// Oracle hasn't submitted yet → do nothing this block; fall through to
 							// the epoch advance check below so the pool is never stuck.
 							let total_borrowed: U256 = pool
@@ -211,9 +213,22 @@ pub mod pallet {
 								.values()
 								.map(|t| t.repaid_earnings)
 								.fold(U256::zero(), |acc, v| acc.saturating_add(v));
-							let oracle_nav = total_borrowed.saturating_add(
-								cumulative_earnings.saturating_sub(total_repaid_earnings),
-							);
+							// oracle_nav = total_borrowed ± pnl_magnitude − total_repaid_earnings,
+							// floored at 0 (subtracted when pnl_is_loss, added otherwise).
+							// Note: a loss can only zero out this outstanding/unrealized claim — it
+							// cannot claw back cash already sitting in a tranche's reserve, since
+							// total_pool_value below sums oracle_nav and total_reserve separately.
+							// So senior is only impaired below par when total_reserve itself falls
+							// short of accrued_nav, not from a loss alone against an untouched reserve.
+							let oracle_nav = if pnl_is_loss {
+								total_borrowed
+									.saturating_sub(pnl_magnitude)
+									.saturating_sub(total_repaid_earnings)
+							} else {
+								total_borrowed.saturating_add(
+									pnl_magnitude.saturating_sub(total_repaid_earnings),
+								)
+							};
 							// Accrue for the full intended epoch duration, not `now - epoch_start_secs`.
 							// The settlement window opens `settlement_offset_secs` before epoch end,
 							// so using the real elapsed time would under-accrue by that offset.
@@ -357,7 +372,7 @@ pub mod pallet {
 							}
 
 							changed = true;
-						} // if let Some(cumulative_earnings)
+						} // if let Some((pnl_magnitude, pnl_is_loss))
 					} // if needs_finalization
 
 					// Settlement window was entered (finalized or already done).
