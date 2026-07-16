@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 
 import { Keyring } from '@polkadot/api';
+import { numberToHex } from 'web3-utils';
 
 import { TEST_CONTROLLERS } from '../../constants/keys';
 import { describeDevNode, INodeContext } from '../set_dev_node';
@@ -282,5 +283,128 @@ describeDevNode('pallet_rwa_pools / precompile_rwa_investments - Automatic-mode 
     );
     const receipt = await context.web3.eth.getTransactionReceipt(block.txResults[0]);
     expect(Boolean(receipt.status)).eq(false);
+  });
+});
+
+describeDevNode('pallet_rwa_pools / precompile_rwa_investments - Automatic-mode deposit deferral at zero epoch_price', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const poolAdmin: { public: string, private: string } = TEST_CONTROLLERS[1];
+  const poolAdminSigner = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const borrower: { public: string, private: string } = TEST_CONTROLLERS[2];
+  const gateway: { public: string, private: string } = TEST_CONTROLLERS[3];
+  const investorA: { public: string, private: string } = TEST_CONTROLLERS[4];
+  const investorB: { public: string, private: string } = TEST_CONTROLLERS[6];
+  const feeder = keyring.addFromUri(TEST_CONTROLLERS[5].private);
+  const feederPublic: { public: string, private: string } = TEST_CONTROLLERS[5];
+  let alithNonce: number;
+  let poolAdminNonce: number;
+  let epoch1: number;
+  let epoch2: number;
+
+  before('should create a pool, settle an initial deposit at par, and borrow the reserve out entirely', async function () {
+    const alithAccount = await context.polkadotApi.query.system.account(alith.address);
+    alithNonce = alithAccount.nonce.toNumber();
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.rwaPools.setGateway(gateway.public)
+    ).signAndSend(alith, { nonce: alithNonce++ });
+    await context.createBlock();
+
+    await grantPermission(context, alith, () => alithNonce++, 1, 'PoolAdmin', poolAdmin.public, true);
+    await createAutomaticPool(context, poolAdmin, borrower, 1);
+
+    const poolAdminAccount = await context.polkadotApi.query.system.account(poolAdminSigner.address);
+    poolAdminNonce = poolAdminAccount.nonce.toNumber();
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, { TrancheInvestor: TRANCHE_ID }, investorA.public, false);
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, { TrancheInvestor: TRANCHE_ID }, investorB.public, false);
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, 'OracleFeeder', feederPublic.public, false);
+
+    const depositBlock = await sendPrecompileTx(
+      context, INVESTMENTS_PRECOMPILE_ADDRESS, INVESTMENTS_SELECTORS, gateway.public, gateway.private,
+      'submit_deposit_order', [encodeOrder(context, 1, investorA.public, 1_000)],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(depositBlock.txResults[0])).status)).eq(true);
+
+    const epoch0 = await currentEpoch(context, 1);
+    const feederNonce0 = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, epoch0, 0, false).signAndSend(feeder, { nonce: feederNonce0 });
+    await context.createBlock();
+
+    await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.reserve)).eq(1_000n);
+    expect(BigInt(tranche.tokenSupply)).eq(1_000n);
+    expect(BigInt(tranche.accruedNav)).eq(1_000n);
+
+    // Borrow the full reserve out so a subsequent loss can drive oracle_nav (and thus this
+    // tranche's price) all the way to exactly 0, with no reserve cushion left to absorb it.
+    const borrowBlock = await sendPrecompileTx(
+      context, POOLS_PRECOMPILE_ADDRESS, POOLS_SELECTORS, gateway.public, gateway.private, 'borrow',
+      [numberToHex(1), numberToHex(CHAIN_ID), VAULT_ADDRESS_A, borrower.public, numberToHex(1_000)],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(borrowBlock.txResults[0])).status)).eq(true);
+  });
+
+  it('should defer a deposit that would settle at a zero epoch_price', async function () {
+    await advanceBlocksUntil(context, async () => (await currentEpoch(context, 1)) > 0);
+    epoch1 = await currentEpoch(context, 1);
+
+    const investorBDepositBlock = await sendPrecompileTx(
+      context, INVESTMENTS_PRECOMPILE_ADDRESS, INVESTMENTS_SELECTORS, gateway.public, gateway.private,
+      'submit_deposit_order', [encodeOrder(context, 1, investorB.public, 200)],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(investorBDepositBlock.txResults[0])).status)).eq(true);
+
+    const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, epoch1, 1_000, true).signAndSend(feeder, { nonce: feederNonce });
+    await context.createBlock();
+
+    await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
+
+    // oracle_nav = max(0, total_borrowed(1_000) - loss(1_000)) = 0; total_reserve = 0 (fully
+    // borrowed out) => total_pool_value = 0 => senior claims min(0, accrued_nav) = 0 => price 0.
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.epochPrice)).eq(0n);
+    expect(BigInt(tranche.reserve)).eq(0n); // investor B's 200 must NOT have been absorbed
+    expect(BigInt(tranche.tokenSupply)).eq(1_000n); // unchanged — no 0-share mint happened
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(200n); // still pending, not cleared
+
+    const rawPending: any = await context.polkadotApi.query.rwaInvestments.pendingDepositOrders(TRANCHE_ID, investorB.public, epoch1);
+    expect(rawPending.isSome).eq(true);
+    expect(BigInt(rawPending.unwrap().amount.toJSON())).eq(200n);
+
+    const rawClaimable: any = await context.polkadotApi.query.rwaInvestments.claimableDepositOrders(TRANCHE_ID, investorB.public, epoch1);
+    expect(rawClaimable.isNone).eq(true);
+  });
+
+  it('should settle the deferred deposit once a later epochs price is nonzero', async function () {
+    await advanceBlocksUntil(context, async () => (await currentEpoch(context, 1)) > epoch1);
+    epoch2 = await currentEpoch(context, 1);
+
+    const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, epoch2, 0, false).signAndSend(feeder, { nonce: feederNonce });
+    await context.createBlock();
+
+    await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
+
+    // oracle_nav = total_borrowed(1_000) + 0 = 1_000; total_reserve = 0 => total_pool_value =
+    // 1_000 => senior claims min(1_000, accrued_nav=1_000) = 1_000 => price = 1_000*WAD/1_000
+    // (still just investor A's tokens, pre-settlement) = WAD exactly. Investor B's carried-over
+    // 200 then settles at that price: shares_minted = 200*WAD/WAD = 200 exactly.
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.epochPrice)).eq(WAD);
+    expect(BigInt(tranche.reserve)).eq(200n);
+    expect(BigInt(tranche.tokenSupply)).eq(1_200n);
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(0n);
+
+    const rawPending: any = await context.polkadotApi.query.rwaInvestments.pendingDepositOrders(TRANCHE_ID, investorB.public, epoch2);
+    expect(rawPending.isNone).eq(true);
+
+    const rawClaimable: any = await context.polkadotApi.query.rwaInvestments.claimableDepositOrders(TRANCHE_ID, investorB.public, epoch2);
+    const claimable = rawClaimable.unwrap();
+    expect(BigInt(claimable.amount.toJSON())).eq(200n);
+    expect(BigInt(claimable.sharesToMint.toJSON())).eq(200n);
   });
 });

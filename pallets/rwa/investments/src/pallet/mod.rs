@@ -57,6 +57,10 @@ pub mod pallet {
 		InsufficientLiquidity,
 		/// Settlement window is open but NAV has not been finalized for this epoch yet.
 		EpochPriceNotSet,
+		/// Epoch price is exactly zero — this tranche's value is fully wiped. New deposits
+		/// cannot be settled at this price without transferring principal to other holders
+		/// for free; retry in a later epoch once price recovers above zero.
+		EpochPriceIsZero,
 		/// No claimable deposit order found for this investor (Automatic mode only).
 		NoClaimableDeposit,
 		/// No claimable redeem order found for this investor (Automatic mode only).
@@ -408,6 +412,7 @@ pub mod pallet {
 
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
+			ensure!(!epoch_price.is_zero(), Error::<T>::EpochPriceIsZero);
 
 			let now = Self::current_block();
 
