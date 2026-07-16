@@ -329,8 +329,10 @@ pub mod pallet {
 		/// Entry point called by the investments precompile when a `requestRedeem`
 		/// message arrives on Bifrost via CCCP.
 		///
-		/// Tranche tokens are burned on the Spoke chain when the request is submitted,
-		/// so `token_supply` is decremented here immediately.
+		/// Tranche tokens are only locked in the Spoke-chain Treasury when the request is
+		/// submitted, not burned — burning (and the corresponding `token_supply` decrement)
+		/// happens at order approval instead (see `approve_redeem_orders` / pallet-pools
+		/// `on_initialize`), so a pending order can still be cancelled and unlocked.
 		/// Rejected during the pool's settlement window.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::default())]
