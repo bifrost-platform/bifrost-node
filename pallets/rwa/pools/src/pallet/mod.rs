@@ -197,6 +197,8 @@ pub mod pallet {
 				if pool.epoch.in_settlement_window(now_secs) {
 					let needs_finalization =
 						pool.tranches.values().any(|t| t.epoch_price.is_none());
+					// Already finalized on a prior block this window unless proven otherwise below.
+					let mut finalized = !needs_finalization;
 					if needs_finalization {
 						if let Some((pnl_magnitude, pnl_is_loss)) =
 							T::NAV::nav(pool_id).map(|(n, l, _)| (n, l))
@@ -382,15 +384,24 @@ pub mod pallet {
 							}
 
 							changed = true;
+							finalized = true;
 						} // if let Some((pnl_magnitude, pnl_is_loss))
+						 // else: oracle still hasn't submitted for this epoch — `finalized` stays
+						 // false, so NextEpochAction is left untouched below and this pool is
+						 // retried again on the very next block rather than silently skipping
+						 // the rest of the window.
 					} // if needs_finalization
 
-					// Settlement window was entered (finalized or already done).
-					// Next action: epoch end, when we need to advance.
-					NextEpochAction::<T>::insert(
-						pool_id,
-						pool.epoch.epoch_start_secs.saturating_add(pool.epoch.epoch_length_secs),
-					);
+					if finalized {
+						// Settlement window handled (finalized just now, or already done on a
+						// prior block this same window). Next action: epoch end.
+						NextEpochAction::<T>::insert(
+							pool_id,
+							pool.epoch
+								.epoch_start_secs
+								.saturating_add(pool.epoch.epoch_length_secs),
+						);
+					}
 				}
 
 				// Epoch over: reset prices and advance.
