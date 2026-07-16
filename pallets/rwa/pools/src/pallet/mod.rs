@@ -306,24 +306,34 @@ pub mod pallet {
 								for (tranche_id, tranche) in pool.tranches.iter_mut() {
 									if !tranche.pending_orders.deposit.is_zero() {
 										let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
-										if let Ok((confirmed, shares_minted)) =
-											T::Investments::settle_deposit_orders(
-												pool_id,
-												tranche_id.clone(),
-												pool.epoch.current_epoch,
-												epoch_price,
-											) {
-											tranche.reserve =
-												tranche.reserve.saturating_add(confirmed);
-											tranche.token_supply =
-												tranche.token_supply.saturating_add(shares_minted);
-											tranche.pending_orders.deposit = U256::zero();
-											// Senior accrued_nav grows by the newly settled deposit.
-											if let TrancheType::Senior { .. } =
-												&tranche.tranche_type
-											{
-												tranche.accrued_nav =
-													tranche.accrued_nav.saturating_add(confirmed);
+										// A price of exactly 0 means this tranche's existing value
+										// is fully wiped. Settling new deposits at that price would
+										// mint 0 shares while the principal still flows into
+										// reserve, silently transferring it to whichever holders
+										// survive into a later epoch. Defer instead: leave the
+										// order(s) pending until a future epoch's price is nonzero.
+										if !epoch_price.is_zero() {
+											if let Ok((confirmed, shares_minted)) =
+												T::Investments::settle_deposit_orders(
+													pool_id,
+													tranche_id.clone(),
+													pool.epoch.current_epoch,
+													epoch_price,
+												) {
+												tranche.reserve =
+													tranche.reserve.saturating_add(confirmed);
+												tranche.token_supply = tranche
+													.token_supply
+													.saturating_add(shares_minted);
+												tranche.pending_orders.deposit = U256::zero();
+												// Senior accrued_nav grows by the newly settled deposit.
+												if let TrancheType::Senior { .. } =
+													&tranche.tranche_type
+												{
+													tranche.accrued_nav = tranche
+														.accrued_nav
+														.saturating_add(confirmed);
+												}
 											}
 										}
 									}
