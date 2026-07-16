@@ -526,11 +526,12 @@ pub trait PermissionInspect<AccountId> {
 /// Implemented by pallet-nav-oracle. Called by pallet-pools to fetch the current
 /// NAV (net asset value = total collateral AUM) for a pool.
 pub trait PoolNAV<PoolId, Balance> {
-	/// Returns `(nav, block_number)` of the last recorded NAV without recomputing.
-	fn nav(pool_id: PoolId) -> Option<(Balance, u32)>;
+	/// Returns `(magnitude, is_loss, block_number)` of the last recorded NAV without
+	/// recomputing. `is_loss` signs `magnitude`: `false` for a net gain, `true` for a net loss.
+	fn nav(pool_id: PoolId) -> Option<(Balance, bool, u32)>;
 
-	/// Triggers a fresh NAV report and returns the result.
-	fn update_nav(pool_id: PoolId) -> Result<Balance, DispatchError>;
+	/// Triggers a fresh NAV report and returns `(magnitude, is_loss)`.
+	fn update_nav(pool_id: PoolId) -> Result<(Balance, bool), DispatchError>;
 }
 
 // ---------------------------------------------------------------------------

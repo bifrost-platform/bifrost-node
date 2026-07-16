@@ -98,7 +98,7 @@ describeDevNode('precompile_rwa_investments - approve_redeem_orders (Approval mo
 
     depositEpoch = await currentEpoch(context, 1);
     let feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(1, depositEpoch, 0).signAndSend(feeder, { nonce: feederNonce++ });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, depositEpoch, 0, false).signAndSend(feeder, { nonce: feederNonce++ });
     await context.createBlock();
 
     await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
@@ -124,7 +124,7 @@ describeDevNode('precompile_rwa_investments - approve_redeem_orders (Approval mo
 
     redeemEpoch = await currentEpoch(context, 1);
     feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(1, redeemEpoch, 0).signAndSend(feeder, { nonce: feederNonce });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, redeemEpoch, 0, false).signAndSend(feeder, { nonce: feederNonce });
     await context.createBlock();
 
     const trancheBeforeApproval = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
@@ -211,7 +211,7 @@ describeDevNode('precompile_rwa_investments - approve_redeem_orders (Approval mo
 
     submittedEpoch = await currentEpoch(context, 2);
     const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
-    await context.polkadotApi.tx.rwaNavOracle.submitEarnings(2, submittedEpoch, 0).signAndSend(feeder, { nonce: feederNonce });
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(2, submittedEpoch, 0, false).signAndSend(feeder, { nonce: feederNonce });
     await context.createBlock();
 
     await advanceToSettlementWindow(context, 2, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
