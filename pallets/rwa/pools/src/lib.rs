@@ -384,13 +384,17 @@ pub trait PoolInspect {
 /// Defined here, implemented by pallet-investments.
 /// Called from pallet-pools' `on_initialize` during automatic epoch settlement.
 pub trait Settlement<PoolId, TrancheId, Balance> {
-	/// Settle all pending deposit orders for a tranche at the given epoch price.
+	/// Settle pending deposit orders for a tranche at the given epoch price, up to
+	/// pallet-investments' own internally-governed `AutoSettlementCap`. Any orders beyond
+	/// the cap are left pending, to be picked up by a later call (bounds this call's cost
+	/// for callers — e.g. pallet-pools' mandatory `on_initialize` hook — where an unbounded
+	/// pending-order backlog must not translate into unbounded block weight/PoV).
 	///
 	/// Settled orders move to `ClaimableDepositOrders`; investors pull-claim via
 	/// `claim_deposit`, which triggers outbound share minting on the spoke chain.
 	///
-	/// Returns `(total_assets_settled, shares_minted)` — used to update
-	/// `tranche.reserve` and `tranche.token_supply` in pallet-pools,
+	/// Returns `(total_assets_settled, shares_minted)` for just this call's batch — used to
+	/// update `tranche.reserve` and `tranche.token_supply` in pallet-pools,
 	/// or `Err` if a required storage operation failed (e.g. pool not found).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
@@ -399,17 +403,26 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 		epoch_price: U256,
 	) -> Result<(Balance, Balance), DispatchError>;
 
-	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`
-	/// (the tranche's available treasury liquidity).
+	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity` (the
+	/// tranche's available treasury liquidity), up to pallet-investments' own
+	/// internally-governed `AutoSettlementCap`. Any orders beyond the cap are left pending,
+	/// for the same reason as `settle_deposit_orders`.
 	///
-	/// If total payout owed <= `max_liquidity`, all orders are settled in full.
-	/// If total payout owed > `max_liquidity`, each order is scaled proportionally
-	/// and the remainder stays in `PendingRedeemOrders` for the next epoch.
+	/// `total_pending_tokens` is the tranche's true full outstanding redeem demand (not just
+	/// this call's capped batch) — the caller already tracks this aggregate incrementally
+	/// (`tranche.pending_orders.redeem` in pallet-pools), so it's passed in rather than
+	/// re-derived from the (possibly-capped) iterated entries, which would otherwise distort
+	/// the pro-rata ratio for whichever subset of orders this call processes.
+	///
+	/// If total payout owed <= `max_liquidity`, all orders in this batch are settled in full.
+	/// If total payout owed > `max_liquidity`, each order in this batch is scaled
+	/// proportionally against `total_pending_tokens` and the remainder stays in
+	/// `PendingRedeemOrders` for a later call.
 	///
 	/// Settled orders move to `ClaimableRedeemOrders`; investors pull-claim via
 	/// `claim_redeem`, which triggers outbound asset payout on the spoke chain.
 	///
-	/// Returns `(tokens_settled, asset_payout)` — used to decrement
+	/// Returns `(tokens_settled, asset_payout)` for just this call's batch — used to decrement
 	/// `tranche.pending_orders.redeem` and `tranche.reserve` in pallet-pools,
 	/// or `Err` if a required storage operation failed.
 	fn settle_redeem_orders(
@@ -418,6 +431,7 @@ pub trait Settlement<PoolId, TrancheId, Balance> {
 		epoch_id: EpochId,
 		max_liquidity: Balance,
 		epoch_price: U256,
+		total_pending_tokens: Balance,
 	) -> Result<(Balance, Balance), DispatchError>;
 }
 

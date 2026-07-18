@@ -27,20 +27,24 @@ impl<T: Config> Pallet<T> {
 }
 
 impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
-	/// Settle all pending deposit orders for a tranche at the given epoch price.
+	/// Settle up to `AutoSettlementCap` pending deposit orders for a tranche at the given
+	/// epoch price. Orders beyond the cap are left in `PendingDepositOrders` for a later call.
 	///
 	/// Settled orders move to `ClaimableDepositOrders`. Token supply is incremented
 	/// immediately so `token_price()` stays accurate for subsequent epochs.
 	///
-	/// Returns the total amount settled (for `tranche.reserve` accounting).
+	/// Returns the total amount settled in this batch (for `tranche.reserve` accounting).
 	fn settle_deposit_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
 		epoch_price: U256,
 	) -> Result<(U256, U256), DispatchError> {
+		let max_orders = AutoSettlementCap::<T>::get();
 		let entries: Vec<((T::AccountId, EpochId), PendingDepositOrder)> =
-			PendingDepositOrders::<T>::iter_prefix((&tranche_id,)).collect();
+			PendingDepositOrders::<T>::iter_prefix((&tranche_id,))
+				.take(max_orders as usize)
+				.collect();
 
 		if entries.is_empty() {
 			return Ok((U256::zero(), U256::zero()));
@@ -99,30 +103,36 @@ impl<T: Config> Settlement<PoolId, TrancheId, U256> for Pallet<T> {
 		Ok((total, shares_total))
 	}
 
-	/// Pro-rata settle pending redeem orders for a tranche up to `max_liquidity`
-	/// (the tranche's available treasury liquidity).
+	/// Pro-rata settle up to `AutoSettlementCap` pending redeem orders for a tranche up to
+	/// `max_liquidity` (the tranche's available treasury liquidity). Orders beyond the cap
+	/// are left in `PendingRedeemOrders` for a later call. `total_pending_tokens` is the
+	/// tranche's true full outstanding redeem demand (not just this capped batch), passed
+	/// in by the caller so the pro-rata ratio stays correct regardless of which subset of
+	/// orders this call processes.
 	///
 	/// Settled orders move to `ClaimableRedeemOrders`.
 	///
-	/// Returns `(tokens_settled, asset_payout)` for `pending_orders.redeem` and
-	/// `tranche.reserve` accounting in pallet-pools.
+	/// Returns `(tokens_settled, asset_payout)` for this batch, for `pending_orders.redeem`
+	/// and `tranche.reserve` accounting in pallet-pools.
 	fn settle_redeem_orders(
 		pool_id: PoolId,
 		tranche_id: TrancheId,
 		epoch_id: EpochId,
 		max_liquidity: U256,
 		epoch_price: U256,
+		total_pending_tokens: U256,
 	) -> Result<(U256, U256), DispatchError> {
+		let max_orders = AutoSettlementCap::<T>::get();
 		let entries: Vec<((T::AccountId, EpochId), PendingRedeemOrder)> =
-			PendingRedeemOrders::<T>::iter_prefix((&tranche_id,)).collect();
+			PendingRedeemOrders::<T>::iter_prefix((&tranche_id,))
+				.take(max_orders as usize)
+				.collect();
 
 		if entries.is_empty() {
 			return Ok((U256::zero(), U256::zero()));
 		}
 
-		let total_tokens = entries
-			.iter()
-			.fold(U256::zero(), |acc, ((_, _), o)| acc.saturating_add(o.amount));
+		let total_tokens = total_pending_tokens;
 
 		if total_tokens.is_zero() {
 			return Ok((U256::zero(), U256::zero()));
