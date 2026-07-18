@@ -15,7 +15,7 @@ use scale_info::TypeInfo;
 use sp_core::U256;
 use sp_runtime::RuntimeDebug;
 
-pub const MAX_INVESTORS_PER_APPROVAL: u32 = 100;
+pub const MAX_INVESTORS_PER_APPROVAL: u32 = 1_000;
 
 /// Identifies a single pending order to approve.
 /// Used as the element type of `orders` in `approve_deposit_orders` and

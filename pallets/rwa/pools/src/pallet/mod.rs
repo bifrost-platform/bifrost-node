@@ -184,22 +184,21 @@ pub mod pallet {
 				weight = weight.saturating_add(Weight::from_parts(900, 0));
 				let mut changed = false;
 
-				// Settlement window just opened: lock epoch price and settle Automatic orders.
-				// `needs_finalization` is the once-only guard — after prices are set it
-				// stays false for the remainder of the window, preventing double-settlement.
-				//
-				// If no block was produced during a prior settlement window (e.g. validator
-				// outage), that epoch's window is simply skipped. Pending orders are NOT lost —
-				// they remain in PendingDepositOrders / PendingRedeemOrders and are carried
-				// forward to this window, where they settle at the current epoch's NAV price.
-				// Investors should expect settlement in the next available window, not
-				// necessarily the epoch in which they submitted.
 				if pool.epoch.in_settlement_window(now_secs) {
-					let needs_finalization =
-						pool.tranches.values().any(|t| t.epoch_price.is_none());
-					// Already finalized on a prior block this window unless proven otherwise below.
-					let mut finalized = !needs_finalization;
-					if needs_finalization {
+					// Phase 1: lock epoch price for all tranches, once, when oracle data is
+					// available. This is a one-time, atomic, whole-pool event — once locked,
+					// `epoch_price` stays `Some` for the rest of the epoch, so this branch
+					// won't run again even though the pool keeps getting visited every block
+					// below (Phase 2) until settlement fully drains or the window closes.
+					//
+					// If no block was produced during a prior settlement window (e.g. validator
+					// outage), that epoch's window is simply skipped. Pending orders are NOT lost —
+					// they remain in PendingDepositOrders / PendingRedeemOrders and are carried
+					// forward to this window, where they settle at the current epoch's NAV price.
+					// Investors should expect settlement in the next available window, not
+					// necessarily the epoch in which they submitted.
+					let needs_price_lock = pool.tranches.values().any(|t| t.epoch_price.is_none());
+					if needs_price_lock {
 						if let Some((pnl_magnitude, pnl_is_loss)) =
 							T::NAV::nav(pool_id).map(|(n, l, _)| (n, l))
 						{
@@ -295,103 +294,132 @@ pub mod pallet {
 								}
 							}
 
-							// Snapshot liquidity before deposit settlement so that freshly settled
-							// deposits cannot immediately fund same-epoch redeem payouts.
-							// BTreeMap gives O(log n) lookup in the redeem loop vs O(n²) with Vec::find.
-							let pre_deposit_reserve: BTreeMap<TrancheId, U256> = pool
-								.tranches
-								.iter()
-								.map(|(id, t)| (id.clone(), t.reserve))
-								.collect();
+							changed = true;
+						}
+						// else: oracle still hasn't submitted for this epoch — price stays
+						// unset; `prices_locked` below will be false, so this pool won't
+						// finalize this block and is retried again on the very next block.
+					}
 
-							if pool.deposit_settlement == SettlementMode::Automatic {
-								for (tranche_id, tranche) in pool.tranches.iter_mut() {
-									if !tranche.pending_orders.deposit.is_zero() {
-										let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
-										// A price of exactly 0 means this tranche's existing value
-										// is fully wiped. Settling new deposits at that price would
-										// mint 0 shares while the principal still flows into
-										// reserve, silently transferring it to whichever holders
-										// survive into a later epoch. Defer instead: leave the
-										// order(s) pending until a future epoch's price is nonzero.
-										if !epoch_price.is_zero() {
-											if let Ok((confirmed, shares_minted)) =
-												T::Investments::settle_deposit_orders(
-													pool_id,
-													tranche_id.clone(),
-													pool.epoch.current_epoch,
-													epoch_price,
-												) {
-												tranche.reserve =
-													tranche.reserve.saturating_add(confirmed);
-												tranche.token_supply = tranche
-													.token_supply
-													.saturating_add(shares_minted);
-												tranche.pending_orders.deposit = U256::zero();
-												// Senior accrued_nav grows by the newly settled deposit.
-												if let TrancheType::Senior { .. } =
-													&tranche.tranche_type
-												{
-													tranche.accrued_nav = tranche
-														.accrued_nav
-														.saturating_add(confirmed);
-												}
-											}
-										}
-									}
-								}
-							}
+					// Phase 2: Automatic-mode settlement, attempted on every block for as long
+					// as pending orders remain — not just the block that locked the price.
+					let prices_locked = pool.tranches.values().all(|t| t.epoch_price.is_some());
+					let mut deposit_remaining = false;
+					let mut redeem_remaining = false;
 
-							if pool.redeem_settlement == SettlementMode::Automatic {
-								for (tranche_id, tranche) in pool.tranches.iter_mut() {
-									let max_reserve = pre_deposit_reserve
-										.get(tranche_id)
-										.copied()
-										.unwrap_or_default();
-									if !max_reserve.is_zero()
-										&& !tranche.pending_orders.redeem.is_zero()
-									{
-										let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
-										if let Ok((tokens_settled, asset_payout)) =
-											T::Investments::settle_redeem_orders(
+					if prices_locked {
+						// Snapshot liquidity before this block's own deposit settlement, so
+						// deposits confirmed in THIS block cannot immediately fund THIS block's
+						// redeem payouts. (A deposit confirmed in an earlier block within the
+						// same window has already landed in reserve and legitimately counts
+						// toward a later block's redeem liquidity — this only guards
+						// same-block double-counting.)
+						// BTreeMap gives O(log n) lookup in the redeem loop vs O(n²) with Vec::find.
+						let pre_deposit_reserve: BTreeMap<TrancheId, U256> =
+							pool.tranches.iter().map(|(id, t)| (id.clone(), t.reserve)).collect();
+
+						if pool.deposit_settlement == SettlementMode::Automatic {
+							for (tranche_id, tranche) in pool.tranches.iter_mut() {
+								if !tranche.pending_orders.deposit.is_zero() {
+									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
+									// A price of exactly 0 means this tranche's existing value
+									// is fully wiped. Settling new deposits at that price would
+									// mint 0 shares while the principal still flows into
+									// reserve, silently transferring it to whichever holders
+									// survive into a later epoch. Defer instead: leave the
+									// order(s) pending until a future epoch's price is nonzero
+									// — this doesn't count as "remaining work" for finalization,
+									// since nothing more can be done for it this epoch anyway.
+									if !epoch_price.is_zero() {
+										if let Ok((confirmed, shares_minted)) =
+											T::Investments::settle_deposit_orders(
 												pool_id,
 												tranche_id.clone(),
 												pool.epoch.current_epoch,
-												max_reserve,
 												epoch_price,
 											) {
 											tranche.reserve =
-												tranche.reserve.saturating_sub(asset_payout);
-											tranche.pending_orders.redeem = tranche
-												.pending_orders
-												.redeem
-												.saturating_sub(tokens_settled);
-											// Tranche tokens are burned on the spoke chain at
-											// settlement (Automatic mode's order approval).
+												tranche.reserve.saturating_add(confirmed);
 											tranche.token_supply =
-												tranche.token_supply.saturating_sub(tokens_settled);
-											// Senior accrued_nav shrinks by the redeemed asset payout.
+												tranche.token_supply.saturating_add(shares_minted);
+											// A capped batch may leave real pending value behind,
+											// so subtract what was actually settled rather than
+											// assuming everything was settled.
+											tranche.pending_orders.deposit = tranche
+												.pending_orders
+												.deposit
+												.saturating_sub(confirmed);
+											// Senior accrued_nav grows by the newly settled deposit.
 											if let TrancheType::Senior { .. } =
 												&tranche.tranche_type
 											{
-												tranche.accrued_nav = tranche
-													.accrued_nav
-													.saturating_sub(asset_payout);
+												tranche.accrued_nav =
+													tranche.accrued_nav.saturating_add(confirmed);
 											}
+											changed = true;
+										}
+										if !tranche.pending_orders.deposit.is_zero() {
+											deposit_remaining = true;
 										}
 									}
 								}
 							}
+						}
 
-							changed = true;
-							finalized = true;
-						} // if let Some((pnl_magnitude, pnl_is_loss))
-						 // else: oracle still hasn't submitted for this epoch — `finalized` stays
-						 // false, so NextEpochAction is left untouched below and this pool is
-						 // retried again on the very next block rather than silently skipping
-						 // the rest of the window.
-					} // if needs_finalization
+						if pool.redeem_settlement == SettlementMode::Automatic {
+							for (tranche_id, tranche) in pool.tranches.iter_mut() {
+								let max_reserve = pre_deposit_reserve
+									.get(tranche_id)
+									.copied()
+									.unwrap_or_default();
+								if !max_reserve.is_zero()
+									&& !tranche.pending_orders.redeem.is_zero()
+								{
+									let epoch_price = tranche.epoch_price.unwrap_or(crate::WAD);
+									let total_pending_tokens = tranche.pending_orders.redeem;
+									if let Ok((tokens_settled, asset_payout)) =
+										T::Investments::settle_redeem_orders(
+											pool_id,
+											tranche_id.clone(),
+											pool.epoch.current_epoch,
+											max_reserve,
+											epoch_price,
+											total_pending_tokens,
+										) {
+										tranche.reserve =
+											tranche.reserve.saturating_sub(asset_payout);
+										tranche.pending_orders.redeem = tranche
+											.pending_orders
+											.redeem
+											.saturating_sub(tokens_settled);
+										// Tranche tokens are burned on the spoke chain at
+										// settlement (Automatic mode's order approval).
+										tranche.token_supply =
+											tranche.token_supply.saturating_sub(tokens_settled);
+										// Senior accrued_nav shrinks by the redeemed asset payout.
+										if let TrancheType::Senior { .. } = &tranche.tranche_type {
+											tranche.accrued_nav =
+												tranche.accrued_nav.saturating_sub(asset_payout);
+										}
+										changed = true;
+									}
+								}
+								// Retried every block regardless of whether liquidity was
+								// available just now — a `repay` may land any block, and if
+								// the window closes first, the epoch-advance branch below
+								// carries this forward for free either way.
+								if !tranche.pending_orders.redeem.is_zero() {
+									redeem_remaining = true;
+								}
+							}
+						}
+					} else {
+						// Price not locked yet this block — can't have finished settlement.
+						deposit_remaining = true;
+						redeem_remaining = true;
+					}
 
+					let finalized = prices_locked && !deposit_remaining && !redeem_remaining;
 					if finalized {
 						// Settlement window handled (finalized just now, or already done on a
 						// prior block this same window). Next action: epoch end.
@@ -402,6 +430,9 @@ pub mod pallet {
 								.saturating_add(pool.epoch.epoch_length_secs),
 						);
 					}
+					// else: NextEpochAction left untouched -> retried next block while the
+					// window stays open, or carried forward to the next epoch's window by the
+					// epoch-advance branch below if the window closes first.
 				}
 
 				// Epoch over: reset prices and advance.

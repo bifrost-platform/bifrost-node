@@ -482,3 +482,179 @@ describeDevNode('pallet_rwa_pools - on_initialize retries NAV finalization every
     expect(BigInt(tranche.pendingOrders.deposit)).eq(0n);
   });
 });
+
+describeDevNode('pallet_rwa_pools - Automatic-mode deposit settlement spans multiple blocks when pending orders exceed the cap', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const poolAdmin: { public: string, private: string } = TEST_CONTROLLERS[1];
+  const poolAdminSigner = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const borrower: { public: string, private: string } = TEST_CONTROLLERS[2];
+  const gateway: { public: string, private: string } = TEST_CONTROLLERS[3];
+  const feeder = keyring.addFromUri(TEST_CONTROLLERS[5].private);
+  const feederPublic: { public: string, private: string } = TEST_CONTROLLERS[5];
+  const investors: { public: string, private: string }[] =
+    [4, 6, 7, 8, 9].map((i) => TEST_CONTROLLERS[i]);
+  const CAP = 3;
+  let alithNonce: number;
+  let poolAdminNonce: number;
+
+  before('should create a pool, set a cap of 3, and submit 5 pending deposits of 100 each', async function () {
+    const alithAccount = await context.polkadotApi.query.system.account(alith.address);
+    alithNonce = alithAccount.nonce.toNumber();
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.rwaPools.setGateway(gateway.public)
+    ).signAndSend(alith, { nonce: alithNonce++ });
+    await context.createBlock();
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.rwaInvestments.setAutoSettlementCap(CAP)
+    ).signAndSend(alith, { nonce: alithNonce++ });
+    await context.createBlock();
+
+    await grantPermission(context, alith, () => alithNonce++, 1, 'PoolAdmin', poolAdmin.public, true);
+    await createAutomaticPool(context, poolAdmin, borrower, 1);
+
+    const poolAdminAccount = await context.polkadotApi.query.system.account(poolAdminSigner.address);
+    poolAdminNonce = poolAdminAccount.nonce.toNumber();
+    for (const investor of investors) {
+      await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, { TrancheInvestor: TRANCHE_ID }, investor.public, false);
+    }
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, 'OracleFeeder', feederPublic.public, false);
+
+    for (const investor of investors) {
+      const block = await sendPrecompileTx(
+        context, INVESTMENTS_PRECOMPILE_ADDRESS, INVESTMENTS_SELECTORS, gateway.public, gateway.private,
+        'submit_deposit_order', [encodeOrder(context, 1, investor.public, 100)],
+      );
+      expect(Boolean((await context.web3.eth.getTransactionReceipt(block.txResults[0])).status)).eq(true);
+    }
+
+    const epoch0 = await currentEpoch(context, 1);
+    const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, epoch0, 0, false).signAndSend(feeder, { nonce: feederNonce });
+    await context.createBlock();
+  });
+
+  it('should settle only the first 3 of 5 pending orders in the windows first block', async function () {
+    await advanceToSettlementWindow(context, 1, EPOCH_LENGTH_SECS, SETTLEMENT_OFFSET_SECS);
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.epochPrice)).eq(WAD);
+    expect(BigInt(tranche.reserve)).eq(300n);
+    expect(BigInt(tranche.tokenSupply)).eq(300n);
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(200n);
+  });
+
+  it('should settle the remaining 2 orders on the very next block, completing finalization', async function () {
+    await context.createBlock();
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.epochPrice)).eq(WAD);
+    expect(BigInt(tranche.reserve)).eq(500n);
+    expect(BigInt(tranche.tokenSupply)).eq(500n);
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(0n);
+  });
+});
+
+describeDevNode('pallet_rwa_pools - Automatic-mode deposit settlement carries remaining orders to the next epoch when the window closes first', (context) => {
+  const keyring = new Keyring({ type: 'ethereum' });
+  const alith = keyring.addFromUri(TEST_CONTROLLERS[0].private);
+  const poolAdmin: { public: string, private: string } = TEST_CONTROLLERS[1];
+  const poolAdminSigner = keyring.addFromUri(TEST_CONTROLLERS[1].private);
+  const borrower: { public: string, private: string } = TEST_CONTROLLERS[2];
+  const gateway: { public: string, private: string } = TEST_CONTROLLERS[3];
+  const feeder = keyring.addFromUri(TEST_CONTROLLERS[5].private);
+  const feederPublic: { public: string, private: string } = TEST_CONTROLLERS[5];
+  const investorA: { public: string, private: string } = TEST_CONTROLLERS[4];
+  const investorB: { public: string, private: string } = TEST_CONTROLLERS[6];
+  // A short epoch/window relative to per-block time (~3s), so only one settlement attempt
+  // fits before the window closes and the epoch advances — forcing a genuine carry-over.
+  const SHORT_EPOCH_LENGTH_SECS = 12;
+  const SHORT_SETTLEMENT_OFFSET_SECS = 4;
+  const CAP = 1;
+  let alithNonce: number;
+  let poolAdminNonce: number;
+
+  before('should create a short-epoch pool, set a cap of 1, and submit 2 pending deposits of 100 each', async function () {
+    const alithAccount = await context.polkadotApi.query.system.account(alith.address);
+    alithNonce = alithAccount.nonce.toNumber();
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.rwaPools.setGateway(gateway.public)
+    ).signAndSend(alith, { nonce: alithNonce++ });
+    await context.createBlock();
+
+    await context.polkadotApi.tx.sudo.sudo(
+      context.polkadotApi.tx.rwaInvestments.setAutoSettlementCap(CAP)
+    ).signAndSend(alith, { nonce: alithNonce++ });
+    await context.createBlock();
+
+    await grantPermission(context, alith, () => alithNonce++, 1, 'PoolAdmin', poolAdmin.public, true);
+    const data = encodeCreatePool(
+      context, 1, borrower.public, SHORT_EPOCH_LENGTH_SECS, SHORT_SETTLEMENT_OFFSET_SECS, false, false,
+      [{ nftContract: NFT_CONTRACT, nftTokenId: '1' }],
+      [{ chainId: CHAIN_ID, vaultAddress: VAULT_ADDRESS_A, isSenior: true, apr: FIVE_PERCENT_APR, maxDeposits: '0' }],
+    );
+    const createBlock = await sendPrecompileTx(
+      context, POOLS_PRECOMPILE_ADDRESS, POOLS_SELECTORS, poolAdmin.public, poolAdmin.private, 'create_pool', [data],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(createBlock.txResults[0])).status)).eq(true);
+
+    const poolAdminAccount = await context.polkadotApi.query.system.account(poolAdminSigner.address);
+    poolAdminNonce = poolAdminAccount.nonce.toNumber();
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, { TrancheInvestor: TRANCHE_ID }, investorA.public, false);
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, { TrancheInvestor: TRANCHE_ID }, investorB.public, false);
+    await grantPermission(context, poolAdminSigner, () => poolAdminNonce++, 1, 'OracleFeeder', feederPublic.public, false);
+
+    const blockA = await sendPrecompileTx(
+      context, INVESTMENTS_PRECOMPILE_ADDRESS, INVESTMENTS_SELECTORS, gateway.public, gateway.private,
+      'submit_deposit_order', [encodeOrder(context, 1, investorA.public, 100)],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(blockA.txResults[0])).status)).eq(true);
+    const blockB = await sendPrecompileTx(
+      context, INVESTMENTS_PRECOMPILE_ADDRESS, INVESTMENTS_SELECTORS, gateway.public, gateway.private,
+      'submit_deposit_order', [encodeOrder(context, 1, investorB.public, 100)],
+    );
+    expect(Boolean((await context.web3.eth.getTransactionReceipt(blockB.txResults[0])).status)).eq(true);
+
+    const epoch0 = await currentEpoch(context, 1);
+    const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+    await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, epoch0, 0, false).signAndSend(feeder, { nonce: feederNonce });
+    await context.createBlock();
+  });
+
+  it('should carry an unsettled order into the next epoch once the short window closes', async function () {
+    await advanceBlocksUntil(context, async () => (await currentEpoch(context, 1)) > 0);
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(tranche.epochPrice).eq(null); // epoch advanced, price reset
+    // With cap=1 and a window this short, the two orders cannot both settle before the
+    // epoch advances — at most one of the two settled, so not everything drained.
+    expect(BigInt(tranche.pendingOrders.deposit)).gt(0n);
+    expect(BigInt(tranche.reserve)).lt(200n);
+  });
+
+  it('should settle the carried-over order normally in a later epochs window', async function () {
+    // The short epoch (12s / ~4 blocks) that forced the carry-over above also makes it easy
+    // to miss any single epoch's window while waiting, so resubmit PnL for whichever epoch
+    // is current on every iteration — matching how a real oracle feeder would keep retrying
+    // — rather than betting on hitting one specific epoch's window in time.
+    let settled = false;
+    for (let i = 0; i < 15 && !settled; i++) {
+      const epoch = await currentEpoch(context, 1);
+      const feederNonce = (await context.polkadotApi.query.system.account(feeder.address)).nonce.toNumber();
+      await context.polkadotApi.tx.rwaNavOracle.submitPnl(1, epoch, 0, false).signAndSend(feeder, { nonce: feederNonce });
+      await context.createBlock();
+
+      const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+      settled = BigInt(tranche.pendingOrders.deposit) === 0n;
+    }
+    expect(settled).eq(true);
+
+    const tranche = await getTranche(context, 1, CHAIN_ID, VAULT_ADDRESS_A);
+    expect(BigInt(tranche.reserve)).eq(200n);
+    expect(BigInt(tranche.tokenSupply)).eq(200n);
+    expect(BigInt(tranche.pendingOrders.deposit)).eq(0n);
+  });
+});

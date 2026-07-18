@@ -75,6 +75,11 @@ pub mod pallet {
 		DuplicateOrderKey,
 		/// No pending order exists for the given (investor, epoch) key.
 		PendingOrderNotFound,
+		/// The orders batch exceeds the configured `ApprovalOrdersCap`.
+		TooManyOrders,
+		/// The requested cap is zero, or exceeds the compile-time
+		/// `MAX_INVESTORS_PER_APPROVAL` ceiling.
+		InvalidApprovalOrdersCap,
 	}
 
 	// -----------------------------------------------------------------------
@@ -171,11 +176,44 @@ pub mod pallet {
 			investor_id: T::AccountId,
 			amount: U256,
 		},
+		/// The Approval-mode per-call order batch cap was updated by sudo.
+		ApprovalOrdersCapUpdated { cap: u32 },
+		/// The Automatic-mode per-block settlement order cap was updated by sudo.
+		AutoSettlementCapUpdated { cap: u32 },
 	}
 
 	// -----------------------------------------------------------------------
 	// Storage
 	// -----------------------------------------------------------------------
+
+	#[pallet::type_value]
+	pub fn DefaultApprovalOrdersCap() -> u32 {
+		100
+	}
+
+	#[pallet::storage]
+	/// Soft cap on how many orders a single `approve_deposit_orders`/`approve_redeem_orders`
+	/// call processes, layered on top of the existing compile-time `MAX_INVESTORS_PER_APPROVAL`
+	/// BoundedVec ceiling (which remains the hard, ungoverned encoding-level backstop — no
+	/// precompile changes needed). Must be in `(0, MAX_INVESTORS_PER_APPROVAL]`.
+	pub type ApprovalOrdersCap<T: Config> =
+		StorageValue<_, u32, ValueQuery, DefaultApprovalOrdersCap>;
+
+	#[pallet::type_value]
+	pub fn DefaultAutoSettlementCap() -> u32 {
+		100
+	}
+
+	#[pallet::storage]
+	/// Caps how many pending orders `settle_deposit_orders`/`settle_redeem_orders` process
+	/// per call. These are invoked from pallet-pools' `on_initialize` — a mandatory hook that
+	/// runs every relevant block and cannot be skipped or split by the runtime — so bounding
+	/// per-call work here is what protects block weight/PoV from a large pending-order
+	/// backlog. Orders beyond the cap are retried on the next block while the settlement
+	/// window remains open, or carried forward to the next epoch's window if the window
+	/// closes first (both handled entirely on the pallet-pools side).
+	pub type AutoSettlementCap<T: Config> =
+		StorageValue<_, u32, ValueQuery, DefaultAutoSettlementCap>;
 
 	/// Pending deposit orders awaiting epoch settlement.
 	/// (tranche_id, investor_id, epoch_id) → order
@@ -421,6 +459,11 @@ pub mod pallet {
 
 			let now = Self::current_block();
 
+			ensure!(
+				orders.len() as u32 <= ApprovalOrdersCap::<T>::get(),
+				Error::<T>::TooManyOrders
+			);
+
 			let mut seen: BTreeSet<OrderKey<T::AccountId>> = BTreeSet::new();
 			for key in orders.iter() {
 				ensure!(seen.insert(key.clone()), Error::<T>::DuplicateOrderKey);
@@ -504,6 +547,11 @@ pub mod pallet {
 
 			let epoch_price = T::Pools::epoch_price(pool_id, tranche_id.clone())
 				.ok_or(Error::<T>::EpochPriceNotSet)?;
+
+			ensure!(
+				orders.len() as u32 <= ApprovalOrdersCap::<T>::get(),
+				Error::<T>::TooManyOrders
+			);
 
 			// Duplicate check — read-only, fires before any state mutation.
 			let mut seen: BTreeSet<OrderKey<T::AccountId>> = BTreeSet::new();
@@ -793,6 +841,41 @@ pub mod pallet {
 				investor_id,
 				amount: order.amount,
 			});
+			Ok(())
+		}
+
+		/// Update the Approval-mode per-call order batch cap (sudo only).
+		///
+		/// See `ApprovalOrdersCap` storage doc for how this interacts with the existing
+		/// compile-time `MAX_INVESTORS_PER_APPROVAL` hard ceiling.
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn set_approval_orders_cap(origin: OriginFor<T>, cap: u32) -> DispatchResult {
+			ensure_root(origin)?;
+			ensure!(
+				cap > 0 && cap <= MAX_INVESTORS_PER_APPROVAL,
+				Error::<T>::InvalidApprovalOrdersCap
+			);
+			ApprovalOrdersCap::<T>::put(cap);
+			Self::deposit_event(Event::ApprovalOrdersCapUpdated { cap });
+			Ok(())
+		}
+
+		/// Update the Automatic-mode per-block settlement order cap (sudo only).
+		///
+		/// See `AutoSettlementCap` storage doc for how this bound protects pallet-pools'
+		/// mandatory `on_initialize` hook and interacts with its multi-block/multi-epoch
+		/// settlement retry.
+		#[pallet::call_index(9)]
+		#[pallet::weight(<T as Config>::WeightInfo::default())]
+		pub fn set_auto_settlement_cap(origin: OriginFor<T>, cap: u32) -> DispatchResult {
+			ensure_root(origin)?;
+			ensure!(
+				cap > 0 && cap <= MAX_INVESTORS_PER_APPROVAL,
+				Error::<T>::InvalidApprovalOrdersCap
+			);
+			AutoSettlementCap::<T>::put(cap);
+			Self::deposit_event(Event::AutoSettlementCapUpdated { cap });
 			Ok(())
 		}
 	}
