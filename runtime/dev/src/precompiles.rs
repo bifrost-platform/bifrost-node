@@ -15,20 +15,11 @@ use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
-use precompile_rwa_investments::InvestmentsPrecompile;
-use precompile_rwa_permissions::PermissionsPrecompile;
-use precompile_rwa_pools::PoolsPrecompile;
 
 use precompile_utils::precompile_set::*;
 
 type EthereumPrecompilesChecks = (AcceptDelegateCall, CallableByContract, CallableByPrecompile);
 type BifrostPrecompilesChecks = (CallableByContract, CallableByPrecompile);
-// Permissions precompile issues a nested EVM sub-call to the Gateway contract (to propagate
-// TrancheInvestor whitelist changes cross-chain), which `RestrictiveHandle` blocks unless
-// `allow_subcalls` is enabled. Recursion into the Permissions precompile itself stays capped at
-// 0 (no self-recursion).
-type PermissionsPrecompilesChecks =
-	(CallableByContract, CallableByPrecompile, SubcallWithMaxNesting<0>);
 
 #[precompile_utils::precompile_name_from_address]
 pub type BifrostPrecompilesAt<R> = (
@@ -73,9 +64,6 @@ pub type BifrostPrecompilesAt<R> = (
 		BifrostTransactionPaymentPrecompile<R>,
 		BifrostPrecompilesChecks,
 	>,
-	PrecompileAt<AddressU64<512>, InvestmentsPrecompile<R>, BifrostPrecompilesChecks>,
-	PrecompileAt<AddressU64<513>, PoolsPrecompile<R>, BifrostPrecompilesChecks>,
-	PrecompileAt<AddressU64<514>, PermissionsPrecompile<R>, PermissionsPrecompilesChecks>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<
