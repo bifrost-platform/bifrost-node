@@ -154,6 +154,41 @@ Key findings from decoding it:
 - Portfolio holdings are laddered T-Bills (maturities from 2026-07-23 through 2026-11-17,
   yield-to-maturity rising with maturity length — consistent with a normal short-end yield curve).
 
+### What exactly must the Agent derive?
+
+Breaking the real Chronicle example down by where each value actually comes from (useful because
+it's easy to assume the Agent just "transcribes" the custodian's document — several fields
+require real computation, and one requires a completely different data source):
+
+**A. Transcribed directly from the custodian's raw document, no computation:**
+`document_date`; per position: `isin`, `description`, `units`, `maturity_date`, `current_price`.
+
+**B. Computed/derived from those raw facts:**
+- `market_value` (per position) = `units × current_price` — verified by hand against the real
+  example: `83,800,000 × 0.999309 = 83,742,094.2`, exact match.
+- `yield_to_maturity` (per position) — computed from price, maturity date, and face value via the
+  standard YTM formula (Chronicle's own `glossary.md` documents it).
+- `net_asset_value` (total) = sum of all positions' `market_value`.
+- `price_per_share` = `net_asset_value / outstanding_shares`.
+
+**C. Sourced from somewhere other than the custodian's document entirely:**
+`outstanding_token_supply_breakdown` (per chain) is **not in the custodian's data at all** — it
+comes from querying each chain's deployed share-token contract's `totalSupply()` directly. The
+Agent needs on-chain read access across every chain the product's shares are deployed on, not
+just the decrypted custodian document.
+
+**D. Two independently-sourced figures for a similar concept, kept separate rather than
+reconciled into one:**
+`outstanding_shares` (792,056,393 — from the custodian/transfer-agent's own share registry) and
+`outstanding_token_supply` (792,672,449 — the on-chain sum from category C) are *not* the same
+number in the real example, and shouldn't be forced to agree. Publishing both, rather than
+picking one, preserves a genuine cross-check signal (a large divergence between them would be
+worth flagging) instead of silently discarding it.
+
+**E. Final on-chain payload — re-encoding, not new computation:**
+`oracle` = `abi.encode(timestamp, price_per_share × 1e18)`, built entirely from values already
+computed in B.
+
 ## Design decisions for Bifrost
 
 ### 1. On-chain payload mirrors Chronicle's `output.oracle`
@@ -300,46 +335,72 @@ truthfulness rests on the custodian's signature, reputation, and legal exposure;
 job is making sure that signed claim reaches the chain intact and stays durably provable — not
 independently confirming the claim is factually correct.
 
-### 4. Custodian-facing Agent portal + CCCP relayers as Validators
+### 4. Roles: Custodian/Collateral Agent, Trust Company/Loan Servicer, and Bifrost's portal
 
-Concrete operational proposal:
+**Terminology, precise this time.** Two real-world TradFi roles matter here, and neither owns the
+underlying assets — actual/beneficial ownership sits with the fund or, in a lending structure,
+stays with the borrower subject to the pledge, never with either service provider:
 
-- Bifrost operates an admin portal for institutional custodians. Custodians are whitelisted and
-  register an EVM wallet address up front.
-- Whitelisting maps directly onto the already-designed `OracleFeeder` role in
-  `pallet-tranche-permissions` (`grant_permission(product_id, OracleFeeder, custodian_wallet)`) —
-  no new permission concept needed.
-- **The custodian is not the Agent.** The custodian's job through the portal is to provide and
-  sign raw data — not to compute NAV/holdings themselves. **This is Bifrost's own design
-  judgment, not a confirmed Chronicle precedent** — an earlier draft of this document justified it
-  by claiming Chronicle itself operates the Agent, inferred from phrasing like *"credibly-neutral
-  attestation by fetching data directly from the custodian"*. That inference doesn't hold up:
-  checking Chronicle's `adapters.md`/`routers.md` docs found no explicit statement of who runs the
-  Agent, and the `ChronicleVAO_<Issuer>_<AssetTicker>_...` naming convention suggests Chronicle's
-  actual counterparty might be the *issuing protocol* (e.g. Centrifuge, Superstate) rather than
-  the custodian directly — a three-party structure (issuer ↔ Chronicle ↔ custodian) this document
-  hadn't considered. The real justification for Bifrost operating the Agent stands on its own:
-  the pallet that ultimately trusts `nav` is Bifrost's, whitelisting (`OracleFeeder`) is already
-  Bifrost's responsibility, so keeping the computation layer auditable and under the same party's
-  control keeps the trust boundary in one place — not because Chronicle is known to do the same.
-- The actual **Agent role — parsing raw data into the computed `output` (NAV, price per share,
-  holdings breakdown) — is Bifrost's own portal backend**, running auditable, re-runnable
-  computation logic, not the custodian.
-- This reading is also supported structurally by the real Chronicle example: `proofs` sits nested
-  under `input`, not under `output` — consistent with the signature attesting to the *raw input's*
-  authenticity (this really came from the custodian) while `output`'s trustworthiness comes from
-  being a deterministic, re-computable function of that signed input, not from a signature of its
-  own.
+- **Custodian** (in a lending context, more precisely a **Collateral Agent**): safekeeps the
+  pledged collateral and perfects the security interest. Reports raw facts only — "this is what's
+  held, as of this date." Does not compute anything.
+- **Trust Company / Fund Administrator** (in a lending context, more precisely a **Loan
+  Servicer**): takes the Collateral Agent's raw holdings report (plus other inputs — pricing,
+  payment history, delinquency status) and actually **computes** the valuation/NAV, tracks the
+  loan book's accounting, and produces the official report. This is the role this document has
+  been calling "the Agent" — parsing raw data into `output`.
+
+**Revised operator judgment.** An earlier draft of this document argued Bifrost itself should
+operate the Agent/computation role, reasoning that keeping it under the same party that owns the
+trust boundary (the pallet, the `OracleFeeder` whitelist) keeps things auditable. Reconsidered:
+this creates a real conflict of interest — Bifrost benefits when the ecosystem's numbers look
+healthy, and would also be the one computing those numbers. The Loan Servicer/Trust Company role
+this maps onto in TradFi exists specifically to be **independent of that incentive** — paid a
+service fee regardless of what the number says, often under fiduciary/licensing obligations that
+give the "legal/audit/reputational" backstop (mitigation option 3 above) an actual accountable
+party to fall on. So: **the Agent/computation role should be an external Loan Servicer or Trust
+Company, not Bifrost** — reusing Bifrost's own earlier inference-checking discipline against
+itself, not just against Chronicle. Bifrost's portal remains the technical pipeline (submission
+UI, IPFS publishing, on-chain announce) regardless of which Loan Servicer operates behind it; this
+doesn't require redesigning the pipeline, only who's accountable for the computation running on it.
+This does *not* fix the fundamental-limitation section's single-source problem by itself (a
+third-party Loan Servicer is still a single computation channel) — it improves *who* is being
+trusted for the same structural limitation, which is a real but distinct improvement from adding
+an actual second source.
+
+**Multiple institutions means multiple independent Collateral-Agent/Loan-Servicer pairs.** A
+product can have several OffchainSource adapters, each with its own `borrower` (the institution —
+see `SourceType::OffchainSource`). Nothing requires these institutions to share a Collateral Agent
+or Loan Servicer — institution A's collateral might sit with a completely different custodian and
+be serviced by a completely different Loan Servicer than institution B's, even within the same
+product. This needs **no pallet changes**: `OracleFeeder` is already many-per-product in
+`pallet-tranche-permissions`, so each institution's Loan Servicer registers its own wallet under
+the same `product_id` — which adapter a given report is *for* comes from the report's own content
+(its `AdapterKey`), not from a separate permission structure per adapter.
+
+- Bifrost operates an admin portal; each institution's Loan Servicer is whitelisted there and
+  registers an EVM wallet up front.
+- Whitelisting maps directly onto `OracleFeeder`
+  (`grant_permission(product_id, OracleFeeder, loan_servicer_wallet)`) — no new permission concept
+  needed, and this is the correction to an earlier draft of this section, which had mapped
+  `OracleFeeder` to the custodian's wallet instead of the Loan Servicer's. The custodian
+  (Collateral Agent) only ever signs raw input; the Loan Servicer is the one accountable for
+  `output` and is the natural party to hold the whitelisted, on-chain-recognized identity.
+- This reading (signature attests to *raw input* only, `output`'s trustworthiness rests on
+  deterministic recomputation rather than its own signature — unless the Agent-signs-`output`
+  mitigation above is adopted) is supported structurally by the real Chronicle example: `proofs`
+  sits nested under `input`, not under `output`.
 - **Only the Agent's own access is unavoidable — not relayers'.** Computing `output` at all
   requires plaintext access to the raw data, so *the Agent* necessarily has it (that's its job).
   This does **not** extend to the general relayer set: the baseline relayer verification (§5
   below) needs zero decrypt access — it only ever touches already-plaintext `output` fields and
   the ciphertext-as-opaque-bytes (for the checksum).
-- **Decided flow**: the custodian encrypts client-side (to the Agent's `age` recipient key) before
-  ever submitting to the portal — plaintext never touches Bifrost's systems except transiently
-  inside the Agent's own decrypt-and-compute step. This is stronger than having the portal receive
-  plaintext and encrypt it afterward (which would mean Bifrost's upload/storage path handles raw
-  plaintext, a larger exposure window).
+- **Decided flow**: the custodian (Collateral Agent) encrypts client-side (to the Loan Servicer's
+  `age` recipient key) before ever submitting — plaintext never touches Bifrost's systems at all,
+  only the Loan Servicer's, transiently inside its own decrypt-and-compute step. This is stronger
+  than having Bifrost's portal receive plaintext and encrypt it afterward (which would mean
+  Bifrost's own upload/storage path handles raw plaintext, a larger exposure window, on top of
+  putting Bifrost in the computation role this section just moved away from).
 - **Signing order matters: encrypt-then-sign, not sign-then-encrypt.** For relayers to verify the
   custodian's signature without holding a decryption key (see §5 below), the signature must cover
   the *ciphertext* bytes actually published, not the plaintext underneath it — otherwise relayers
@@ -428,8 +489,51 @@ Mirrors the `RequestedInvestment` → `ApprovedInvestment` pattern already used 
 6. `pallet-rwa-nav-oracle` stores the confirmed `(nav, attestation_hash)` — this is the value other
    pallets/consumers read as "the" trusted NAV for that product.
 
+### 6. Adapter-level payload schema for OffchainSource loan books
+
+Chronicle's schema is bond-fund-specific (`isin`, `yield_to_maturity`, etc.) — an OffchainSource
+RWA loan book needs its own field set, but the same A–E structure from the "what must the Agent
+derive" breakdown above carries over directly:
+
+**A. Transcribed from the custodian's loan-servicing records:**
+`report_date`; per loan position: `loan_id`, `borrower` (cross-checked against the `borrower`
+already registered in pallet-tranche-system's `SourceType::OffchainSource`), `principal_disbursed`,
+`principal_outstanding`, `interest_rate`, `origination_date`, `maturity_date`,
+`collateral_description` (cross-checked against the registered `collaterals`),
+`collateral_appraised_value`, `days_past_due`/`delinquency_status`, `accrued_interest`.
+
+**B. Computed/derived:**
+- `loan_to_value_ratio` = `principal_outstanding / collateral_appraised_value`.
+- `market_value` (per position) — **needs an explicit valuation policy, not just a formula**:
+  book value (`principal_outstanding + accrued_interest`) for performing loans is straightforward,
+  but delinquent/impaired loans need a haircut methodology decided up front, not left to the
+  Agent's discretion per report.
+- `net_asset_value` (total) = sum of position `market_value`.
+
+**C. Sourced from somewhere other than the custodian's document:**
+Unlike Chronicle's multi-chain share-token supply, an individual adapter doesn't have an obvious
+on-chain "circulating supply" of its own to cross-check against — **except one thing worth
+exploiting**: the Adapter contract itself (`IYieldAdapter` implementation) almost certainly tracks
+its own running total of capital deployed on-chain already, as ordinary bookkeeping to service
+`requestSupply`/withdrawal calls. That on-chain figure can be diffed against the custodian's
+self-reported `principal_outstanding` as a genuine independent cross-check — catching a
+custodian/Agent discrepancy **without needing any decryption access**, unlike the deeper
+mitigations discussed earlier. This is an opportunity specific to this architecture that Chronicle's
+bond-fund case doesn't have in quite the same form.
+
+**D/E**: same as Chronicle's — publish any independently-sourced figures side by side rather than
+reconciling them away, and keep the final on-chain payload a plain re-encoding of already-computed
+values (e.g. `abi.encode(timestamp, nav_wad)`), not a new computation.
+
+(Not addressed here, deliberately deferred: whether `pallet-rwa-nav-oracle`'s `update_nav`/
+`confirm_nav` is scoped per-product or per-adapter, given a product can have multiple OffchainSource
+adapters — see Open questions.)
+
 ## Open questions
 
+- Whether `update_nav`/`confirm_nav` is scoped per-product or per-adapter, given a product can
+  have multiple OffchainSource adapters — explicitly skipped/deferred, not resolved, during this
+  discussion.
 - Exactly what CCCP relayers verify for OffchainSource NAV reports (signature/consistency only, vs.
   attempting genuine independent-source cross-checks where a custodian offers multiple channels) —
   not decided; likely varies per product based on what the custodian relationship actually offers.

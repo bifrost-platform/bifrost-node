@@ -20,11 +20,14 @@ pub type ProductId = u64;
 /// (each tranche entry there mapped 1:1 to what's now a `Tranche` here).
 pub const MAX_TRANCHES: u32 = 10;
 
-/// Maximum number of individual (single-yield-source) Adapters per product.
-pub const MAX_ADAPTERS: u32 = 20;
-
 /// Maximum number of MultichainAdapter routing entries per product.
 pub const MAX_MULTICHAIN_ADAPTERS: u32 = 20;
+
+/// Maximum number of individual (single-yield-source) Adapters per
+/// MultichainAdapter. Rescoped from per-product to per-MultichainAdapter
+/// (2026-07-27): adapters now live nested under their parent MultichainAdapter
+/// (see `MultichainAdapterInfo`) instead of in a flat, product-wide registry.
+pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 20;
 
 /// Maximum number of collateral NFTs per (OffchainSource) Adapter.
 /// Carried over from pallet-pools' `MAX_COLLATERALS`, now scoped per-adapter
@@ -62,11 +65,19 @@ pub struct VaultId {
 // AdapterKey — adapter / multichain-adapter identity
 // ---------------------------------------------------------------------------
 
-/// Identifies an Adapter or MultichainAdapter entry: its own address paired with
-/// the EVM chain it lives on. Same shape used for both registries (see
-/// `ProductDetails`) — they're separate namespaces, but the key shape is
-/// identical, so one type covers both. Globally unique across ALL products,
-/// mirroring pallet-pools' `CollateralAsset` uniqueness convention.
+/// Identifies a MultichainAdapter entry: its own address paired with the EVM
+/// chain it lives on. Globally unique across ALL products, mirroring
+/// pallet-pools' `CollateralAsset` uniqueness convention.
+///
+/// Nested Adapters (see `AdapterInfo`) are NOT keyed by this type — they carry
+/// no `chain_id` of their own (removed 2026-07-27; a nested adapter always
+/// lives on its parent MultichainAdapter's chain), so `ProductDetails`'s nested
+/// `adapters` map is keyed by plain `H160` instead. `AdapterIndex`'s reverse-index
+/// (see pallet/mod.rs) still uses this type, though — global adapter uniqueness
+/// stays chain-aware (some on-chain protocols share the same contract address
+/// across different chains via CREATE2), it's just derived from the parent
+/// MultichainAdapter's `chain_id` at write time rather than stored on the
+/// adapter itself.
 #[derive(
 	Clone,
 	Encode,
@@ -167,19 +178,56 @@ pub struct CollateralAsset {
 }
 
 // ---------------------------------------------------------------------------
-// MultichainAdapterInfo
+// AdapterInfo
 // ---------------------------------------------------------------------------
 
-/// A single MultichainAdapter routing entry: just its allocation weight (as a
-/// FixedU128 inner value, 1e18 = 100%) — address/chain_id already live in the
-/// `AdapterKey` this is mapped from, so a tuple struct is enough. Across one
-/// product's full `multichain_adapters` list, these must always sum to exactly
-/// 1e18 — see `set_multichain_adapters` in interface.sol for why this is a
-/// full-array replace rather than single-entity add/remove/update.
+/// An individual yield-source Adapter, nested under its parent MultichainAdapter
+/// (see `MultichainAdapterInfo`) rather than living in a flat, product-wide map.
+/// Wraps `SourceType` together with this adapter's own sub-allocation weight —
+/// a bare `SourceType` was enough before `weightBps` existed on the interface,
+/// but now needs a second field alongside it. Keyed by plain `H160` (its own
+/// address) in its parent's `adapters` map — no `chain_id` of its own, since a
+/// nested adapter always lives on its parent MultichainAdapter's chain.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct MultichainAdapterInfo(pub U256);
+pub struct AdapterInfo<AccountId> {
+	pub source_type: SourceType<AccountId>,
+	/// Sub-allocation weight within this adapter's parent MultichainAdapter,
+	/// basis points (10_000 = 100%). Across one MultichainAdapter's nested
+	/// `adapters`, these must always sum to exactly 10_000 (2026-07-27, same
+	/// invariant as `MultichainAdapterInfo::weight_bps`) — mirrors interface.sol's
+	/// `AdapterInput.weightBps` and `set_adapters`' full-array-replace rationale.
+	pub weight_bps: u16,
+}
+
+// ---------------------------------------------------------------------------
+// MultichainAdapterInfo
+// ---------------------------------------------------------------------------
+
+/// A single MultichainAdapter routing entry: its top-level allocation weight,
+/// plus the individual Adapters it internally manages/routes to (2026-07-27:
+/// nested here rather than living in a separate flat `ProductDetails::adapters`
+/// map — a MultichainAdapter's internal split across the protocols it manages
+/// is a parent-child relationship, not two independent registries).
+/// `weight_bps` is basis points (10_000 = 100%) — across one product's full
+/// `multichain_adapters` list, these must always sum to exactly 10_000. See
+/// `set_multichain_adapters` in interface.sol for why this is a full-array
+/// replace rather than single-entity add/remove/update.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct MultichainAdapterInfo<AccountId> {
+	pub weight_bps: u16,
+	/// Keyed by the adapter's own address (`H160`) — not `AdapterKey`, since a
+	/// nested adapter carries no `chain_id` of its own; it's always this parent's
+	/// `chain_id` (implied, not duplicated in the key).
+	pub adapters: BoundedBTreeMap<
+		H160,
+		AdapterInfo<AccountId>,
+		ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
+	>,
+}
 
 // ---------------------------------------------------------------------------
 // ValuationInfo
@@ -222,11 +270,15 @@ pub struct ProductDetails<AccountId> {
 	/// Ordered by waterfall priority — index 0 is highest priority. See
 	/// `Tranche`'s doc comment for why there's no separate `priority` field.
 	pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
-	pub adapters: BoundedBTreeMap<AdapterKey, SourceType<AccountId>, ConstU32<MAX_ADAPTERS>>,
 	/// Always replaced wholesale by `set_multichain_adapters` — see that
 	/// function's doc comment in interface.sol for why (100%-sum invariant).
-	pub multichain_adapters:
-		BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, ConstU32<MAX_MULTICHAIN_ADAPTERS>>,
+	/// Each entry now owns its own nested `adapters` (see `MultichainAdapterInfo`)
+	/// — there is no separate top-level adapters map anymore.
+	pub multichain_adapters: BoundedBTreeMap<
+		AdapterKey,
+		MultichainAdapterInfo<AccountId>,
+		ConstU32<MAX_MULTICHAIN_ADAPTERS>,
+	>,
 }
 
 // ---------------------------------------------------------------------------

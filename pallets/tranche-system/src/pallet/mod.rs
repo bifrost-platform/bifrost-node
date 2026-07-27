@@ -73,6 +73,14 @@ pub mod pallet {
 	#[pallet::storage]
 	/// Reverse index: which product an individual Adapter (source_address, chain_id)
 	/// belongs to. Globally unique across all products, same rationale as `Vaults`.
+	/// The adapter itself now lives nested inside its parent MultichainAdapter's
+	/// `adapters` map (see `MultichainAdapterInfo`), keyed there by plain `H160`
+	/// (no `chain_id` — it carries none of its own, see `AdapterInfo`) — this
+	/// index still keys by the full `AdapterKey{address, chain_id}` shape, with
+	/// `chain_id` derived from the parent MultichainAdapter at write time, so
+	/// global uniqueness stays chain-aware (some on-chain protocols share the
+	/// same contract address across different chains via CREATE2) without the
+	/// adapter itself having to carry a redundant `chain_id` field.
 	/// Mirrors pallet-pools' `Collaterals: CollateralAsset -> PoolId`.
 	pub type AdapterIndex<T: Config> = StorageMap<_, Blake2_128Concat, AdapterKey, ProductId>;
 

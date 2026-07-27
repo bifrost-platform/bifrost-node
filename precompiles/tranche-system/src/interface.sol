@@ -39,21 +39,34 @@ pragma solidity >=0.8.0;
  *   - Two distinct adapter concepts, per the source spec:
  *     `adapters` (this interface's `AdapterInput`) are individual single-yield-
  *     source registrations (an offchain RWA loan book, or one onchain money
- *     market) and carry no weight of their own — add/remove only, no update.
+ *     market) — add/remove only, no update. Nested under their parent
+ *     `MultichainAdapterInput` (2026-07-27) rather than a separate flat, product-wide
+ *     list — a MultichainAdapter's internal split across the protocols it manages
+ *     (e.g. Compound vs. Morpho vs. Aave) is a parent-child relationship, not two
+ *     independent registries. As a consequence `AdapterInput` carries no `chain_id`
+ *     of its own: a nested adapter always lives on its parent MultichainAdapter's
+ *     chain, so `set_adapters` (see below) takes `parent_adapter_address`/
+ *     `parent_chain_id` to both identify the parent and supply that implied chain.
  *     `multichain_adapters` (`MultichainAdapterInput`) are the Hub-chain
  *     MultichainAdapter contract instances Valuation actually calls
  *     (`executeDeposit`/`collectEachNAV` etc. in the call-flow spec) and carry
- *     the `weight` Valuation uses to decide its top-level capital-distribution
- *     ratio. Weight can also exist *within* a MultichainAdapter (how it splits
- *     its allocation across the individual `adapters`/protocols it manages,
- *     e.g. Compound vs. Morpho vs. Aave), but that's the MultichainAdapter
- *     contract's own internal concern — Valuation, and therefore this pallet,
- *     only tracks the outer per-MultichainAdapter weight. This is why
- *     `AdapterInput` has no `weight` field.
- *   - `weight` (multichain adapter) and `apr` (Senior tranche) both use the same
- *     FixedU128-inner-value convention as the old Pools precompile: 1e18 = 100%.
+ *     the `weightBps` Valuation uses to decide its top-level capital-distribution
+ *     ratio.
+ *   - `AdapterInput.weightBps` (added 2026-07-27) represents a given adapter's
+ *     sub-allocation weight *within its parent MultichainAdapter's* internal split
+ *     (e.g. Compound vs. Morpho vs. Aave) — informational/audit bookkeeping in this
+ *     pallet; the earlier draft of this interface omitted it on the reasoning that
+ *     this split was purely the MultichainAdapter contract's own internal concern,
+ *     but it's tracked here now. Same invariant as `multichain_adapters`' weights
+ *     (2026-07-27): a single MultichainAdapter's nested `adapters` weightBps must
+ *     always sum to exactly 10_000 — see `set_adapters` for why that's a
+ *     full-array replace scoped to one parent, mirroring `set_multichain_adapters`.
+ *   - `weightBps`/`apr` unit conventions differ: `apr` (Senior tranche) is a
+ *     FixedU128 inner value as in the old Pools precompile (1e18 = 100%);
+ *     `weightBps` (both `MultichainAdapterInput` and `AdapterInput`) is
+ *     **basis points** (10_000 = 100%), a `uint16`.
  *   - A product's `multichain_adapters` weights must always sum to exactly 100%
- *     (1e18) — this is a hard invariant, not advisory (Valuation's entire
+ *     (10_000 bps) — this is a hard invariant, not advisory (Valuation's entire
  *     capital-distribution decision is driven by this table). Because of that,
  *     `set_multichain_adapters` (see below) takes the full intended end-state
  *     list and replaces it atomically, rather than single-entity add/remove/
@@ -79,9 +92,7 @@ interface TrancheSystem {
         OnchainSource
     }
 
-    /// @dev Discriminant for the unified set_tranche/set_adapter mutation functions.
-    ///      `Update` is not meaningful for set_adapter (adapters have no mutable
-    ///      field) and must revert.
+    /// @dev Discriminant for the unified set_tranche mutation function.
     enum CrudAction {
         Add,
         Remove,
@@ -124,27 +135,36 @@ interface TrancheSystem {
         uint8 priority;
     }
 
-    /// @param adapter_address Hub-chain MultichainAdapter contract address
-    /// @param chain_id        EVM chain ID this MultichainAdapter routes capital to
-    /// @param weight          Allocation weight Valuation uses for its top-level distribution, FixedU128 inner (1e18 = 100%)
-    struct MultichainAdapterInput {
-        address adapter_address;
-        uint64 chain_id;
-        uint256 weight;
-    }
-
     /// @param source_type    OffchainSource or OnchainSource
     /// @param source_address Yield source's own address (e.g. an onchain money-market address);
-    ///                        for OffchainSource this identifies the RWA loan book instance
-    /// @param chain_id       EVM chain ID where the yield source lives
+    ///                        for OffchainSource this identifies the RWA loan book instance.
+    ///                        No separate `chain_id` here (removed 2026-07-27) — a nested
+    ///                        adapter always lives on its parent MultichainAdapter's `chain_id`,
+    ///                        see `MultichainAdapterInput.adapters` and `set_adapters` below
+    /// @param weightBps      This adapter's sub-allocation weight within its parent
+    ///                       MultichainAdapter's internal split (e.g. Compound vs. Morpho vs.
+    ///                       Aave), basis points (10_000 = 100%); across one parent's nested
+    ///                       `adapters`, must sum to exactly 10_000, see notes above
     /// @param borrower       OffchainSource only: institution's EVM address; zero address otherwise
     /// @param collaterals    OffchainSource only: collateral NFTs backing the loan book; empty otherwise
     struct AdapterInput {
         SourceType source_type;
         address source_address;
-        uint64 chain_id;
+        uint16 weightBps;
         address borrower;
         CollateralInput[] collaterals;
+    }
+
+    /// @param adapter_address Hub-chain MultichainAdapter contract address
+    /// @param chain_id        EVM chain ID this MultichainAdapter routes capital to
+    /// @param weightBps       Allocation weight Valuation uses for its top-level distribution, basis points (10_000 = 100%)
+    /// @param adapters        Individual yield-source Adapters this MultichainAdapter internally
+    ///                        manages/routes to (nested 2026-07-27 — see notes above)
+    struct MultichainAdapterInput {
+        address adapter_address;
+        uint64 chain_id;
+        uint16 weightBps;
+        AdapterInput[] adapters;
     }
 
     /// @dev `product_admin` is not a function input on create_product (see below) —
@@ -167,12 +187,11 @@ interface TrancheSystem {
         address vault_address,
         uint8 priority
     );
-    event AdapterSet(
+    event AdaptersSet(
         uint256 product_id,
-        CrudAction action,
-        SourceType source_type,
-        address source_address,
-        uint64 chain_id
+        address parent_adapter_address,
+        uint64 parent_chain_id,
+        AdapterInput[] adapters
     );
     event MultichainAdaptersSet(
         uint256 product_id,
@@ -192,21 +211,22 @@ interface TrancheSystem {
      *      before dispatch and only then constructs the ProductAdmin origin, so
      *      this function trusts that check rather than re-taking the admin address
      *      as a parameter.
-     *      Reverts if `product_id` is already taken, `tranches` is empty, or
-     *      weights across `multichain_adapters` don't sum to 100% (1e18).
+     *      Reverts if `product_id` is already taken, `tranches` is empty, weightBps
+     *      across `multichain_adapters` don't sum to 100% (10_000 bps), or any
+     *      entry's nested `adapters` weightBps don't themselves sum to 100%.
      *      Emits ProductCreated on success.
      * @param product_id          Hub product ID (already granted to the caller via ProductAdmin)
      * @param valuation           Valuation contract binding + settlement cadence config
      * @param tranches            Array of tranche configurations (each identified by its vault)
-     * @param multichain_adapters Array of MultichainAdapter routing entries (address, chain_id, weight)
-     * @param adapters            Array of individual yield-source Adapter registrations
+     * @param multichain_adapters Array of MultichainAdapter routing entries, each carrying its
+     *                             own nested individual-Adapter registrations (address, chain_id,
+     *                             weightBps, adapters)
      */
     function create_product(
         uint256 product_id,
         ValuationInput calldata valuation,
         TrancheInput[] calldata tranches,
-        MultichainAdapterInput[] calldata multichain_adapters,
-        AdapterInput[] calldata adapters
+        MultichainAdapterInput[] calldata multichain_adapters
     ) external;
 
     /**
@@ -244,43 +264,58 @@ interface TrancheSystem {
     ) external;
 
     /**
-     * @notice Add or remove an individual yield-source Adapter on an existing
-     *         product, identified by (`source_address`, `chain_id`).
+     * @notice Replace, atomically, the entire set of individual yield-source
+     *         Adapters nested under one of an existing product's MultichainAdapter
+     *         entries (identified by `parent_adapter_address`, `parent_chain_id`).
      * @dev Caller must hold the ProductAdmin role for `product_id`.
-     *        - Add:    registers a new adapter (reverts if one with the same
-     *                  (`source_address`, `chain_id`) already exists for this
-     *                  product). `source_type`, `borrower`, and `collaterals` are used.
-     *        - Remove: only `source_address`/`chain_id` are used, to identify which
-     *                  adapter to remove.
-     *        - Update: NOT SUPPORTED — reverts. Adapters have no mutable field
-     *                  (unlike multichain_adapters, they carry no weight); once
-     *                  added, an adapter can only be removed and re-added.
-     *      Emits AdapterSet on success.
-     * @param product_id The product whose adapter is being mutated
-     * @param action     Add or Remove (Update reverts)
-     * @param adapter    The adapter data; see field usage per `action` above
+     *      Mirrors `set_multichain_adapters`'s full-array-replace shape, scoped to
+     *      one parent's nested `adapters` instead of the whole table: callers
+     *      submit the full intended end-state list every time, not deltas — the
+     *      same rationale applies, now that adapter-level `weightBps` also carries
+     *      a hard 100% sum invariant (see below), a single-entity add/remove can't
+     *      preserve it without either silently rescaling every other entry or
+     *      leaving the sum temporarily wrong between calls.
+     *      Reverts if no MultichainAdapter matching (`parent_adapter_address`,
+     *      `parent_chain_id`) exists for `product_id`, unless
+     *      `sum(adapters[i].weightBps) == 10_000`, or if `adapters` contains a
+     *      duplicate `source_address` (global uniqueness is chain-aware even
+     *      though `AdapterInput` no longer carries its own `chain_id`: it's
+     *      derived from `parent_chain_id`, so the same `source_address` can still
+     *      be registered once per chain, under different parents).
+     *      Emits AdaptersSet on success.
+     * @param product_id             The product whose adapters are being replaced
+     * @param parent_adapter_address The parent MultichainAdapter's contract address
+     * @param parent_chain_id        The parent MultichainAdapter's chain ID
+     * @param adapters               The full intended end-state list of nested adapters
      */
-    function set_adapter(
+    function set_adapters(
         uint256 product_id,
-        CrudAction action,
-        AdapterInput calldata adapter
+        address parent_adapter_address,
+        uint64 parent_chain_id,
+        AdapterInput[] calldata adapters
     ) external;
 
     /**
      * @notice Replace a product's entire MultichainAdapter routing table atomically.
      * @dev Caller must hold the ProductAdmin role for `product_id`.
-     *      Unlike set_tranche/set_adapter, this is NOT a single-entity add/remove/
-     *      update call — callers must submit the full intended end-state list every
-     *      time, not deltas. This is deliberate: a product's multichain_adapters
-     *      weights must always sum to exactly 100% (1e18), and a single-entity
+     *      Unlike set_tranche, this is NOT a single-entity add/remove/update call —
+     *      callers must submit the full intended end-state list every time, not
+     *      deltas. This is deliberate: a product's multichain_adapters weightBps
+     *      must always sum to exactly 100% (10_000 bps), and a single-entity
      *      mutation can't preserve that cross-entry invariant without either
      *      silently rescaling every other entry (a surprising side effect) or
      *      leaving the sum temporarily wrong between calls (a real fund-safety risk
      *      if Valuation acts on a stale/incomplete state). A full-array replace
-     *      checked atomically avoids both.
-     *      Reverts unless `sum(multichain_adapters[i].weight) == 1e18`, or if
+     *      checked atomically avoids both — same rationale as `set_adapters` uses
+     *      for a single parent's nested adapters. The replace is deep: each entry's
+     *      nested `adapters` is replaced wholesale along with it, same as
+     *      `set_adapters` would leave it — callers changing only e.g. a top-level
+     *      weightBps must still resupply that entry's unchanged `adapters` array,
+     *      or they'll be wiped.
+     *      Reverts unless `sum(multichain_adapters[i].weightBps) == 10_000`, if
      *      `multichain_adapters` contains a duplicate (`adapter_address`, `chain_id`)
-     *      pair.
+     *      pair, or if any entry's nested `adapters` contains a duplicate
+     *      `source_address`.
      *      Emits MultichainAdaptersSet on success.
      * @param product_id          The product whose MultichainAdapter table is being replaced
      * @param multichain_adapters The full intended end-state list of routing entries

@@ -45,7 +45,8 @@ interface Investments {
     event SettlementInfoRecorded(
         uint256 product_id,
         uint256 settlement_id,
-        bytes[] nav_infos
+        bytes[] nav_infos,
+        uint256 product_nav
     );
 
     /**
@@ -137,14 +138,24 @@ interface Investments {
      *        abi.encodePacked(uint8 structure_type, uint256 timestamp, address adapter, uint256 epoch_id)
      *      `structure_type` is the entry's leading discriminant byte; decoders must
      *      branch on it before parsing the remainder of the entry.
+     *      `product_nav` is the finalized total across all of the product's sources
+     *      (both OnchainSource adapters, read live by Valuation, and OffchainSource
+     *      adapters, fed via pallet-rwa-nav-oracle) — the aggregate figure Valuation
+     *      actually used for this settlement's waterfall/share-price computation,
+     *      recorded here alongside the per-source breakdown for audit purposes. Not
+     *      independently verified by this pallet against `nav_infos` — Valuation is
+     *      trusted for the aggregation, same as it's trusted for every other value
+     *      in this interface.
      *      Emits SettlementInfoRecorded on success.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  Valuation Contract's settlement cycle this info belongs to
      * @param nav_infos      Per-source NAV records for this settlement, one packed entry per source
+     * @param product_nav    Finalized total NAV across all sources for this settlement (sum, not per-source)
      */
     function record_settlement_info(
         uint256 product_id,
         uint256 settlement_id,
-        bytes[] calldata nav_infos
+        bytes[] calldata nav_infos,
+        uint256 product_nav
     ) external;
 }
