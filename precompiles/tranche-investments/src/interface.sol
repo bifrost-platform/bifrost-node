@@ -20,6 +20,44 @@ interface Investments {
         uint256 amount;
     }
 
+    /// @dev Adapter-level NAV breakdown for one settlement — one entry per Adapter within a
+    ///      product. Field naming/shape intentionally mirrors the node's own base valuation
+    ///      record format (chainId, adapter, epochId, valuationCutoff), not this file's usual
+    ///      snake_case convention, so the pallet-side type and any off-chain indexer consuming
+    ///      both share field semantics 1:1.
+    /// @param chainId         EVM chain ID the adapter lives on — combined with `adapter`, this
+    ///                        is the adapter's global identity (chainId, adapter)
+    /// @param adapter         Adapter contract address on that chain
+    /// @param epochId         Adapter's own local epoch/settlement counter
+    /// @param valuationCutoff Timestamp this valuation was struck as-of
+    /// @param principal       Cumulative principal deployed into this adapter
+    /// @param positions       Per-asset breakdown of this adapter's current holdings
+    struct AdapterValuation {
+        uint64 chainId;
+        address adapter;
+        uint256 epochId;
+        uint64 valuationCutoff;
+        uint256 principal;
+        AssetPosition[] positions;
+    }
+
+    /// @param asset    Asset's token address on `chainId` (native to that chain, not a Hub address)
+    /// @param amount   Held amount, in `asset`'s own decimals
+    /// @param priceUsd Price at valuation time, FixedU128-style 1e18 fixed-point (sourced from
+    ///                 the Adapter's own NAV oracle, not this pallet)
+    /// @param usdValue `amount * priceUsd`, recorded alongside `amount`/`priceUsd` rather than
+    ///                 only stored, so downstream consumers can re-derive and cross-check it
+    ///                 without re-fetching price data
+    /// @param counted  Whether this position counts toward the adapter's NAV — pre-swap reward
+    ///                 tokens are `false` (see design doc §4)
+    struct AssetPosition {
+        address asset;
+        uint256 amount;
+        uint256 priceUsd;
+        uint256 usdValue;
+        bool counted;
+    }
+
     event InvestmentRequested(
         uint256 product_id,
         uint64 vault_chain_id,
@@ -42,10 +80,14 @@ interface Investments {
         uint256 request_id,
         uint256 settlement_id
     );
-    event SettlementInfoRecorded(
+    event AdapterValuationsRecorded(
         uint256 product_id,
         uint256 settlement_id,
-        bytes[] nav_infos,
+        AdapterValuation[] valuations
+    );
+    event ProductNavRecorded(
+        uint256 product_id,
+        uint256 settlement_id,
         uint256 product_nav
     );
 
@@ -129,33 +171,45 @@ interface Investments {
     ) external;
 
     /**
-     * @notice Record the finalized per-source NAV breakdown for a settlement,
-     *         once the Valuation Contract has completed that settlement cycle.
+     * @notice Record the finalized per-Adapter NAV breakdown for a settlement, once the
+     *         Valuation Contract has completed that settlement cycle.
      * @dev Only callable by the product's registered Valuation contract address.
-     *      Each entry of `nav_infos` is a raw packed encoding rather than a fixed
-     *      struct, so that the payload shape can vary by `structure_type` without
-     *      changing this function's signature. The layout as currently specified is:
-     *        abi.encodePacked(uint8 structure_type, uint256 timestamp, address adapter, uint256 epoch_id)
-     *      `structure_type` is the entry's leading discriminant byte; decoders must
-     *      branch on it before parsing the remainder of the entry.
-     *      `product_nav` is the finalized total across all of the product's sources
-     *      (both OnchainSource adapters, read live by Valuation, and OffchainSource
-     *      adapters, fed via pallet-rwa-nav-oracle) — the aggregate figure Valuation
-     *      actually used for this settlement's waterfall/share-price computation,
-     *      recorded here alongside the per-source breakdown for audit purposes. Not
-     *      independently verified by this pallet against `nav_infos` — Valuation is
-     *      trusted for the aggregation, same as it's trusted for every other value
-     *      in this interface.
-     *      Emits SettlementInfoRecorded on success.
+     *      Renamed from `record_settlement_info` (2026-07-28), and `nav_infos` changed from
+     *      `bytes[]` to `AdapterValuation[]` — the old opaque-bytes shape existed to let the
+     *      payload vary by a leading `structure_type` discriminant byte without changing this
+     *      function's signature; now that the shape is a fixed struct (one entry per Adapter),
+     *      that flexibility is gone, so the name narrows to match what this call actually
+     *      records. The settlement's aggregate total is a separate call — see
+     *      `record_product_nav` below.
+     *      Emits AdapterValuationsRecorded on success.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  Valuation Contract's settlement cycle this info belongs to
-     * @param nav_infos      Per-source NAV records for this settlement, one packed entry per source
-     * @param product_nav    Finalized total NAV across all sources for this settlement (sum, not per-source)
+     * @param valuations     Per-Adapter NAV breakdown for this settlement, one entry per Adapter
      */
-    function record_settlement_info(
+    function record_adapter_valuations(
         uint256 product_id,
         uint256 settlement_id,
-        bytes[] calldata nav_infos,
+        AdapterValuation[] calldata valuations
+    ) external;
+
+    /**
+     * @notice Record the settlement's finalized aggregate NAV across all of the product's
+     *         sources, once the Valuation Contract has completed that settlement cycle.
+     * @dev Only callable by the product's registered Valuation contract address.
+     *      `product_nav` is the finalized total across all of the product's sources (both
+     *      OnchainSource adapters, read live by Valuation, and OffchainSource adapters, fed
+     *      via pallet-rwa-nav-oracle) — the aggregate figure Valuation actually used for this
+     *      settlement's waterfall/share-price computation. Not independently verified by this
+     *      pallet against `record_adapter_valuations`'s breakdown — Valuation is trusted for
+     *      the aggregation, same as it's trusted for every other value in this interface.
+     *      Emits ProductNavRecorded on success.
+     * @param product_id     The product this settlement belongs to
+     * @param settlement_id  Valuation Contract's settlement cycle this NAV belongs to
+     * @param product_nav    Finalized total NAV across all sources for this settlement (sum, not per-source)
+     */
+    function record_product_nav(
+        uint256 product_id,
+        uint256 settlement_id,
         uint256 product_nav
     ) external;
 }
