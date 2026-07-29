@@ -26,15 +26,16 @@ pub type SettlementId = U256;
 /// be allocated across more MultichainAdapters than a product actually has.
 pub const MAX_ALLOCATIONS: u32 = pallet_tranche_system::MAX_MULTICHAIN_ADAPTERS;
 
-/// Maximum number of NAV info entries recorded per settlement.
-pub const MAX_NAV_INFOS: u32 = pallet_tranche_system::MAX_MULTICHAIN_ADAPTERS;
+/// Maximum number of Adapter valuation entries recorded per settlement — one
+/// entry per Adapter, so bounded the same way as `MAX_ALLOCATIONS`.
+pub const MAX_ADAPTER_VALUATIONS: u32 = pallet_tranche_system::MAX_MULTICHAIN_ADAPTERS;
 
-/// Maximum byte length of a single NAV info entry's payload (after the leading
-/// `structure_type` discriminant byte is stripped out into its own field).
-/// The only currently-known layout — `timestamp (32B) + adapter (20B) + epoch_id
-/// (32B)` = 84 bytes — fits comfortably; sized up for headroom on future
-/// structure_types.
-pub const MAX_NAV_INFO_LEN: u32 = 128;
+/// Maximum number of `AssetPosition` entries per `AdapterValuation`. No
+/// equivalent bound exists elsewhere in this pallet family — an Adapter's
+/// underlying holdings aren't a registered, product-scoped concept the way
+/// tranches/adapters/collaterals are, so this is a fresh cap sized in the same
+/// ballpark as other per-entity bounds (e.g. `MAX_COLLATERALS`).
+pub const MAX_ASSET_POSITIONS: u32 = 20;
 
 // ---------------------------------------------------------------------------
 // OrderType
@@ -119,17 +120,54 @@ pub struct ApprovedInvestment {
 }
 
 // ---------------------------------------------------------------------------
-// NavInfo
+// AdapterValuation / AssetPosition
 // ---------------------------------------------------------------------------
 
-/// One entry of a settlement's `nav_infos[]`, as recorded by
-/// `record_settlement_info`. `structure_type` is the leading discriminant byte
-/// from interface.sol's packed encoding; `payload` is the raw remainder,
-/// undecoded — decoders must branch on `structure_type` before interpreting it.
+/// One entry of a settlement's Adapter NAV breakdown, as recorded by
+/// `record_adapter_valuations`. Field names/shape mirror interface.sol's
+/// `AdapterValuation` 1:1 (itself mirroring the node's own base valuation
+/// record format) rather than this pallet's usual snake_case — see that
+/// struct's doc comment.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct NavInfo {
-	pub structure_type: u8,
-	pub payload: BoundedVec<u8, ConstU32<MAX_NAV_INFO_LEN>>,
+pub struct AdapterValuation {
+	/// EVM chain ID the adapter lives on — combined with `adapter`, this is
+	/// the adapter's global identity, mirroring `AdapterKey`'s shape (kept as
+	/// a bare pair here rather than reusing `AdapterKey` directly, since this
+	/// struct's field names/casing intentionally follow interface.sol's
+	/// `AdapterValuation`, not pallet-tranche-system's convention).
+	pub chain_id: u64,
+	pub adapter: H160,
+	/// Adapter's own local epoch/settlement counter.
+	pub epoch_id: U256,
+	/// Timestamp this valuation was struck as-of.
+	pub valuation_cutoff: u64,
+	/// Cumulative principal deployed into this adapter.
+	pub principal: U256,
+	pub positions: BoundedVec<AssetPosition, ConstU32<MAX_ASSET_POSITIONS>>,
+}
+
+/// One asset held by an Adapter as of its valuation cutoff.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct AssetPosition {
+	/// Asset's token address on the parent `AdapterValuation`'s `chain_id`
+	/// (native to that chain, not a Hub address).
+	pub asset: H160,
+	/// Held amount, in `asset`'s own decimals.
+	pub amount: U256,
+	/// Price at valuation time, FixedU128-style 1e18 fixed-point (sourced
+	/// from the Adapter's own NAV oracle, not this pallet).
+	pub price_usd: U256,
+	/// `amount * price_usd`, recorded alongside `amount`/`price_usd` rather
+	/// than only stored, so downstream consumers can re-derive and
+	/// cross-check it without re-fetching price data. Not verified against
+	/// `amount * price_usd` by this pallet — Valuation is trusted for it,
+	/// same as every other value in this interface.
+	pub usd_value: U256,
+	/// Whether this position counts toward the adapter's NAV — pre-swap
+	/// reward tokens are `false` (see design doc §4).
+	pub counted: bool,
 }

@@ -1,10 +1,11 @@
 use crate::{
-	ApprovedInvestment, NavInfo, RequestId, RequestedInvestment, SettlementId, MAX_NAV_INFOS,
+	AdapterValuation, ApprovedInvestment, RequestId, RequestedInvestment, SettlementId,
+	MAX_ADAPTER_VALUATIONS,
 };
 use pallet_tranche_system::ProductId;
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
-use sp_core::ConstU32;
+use sp_core::{ConstU32, U256};
 use sp_runtime::BoundedVec;
 
 #[frame_support::pallet]
@@ -41,7 +42,7 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Only accepted origin for all four extrinsics in this pallet.
+		/// Only accepted origin for all five extrinsics in this pallet.
 		/// Wire as `pallet_tranche_investments::EnsureValuation` in the runtime
 		/// so that only the tranche-investments precompile can invoke them.
 		type ValuationOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
@@ -50,9 +51,9 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 	// Errors / Events / Extrinsics — next pass: record_investment_request,
 	// record_investment_approval, record_investment_cancellation,
-	// record_settlement_info. This pass is storage only, per the current
-	// design step. Cancellation's request_id replay-guard is explicitly
-	// deferred (not yet designed).
+	// record_adapter_valuations, record_product_nav. This pass is storage
+	// only, per the current design step. Cancellation's request_id
+	// replay-guard is explicitly deferred (not yet designed).
 	// -----------------------------------------------------------------------
 
 	// -----------------------------------------------------------------------
@@ -94,21 +95,29 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// Per-source NAV records for a completed settlement, as recorded by
-	/// `record_settlement_info`. Keyed by `(product_id, settlement_id)` — same
-	/// per-product-namespace reasoning as `RequestedInvestments`.
-	pub type Settlements<T: Config> = StorageDoubleMap<
+	/// Per-Adapter NAV breakdown for a completed settlement, as recorded by
+	/// `record_adapter_valuations`. Keyed by `(product_id, settlement_id)`.
+	pub type AdapterValuations<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		ProductId,
 		Blake2_128Concat,
 		SettlementId,
-		BoundedVec<NavInfo, ConstU32<MAX_NAV_INFOS>>,
+		BoundedVec<AdapterValuation, ConstU32<MAX_ADAPTER_VALUATIONS>>,
 	>;
+
+	#[pallet::storage]
+	/// Settlement's finalized aggregate NAV across all of the product's
+	/// sources, as recorded by `record_product_nav` -- a separate call/entry
+	/// from `AdapterValuations`, not derived from it (Valuation is trusted for
+	/// the aggregation, not independently re-checked against the per-Adapter
+	/// breakdown). Keyed by `(product_id, settlement_id)`.
+	pub type ProductNavs<T: Config> =
+		StorageDoubleMap<_, Blake2_128Concat, ProductId, Blake2_128Concat, SettlementId, U256>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics — next pass: record_investment_request,
 	// record_investment_approval, record_investment_cancellation,
-	// record_settlement_info
+	// record_adapter_valuations, record_product_nav
 	// -----------------------------------------------------------------------
 }
