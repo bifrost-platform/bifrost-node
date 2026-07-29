@@ -8423,6 +8423,8 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "pallet-evm",
+ "pallet-timestamp",
  "parity-scale-codec",
  "scale-info",
  "serde",

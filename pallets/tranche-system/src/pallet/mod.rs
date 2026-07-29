@@ -1,12 +1,16 @@
 mod impls;
 
 use crate::{
-	AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo, ProductDetails,
-	ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId, VaultInspect,
-	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
+	AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo, NavSyncOutcome,
+	NavSyncState, ProductDetails, ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo,
+	VaultId, VaultInspect, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
 };
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{Hooks, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 use sp_core::H160;
 use sp_std::vec::Vec;
@@ -47,7 +51,9 @@ pub mod pallet {
 	}
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config:
+		frame_system::Config + pallet_evm::Config + pallet_timestamp::Config<Moment = u64>
+	{
 		/// Only accepted origin for every extrinsic in this pallet
 		/// (`create_product`, `set_tranche`, `set_adapters`,
 		/// `set_multichain_adapters`) — none of them can be called via a plain
@@ -140,6 +146,15 @@ pub mod pallet {
 		AdaptersSet { product_id: ProductId, parent_adapter_address: H160, parent_chain_id: u64 },
 		/// A product's entire MultichainAdapter table was replaced wholesale.
 		MultichainAdaptersSet { product_id: ProductId },
+		/// `on_initialize` attempted `Valuation.tryUpdateNav()` for a product
+		/// inside its settlement window. `attempt` is this attempt's 1-based
+		/// count within the current epoch (capped at `MAX_NAV_SYNC_ATTEMPTS`).
+		NavSyncAttempted {
+			product_id: ProductId,
+			valuation_address: H160,
+			attempt: u8,
+			succeeded: bool,
+		},
 	}
 
 	// -----------------------------------------------------------------------
@@ -181,6 +196,40 @@ pub mod pallet {
 	/// shape is identical — globally unique across all products, same rationale.
 	pub type MultichainAdapterIndex<T: Config> =
 		StorageMap<_, Blake2_128Concat, AdapterKey, ProductId>;
+
+	#[pallet::storage]
+	/// Per-product retry state for the current epoch's settlement window —
+	/// see `NavSyncState`'s doc comment. This is what lets `on_initialize`
+	/// (stateless across blocks on its own) know how many attempts it's
+	/// already made this epoch, when the last one was, and whether one
+	/// already succeeded.
+	pub type NavSyncStates<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, NavSyncState>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Log of every `tryUpdateNav()` attempt `sync_navs` has made for a
+	/// product, keyed by the block it happened at. See `NavSyncOutcome`'s doc
+	/// comment for why this exists — there's no EVM transaction/receipt for
+	/// these internal calls, so this is the only place to look one up.
+	pub type NavSyncLogs<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		BlockNumberFor<T>,
+		NavSyncOutcome,
+	>;
+
+	// -----------------------------------------------------------------------
+	// Hooks
+	// -----------------------------------------------------------------------
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+			Self::sync_navs()
+		}
+	}
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
