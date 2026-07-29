@@ -9469,6 +9469,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-tranche-system"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-utils"
 version = "0.1.0"
 source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"

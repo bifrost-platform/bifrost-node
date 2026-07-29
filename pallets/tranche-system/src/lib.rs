@@ -1,13 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod pallet;
+pub mod weights;
 
 pub use pallet::pallet::*;
+pub use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{BoundedBTreeMap, BoundedVec, RuntimeDebug};
+use sp_std::marker::PhantomData;
 
 // ---------------------------------------------------------------------------
 // Primitive type aliases / constants
@@ -96,6 +99,30 @@ pub struct AdapterKey {
 	pub address: H160,
 	/// EVM chain ID where that address lives.
 	pub chain_id: u64,
+}
+
+// ---------------------------------------------------------------------------
+// CrudAction
+// ---------------------------------------------------------------------------
+
+/// Discriminant for `set_tranche`'s unified add/remove/update mutation.
+/// Mirrors interface.sol's `CrudAction`.
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub enum CrudAction {
+	Add,
+	Remove,
+	Update,
 }
 
 // ---------------------------------------------------------------------------
@@ -310,28 +337,32 @@ pub trait VaultInspect {
 // ProductAdmin origin
 // ---------------------------------------------------------------------------
 
-/// `EnsureOrigin` that accepts only the `ProductAdmin` pallet origin.
+/// `EnsureOrigin` that accepts only the `ProductAdmin` pallet origin, yielding
+/// the verified admin's `AccountId` as its `Success` value — mirrors
+/// `frame_system::EnsureSigned`, which does the same for a plain signed origin.
 /// The tranche-system precompile creates this origin before dispatching to
 /// `create_product`, guaranteeing it can't be called via a plain signed
 /// extrinsic — mirrors pallet-pools' `EnsurePoolAdmin`.
-/// Wire as `type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin`
+/// Wire as `type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>`
 /// in the runtime.
-pub struct EnsureProductAdmin;
+pub struct EnsureProductAdmin<T>(PhantomData<T>);
 
-impl<OuterOrigin> frame_support::traits::EnsureOrigin<OuterOrigin> for EnsureProductAdmin
+impl<OuterOrigin, T> frame_support::traits::EnsureOrigin<OuterOrigin> for EnsureProductAdmin<T>
 where
-	OuterOrigin: Into<Result<Origin, OuterOrigin>> + From<Origin>,
+	T: Config,
+	T::AccountId: Default,
+	OuterOrigin: Into<Result<Origin<T>, OuterOrigin>> + From<Origin<T>>,
 {
-	type Success = ();
+	type Success = T::AccountId;
 	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
 		match o.into() {
-			Ok(Origin::ProductAdmin) => Ok(()),
+			Ok(Origin::ProductAdmin(who)) => Ok(who),
 			Err(o) => Err(o),
 		}
 	}
 
 	#[cfg(feature = "runtime-benchmarks")]
 	fn try_successful_origin() -> Result<OuterOrigin, ()> {
-		Ok(OuterOrigin::from(Origin::ProductAdmin))
+		Ok(OuterOrigin::from(Origin::ProductAdmin(T::AccountId::default())))
 	}
 }
