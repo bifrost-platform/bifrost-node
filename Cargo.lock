@@ -9453,6 +9453,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-tranche-investments"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-investments",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-tranche-permissions"
 version = "1.0.0"
 dependencies = [

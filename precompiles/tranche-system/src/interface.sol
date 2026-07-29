@@ -88,9 +88,13 @@ pragma solidity >=0.8.0;
  *     side effect) or leaving the sum temporarily wrong between calls (a real
  *     fund-safety risk if Valuation acts on a stale/incomplete state).
  *   - Caller authorization is NOT modeled by a Gateway here — per
- *     pallet-tranche-permissions, the caller must hold the relevant role
- *     (e.g. ProductAdmin) for `product_id`, granted via that pallet's
- *     grant_permission/revoke_permission.
+ *     pallet-tranche-permissions, the caller must hold ProductAdmin for
+ *     `product_id`, granted via that pallet's grant_permission/revoke_permission.
+ *     Every function on this interface enforces this at the pallet level, not
+ *     just here: pallet-tranche-system's extrinsics only accept an origin this
+ *     precompile constructs after checking ProductAdmin itself, so calling the
+ *     pallet directly (bypassing this precompile) is impossible regardless of
+ *     role — there is no signed-origin fallback path.
  *
  * Address: 0x0000000000000000000000000000000000000200
  */
@@ -251,7 +255,10 @@ interface TrancheSystem {
     /**
      * @notice Add, remove, or update a tranche on an existing product, identified
      *         by its vault (chain_id, vault_address).
-     * @dev Caller must hold the ProductAdmin role for `product_id`.
+     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     *      pallet itself, not just this precompile: it only accepts an origin this
+     *      precompile constructs after checking ProductAdmin, so there is no signed-origin
+     *      path that bypasses this check.
      *      Field usage differs by `action` — unused fields are ignored, but callers
      *      must still supply the full struct (e.g. pass zero/default values for
      *      `tranche_type`/`apr`/`priority` on a `Remove` call):
@@ -290,7 +297,10 @@ interface TrancheSystem {
      * @notice Replace, atomically, the entire set of individual yield-source
      *         Adapters nested under one of an existing product's MultichainAdapter
      *         entries (identified by `parent_adapter_address`, `parent_chain_id`).
-     * @dev Caller must hold the ProductAdmin role for `product_id`.
+     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     *      pallet itself, not just this precompile: it only accepts an origin this
+     *      precompile constructs after checking ProductAdmin, so there is no signed-origin
+     *      path that bypasses this check.
      *      Mirrors `set_multichain_adapters`'s full-array-replace shape, scoped to
      *      one parent's nested `adapters` instead of the whole table: callers
      *      submit the full intended end-state list every time, not deltas — the
@@ -321,7 +331,10 @@ interface TrancheSystem {
 
     /**
      * @notice Replace a product's entire MultichainAdapter routing table atomically.
-     * @dev Caller must hold the ProductAdmin role for `product_id`.
+     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     *      pallet itself, not just this precompile: it only accepts an origin this
+     *      precompile constructs after checking ProductAdmin, so there is no signed-origin
+     *      path that bypasses this check.
      *      Unlike set_tranche, this is NOT a single-entity add/remove/update call —
      *      callers must submit the full intended end-state list every time, not
      *      deltas. This is deliberate: a product's multichain_adapters weightBps

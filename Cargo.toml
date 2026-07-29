@@ -35,6 +35,7 @@ members = [
 	"precompiles/bifrost-evm-tx-payment",
 	"precompiles/tranche-permissions",
 	"precompiles/tranche-system",
+	"precompiles/tranche-investments",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
@@ -137,6 +138,7 @@ precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompi
 # OmniFi tranche-system Precompiles
 precompile-tranche-permissions = { default-features = false, path = "precompiles/tranche-permissions" }
 precompile-tranche-system = { default-features = false, path = "precompiles/tranche-system" }
+precompile-tranche-investments = { default-features = false, path = "precompiles/tranche-investments" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

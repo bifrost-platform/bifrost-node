@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{
-	AdapterInfo, AdapterKey, CrudAction, MultichainAdapterInfo, PermissionInspect, ProductDetails,
+	AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo, ProductDetails,
 	ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId, VaultInspect,
 	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
 };
@@ -39,36 +39,29 @@ pub mod pallet {
 		/// pallet-tranche-permissions). Carries that verified account so
 		/// `create_product` can populate `ProductCreated`'s `product_admin`
 		/// field without re-deriving it — mirrors
-		/// `frame_system::RawOrigin::Signed`. Used to ensure `create_product`
-		/// can only be called through the precompile — mirrors pallet-pools'
+		/// `frame_system::RawOrigin::Signed`. The only accepted origin for
+		/// every extrinsic in this pallet, ensuring none of them can be
+		/// called except through the precompile — mirrors pallet-pools'
 		/// `Origin::PoolAdmin`.
 		ProductAdmin(T::AccountId),
 	}
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Only accepted origin for `create_product`. `set_tranche`,
-		/// `set_adapters`, and `set_multichain_adapters` are gated differently
-		/// — via a plain signed origin checked against `Permissions` inline —
-		/// since, unlike `create_product`, they don't need to surface the
-		/// admin's identity in an event.
+		/// Only accepted origin for every extrinsic in this pallet
+		/// (`create_product`, `set_tranche`, `set_adapters`,
+		/// `set_multichain_adapters`) — none of them can be called via a plain
+		/// signed extrinsic. The tranche-system precompile constructs this
+		/// origin itself, after verifying the caller holds ProductAdmin for
+		/// the product being acted on (via pallet-tranche-permissions), so
+		/// this pallet never needs to re-check that itself.
 		/// Wire as `pallet_tranche_system::EnsureProductAdmin<Runtime>` in the
 		/// runtime so that only the tranche-system precompile can invoke
-		/// `create_product`.
+		/// these extrinsics.
 		type ProductAdminOrigin: frame_support::traits::EnsureOrigin<
 			Self::RuntimeOrigin,
 			Success = Self::AccountId,
 		>;
-		/// Permission inspector — implemented by pallet-tranche-permissions.
-		/// Used to gate `set_tranche`, `set_adapters`, and
-		/// `set_multichain_adapters` (checked inline via `ensure_signed` +
-		/// `is_product_admin`); `create_product` is gated via
-		/// `ProductAdminOrigin` instead, but the precompile that constructs
-		/// that origin ultimately consults the same source of truth. Borrower
-		/// identity is not gated here at all — it lives directly on each
-		/// OffchainSource adapter (see `SourceType`), not as a
-		/// permissions-pallet role.
-		type Permissions: PermissionInspect<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -87,8 +80,6 @@ pub mod pallet {
 		EmptyTranches,
 		/// A product cannot hold more than `MAX_TRANCHES` tranches.
 		TooManyTranches,
-		/// Caller does not hold the ProductAdmin role for this product.
-		NotProductAdmin,
 		/// The vault (chain_id, vault_address) is already registered — either
 		/// to this product or a different one.
 		VaultAlreadyRegistered,
@@ -274,8 +265,8 @@ pub mod pallet {
 		}
 
 		/// Add, remove, or update a tranche on an existing product, identified
-		/// by its vault. Caller must hold the ProductAdmin role for
-		/// `product_id`, checked inline against `T::Permissions`.
+		/// by its vault. Origin must be `ProductAdminOrigin` — same
+		/// precompile-only gating as `create_product`.
 		///
 		/// Field usage differs by `action`, mirroring interface.sol's
 		/// `set_tranche`. Every branch re-validates, on the resulting full
@@ -305,11 +296,7 @@ pub mod pallet {
 			tranche_type: TrancheType,
 			priority: u8,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			ensure!(
-				T::Permissions::is_product_admin(product_id, &caller),
-				Error::<T>::NotProductAdmin
-			);
+			T::ProductAdminOrigin::ensure_origin(origin)?;
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
@@ -389,8 +376,8 @@ pub mod pallet {
 
 		/// Replace, atomically, the entire set of individual Adapters nested
 		/// under one MultichainAdapter (identified by `parent_adapter_address`,
-		/// `parent_chain_id`). Caller must hold the ProductAdmin role for
-		/// `product_id`, checked inline against `T::Permissions`.
+		/// `parent_chain_id`). Origin must be `ProductAdminOrigin` — same
+		/// precompile-only gating as `create_product`.
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_adapters())]
 		pub fn set_adapters(
@@ -404,11 +391,7 @@ pub mod pallet {
 				ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 			>,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			ensure!(
-				T::Permissions::is_product_admin(product_id, &caller),
-				Error::<T>::NotProductAdmin
-			);
+			T::ProductAdminOrigin::ensure_origin(origin)?;
 
 			Self::ensure_weights_sum_to_10000(adapters.values().map(|a| a.weight_bps))?;
 
@@ -457,8 +440,8 @@ pub mod pallet {
 
 		/// Replace a product's entire MultichainAdapter routing table
 		/// atomically — deep replace, including every entry's nested
-		/// `adapters`. Caller must hold the ProductAdmin role for
-		/// `product_id`, checked inline against `T::Permissions`.
+		/// `adapters`. Origin must be `ProductAdminOrigin` — same
+		/// precompile-only gating as `create_product`.
 		#[pallet::call_index(3)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_adapters())]
 		pub fn set_multichain_adapters(
@@ -470,11 +453,7 @@ pub mod pallet {
 				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 			>,
 		) -> DispatchResult {
-			let caller = ensure_signed(origin)?;
-			ensure!(
-				T::Permissions::is_product_admin(product_id, &caller),
-				Error::<T>::NotProductAdmin
-			);
+			T::ProductAdminOrigin::ensure_origin(origin)?;
 
 			Self::ensure_weights_sum_to_10000(
 				multichain_adapters.values().map(|info| info.weight_bps),
@@ -514,5 +493,15 @@ pub mod pallet {
 impl<T: pallet::Config> VaultInspect for pallet::Pallet<T> {
 	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool {
 		pallet::Vaults::<T>::get(vault) == Some(product_id)
+	}
+}
+
+impl<T: pallet::Config> AdapterInspect for pallet::Pallet<T> {
+	fn multichain_adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
+		pallet::MultichainAdapterIndex::<T>::get(key) == Some(product_id)
+	}
+
+	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
+		pallet::AdapterIndex::<T>::get(key) == Some(product_id)
 	}
 }

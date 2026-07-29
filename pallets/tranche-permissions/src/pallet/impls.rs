@@ -1,6 +1,6 @@
 use crate::Role;
 
-use pallet_tranche_system::{PermissionInspect, ProductId};
+use pallet_tranche_system::ProductId;
 
 use super::pallet::*;
 
@@ -38,11 +38,5 @@ impl<T: Config> Pallet<T> {
 			Role::OracleFeeder => OracleFeeders::<T>::remove(product_id, who),
 			Role::TrancheInvestor(vault) => TrancheInvestors::<T>::remove(vault, who),
 		}
-	}
-}
-
-impl<T: Config> PermissionInspect<T::AccountId> for Pallet<T> {
-	fn is_product_admin(product_id: ProductId, who: &T::AccountId) -> bool {
-		ProductAdmins::<T>::get(product_id).as_ref() == Some(who)
 	}
 }

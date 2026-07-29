@@ -188,11 +188,11 @@ pub struct TrancheInput {
 // ---------------------------------------------------------------------------
 
 /// Generic over `AccountId` because `OffchainSource` carries `borrower` — unlike
-/// `product_admin` (owned entirely by the permissions pallet, see
-/// `PermissionInspect`), `borrower` lives directly on the adapter here. A
-/// product can have multiple OffchainSource adapters, each potentially a
-/// different institution, so there's no single product-scoped "Borrower" role
-/// to delegate to — this is the source of truth instead.
+/// `product_admin` (owned entirely by pallet-tranche-permissions), `borrower`
+/// lives directly on the adapter here. A product can have multiple
+/// OffchainSource adapters, each potentially a different institution, so
+/// there's no single product-scoped "Borrower" role to delegate to — this is
+/// the source of truth instead.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
@@ -303,10 +303,10 @@ pub struct ValuationInfo {
 /// Generic over `AccountId` (via `SourceType`, see its doc comment) — unlike the
 /// old design, this pallet now stores adapter `borrower`s directly rather than
 /// delegating them to the permissions pallet. `product_admin` is still NOT
-/// stored here, though — it remains fully owned by pallet-tranche-permissions
-/// (see `PermissionInspect::is_product_admin`), since there's exactly one
-/// ProductAdmin per product and no ambiguity about where it belongs, unlike
-/// `borrower` which only makes sense attached to a specific adapter.
+/// stored here, though — it remains fully owned by pallet-tranche-permissions'
+/// own `ProductAdmins` storage, since there's exactly one ProductAdmin per
+/// product and no ambiguity about where it belongs, unlike `borrower` which
+/// only makes sense attached to a specific adapter.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
@@ -330,16 +330,6 @@ pub struct ProductDetails<AccountId> {
 // Traits
 // ---------------------------------------------------------------------------
 
-/// Implemented by pallet-tranche-permissions. Called by pallet-tranche-system
-/// to gate-check ProductAdmin (mirrors pallet-pools' `PermissionInspect`, minus
-/// `grant_borrower` — there's no product-scoped Borrower role anymore; borrower
-/// identity lives directly on each OffchainSource adapter instead, see
-/// `SourceType`).
-pub trait PermissionInspect<AccountId> {
-	/// Returns `true` if `who` holds the ProductAdmin role for `product_id`.
-	fn is_product_admin(product_id: ProductId, who: &AccountId) -> bool;
-}
-
 /// Implemented by pallet-tranche-system itself (it owns the `Vaults` reverse
 /// index). Consumed by pallet-tranche-permissions to reject granting
 /// `Role::TrancheInvestor(vault)` for a vault that doesn't belong to the
@@ -349,6 +339,21 @@ pub trait VaultInspect {
 	/// Returns `true` if `vault` is registered as one of `product_id`'s
 	/// tranches.
 	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool;
+}
+
+/// Implemented by pallet-tranche-system itself (it owns the `MultichainAdapterIndex`/
+/// `AdapterIndex` reverse indexes). Consumed by pallet-tranche-investments to
+/// reject recording an allocation/valuation against a MultichainAdapter or
+/// individual Adapter that doesn't actually belong to the product in
+/// question — same rationale as `VaultInspect`.
+pub trait AdapterInspect {
+	/// Returns `true` if `key` is registered as one of `product_id`'s
+	/// top-level MultichainAdapters (see `ProductDetails::multichain_adapters`).
+	fn multichain_adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool;
+	/// Returns `true` if `key` is registered as one of `product_id`'s nested
+	/// individual Adapters (see `MultichainAdapterInfo::adapters`), under any
+	/// parent.
+	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool;
 }
 
 // ---------------------------------------------------------------------------

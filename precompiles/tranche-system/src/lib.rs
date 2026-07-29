@@ -54,14 +54,15 @@ type EvmMultichainAdapterInput = (Address, u64, u16, Vec<EvmAdapterInput>);
 /// `set_tranche`/`set_adapters`/`set_multichain_adapters` extrinsics.
 ///
 /// Called directly by ProductAdmin EOAs — not by a Gateway — so origins are
-/// resolved from `handle.context().caller`. `create_product` is gated by
-/// `pallet_tranche_system::Origin::ProductAdmin`, constructed here only after
-/// reading `pallet-tranche-permissions`' `ProductAdmins` storage directly to
-/// confirm the caller holds the role — the pallet itself has no other way to
-/// verify this, since that custom origin carries an already-authenticated
-/// account rather than re-deriving it. The other three extrinsics dispatch as
-/// a plain signed origin instead; the pallet checks `ProductAdmin` inline
-/// against the same storage via its `T::Permissions` config item.
+/// resolved from `handle.context().caller`. Every one of these four functions
+/// is gated by `pallet_tranche_system::Origin::ProductAdmin`, constructed here
+/// only after reading `pallet-tranche-permissions`' `ProductAdmins` storage
+/// directly to confirm the caller holds the role for `product_id` — the
+/// pallet itself has no other way to verify this, since that custom origin
+/// carries an already-authenticated account rather than re-deriving it. This
+/// is deliberately the *only* way into any of these four extrinsics: none of
+/// them accept a plain signed origin, so calling pallet-tranche-system
+/// directly (bypassing this precompile) is impossible regardless of role.
 pub struct TrancheSystemPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
@@ -159,6 +160,7 @@ where
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		let product_id = to_product_id(product_id)?;
+		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
 		let decoded_action = decode_crud_action(action)?;
 		let (tranche_type_byte, apr, vault, priority) = tranche;
 		let (vault_chain_id, vault_address) = vault;
@@ -174,7 +176,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;
@@ -218,6 +220,7 @@ where
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		let product_id = to_product_id(product_id)?;
+		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
 		let bounded_adapters = decode_adapters::<Runtime>(&adapters)?;
 
 		let call = TrancheSystemCall::<Runtime>::set_adapters {
@@ -228,7 +231,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;
@@ -266,6 +269,7 @@ where
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		let product_id = to_product_id(product_id)?;
+		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
 		let bounded_multichain_adapters =
 			decode_multichain_adapters::<Runtime>(&multichain_adapters)?;
 
@@ -275,7 +279,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;
@@ -306,11 +310,9 @@ fn to_product_id(product_id: U256) -> EvmResult<ProductId> {
 	Ok(product_id.as_u64())
 }
 
-/// `create_product`-only check: reads `pallet-tranche-permissions`' storage
-/// directly to confirm the caller holds `ProductAdmin` for `product_id`,
-/// before constructing `Origin::ProductAdmin`. The other three extrinsics
-/// don't need this — they dispatch as a plain signed origin and let the
-/// pallet check `T::Permissions` inline instead.
+/// Reads `pallet-tranche-permissions`' storage directly to confirm the caller
+/// holds `ProductAdmin` for `product_id`, before constructing
+/// `Origin::ProductAdmin` — shared by all four extrinsics in this precompile.
 fn ensure_caller_is_product_admin<Runtime>(
 	product_id: ProductId,
 	caller_account: &Runtime::AccountId,
