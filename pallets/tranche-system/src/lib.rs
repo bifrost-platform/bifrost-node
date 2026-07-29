@@ -165,6 +165,24 @@ pub struct Tranche {
 	pub vault: VaultId,
 }
 
+/// One entry of `create_product`'s `tranches` input. Carries an explicit
+/// `priority` (0 = highest) used once, at creation time, to sort the incoming
+/// set into `ProductDetails::tranches`' final order — `priority` itself is
+/// never persisted (see `Tranche`'s doc comment for why position alone
+/// suffices after that). Sorting by `priority` must yield all `Senior`
+/// tranches before all `Junior` ones — `create_product` reverts otherwise, so
+/// a product's waterfall always pays Seniors before Juniors by construction,
+/// not just by whatever order a caller happened to submit them in. Mirrors
+/// interface.sol's `TrancheInput`.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct TrancheInput {
+	pub priority: u8,
+	pub tranche_type: TrancheType,
+	pub vault: VaultId,
+}
+
 // ---------------------------------------------------------------------------
 // SourceType / AdapterInfo
 // ---------------------------------------------------------------------------

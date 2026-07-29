@@ -5,8 +5,9 @@ use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::AddressMapping;
 use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
-	MultichainAdapterInfo, ProductId, SourceType, Tranche, TrancheType, ValuationInfo, VaultId,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
+	MultichainAdapterInfo, ProductId, SourceType, TrancheInput, TrancheType, ValuationInfo,
+	VaultId, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHES,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
@@ -80,8 +81,9 @@ where
 	///
 	/// @param product_id Hub product ID (already granted to the caller via ProductAdmin)
 	/// @param valuation (valuation_address, settlement_length_secs, settlement_offset_secs)
-	/// @param tranches Tranche configs; array order fixes priority (index 0 = highest) —
-	/// each entry's own `priority` field is ignored
+	/// @param tranches Tranche configs; each entry's `priority` (0 = highest) determines the
+	/// stored order, not array position — reverts if two entries share a `priority`, or if
+	/// sorting by `priority` doesn't put every Senior tranche before every Junior one
 	/// @param multichain_adapters MultichainAdapter routing entries, each carrying its own
 	/// nested individual-Adapter registrations
 	#[precompile::public(
@@ -341,21 +343,20 @@ fn decode_tranche_type(tranche_type: u8, apr: U256) -> EvmResult<TrancheType> {
 	}
 }
 
-/// `create_product`-only: array order fixes each tranche's priority (index 0
-/// = highest) — every entry's own `priority` field is ignored, since
-/// `pallet_tranche_system::Tranche` carries no such field at all (see its doc
-/// comment). Use `set_tranche` to insert/move a tranche at an explicit
-/// priority on an existing product.
+/// `create_product`-only: each entry's `priority` is passed straight through
+/// (not derived from array position) — the pallet sorts by it and reverts if
+/// two entries share a `priority` or if the sorted order doesn't put every
+/// Senior tranche before every Junior one. See `TrancheInput`'s doc comment.
 fn decode_tranches(
 	tranches: &[EvmTrancheInput],
-) -> EvmResult<BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>> {
-	let mut bounded = BoundedVec::<Tranche, ConstU32<MAX_TRANCHES>>::default();
-	for (tranche_type, apr, vault, _priority) in tranches.iter().cloned() {
+) -> EvmResult<BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>> {
+	let mut bounded = BoundedVec::<TrancheInput, ConstU32<MAX_TRANCHES>>::default();
+	for (tranche_type, apr, vault, priority) in tranches.iter().cloned() {
 		let (chain_id, vault_address) = vault;
 		let tranche_type = decode_tranche_type(tranche_type, apr)?;
 		let vault_id = VaultId { chain_id, vault_address: vault_address.0 };
 		bounded
-			.try_push(Tranche { tranche_type, vault: vault_id })
+			.try_push(TrancheInput { priority, tranche_type, vault: vault_id })
 			.map_err(|_| revert("too many tranches"))?;
 	}
 	Ok(bounded)

@@ -2,13 +2,14 @@ mod impls;
 
 use crate::{
 	AdapterInfo, AdapterKey, CrudAction, MultichainAdapterInfo, PermissionInspect, ProductDetails,
-	ProductId, Tranche, TrancheType, ValuationInfo, VaultId, VaultInspect, WeightInfo,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
+	ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId, VaultInspect,
+	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::H160;
+use sp_std::vec::Vec;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -109,6 +110,16 @@ pub mod pallet {
 		/// A `weightBps` set (top-level `multichain_adapters`, or one parent's
 		/// nested `adapters`) must sum to exactly 10_000 (100%).
 		WeightsMustSumTo10000,
+		/// Two entries of `create_product`'s `tranches` input shared the same
+		/// `priority` — sort order would be ambiguous.
+		DuplicatePriority,
+		/// In priority order (0 = highest), every `Senior` tranche must precede
+		/// every `Junior` tranche.
+		SeniorMustPrecedeJunior,
+		/// `set_tranche`'s `Update` cannot change a tranche's Junior/Senior
+		/// discriminant (only `apr` and `priority` are mutable) — remove and
+		/// re-add to change it.
+		TrancheTypeImmutable,
 	}
 
 	// -----------------------------------------------------------------------
@@ -194,13 +205,19 @@ pub mod pallet {
 		/// constructs it after verifying the caller holds ProductAdmin for
 		/// `product_id` (granted up front via pallet-tranche-permissions,
 		/// before this is ever called).
+		///
+		/// `tranches` carries an explicit `priority` per entry (see
+		/// `TrancheInput`'s doc comment) — sorted once here to establish
+		/// `ProductDetails::tranches`' final order. Reverts if two entries share
+		/// a `priority`, or if sorting by `priority` doesn't put every `Senior`
+		/// tranche before every `Junior` one.
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::create_product())]
 		pub fn create_product(
 			origin: OriginFor<T>,
 			product_id: ProductId,
 			valuation: ValuationInfo,
-			tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
 			multichain_adapters: BoundedBTreeMap<
 				AdapterKey,
 				MultichainAdapterInfo<T::AccountId>,
@@ -218,6 +235,19 @@ pub mod pallet {
 			for info in multichain_adapters.values() {
 				Self::ensure_weights_sum_to_10000(info.adapters.values().map(|a| a.weight_bps))?;
 			}
+
+			let mut sorted: Vec<TrancheInput> = tranches.into_inner();
+			sorted.sort_by_key(|input| input.priority);
+			for pair in sorted.windows(2) {
+				ensure!(pair[0].priority != pair[1].priority, Error::<T>::DuplicatePriority);
+			}
+			let ordered: Vec<Tranche> = sorted
+				.into_iter()
+				.map(|input| Tranche { tranche_type: input.tranche_type, vault: input.vault })
+				.collect();
+			Self::ensure_senior_precedes_junior(&ordered)?;
+			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>> =
+				BoundedVec::try_from(ordered).map_err(|_| Error::<T>::TooManyTranches)?;
 
 			Self::ensure_tranches_are_unregistered(tranches.iter())?;
 			Self::ensure_multichain_adapters_are_unregistered(multichain_adapters.iter())?;
@@ -248,7 +278,10 @@ pub mod pallet {
 		/// `product_id`, checked inline against `T::Permissions`.
 		///
 		/// Field usage differs by `action`, mirroring interface.sol's
-		/// `set_tranche`:
+		/// `set_tranche`. Every branch re-validates, on the resulting full
+		/// tranche list, that all `Senior` tranches still precede all `Junior`
+		/// ones (same invariant `create_product` establishes) — reverts if the
+		/// requested change would break it.
 		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
 		///   any product). `tranche_type` and `priority` are used. If `priority` is already
 		///   occupied, the existing tranche at that slot (and everything after it) shifts down by
@@ -259,7 +292,9 @@ pub mod pallet {
 		///   pallet-tranche-investments doesn't expose an inspection trait for this yet.
 		/// - `Update`: `vault` identifies which tranche to update (reverts if not found);
 		///   `priority` is applied as a new value using the same insert-and-shift semantics as
-		///   `Add`. `tranche_type` is ignored — fixed at `Add`, cannot be changed.
+		///   `Add`. `tranche_type`'s Junior/Senior discriminant is immutable — reverts if it
+		///   doesn't match the existing tranche's; `apr` (carried inside `tranche_type` for
+		///   `Senior`) may still change, since only the discriminant is checked.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_tranche())]
 		pub fn set_tranche(
@@ -297,6 +332,7 @@ pub mod pallet {
 								},
 							)
 							.map_err(|_| Error::<T>::TooManyTranches)?;
+						Self::ensure_senior_precedes_junior(&product.tranches)?;
 						Vaults::<T>::insert(&vault, product_id);
 					},
 					CrudAction::Remove => {
@@ -306,6 +342,7 @@ pub mod pallet {
 							.position(|t| t.vault == vault)
 							.ok_or(Error::<T>::VaultNotFound)?;
 						product.tranches.remove(idx);
+						Self::ensure_senior_precedes_junior(&product.tranches)?;
 						Vaults::<T>::remove(&vault);
 					},
 					CrudAction::Update => {
@@ -314,7 +351,14 @@ pub mod pallet {
 							.iter()
 							.position(|t| t.vault == vault)
 							.ok_or(Error::<T>::VaultNotFound)?;
-						let existing = product.tranches.remove(idx);
+						let type_matches = matches!(
+							(&product.tranches[idx].tranche_type, &tranche_type),
+							(TrancheType::Junior, TrancheType::Junior)
+								| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
+						);
+						ensure!(type_matches, Error::<T>::TrancheTypeImmutable);
+
+						product.tranches.remove(idx);
 						let new_idx = priority as usize;
 						ensure!(new_idx <= product.tranches.len(), Error::<T>::InvalidPriority);
 						product
@@ -322,11 +366,12 @@ pub mod pallet {
 							.try_insert(
 								new_idx,
 								Tranche {
-									tranche_type: existing.tranche_type,
+									tranche_type: tranche_type.clone(),
 									vault: vault.clone(),
 								},
 							)
 							.map_err(|_| Error::<T>::TooManyTranches)?;
+						Self::ensure_senior_precedes_junior(&product.tranches)?;
 					},
 				}
 				Ok(())

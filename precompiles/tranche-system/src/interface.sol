@@ -32,6 +32,15 @@ pragma solidity >=0.8.0;
  *     waterfall). Inserting at an occupied priority (via set_tranche's `priority`
  *     field, on both Add and Update) shifts the existing tranche at that slot,
  *     and everything after it, down by one — this is an insert, not an overwrite.
+ *   - Every Senior tranche must precede every Junior tranche in priority order —
+ *     a hard invariant, not advisory. `create_product` sorts its `tranches` array
+ *     by each entry's own `priority` field (NOT array position — see below) and
+ *     reverts if that produces a Junior-before-Senior ordering, or if two entries
+ *     share a `priority`. `set_tranche`'s Add/Remove/Update all re-check this
+ *     invariant on the resulting full list, since any of them can change relative
+ *     order. `set_tranche`'s Update additionally cannot change a tranche's
+ *     Junior/Senior discriminant at all (reverts if attempted) — only `apr` and
+ *     `priority` are mutable there; changing Junior<->Senior requires remove + re-add.
  *   - `AdapterInput.borrower`/`AdapterInput.collaterals` are only meaningful when
  *     `source_type == OffchainSource` (mirrors the old Pools precompile's
  *     borrower_id/CollateralInput fields, now living per-adapter instead of
@@ -51,7 +60,11 @@ pragma solidity >=0.8.0;
  *     MultichainAdapter contract instances Valuation actually calls
  *     (`executeDeposit`/`collectEachNAV` etc. in the call-flow spec) and carry
  *     the `weightBps` Valuation uses to decide its top-level capital-distribution
- *     ratio.
+ *     ratio. An Adapter (address, chain_id) can belong to at most one
+ *     MultichainAdapter at a time, globally — `create_product`/`set_multichain_adapters`
+ *     revert if the same nested Adapter appears under two different parents in
+ *     one call, and `set_adapters`/`set_multichain_adapters` both revert if it's
+ *     already registered under a *different* parent than the one being written.
  *   - `AdapterInput.weightBps` (added 2026-07-27) represents a given adapter's
  *     sub-allocation weight *within its parent MultichainAdapter's* internal split
  *     (e.g. Compound vs. Morpho vs. Aave) — informational/audit bookkeeping in this
@@ -211,13 +224,19 @@ interface TrancheSystem {
      *      before dispatch and only then constructs the ProductAdmin origin, so
      *      this function trusts that check rather than re-taking the admin address
      *      as a parameter.
-     *      Reverts if `product_id` is already taken, `tranches` is empty, weightBps
-     *      across `multichain_adapters` don't sum to 100% (10_000 bps), or any
-     *      entry's nested `adapters` weightBps don't themselves sum to 100%.
+     *      `tranches` is sorted by each entry's own `priority` field (0 = highest) to
+     *      establish the product's stored waterfall order — NOT by array position.
+     *      Reverts if `product_id` is already taken, `tranches` is empty, two entries
+     *      share a `priority`, sorting by `priority` doesn't put every Senior tranche
+     *      before every Junior one, weightBps across `multichain_adapters` don't sum
+     *      to 100% (10_000 bps), any entry's nested `adapters` weightBps don't
+     *      themselves sum to 100%, or the same nested Adapter (address, chain_id)
+     *      appears under two different `multichain_adapters` entries.
      *      Emits ProductCreated on success.
      * @param product_id          Hub product ID (already granted to the caller via ProductAdmin)
      * @param valuation           Valuation contract binding + settlement cadence config
-     * @param tranches            Array of tranche configurations (each identified by its vault)
+     * @param tranches            Array of tranche configurations (each identified by its vault);
+     *                             `priority`, not array order, determines final stored order
      * @param multichain_adapters Array of MultichainAdapter routing entries, each carrying its
      *                             own nested individual-Adapter registrations (address, chain_id,
      *                             weightBps, adapters)
@@ -248,10 +267,14 @@ interface TrancheSystem {
      *                  one, closing the gap.
      *        - Update: `tranche.vault` identifies which tranche to update (reverts
      *                  if not found); `apr` and `priority` are applied as new values.
-     *                  `tranche_type` is ignored — a tranche's type is fixed at Add
-     *                  and cannot be changed. If `priority` differs from the
-     *                  tranche's current priority, it re-inserts using the same
-     *                  shift semantics as Add.
+     *                  `tranche_type`'s Junior/Senior discriminant is immutable —
+     *                  reverts if it doesn't match the existing tranche's (remove +
+     *                  re-add to actually change it); `apr` may still change freely
+     *                  for a Senior tranche, since only the discriminant is checked.
+     *                  If `priority` differs from the tranche's current priority, it
+     *                  re-inserts using the same shift semantics as Add.
+     *      Every branch reverts if the resulting full tranche list would put any
+     *      Junior tranche before a Senior one (see notes above).
      *      Emits TrancheSet on success.
      * @param product_id The product whose tranche is being mutated
      * @param action     Add, Remove, or Update
@@ -277,11 +300,12 @@ interface TrancheSystem {
      *      leaving the sum temporarily wrong between calls.
      *      Reverts if no MultichainAdapter matching (`parent_adapter_address`,
      *      `parent_chain_id`) exists for `product_id`, unless
-     *      `sum(adapters[i].weightBps) == 10_000`, or if `adapters` contains a
-     *      duplicate `source_address` (global uniqueness is chain-aware even
-     *      though `AdapterInput` no longer carries its own `chain_id`: it's
-     *      derived from `parent_chain_id`, so the same `source_address` can still
-     *      be registered once per chain, under different parents).
+     *      `sum(adapters[i].weightBps) == 10_000`, if `adapters` contains a
+     *      duplicate `source_address`, or if a `source_address` is already
+     *      registered under a *different* parent (an Adapter belongs to at most
+     *      one MultichainAdapter globally, see notes above — re-registering the
+     *      same `source_address` under *this* parent, e.g. just to change its
+     *      `weightBps`, is fine).
      *      Emits AdaptersSet on success.
      * @param product_id             The product whose adapters are being replaced
      * @param parent_adapter_address The parent MultichainAdapter's contract address
@@ -314,8 +338,10 @@ interface TrancheSystem {
      *      or they'll be wiped.
      *      Reverts unless `sum(multichain_adapters[i].weightBps) == 10_000`, if
      *      `multichain_adapters` contains a duplicate (`adapter_address`, `chain_id`)
-     *      pair, or if any entry's nested `adapters` contains a duplicate
-     *      `source_address`.
+     *      pair, if any entry's nested `adapters` contains a duplicate
+     *      `source_address`, or if the same nested `source_address` (chain-aware,
+     *      via its parent's `chain_id`) appears under two different entries — an
+     *      Adapter belongs to at most one MultichainAdapter globally, see notes above.
      *      Emits MultichainAdaptersSet on success.
      * @param product_id          The product whose MultichainAdapter table is being replaced
      * @param multichain_adapters The full intended end-state list of routing entries

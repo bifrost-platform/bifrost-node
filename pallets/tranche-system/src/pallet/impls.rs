@@ -1,4 +1,4 @@
-use crate::{AdapterKey, MultichainAdapterInfo, ProductId, Tranche};
+use crate::{AdapterKey, MultichainAdapterInfo, ProductId, Tranche, TrancheType};
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
@@ -40,11 +40,19 @@ impl<T: Config> Pallet<T> {
 	/// existing product's table must remove its old reverse-index entries
 	/// first (see `set_multichain_adapters`), so re-registering the same
 	/// (address, chain_id) isn't mistaken for a collision here.
+	///
+	/// Also enforces, via a local `seen` set, that an Adapter belongs to at
+	/// most one MultichainAdapter: two different parents in the *same*
+	/// incoming call can't nest the same (address, chain_id) — a check the
+	/// per-entry storage lookup alone can't catch, since neither write has
+	/// happened yet at validation time (mirrors `ensure_tranches_are_unregistered`'s
+	/// same intra-call-duplicate guard for `tranches`).
 	pub(crate) fn ensure_multichain_adapters_are_unregistered<'a, AccountId: 'a>(
 		multichain_adapters: impl Iterator<
 			Item = (&'a AdapterKey, &'a MultichainAdapterInfo<AccountId>),
 		>,
 	) -> DispatchResult {
+		let mut seen = BTreeSet::new();
 		for (key, info) in multichain_adapters {
 			ensure!(
 				!MultichainAdapterIndex::<T>::contains_key(key),
@@ -52,10 +60,30 @@ impl<T: Config> Pallet<T> {
 			);
 			for address in info.adapters.keys() {
 				let adapter_key = AdapterKey { address: *address, chain_id: key.chain_id };
+				ensure!(seen.insert(adapter_key.clone()), Error::<T>::AdapterAlreadyRegistered);
 				ensure!(
 					!AdapterIndex::<T>::contains_key(&adapter_key),
 					Error::<T>::AdapterAlreadyRegistered
 				);
+			}
+		}
+		Ok(())
+	}
+
+	/// Checks that, in priority order (index 0 = highest — i.e. array order,
+	/// since `Tranche` carries no separate priority field), every `Senior`
+	/// tranche precedes every `Junior` one. Shared by `create_product` (on the
+	/// freshly-sorted input) and every `set_tranche` branch (re-checked on the
+	/// resulting full list after the mutation, since `Add`/`Remove`/`Update`
+	/// can all change relative order).
+	pub(crate) fn ensure_senior_precedes_junior(tranches: &[Tranche]) -> DispatchResult {
+		let mut seen_junior = false;
+		for tranche in tranches {
+			match tranche.tranche_type {
+				TrancheType::Junior => seen_junior = true,
+				TrancheType::Senior { .. } => {
+					ensure!(!seen_junior, Error::<T>::SeniorMustPrecedeJunior);
+				},
 			}
 		}
 		Ok(())
