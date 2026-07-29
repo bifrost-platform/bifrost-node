@@ -1,8 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod pallet;
+pub mod weights;
 
 pub use pallet::pallet::*;
+pub use weights::WeightInfo;
 
 use pallet_tranche_system::VaultId;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -16,11 +18,11 @@ use sp_runtime::RuntimeDebug;
 /// A permission role scoped to a product.
 ///
 /// Cardinality per product (confirmed 2026-07-24):
-/// - `ProductAdmin` — exactly one. Pre-granted by sudo before `create_product`
-///   is ever called (see pallet-tranche-system's `create_product` flow).
+/// - `ProductAdmin` — exactly one. Pre-granted by sudo before `create_product` is ever called (see
+///   pallet-tranche-system's `create_product` flow).
 /// - `OracleFeeder` — many.
-/// - `TrancheInvestor` — many, scoped to a specific tranche (`VaultId`), not
-///   the whole product — mirrors old pools' `Role::TrancheInvestor(TrancheId)`.
+/// - `TrancheInvestor` — many, scoped to a specific tranche (`VaultId`), not the whole product —
+///   mirrors old pools' `Role::TrancheInvestor(TrancheId)`.
 ///
 /// No `Borrower` variant, unlike old pools' `Role`: a product can have
 /// multiple OffchainSource adapters, each potentially a different

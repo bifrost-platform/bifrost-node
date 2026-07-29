@@ -1,4 +1,4 @@
-use crate::{AdapterKey, PermissionInspect, ProductDetails, ProductId, VaultId};
+use crate::{AdapterKey, PermissionInspect, ProductDetails, ProductId, VaultId, VaultInspect};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 
@@ -95,4 +95,10 @@ pub mod pallet {
 	// Extrinsics — next pass: create_product, set_tranche, set_adapter,
 	// set_multichain_adapters
 	// -----------------------------------------------------------------------
+}
+
+impl<T: pallet::Config> VaultInspect for pallet::Pallet<T> {
+	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool {
+		pallet::Vaults::<T>::get(vault) == Some(product_id)
+	}
 }

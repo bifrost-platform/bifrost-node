@@ -295,6 +295,17 @@ pub trait PermissionInspect<AccountId> {
 	fn is_product_admin(product_id: ProductId, who: &AccountId) -> bool;
 }
 
+/// Implemented by pallet-tranche-system itself (it owns the `Vaults` reverse
+/// index). Consumed by pallet-tranche-permissions to reject granting
+/// `Role::TrancheInvestor(vault)` for a vault that doesn't belong to the
+/// product the caller is ProductAdmin for — mirrors pallet-pools'
+/// `PoolInspect::tranche_exists` check in the old `grant_permission`.
+pub trait VaultInspect {
+	/// Returns `true` if `vault` is registered as one of `product_id`'s
+	/// tranches.
+	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool;
+}
+
 // ---------------------------------------------------------------------------
 // ProductAdmin origin
 // ---------------------------------------------------------------------------
