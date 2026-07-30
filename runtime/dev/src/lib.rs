@@ -118,7 +118,8 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing
+/// `OnRuntimeUpgrade`.
 type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
@@ -158,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 467,
+	spec_version: 468,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -1164,32 +1165,21 @@ impl pallet_oracle_registry::Config for Runtime {
 	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_rwa_permissions::Config for Runtime {
-	type Pools = RwaPools;
-	type WeightInfo = pallet_rwa_permissions::weights::SubstrateWeight<Runtime>;
+impl pallet_tranche_system::Config for Runtime {
+	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
+	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_rwa_pools::Config for Runtime {
-	type GatewayOrigin = pallet_rwa_pools::EnsureGateway;
-	type PoolAdminOrigin = pallet_rwa_pools::EnsurePoolAdmin;
-	type Investments = RwaInvestments;
-	type NAV = RwaNavOracle;
-	type Time = Timestamp;
-	type Permissions = RwaPermissions;
-	type WeightInfo = pallet_rwa_pools::weights::SubstrateWeight<Runtime>;
+impl pallet_tranche_permissions::Config for Runtime {
+	type Vaults = TrancheSystem;
+	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_rwa_investments::Config for Runtime {
-	type GatewayOrigin = pallet_rwa_pools::EnsureGateway;
-	type Pools = RwaPools;
-	type Permissions = RwaPermissions;
-	type WeightInfo = pallet_rwa_investments::weights::SubstrateWeight<Runtime>;
-}
-
-impl pallet_rwa_nav_oracle::Config for Runtime {
-	type Pools = RwaPools;
-	type Permissions = RwaPermissions;
-	type WeightInfo = pallet_rwa_nav_oracle::weights::SubstrateWeight<Runtime>;
+impl pallet_tranche_investments::Config for Runtime {
+	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type WeightInfo = pallet_tranche_investments::weights::SubstrateWeight<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -1323,17 +1313,14 @@ mod runtime {
 	#[runtime::pallet_index(65)]
 	pub type OracleRegistry = pallet_oracle_registry;
 
-	#[runtime::pallet_index(70)]
-	pub type RwaPermissions = pallet_rwa_permissions;
+	#[runtime::pallet_index(80)]
+	pub type TrancheSystem = pallet_tranche_system;
 
-	#[runtime::pallet_index(71)]
-	pub type RwaPools = pallet_rwa_pools;
+	#[runtime::pallet_index(81)]
+	pub type TranchePermissions = pallet_tranche_permissions;
 
-	#[runtime::pallet_index(72)]
-	pub type RwaInvestments = pallet_rwa_investments;
-
-	#[runtime::pallet_index(73)]
-	pub type RwaNavOracle = pallet_rwa_nav_oracle;
+	#[runtime::pallet_index(82)]
+	pub type TrancheInvestments = pallet_tranche_investments;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

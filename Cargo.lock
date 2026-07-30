@@ -1079,15 +1079,14 @@ dependencies = [
  "pallet-oracle-registry",
  "pallet-preimage",
  "pallet-relay-manager",
- "pallet-rwa-investments",
- "pallet-rwa-nav-oracle",
- "pallet-rwa-permissions",
- "pallet-rwa-pools",
  "pallet-safe-mode",
  "pallet-scheduler",
  "pallet-session",
  "pallet-sudo",
  "pallet-timestamp",
+ "pallet-tranche-investments",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-treasury",
@@ -1104,9 +1103,9 @@ dependencies = [
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
- "precompile-rwa-investments",
- "precompile-rwa-permissions",
- "precompile-rwa-pools",
+ "precompile-tranche-investments",
+ "precompile-tranche-permissions",
+ "precompile-tranche-system",
  "precompile-utils",
  "scale-info",
  "sp-api",
@@ -8297,69 +8296,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-rwa-investments"
-version = "1.0.0"
-dependencies = [
- "frame-support",
- "frame-system",
- "pallet-rwa-pools",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "pallet-rwa-nav-oracle"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "pallet-rwa-pools",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "pallet-rwa-permissions"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "pallet-rwa-pools",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "pallet-rwa-pools"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "pallet-safe-mode"
 version = "26.0.0"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
@@ -8464,6 +8400,60 @@ dependencies = [
  "sp-runtime",
  "sp-storage",
  "sp-timestamp",
+]
+
+[[package]]
+name = "pallet-tranche-investments"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-permissions"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-system"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -9493,15 +9483,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "precompile-rwa-investments"
+name = "precompile-tranche-investments"
 version = "1.0.0"
 dependencies = [
  "fp-evm",
  "frame-support",
  "frame-system",
  "pallet-evm",
- "pallet-rwa-investments",
- "pallet-rwa-pools",
+ "pallet-tranche-investments",
+ "pallet-tranche-system",
  "precompile-utils",
  "sp-core",
  "sp-runtime",
@@ -9509,15 +9499,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "precompile-rwa-permissions"
+name = "precompile-tranche-permissions"
 version = "1.0.0"
 dependencies = [
  "fp-evm",
  "frame-support",
  "frame-system",
  "pallet-evm",
- "pallet-rwa-permissions",
- "pallet-rwa-pools",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
  "precompile-utils",
  "sp-core",
  "sp-runtime",
@@ -9525,14 +9515,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "precompile-rwa-pools"
+name = "precompile-tranche-system"
 version = "1.0.0"
 dependencies = [
  "fp-evm",
  "frame-support",
  "frame-system",
  "pallet-evm",
- "pallet-rwa-pools",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
  "precompile-utils",
  "sp-core",
  "sp-runtime",
