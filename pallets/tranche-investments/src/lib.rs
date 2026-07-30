@@ -11,6 +11,7 @@ use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{BoundedVec, RuntimeDebug};
+use sp_std::marker::PhantomData;
 
 // ---------------------------------------------------------------------------
 // Primitive type aliases / constants
@@ -172,4 +173,36 @@ pub struct AssetPosition {
 	/// Whether this position counts toward the adapter's NAV — pre-swap
 	/// reward tokens are `false` (see design doc §4).
 	pub counted: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Valuation origin
+// ---------------------------------------------------------------------------
+
+/// `EnsureOrigin` that accepts only the `Origin::Valuation` pallet origin —
+/// mirrors pallet-tranche-system's `EnsureProductAdmin`, except `Origin::Valuation`
+/// carries no payload (the precompile already resolved and verified the caller
+/// against the product's registered `valuation_address` before constructing this
+/// origin, so there's nothing left to hand back as `Success`).
+/// Wire as `type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>`
+/// in the runtime.
+pub struct EnsureValuation<T>(PhantomData<T>);
+
+impl<OuterOrigin, T> frame_support::traits::EnsureOrigin<OuterOrigin> for EnsureValuation<T>
+where
+	T: Config,
+	OuterOrigin: Into<Result<Origin, OuterOrigin>> + From<Origin>,
+{
+	type Success = ();
+	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
+		match o.into() {
+			Ok(Origin::Valuation) => Ok(()),
+			Err(o) => Err(o),
+		}
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<OuterOrigin, ()> {
+		Ok(OuterOrigin::from(Origin::Valuation))
+	}
 }

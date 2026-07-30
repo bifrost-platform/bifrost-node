@@ -118,7 +118,8 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing
+/// `OnRuntimeUpgrade`.
 type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
@@ -1164,6 +1165,23 @@ impl pallet_oracle_registry::Config for Runtime {
 	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_tranche_system::Config for Runtime {
+	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
+	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_tranche_permissions::Config for Runtime {
+	type Vaults = TrancheSystem;
+	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_tranche_investments::Config for Runtime {
+	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type WeightInfo = pallet_tranche_investments::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -1294,6 +1312,15 @@ mod runtime {
 
 	#[runtime::pallet_index(65)]
 	pub type OracleRegistry = pallet_oracle_registry;
+
+	#[runtime::pallet_index(80)]
+	pub type TrancheSystem = pallet_tranche_system;
+
+	#[runtime::pallet_index(81)]
+	pub type TranchePermissions = pallet_tranche_permissions;
+
+	#[runtime::pallet_index(82)]
+	pub type TrancheInvestments = pallet_tranche_investments;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

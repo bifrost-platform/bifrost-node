@@ -94,6 +94,9 @@ pallet-blaze = { workspace = true }
 pallet-bifrost-evm-tx-payment = { workspace = true }
 pallet-oracle-registry = { workspace = true }
 pallet-cccp-relay-queue = { workspace = true }
+pallet-tranche-system = { workspace = true }
+pallet-tranche-permissions = { workspace = true }
+pallet-tranche-investments = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -111,6 +114,9 @@ precompile-btc-registration-pool = { workspace = true }
 precompile-btc-socket-queue = { workspace = true }
 precompile-blaze = { workspace = true }
 precompile-bifrost-evm-tx-payment = { workspace = true }
+precompile-tranche-system = { workspace = true }
+precompile-tranche-permissions = { workspace = true }
+precompile-tranche-investments = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -155,6 +161,9 @@ std = [
 	"pallet-bifrost-evm-tx-payment/std",
 	"pallet-oracle-registry/std",
 	"pallet-cccp-relay-queue/std",
+	"pallet-tranche-system/std",
+	"pallet-tranche-permissions/std",
+	"pallet-tranche-investments/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
@@ -194,6 +203,9 @@ std = [
 	"precompile-btc-socket-queue/std",
 	"precompile-blaze/std",
 	"precompile-bifrost-evm-tx-payment/std",
+	"precompile-tranche-system/std",
+	"precompile-tranche-permissions/std",
+	"precompile-tranche-investments/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
