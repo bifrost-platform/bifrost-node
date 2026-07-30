@@ -3,10 +3,10 @@
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_tranche_investments::{
-	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, OrderType,
+	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, OrderType, TrancheSettle,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_ASSET_POSITIONS,
 };
-use pallet_tranche_system::{AdapterKey, ProductId};
+use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
@@ -23,8 +23,8 @@ pub(crate) const SELECTOR_LOG_INVESTMENT_APPROVED: [u8; 32] =
 pub(crate) const SELECTOR_LOG_ADAPTER_VALUATIONS_RECORDED: [u8; 32] = keccak256!(
 	"AdapterValuationsRecorded(uint256,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
 );
-pub(crate) const SELECTOR_LOG_PRODUCT_NAV_RECORDED: [u8; 32] =
-	keccak256!("ProductNavRecorded(uint256,uint256,uint256)");
+pub(crate) const SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED: [u8; 32] =
+	keccak256!("TrancheSettlementRecorded(uint256,uint256,uint256,uint256)");
 
 // ---------------------------------------------------------------------------
 // interface.sol struct <-> tuple mappings
@@ -36,6 +36,9 @@ type EvmAllocation = (Address, u64, U256);
 type EvmAssetPosition = (Address, U256, U256, U256, bool);
 /// `AdapterValuation` — (chainId, adapter, epochId, valuationCutoff, principal, positions)
 type EvmAdapterValuation = (u64, Address, U256, u64, U256, Vec<EvmAssetPosition>);
+/// `TrancheSettle` — (vault_chain_id, vault_address, tranche_nav, share_price,
+/// units_outstanding, principal)
+type EvmTrancheSettle = (u64, Address, U256, U256, U256, U256);
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -211,22 +214,30 @@ where
 		Ok(())
 	}
 
-	/// Record the settlement's finalized aggregate NAV. See
-	/// `pallet_tranche_investments::record_product_nav`'s doc comment.
-	#[precompile::public("record_product_nav(uint256,uint256,uint256)")]
-	fn record_product_nav(
+	/// Record the post-waterfall per-tranche settlement result, plus the
+	/// product's finalized aggregate NAV. See
+	/// `pallet_tranche_investments::record_tranche_settlement`'s doc comment.
+	#[precompile::public(
+		"record_tranche_settlement(uint256,uint256,(uint64,address,uint256,uint256,uint256,uint256)[],uint256,uint256)"
+	)]
+	fn record_tranche_settlement(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
 		settlement_id: U256,
+		tranches: Vec<EvmTrancheSettle>,
+		pending_deposit_assets: U256,
 		product_nav: U256,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let product_id = to_product_id(product_id)?;
 		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		let bounded_tranches = decode_tranche_settles(&tranches)?;
 
-		let call = InvestmentsCall::<Runtime>::record_product_nav {
+		let call = InvestmentsCall::<Runtime>::record_tranche_settlement {
 			product_id,
 			settlement_id,
+			tranches: bounded_tranches,
+			pending_deposit_assets,
 			product_nav,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -238,8 +249,13 @@ where
 
 		let event = log1(
 			handle.context().address,
-			SELECTOR_LOG_PRODUCT_NAV_RECORDED,
-			solidity::encode_event_data((U256::from(product_id), settlement_id, product_nav)),
+			SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED,
+			solidity::encode_event_data((
+				U256::from(product_id),
+				settlement_id,
+				pending_deposit_assets,
+				product_nav,
+			)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
@@ -327,6 +343,28 @@ fn decode_adapter_valuations(
 				positions,
 			})
 			.map_err(|_| revert("too many adapter valuations"))?;
+	}
+	Ok(bounded)
+}
+
+fn decode_tranche_settles(
+	tranches: &[EvmTrancheSettle],
+) -> EvmResult<BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>> {
+	let mut bounded =
+		BoundedVec::<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>::default();
+	for (vault_chain_id, vault_address, tranche_nav, share_price, units_outstanding, principal) in
+		tranches.iter().cloned()
+	{
+		let vault = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		bounded
+			.try_push(TrancheSettle {
+				vault,
+				tranche_nav,
+				share_price,
+				units_outstanding,
+				principal,
+			})
+			.map_err(|_| revert("too many tranches"))?;
 	}
 	Ok(bounded)
 }

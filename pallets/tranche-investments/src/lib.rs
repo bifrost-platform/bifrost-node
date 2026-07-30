@@ -176,6 +176,47 @@ pub struct AssetPosition {
 }
 
 // ---------------------------------------------------------------------------
+// TrancheSettle / TrancheSettlement
+// ---------------------------------------------------------------------------
+
+/// Post-waterfall settlement result for a single tranche, as recorded by
+/// `record_tranche_settlement`. Read back by the next settlement cycle to
+/// know each tranche's current NAV/share price/units/principal without
+/// re-deriving them — the write half of that read/write pair.
+///
+/// Distinct from `AdapterValuation::principal` (that's capital deployed into
+/// one yield source; this is a tranche's own Senior principal claim) —
+/// neither can substitute for the other.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct TrancheSettle {
+	pub vault: VaultId,
+	/// This tranche's NAV after the waterfall, in the product's base asset.
+	pub tranche_nav: U256,
+	/// Tranche share-token price, FixedU128-style 1e18 fixed-point.
+	pub share_price: U256,
+	/// Tranche share-token total supply after this settlement.
+	pub units_outstanding: U256,
+	/// Senior-tranche principal claim — meaningless (pass zero) for Junior,
+	/// same Senior-only convention as `TrancheType::Senior`'s `apr`.
+	pub principal: U256,
+}
+
+/// One settlement's full tranche-level result for a product, as recorded by
+/// `record_tranche_settlement` — one entry per tranche, plus the product's
+/// pending (unconfirmed) deposit total.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct TrancheSettlement {
+	pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+	/// Product-level pending/unconfirmed deposit amount as of this
+	/// settlement — not yet reflected in any tranche's `units_outstanding`.
+	pub pending_deposit_assets: U256,
+}
+
+// ---------------------------------------------------------------------------
 // Valuation origin
 // ---------------------------------------------------------------------------
 

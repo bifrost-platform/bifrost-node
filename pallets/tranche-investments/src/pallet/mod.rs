@@ -1,6 +1,7 @@
 use crate::{
 	AdapterValuation, Allocation, ApprovedInvestment, OrderType, RequestId, RequestedInvestment,
-	SettlementId, WeightInfo, MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS,
+	SettlementId, TrancheSettle, TrancheSettlement, WeightInfo, MAX_ADAPTER_VALUATIONS,
+	MAX_ALLOCATIONS,
 };
 use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
 
@@ -90,9 +91,11 @@ pub mod pallet {
 		/// Adapter valuations were already recorded for this
 		/// (product_id, settlement_id).
 		AdapterValuationsAlreadyRecorded,
-		/// A product NAV was already recorded for this
+		/// The same vault appears twice in one `tranches` array.
+		DuplicateTrancheSettleEntry,
+		/// A tranche settlement was already recorded for this
 		/// (product_id, settlement_id).
-		ProductNavAlreadyRecorded,
+		TrancheSettlementAlreadyRecorded,
 	}
 
 	// -----------------------------------------------------------------------
@@ -121,8 +124,14 @@ pub mod pallet {
 		},
 		/// Per-Adapter NAV breakdown was recorded for a settlement.
 		AdapterValuationsRecorded { product_id: ProductId, settlement_id: SettlementId },
-		/// A product's aggregate NAV was recorded for a settlement.
-		ProductNavRecorded { product_id: ProductId, settlement_id: SettlementId, product_nav: U256 },
+		/// Post-waterfall per-tranche settlement results (and the product's
+		/// aggregate NAV) were recorded for a settlement.
+		TrancheSettlementRecorded {
+			product_id: ProductId,
+			settlement_id: SettlementId,
+			pending_deposit_assets: U256,
+			product_nav: U256,
+		},
 	}
 
 	// -----------------------------------------------------------------------
@@ -177,12 +186,34 @@ pub mod pallet {
 
 	#[pallet::storage]
 	/// Settlement's finalized aggregate NAV across all of the product's
-	/// sources, as recorded by `record_product_nav` -- a separate call/entry
-	/// from `AdapterValuations`, not derived from it (Valuation is trusted for
-	/// the aggregation, not independently re-checked against the per-Adapter
-	/// breakdown). Keyed by `(product_id, settlement_id)`.
+	/// sources, as recorded by `record_tranche_settlement` alongside the
+	/// per-tranche breakdown -- a separate entry from `AdapterValuations`,
+	/// not derived from it (Valuation is trusted for the aggregation, not
+	/// independently re-checked against the per-Adapter breakdown). Keyed by
+	/// `(product_id, settlement_id)`.
 	pub type ProductNavs<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, ProductId, Blake2_128Concat, SettlementId, U256>;
+
+	#[pallet::storage]
+	/// Post-waterfall per-tranche settlement result for a completed
+	/// settlement, as recorded by `record_tranche_settlement`. Keyed by
+	/// `(product_id, settlement_id)`, same rationale as `AdapterValuations`/
+	/// `ProductNavs`. `units_outstanding`/`principal` are overwritten
+	/// wholesale by each new settlement — nothing else in this pallet
+	/// separately accumulates them.
+	///
+	/// No separate "last settlement_id" pointer is kept here — the Valuation
+	/// Contract already tracks that itself off-chain (it's the one that
+	/// assigns `settlement_id`s in the first place), so this pallet doesn't
+	/// duplicate that bookkeeping.
+	pub type TrancheSettlements<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
+		TrancheSettlement,
+	>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
@@ -332,29 +363,49 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Record the settlement's finalized aggregate NAV across all of the
-		/// product's sources. Origin must be `ValuationOrigin`. Callable at
-		/// most once per (product_id, settlement_id).
+		/// Record the post-waterfall per-tranche settlement result: each
+		/// tranche's NAV/share price/units/principal, the product's pending
+		/// deposit total, and the product's finalized aggregate NAV (formerly
+		/// `record_product_nav`, folded in here so both are recorded
+		/// atomically in one call). Origin must be `ValuationOrigin`. Callable
+		/// at most once per (product_id, settlement_id).
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::record_product_nav())]
-		pub fn record_product_nav(
+		#[pallet::weight(<T as Config>::WeightInfo::record_tranche_settlement())]
+		pub fn record_tranche_settlement(
 			origin: OriginFor<T>,
 			product_id: ProductId,
 			settlement_id: SettlementId,
+			tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+			pending_deposit_assets: U256,
 			product_nav: U256,
 		) -> DispatchResult {
 			T::ValuationOrigin::ensure_origin(origin)?;
 
 			ensure!(
-				!ProductNavs::<T>::contains_key(product_id, settlement_id),
-				Error::<T>::ProductNavAlreadyRecorded
+				!TrancheSettlements::<T>::contains_key(product_id, settlement_id),
+				Error::<T>::TrancheSettlementAlreadyRecorded
 			);
 
-			ProductNavs::<T>::insert(product_id, settlement_id, product_nav);
+			let mut seen = BTreeSet::new();
+			for settle in tranches.iter() {
+				ensure!(seen.insert(settle.vault.clone()), Error::<T>::DuplicateTrancheSettleEntry);
+				ensure!(
+					T::Vaults::vault_belongs_to_product(product_id, &settle.vault),
+					Error::<T>::VaultNotRegistered
+				);
+			}
 
-			Self::deposit_event(Event::ProductNavRecorded {
+			TrancheSettlements::<T>::insert(
 				product_id,
 				settlement_id,
+				TrancheSettlement { tranches, pending_deposit_assets },
+			);
+			ProductNavs::<T>::insert(product_id, settlement_id, product_nav);
+
+			Self::deposit_event(Event::TrancheSettlementRecorded {
+				product_id,
+				settlement_id,
+				pending_deposit_assets,
 				product_nav,
 			});
 			Ok(())

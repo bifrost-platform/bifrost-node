@@ -58,6 +58,26 @@ interface Investments {
         bool counted;
     }
 
+    /// @dev Post-waterfall settlement result for a single tranche, one entry per tranche within
+    ///      a product. Distinct from AdapterValuation.principal (that's capital deployed into
+    ///      one yield source; this is a tranche's own Senior principal claim) — neither
+    ///      substitutes for the other.
+    /// @param vault_chain_id     EVM chain ID where the tranche's ERC-7540 vault is deployed
+    /// @param vault_address      ERC-7540 vault contract address identifying the tranche
+    /// @param tranche_nav        This tranche's NAV after the waterfall, in the product's base asset
+    /// @param share_price        Tranche share-token price, FixedU128-style 1e18 fixed-point
+    /// @param units_outstanding  Tranche share-token total supply after this settlement
+    /// @param principal          Senior-tranche principal claim — pass zero for Junior, same
+    ///                           Senior-only convention as TrancheSystem's TrancheInput.apr
+    struct TrancheSettle {
+        uint64 vault_chain_id;
+        address vault_address;
+        uint256 tranche_nav;
+        uint256 share_price;
+        uint256 units_outstanding;
+        uint256 principal;
+    }
+
     event InvestmentRequested(
         uint256 product_id,
         uint256 request_id,
@@ -80,9 +100,10 @@ interface Investments {
         uint256 settlement_id,
         AdapterValuation[] valuations
     );
-    event ProductNavRecorded(
+    event TrancheSettlementRecorded(
         uint256 product_id,
         uint256 settlement_id,
+        uint256 pending_deposit_assets,
         uint256 product_nav
     );
 
@@ -156,8 +177,8 @@ interface Investments {
      *      payload vary by a leading `structure_type` discriminant byte without changing this
      *      function's signature; now that the shape is a fixed struct (one entry per Adapter),
      *      that flexibility is gone, so the name narrows to match what this call actually
-     *      records. The settlement's aggregate total is a separate call — see
-     *      `record_product_nav` below.
+     *      records. The settlement's aggregate total is recorded separately, as
+     *      part of `record_tranche_settlement` below.
      *      Emits AdapterValuationsRecorded on success.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  Valuation Contract's settlement cycle this info belongs to
@@ -170,23 +191,37 @@ interface Investments {
     ) external;
 
     /**
-     * @notice Record the settlement's finalized aggregate NAV across all of the product's
-     *         sources, once the Valuation Contract has completed that settlement cycle.
-     * @dev Only callable by the product's registered Valuation contract address.
-     *      `product_nav` is the finalized total across all of the product's sources (both
-     *      OnchainSource adapters, read live by Valuation, and OffchainSource adapters, fed
-     *      via pallet-rwa-nav-oracle) — the aggregate figure Valuation actually used for this
-     *      settlement's waterfall/share-price computation. Not independently verified by this
-     *      pallet against `record_adapter_valuations`'s breakdown — Valuation is trusted for
-     *      the aggregation, same as it's trusted for every other value in this interface.
-     *      Emits ProductNavRecorded on success.
-     * @param product_id     The product this settlement belongs to
-     * @param settlement_id  Valuation Contract's settlement cycle this NAV belongs to
-     * @param product_nav    Finalized total NAV across all sources for this settlement (sum, not per-source)
+     * @notice Record the post-waterfall per-tranche settlement result for a settlement cycle:
+     *         each tranche's NAV/share price/units/principal, the product's pending
+     *         (unconfirmed) deposit total, and the product's finalized aggregate NAV.
+     * @dev Only callable by the product's registered Valuation contract address. Callable at
+     *      most once per (product_id, settlement_id) — same as record_adapter_valuations.
+     *      Folds what used to be the separate record_product_nav call in here, so both are
+     *      recorded atomically in one transaction: `product_nav` is the finalized total across
+     *      all of the product's sources (both OnchainSource adapters, read live by Valuation,
+     *      and OffchainSource adapters, fed via pallet-rwa-nav-oracle) — the aggregate figure
+     *      Valuation actually used for this settlement's waterfall/share-price computation. Not
+     *      independently verified by this pallet against `record_adapter_valuations`'s
+     *      breakdown — Valuation is trusted for the aggregation, same as it's trusted for every
+     *      other value in this interface.
+     *      `tranches[i].units_outstanding`/`tranches[i].principal` are overwritten wholesale by
+     *      each new settlement — record_investment_approval does not separately accumulate
+     *      tranche-level totals, so this call is the sole source of truth for them going
+     *      forward, read back by the next settlement cycle.
+     *      Emits TrancheSettlementRecorded on success.
+     * @param product_id              The product this settlement belongs to
+     * @param settlement_id           Valuation Contract's settlement cycle this result belongs to
+     * @param tranches                Post-waterfall result for every tranche, one entry per tranche
+     * @param pending_deposit_assets  Product-level pending/unconfirmed deposit amount as of this
+     *                                settlement — not yet reflected in any tranche's units_outstanding
+     * @param product_nav             Finalized total NAV across all sources for this settlement
+     *                                (sum, not per-source)
      */
-    function record_product_nav(
+    function record_tranche_settlement(
         uint256 product_id,
         uint256 settlement_id,
+        TrancheSettle[] calldata tranches,
+        uint256 pending_deposit_assets,
         uint256 product_nav
     ) external;
 }
