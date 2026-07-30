@@ -288,10 +288,11 @@ pub struct ValuationInfo {
 	/// in that call path).
 	pub valuation_address: H160,
 	/// Unix timestamp (seconds) the first settlement cycle begins. Admin-set
-	/// at `create_product` — can be in the future, letting a product's
-	/// settlement schedule be set up before it goes live. Every later cycle
-	/// starts at `settlement_start_timestamp + k * settlement_length_secs` for
-	/// integer `k`.
+	/// at `create_product` — must be strictly after the block time `create_product`
+	/// executes in (`create_product` reverts otherwise), letting a product's
+	/// settlement schedule be set up before it goes live but never backdated.
+	/// Every later cycle starts at `settlement_start_timestamp + k *
+	/// settlement_length_secs` for integer `k`.
 	///
 	/// Purely configuration: this pallet takes no action on its own when the
 	/// time arrives. Settlement (calling `Valuation.tryUpdateNav()`) is
@@ -301,12 +302,17 @@ pub struct ValuationInfo {
 	pub settlement_start_timestamp: u64,
 	/// Length of one settlement cycle, in seconds, counted from
 	/// `settlement_start_timestamp`. Admin-set; recommended to be at least the
-	/// GCD of the underlying yield sources' cycles.
+	/// GCD of the underlying yield sources' cycles. Must be strictly greater
+	/// than `settlement_offset_secs` (`create_product` reverts otherwise) —
+	/// see that field's doc comment for why.
 	pub settlement_length_secs: u64,
 	/// Width, in seconds, of the settlement window at the *end* of each
 	/// cycle — e.g. `3600` for a 1-hour window (not "seconds since the cycle
 	/// started"). Order submission closes ("market close") when the window
-	/// opens.
+	/// opens. Must be strictly less than `settlement_length_secs`
+	/// (`create_product` reverts otherwise) — otherwise the window would
+	/// swallow the whole cycle (or more), leaving no room for order
+	/// submission at all.
 	pub settlement_offset_secs: u64,
 }
 

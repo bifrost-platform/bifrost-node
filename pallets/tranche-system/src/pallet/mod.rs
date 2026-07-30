@@ -47,7 +47,7 @@ pub mod pallet {
 	}
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_timestamp::Config<Moment = u64> {
 		/// Only accepted origin for every extrinsic in this pallet
 		/// (`create_product`, `set_tranche`, `set_adapters`,
 		/// `set_multichain_adapters`) — none of them can be called via a plain
@@ -111,6 +111,14 @@ pub mod pallet {
 		/// discriminant (only `apr` and `priority` are mutable) — remove and
 		/// re-add to change it.
 		TrancheTypeImmutable,
+		/// `settlement_offset_secs` must be strictly less than
+		/// `settlement_length_secs` — otherwise the settlement window would
+		/// swallow the whole cycle (or more), leaving no room for order
+		/// submission.
+		SettlementOffsetMustBeShorterThanLength,
+		/// `settlement_start_timestamp` must be strictly after the current
+		/// block time.
+		SettlementStartMustBeInFuture,
 	}
 
 	// -----------------------------------------------------------------------
@@ -220,6 +228,15 @@ pub mod pallet {
 
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
+			ensure!(
+				valuation.settlement_offset_secs < valuation.settlement_length_secs,
+				Error::<T>::SettlementOffsetMustBeShorterThanLength
+			);
+			let now_secs = <pallet_timestamp::Pallet<T>>::get() / 1000;
+			ensure!(
+				valuation.settlement_start_timestamp > now_secs,
+				Error::<T>::SettlementStartMustBeInFuture
+			);
 
 			Self::ensure_weights_sum_to_10000(
 				multichain_adapters.values().map(|info| info.weight_bps),

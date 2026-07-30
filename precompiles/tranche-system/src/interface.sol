@@ -124,8 +124,10 @@ interface TrancheSystem {
     }
 
     /// @param valuation_address           Hub-chain Valuation contract address for this product
-    /// @param settlement_start_timestamp  Unix timestamp the first settlement cycle begins; can
-    ///                                     be in the future. Every later cycle starts at
+    /// @param settlement_start_timestamp  Unix timestamp the first settlement cycle begins; must
+    ///                                     be strictly after the block time create_product
+    ///                                     executes in (reverts otherwise) — can be scheduled
+    ///                                     ahead, never backdated. Every later cycle starts at
     ///                                     settlement_start_timestamp + k * settlement_length_secs.
     ///                                     Purely configuration — read off-chain by the settlement
     ///                                     bot that calls Valuation.tryUpdateNav(); no on-chain
@@ -133,11 +135,14 @@ interface TrancheSystem {
     /// @param settlement_length_secs      Length of one settlement cycle, in seconds, counted
     ///                                     from settlement_start_timestamp; admin-set, recommended
     ///                                     to be at least the GCD of the underlying yield sources'
-    ///                                     cycles
+    ///                                     cycles. Must be strictly greater than
+    ///                                     settlement_offset_secs (reverts otherwise)
     /// @param settlement_offset_secs      Width, in seconds, of the settlement window at the
     ///                                     *end* of each cycle (e.g. 3600 for a 1-hour window) —
     ///                                     not seconds since the cycle started. Order submission
-    ///                                     closes ("market close") when the window opens
+    ///                                     closes ("market close") when the window opens. Must be
+    ///                                     strictly less than settlement_length_secs (reverts
+    ///                                     otherwise)
     struct ValuationInput {
         address valuation_address;
         uint64 settlement_start_timestamp;
@@ -246,8 +251,11 @@ interface TrancheSystem {
      *      share a `priority`, sorting by `priority` doesn't put every Senior tranche
      *      before every Junior one, weightBps across `multichain_adapters` don't sum
      *      to 100% (10_000 bps), any entry's nested `adapters` weightBps don't
-     *      themselves sum to 100%, or the same nested Adapter (address, chain_id)
-     *      appears under two different `multichain_adapters` entries.
+     *      themselves sum to 100%, the same nested Adapter (address, chain_id)
+     *      appears under two different `multichain_adapters` entries,
+     *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`, or
+     *      `valuation.settlement_start_timestamp` is not strictly after the current
+     *      block time.
      *      Emits ProductCreated on success.
      * @param product_id          Hub product ID (already granted to the caller via ProductAdmin)
      * @param valuation           Valuation contract binding + settlement cadence config
