@@ -132,6 +132,7 @@ pub mod pallet {
 		ProductCreated {
 			product_id: ProductId,
 			product_admin: T::AccountId,
+			base_asset: H160,
 			valuation_address: H160,
 			settlement_start_timestamp: u64,
 			settlement_length_secs: u64,
@@ -143,6 +144,8 @@ pub mod pallet {
 			action: CrudAction,
 			vault: VaultId,
 			tranche_type: TrancheType,
+			asset: H160,
+			shares: H160,
 			priority: u8,
 		},
 		/// A MultichainAdapter's nested adapters were replaced wholesale.
@@ -263,7 +266,12 @@ pub mod pallet {
 			}
 			let ordered: Vec<Tranche> = sorted
 				.into_iter()
-				.map(|input| Tranche { tranche_type: input.tranche_type, vault: input.vault })
+				.map(|input| Tranche {
+					tranche_type: input.tranche_type,
+					vault: input.vault,
+					asset: input.asset,
+					shares: input.shares,
+				})
 				.collect();
 			Self::ensure_senior_precedes_junior(&ordered)?;
 			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>> =
@@ -280,6 +288,7 @@ pub mod pallet {
 			Self::deposit_event(Event::ProductCreated {
 				product_id,
 				product_admin,
+				base_asset: valuation.base_asset,
 				valuation_address: valuation.valuation_address,
 				settlement_start_timestamp: valuation.settlement_start_timestamp,
 				settlement_length_secs: valuation.settlement_length_secs,
@@ -304,18 +313,19 @@ pub mod pallet {
 		/// ones (same invariant `create_product` establishes) — reverts if the
 		/// requested change would break it.
 		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
-		///   any product). `tranche_type` and `priority` are used. If `priority` is already
-		///   occupied, the existing tranche at that slot (and everything after it) shifts down by
-		///   one.
+		///   any product). `tranche_type`, `asset`, `shares`, and `priority` are used. If
+		///   `priority` is already occupied, the existing tranche at that slot (and everything
+		///   after it) shifts down by one.
 		/// - `Remove`: only `vault` is used, to find which tranche to remove. Every tranche after
 		///   it shifts up by one, closing the gap. NOT YET CHECKED (deferred): interface.sol also
 		///   specifies this should revert if the tranche has outstanding investments —
 		///   pallet-tranche-investments doesn't expose an inspection trait for this yet.
 		/// - `Update`: `vault` identifies which tranche to update (reverts if not found);
-		///   `priority` is applied as a new value using the same insert-and-shift semantics as
-		///   `Add`. `tranche_type`'s Junior/Senior discriminant is immutable — reverts if it
-		///   doesn't match the existing tranche's; `apr` (carried inside `tranche_type` for
-		///   `Senior`) may still change, since only the discriminant is checked.
+		///   `asset`, `shares`, and `priority` are applied as new values using the same
+		///   insert-and-shift semantics as `Add` for `priority`. `tranche_type`'s Junior/Senior
+		///   discriminant is immutable — reverts if it doesn't match the existing tranche's;
+		///   `apr` (carried inside `tranche_type` for `Senior`) may still change, since only the
+		///   discriminant is checked.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_tranche())]
 		pub fn set_tranche(
@@ -324,6 +334,8 @@ pub mod pallet {
 			action: CrudAction,
 			vault: VaultId,
 			tranche_type: TrancheType,
+			asset: H160,
+			shares: H160,
 			priority: u8,
 		) -> DispatchResult {
 			T::ProductAdminOrigin::ensure_origin(origin)?;
@@ -346,6 +358,8 @@ pub mod pallet {
 								Tranche {
 									tranche_type: tranche_type.clone(),
 									vault: vault.clone(),
+									asset,
+									shares,
 								},
 							)
 							.map_err(|_| Error::<T>::TooManyTranches)?;
@@ -385,6 +399,8 @@ pub mod pallet {
 								Tranche {
 									tranche_type: tranche_type.clone(),
 									vault: vault.clone(),
+									asset,
+									shares,
 								},
 							)
 							.map_err(|_| Error::<T>::TooManyTranches)?;
@@ -399,6 +415,8 @@ pub mod pallet {
 				action,
 				vault,
 				tranche_type,
+				asset,
+				shares,
 				priority,
 			});
 			Ok(())

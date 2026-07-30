@@ -36,7 +36,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn record_tranche_settlement() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
-			.saturating_add(T::DbWeight::get().writes(2_u64))
+			.saturating_add(T::DbWeight::get().writes(3_u64))
 	}
 }
 
@@ -60,6 +60,6 @@ impl WeightInfo for () {
 	fn record_tranche_settlement() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
-			.saturating_add(RocksDbWeight::get().writes(2_u64))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
 	}
 }

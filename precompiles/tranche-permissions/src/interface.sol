@@ -137,4 +137,34 @@ interface TranchePermissions {
         address who,
         VaultInput calldata vault
     ) external;
+
+    /**
+     * @notice Read whether `who` currently holds the TrancheInvestor whitelist for `vault`.
+     * @dev `product_id` is accepted for signature symmetry with grant_permission/
+     *      revoke_permission but isn't part of the actual check — the whitelist is keyed
+     *      by `vault` alone (globally unique across all products).
+     * @param product_id Accepted for signature symmetry; not used in the lookup itself
+     * @param vault      Identifies the tranche whose whitelist is being checked
+     * @param who        EVM address to check
+     */
+    function is_tranche_investor(
+        uint256 product_id,
+        VaultInput calldata vault,
+        address who
+    ) external view returns (bool);
+
+    /**
+     * @notice Read whether `who` holds `role` for `product_id`.
+     * @dev Only ProductAdmin and OracleFeeder are supported here — TrancheInvestor
+     *      reverts (it has no `vault` parameter on this signature); use
+     *      is_tranche_investor for that role instead.
+     * @param product_id The product to check
+     * @param role       ProductAdmin or OracleFeeder
+     * @param who        EVM address to check
+     */
+    function has_role(
+        uint256 product_id,
+        Role role,
+        address who
+    ) external view returns (bool);
 }

@@ -201,11 +201,6 @@ pub mod pallet {
 	/// `ProductNavs`. `units_outstanding`/`principal` are overwritten
 	/// wholesale by each new settlement — nothing else in this pallet
 	/// separately accumulates them.
-	///
-	/// No separate "last settlement_id" pointer is kept here — the Valuation
-	/// Contract already tracks that itself off-chain (it's the one that
-	/// assigns `settlement_id`s in the first place), so this pallet doesn't
-	/// duplicate that bookkeeping.
 	pub type TrancheSettlements<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -214,6 +209,19 @@ pub mod pallet {
 		SettlementId,
 		TrancheSettlement,
 	>;
+
+	#[pallet::storage]
+	/// The most recently recorded `settlement_id` per product, written
+	/// alongside `TrancheSettlements`/`ProductNavs` by `record_tranche_settlement`.
+	/// The Valuation Contract remains the source of truth for settlement_id
+	/// assignment/incrementing (this pallet never generates or advances it on
+	/// its own) — this pointer exists purely to serve read-side queries that
+	/// need "the latest settlement" without a `settlement_id` parameter
+	/// (`get_settlement_id`/`get_tranche_state`/`get_pending_deposit_assets`/
+	/// `get_last_settlement` on the precompile). It plays no role in
+	/// `record_tranche_settlement`'s own duplicate-write check, which still
+	/// keys off `TrancheSettlements::contains_key` directly.
+	pub type LastSettlementId<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, SettlementId>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
@@ -401,6 +409,7 @@ pub mod pallet {
 				TrancheSettlement { tranches, pending_deposit_assets },
 			);
 			ProductNavs::<T>::insert(product_id, settlement_id, product_nav);
+			LastSettlementId::<T>::insert(product_id, settlement_id);
 
 			Self::deposit_event(Event::TrancheSettlementRecorded {
 				product_id,

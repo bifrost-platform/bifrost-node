@@ -123,6 +123,11 @@ interface TrancheSystem {
         uint256 nft_token_id;
     }
 
+    /// @param base_asset                  The product's denomination asset — its token address
+    ///                                     on the Hub chain. Immutable after create_product; every
+    ///                                     NAV/price value recorded against this product elsewhere
+    ///                                     (Investments' TrancheSettle.tranche_nav, product_nav,
+    ///                                     etc.) is denominated in this asset
     /// @param valuation_address           Hub-chain Valuation contract address for this product
     /// @param settlement_start_timestamp  Unix timestamp the first settlement cycle begins; must
     ///                                     be strictly after the block time create_product
@@ -144,6 +149,7 @@ interface TrancheSystem {
     ///                                     strictly less than settlement_length_secs (reverts
     ///                                     otherwise)
     struct ValuationInput {
+        address base_asset;
         address valuation_address;
         uint64 settlement_start_timestamp;
         uint64 settlement_length_secs;
@@ -160,11 +166,21 @@ interface TrancheSystem {
     /// @param tranche_type Junior or Senior
     /// @param apr          Fixed APR as a FixedU128 inner value (1e18 = 100%); Senior-only, see notes above
     /// @param vault        The ERC-7540 vault identifying this tranche
+    /// @param asset        The asset investors deposit when depositing into `vault` — a token
+    ///                     address on `vault.chain_id` (not necessarily the Hub chain, and not
+    ///                     necessarily the same asset across different tranches of the same
+    ///                     product). Distinct from ValuationInput.base_asset, which is the
+    ///                     Hub-chain asset NAV/pricing is denominated in
+    /// @param shares       This tranche's own share-token contract address — the ERC-7540
+    ///                     vault's share token investors receive/burn on deposit/redeem, on
+    ///                     `vault.chain_id`. Distinct from `asset` (what's deposited in)
     /// @param priority     Waterfall priority within the product; 0 = highest priority, see notes above
     struct TrancheInput {
         TrancheType tranche_type;
         uint256 apr;
         VaultInput vault;
+        address asset;
+        address shares;
         uint8 priority;
     }
 
@@ -207,6 +223,7 @@ interface TrancheSystem {
     event ProductCreated(
         uint256 product_id,
         address product_admin,
+        address base_asset,
         address valuation_address,
         uint64 settlement_start_timestamp,
         uint64 settlement_length_secs,
@@ -219,6 +236,8 @@ interface TrancheSystem {
         uint256 apr,
         uint64 vault_chain_id,
         address vault_address,
+        address asset,
+        address shares,
         uint8 priority
     );
     event AdaptersSet(
@@ -281,23 +300,24 @@ interface TrancheSystem {
      *      path that bypasses this check.
      *      Field usage differs by `action` — unused fields are ignored, but callers
      *      must still supply the full struct (e.g. pass zero/default values for
-     *      `tranche_type`/`apr`/`priority` on a `Remove` call):
+     *      `tranche_type`/`apr`/`asset`/`shares`/`priority` on a `Remove` call):
      *        - Add:    `tranche.vault` becomes the new tranche's identity (reverts if
      *                  a tranche with the same vault already exists for this product).
-     *                  `tranche_type`, `apr` (Senior-only), and `priority` are used.
-     *                  If `priority` is already occupied, the existing tranche at that
-     *                  slot (and everything after it) shifts down by one.
+     *                  `tranche_type`, `apr` (Senior-only), `asset`, `shares`, and
+     *                  `priority` are used. If `priority` is already occupied, the
+     *                  existing tranche at that slot (and everything after it) shifts
+     *                  down by one.
      *        - Remove: only `tranche.vault` is used, to identify which tranche to
      *                  remove (reverts if not found, or if it has outstanding
      *                  investments). Every tranche with a lower priority ranking
      *                  (higher numeric value) than the removed one shifts up by
      *                  one, closing the gap.
      *        - Update: `tranche.vault` identifies which tranche to update (reverts
-     *                  if not found); `apr` and `priority` are applied as new values.
-     *                  `tranche_type`'s Junior/Senior discriminant is immutable —
-     *                  reverts if it doesn't match the existing tranche's (remove +
-     *                  re-add to actually change it); `apr` may still change freely
-     *                  for a Senior tranche, since only the discriminant is checked.
+     *                  if not found); `apr`, `asset`, `shares`, and `priority` are
+     *                  applied as new values. `tranche_type`'s Junior/Senior discriminant
+     *                  is immutable — reverts if it doesn't match the existing tranche's
+     *                  (remove + re-add to actually change it); `apr` may still change
+     *                  freely for a Senior tranche, since only the discriminant is checked.
      *                  If `priority` differs from the tranche's current priority, it
      *                  re-inserts using the same shift semantics as Add.
      *      Every branch reverts if the resulting full tranche list would put any
@@ -383,4 +403,47 @@ interface TrancheSystem {
         uint256 product_id,
         MultichainAdapterInput[] calldata multichain_adapters
     ) external;
+
+    /**
+     * @notice Read a product's Valuation binding and settlement-cadence config.
+     * @dev Reverts if `product_id` doesn't exist.
+     * @param product_id The product to look up
+     */
+    function get_product(
+        uint256 product_id
+    )
+        external
+        view
+        returns (
+            address base_asset,
+            address valuation,
+            uint64 settlement_start_timestamp,
+            uint64 settlement_length_secs,
+            uint64 settlement_offset_secs
+        );
+
+    /**
+     * @notice Read a product's tranches, in waterfall priority order (index 0 = highest
+     *         priority — see notes above).
+     * @dev Reverts if `product_id` doesn't exist. Each returned entry's `priority` field
+     *      reflects current stored order, not necessarily whatever `priority` value the
+     *      tranche was originally added/updated with.
+     * @param product_id The product to look up
+     */
+    function get_tranches(
+        uint256 product_id
+    ) external view returns (TrancheInput[] memory tranches);
+
+    /**
+     * @notice Read a product's MultichainAdapter routing table, each entry carrying its
+     *         own nested individual-Adapter registrations.
+     * @dev Reverts if `product_id` doesn't exist.
+     * @param product_id The product to look up
+     */
+    function get_multichain_adapters(
+        uint256 product_id
+    )
+        external
+        view
+        returns (MultichainAdapterInput[] memory multichain_adapters);
 }

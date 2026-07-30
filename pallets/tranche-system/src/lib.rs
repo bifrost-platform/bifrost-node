@@ -163,6 +163,17 @@ pub enum TrancheType {
 pub struct Tranche {
 	pub tranche_type: TrancheType,
 	pub vault: VaultId,
+	/// The asset investors deposit when depositing into this tranche's vault —
+	/// a token address on `vault.chain_id` (not necessarily the Hub chain, and
+	/// not necessarily the same asset across different tranches of the same
+	/// product). Distinct from `ValuationInfo::base_asset`, which is the
+	/// Hub-chain asset NAV/pricing is denominated in.
+	pub asset: H160,
+	/// This tranche's own share-token contract address — the ERC-7540 vault's
+	/// share token investors receive/burn on deposit/redeem, on `vault.chain_id`.
+	/// Distinct from `asset` (what's deposited in) and `ValuationInfo::base_asset`
+	/// (the Hub-chain pricing denomination).
+	pub shares: H160,
 }
 
 /// One entry of `create_product`'s `tranches` input. Carries an explicit
@@ -181,6 +192,10 @@ pub struct TrancheInput {
 	pub priority: u8,
 	pub tranche_type: TrancheType,
 	pub vault: VaultId,
+	/// See `Tranche::asset`'s doc comment.
+	pub asset: H160,
+	/// See `Tranche::shares`' doc comment.
+	pub shares: H160,
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +297,11 @@ pub struct MultichainAdapterInfo<AccountId> {
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
 pub struct ValuationInfo {
+	/// The product's denomination asset — its token address on the Hub chain.
+	/// Admin-set at `create_product`, immutable afterward (same as
+	/// `valuation_address`). `tranche_nav`/`product_nav`/etc. throughout
+	/// pallet-tranche-investments are all denominated in this asset.
+	pub base_asset: H160,
 	/// Hub-chain Valuation contract address for this product. This pallet's
 	/// authorization check for pallet-tranche-investments-style calls compares
 	/// the caller against this address (see interface.sol notes — no Gateway

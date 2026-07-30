@@ -39,6 +39,8 @@ type EvmAdapterValuation = (u64, Address, U256, u64, U256, Vec<EvmAssetPosition>
 /// `TrancheSettle` — (vault_chain_id, vault_address, tranche_nav, share_price,
 /// units_outstanding, principal)
 type EvmTrancheSettle = (u64, Address, U256, U256, U256, U256);
+/// `VaultInput` — (chain_id, vault_address)
+type EvmVaultInput = (u64, Address);
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -262,6 +264,224 @@ where
 
 		Ok(())
 	}
+
+	/// Read a product's current settlement_id — the value most recently passed to
+	/// `record_tranche_settlement`. Zero if the product has never settled yet.
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_settlement_id(uint256)")]
+	#[precompile::view]
+	fn get_settlement_id(handle: &mut impl PrecompileHandle, product_id: U256) -> EvmResult<U256> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		Ok(pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
+			.unwrap_or_default())
+	}
+
+	/// Enumerate pending (unapproved) request IDs for a product, scoped to one
+	/// settlement batch, with offset/limit pagination.
+	///
+	/// @param product_id    The product to look up
+	/// @param settlement_id Only requests recorded against this settlement cycle are returned
+	/// @param offset        Number of matching entries to skip
+	/// @param limit         Maximum number of entries to return
+	#[precompile::public("get_pending_requests(uint256,uint256,uint256,uint256)")]
+	#[precompile::view]
+	fn get_pending_requests(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		settlement_id: U256,
+		offset: U256,
+		limit: U256,
+	) -> EvmResult<Vec<U256>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let offset = to_u64(offset)?;
+		let limit = to_u64(limit)?;
+
+		let mut ids = Vec::new();
+		let mut skipped = 0u64;
+		let mut collected = 0u64;
+		for (request_id, requested) in
+			pallet_tranche_investments::RequestedInvestments::<Runtime>::iter_prefix(product_id)
+		{
+			if requested.settlement_id != settlement_id {
+				continue;
+			}
+			if skipped < offset {
+				skipped += 1;
+				continue;
+			}
+			if collected >= limit {
+				break;
+			}
+			ids.push(request_id);
+			collected += 1;
+		}
+		Ok(ids)
+	}
+
+	/// Read a single request's current state — pending or approved.
+	///
+	/// @param product_id The product the request belongs to
+	/// @param request_id The request to look up
+	/// @return investor, vault_chain_id, vault, amount, settlement_id, order_type, status
+	/// (status: 0 = pending, 1 = approved)
+	#[precompile::public("get_request(uint256,uint256)")]
+	#[precompile::view]
+	fn get_request(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		request_id: U256,
+	) -> EvmResult<(Address, u64, Address, U256, U256, u8, u8)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+
+		if let Some(requested) =
+			pallet_tranche_investments::RequestedInvestments::<Runtime>::get(product_id, request_id)
+		{
+			return Ok((
+				Address(requested.investor_address),
+				requested.vault.chain_id,
+				Address(requested.vault.vault_address),
+				requested.amount,
+				requested.settlement_id,
+				encode_order_type(requested.order_type),
+				0u8,
+			));
+		}
+		if let Some(approved) =
+			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
+		{
+			let requested = &approved.requested;
+			return Ok((
+				Address(requested.investor_address),
+				requested.vault.chain_id,
+				Address(requested.vault.vault_address),
+				requested.amount,
+				approved.settlement_id,
+				encode_order_type(requested.order_type),
+				1u8,
+			));
+		}
+		Err(revert("request not found"))
+	}
+
+	/// Read a tranche's outstanding units and Senior principal claim, as of the
+	/// product's most recently recorded settlement.
+	///
+	/// @param product_id The product the tranche belongs to
+	/// @param tranche    The tranche's identifying vault (chain_id, vault_address)
+	/// @return units_outstanding, principal
+	#[precompile::public("get_tranche_state(uint256,(uint64,address))")]
+	#[precompile::view]
+	fn get_tranche_state(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		tranche: EvmVaultInput,
+	) -> EvmResult<(U256, U256)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let (chain_id, vault_address) = tranche;
+		let vault = VaultId { chain_id, vault_address: vault_address.0 };
+
+		let last_id = pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settlement =
+			pallet_tranche_investments::TrancheSettlements::<Runtime>::get(product_id, last_id)
+				.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settle = settlement
+			.tranches
+			.iter()
+			.find(|s| s.vault == vault)
+			.ok_or_else(|| revert("tranche not found in latest settlement"))?;
+		Ok((settle.units_outstanding, settle.principal))
+	}
+
+	/// Read a product's pending (unconfirmed) deposit total, as of the product's
+	/// most recently recorded settlement. Zero if the product has never settled.
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_pending_deposit_assets(uint256)")]
+	#[precompile::view]
+	fn get_pending_deposit_assets(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+	) -> EvmResult<U256> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let Some(last_id) =
+			pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
+		else {
+			return Ok(U256::zero());
+		};
+		Ok(pallet_tranche_investments::TrancheSettlements::<Runtime>::get(product_id, last_id)
+			.map(|s| s.pending_deposit_assets)
+			.unwrap_or_default())
+	}
+
+	/// Read a product's most recently recorded settlement: its settlement_id, each
+	/// tranche's share price/NAV (ordered by tranche priority — see TrancheSystem's
+	/// `get_tranches`, NOT the order Valuation happened to submit them in), and the
+	/// product's finalized aggregate NAV.
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_last_settlement(uint256)")]
+	#[precompile::view]
+	fn get_last_settlement(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+	) -> EvmResult<(U256, Vec<U256>, Vec<U256>, U256)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+
+		let last_id = pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settlement =
+			pallet_tranche_investments::TrancheSettlements::<Runtime>::get(product_id, last_id)
+				.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let product_nav =
+			pallet_tranche_investments::ProductNavs::<Runtime>::get(product_id, last_id)
+				.ok_or_else(|| revert("product has no recorded settlement"))?;
+
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+
+		let mut share_prices = Vec::with_capacity(product.tranches.len());
+		let mut tranche_navs = Vec::with_capacity(product.tranches.len());
+		for tranche in product.tranches.iter() {
+			let settle = settlement
+				.tranches
+				.iter()
+				.find(|s| s.vault == tranche.vault)
+				.ok_or_else(|| revert("tranche missing from latest settlement"))?;
+			share_prices.push(settle.share_price);
+			tranche_navs.push(settle.tranche_nav);
+		}
+
+		Ok((last_id, share_prices, tranche_navs, product_nav))
+	}
+
+	/// Read a request's approval details.
+	///
+	/// @param product_id The product the request belongs to
+	/// @param request_id The request to look up
+	/// @return settlement_id, claimable_assets, status (always 1 = approved; reverts if
+	/// no approval is recorded for `request_id`)
+	#[precompile::public("get_approval(uint256,uint256)")]
+	#[precompile::view]
+	fn get_approval(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		request_id: U256,
+	) -> EvmResult<(U256, U256, u8)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let approved =
+			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
+				.ok_or_else(|| revert("approval not found"))?;
+		Ok((approved.settlement_id, approved.claimable_assets, 1u8))
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +518,22 @@ fn decode_order_type(order_type: u8) -> EvmResult<OrderType> {
 		1 => Ok(OrderType::Deposit),
 		_ => Err(revert("invalid order_type")),
 	}
+}
+
+fn encode_order_type(order_type: OrderType) -> u8 {
+	match order_type {
+		OrderType::Redeem => 0,
+		OrderType::Deposit => 1,
+	}
+}
+
+/// Reverts rather than silently truncating if `value` doesn't fit `u64` —
+/// shared by `get_pending_requests`'s `offset`/`limit` parameters.
+fn to_u64(value: U256) -> EvmResult<u64> {
+	if value > U256::from(u64::MAX) {
+		return Err(revert("value exceeds u64::MAX"));
+	}
+	Ok(value.as_u64())
 }
 
 fn decode_allocations(

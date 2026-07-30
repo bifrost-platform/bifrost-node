@@ -224,4 +224,142 @@ interface Investments {
         uint256 pending_deposit_assets,
         uint256 product_nav
     ) external;
+
+    /// @param chain_id      EVM chain ID where the tranche's ERC-7540 vault is deployed
+    /// @param vault_address ERC-7540 vault contract address identifying the tranche
+    struct VaultInput {
+        uint64 chain_id;
+        address vault_address;
+    }
+
+    /**
+     * @notice Read a product's current settlement_id — the value most recently passed to
+     *         record_tranche_settlement.
+     * @dev This pallet never generates or increments settlement_id itself — the Valuation
+     *      Contract remains the source of truth for assignment; this just echoes back the
+     *      last value it recorded. Zero if the product has never settled yet.
+     * @param product_id The product to look up
+     */
+    function get_settlement_id(
+        uint256 product_id
+    ) external view returns (uint256);
+
+    /**
+     * @notice Enumerate pending (unapproved) request IDs for a product, scoped to one
+     *         settlement batch, with offset/limit pagination.
+     * @dev `settlement_id` scopes to requests recorded (via record_investment_request)
+     *      against that settlement cycle specifically — lets a caller process only the
+     *      current batch and leave requests carried over from an earlier, still-unapproved
+     *      batch for later.
+     * @param product_id    The product to look up
+     * @param settlement_id Only requests recorded against this settlement cycle are returned
+     * @param offset        Number of matching entries to skip
+     * @param limit         Maximum number of entries to return
+     */
+    function get_pending_requests(
+        uint256 product_id,
+        uint256 settlement_id,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (uint256[] memory request_ids);
+
+    /**
+     * @notice Read a single request's current state — pending or approved.
+     * @dev Reverts if no request exists for `request_id` (neither pending nor approved).
+     *      `settlement_id` is the request-time cycle while pending, or the approval-time
+     *      cycle once approved (these can differ — see record_investment_approval notes).
+     * @param product_id The product the request belongs to
+     * @param request_id The request to look up
+     * @return investor           Investor address on the external chain
+     * @return vault_chain_id     EVM chain ID of the tranche vault this request targets
+     * @return vault              ERC-7540 vault contract address on that chain
+     * @return amount             Investor's full requested amount (pre-allocation)
+     * @return settlement_id      See dev notes above
+     * @return order_type         0 = redeem, 1 = deposit
+     * @return status             0 = pending, 1 = approved
+     */
+    function get_request(
+        uint256 product_id,
+        uint256 request_id
+    )
+        external
+        view
+        returns (
+            address investor,
+            uint64 vault_chain_id,
+            address vault,
+            uint256 amount,
+            uint256 settlement_id,
+            uint8 order_type,
+            uint8 status
+        );
+
+    /**
+     * @notice Read a tranche's outstanding units and Senior principal claim, as of the
+     *         product's most recently recorded settlement.
+     * @dev Reverts if the product has no recorded settlement yet, or if `tranche` wasn't
+     *      part of the latest settlement's tranches array.
+     * @param product_id The product the tranche belongs to
+     * @param tranche    The tranche's identifying vault
+     * @return units_outstanding Tranche share-token total supply as of the latest settlement
+     * @return principal         Senior-tranche principal claim (zero for Junior)
+     */
+    function get_tranche_state(
+        uint256 product_id,
+        VaultInput calldata tranche
+    ) external view returns (uint256 units_outstanding, uint256 principal);
+
+    /**
+     * @notice Read a product's pending (unconfirmed) deposit total, as of the product's
+     *         most recently recorded settlement.
+     * @dev Zero if the product has never settled yet — distinct from "settled with zero
+     *      pending deposits," but indistinguishable from it by this call alone (pair with
+     *      get_settlement_id if that distinction matters to the caller).
+     * @param product_id The product to look up
+     */
+    function get_pending_deposit_assets(
+        uint256 product_id
+    ) external view returns (uint256);
+
+    /**
+     * @notice Read a product's most recently recorded settlement in full: its
+     *         settlement_id, each tranche's share price and NAV, and the product's
+     *         finalized aggregate NAV.
+     * @dev Reverts if the product has no recorded settlement yet. `share_prices`/
+     *      `tranche_navs` are ordered by the product's CURRENT tranche priority order
+     *      (TrancheSystem.get_tranches' order), not by whatever order Valuation happened
+     *      to submit `tranches` in when it called record_tranche_settlement — reverts if
+     *      a currently-registered tranche is missing from the latest settlement's
+     *      tranches array (a partial settlement can't be summarized this way).
+     * @param product_id The product to look up
+     */
+    function get_last_settlement(
+        uint256 product_id
+    )
+        external
+        view
+        returns (
+            uint256 settlement_id,
+            uint256[] memory share_prices,
+            uint256[] memory tranche_navs,
+            uint256 product_nav
+        );
+
+    /**
+     * @notice Read a request's approval details.
+     * @dev Reverts if no approval is recorded for `request_id`.
+     * @param product_id The product the request belongs to
+     * @param request_id The request to look up
+     * @return settlement_id      Settlement cycle this approval settled in
+     * @return claimable_assets   Finalized claimable amount for the investor
+     * @return status             Always 1 (approved) — a distinct status value from
+     *                            get_request's 0/1 pair only exists there, not here
+     */
+    function get_approval(
+        uint256 product_id,
+        uint256 request_id
+    )
+        external
+        view
+        returns (uint256 settlement_id, uint256 claimable_assets, uint8 status);
 }

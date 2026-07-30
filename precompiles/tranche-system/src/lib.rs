@@ -19,9 +19,9 @@ use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_PRODUCT_CREATED: [u8; 32] =
-	keccak256!("ProductCreated(uint256,address,address,uint64,uint64,uint64)");
+	keccak256!("ProductCreated(uint256,address,address,address,uint64,uint64,uint64)");
 pub(crate) const SELECTOR_LOG_TRANCHE_SET: [u8; 32] =
-	keccak256!("TrancheSet(uint256,uint8,uint8,uint256,uint64,address,uint8)");
+	keccak256!("TrancheSet(uint256,uint8,uint8,uint256,uint64,address,address,address,uint8)");
 pub(crate) const SELECTOR_LOG_ADAPTERS_SET: [u8; 32] = keccak256!(
 	"AdaptersSet(uint256,address,uint64,(uint8,address,uint16,address,(address,uint256)[])[])"
 );
@@ -33,13 +33,13 @@ pub(crate) const SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET: [u8; 32] = keccak256!(
 // interface.sol struct <-> tuple mappings
 // ---------------------------------------------------------------------------
 
-/// `ValuationInput` — (valuation_address, settlement_start_timestamp, settlement_length_secs,
-/// settlement_offset_secs)
-type EvmValuationInput = (Address, u64, u64, u64);
+/// `ValuationInput` — (base_asset, valuation_address, settlement_start_timestamp,
+/// settlement_length_secs, settlement_offset_secs)
+type EvmValuationInput = (Address, Address, u64, u64, u64);
 /// `VaultInput` — (chain_id, vault_address)
 type EvmVaultInput = (u64, Address);
-/// `TrancheInput` — (tranche_type, apr, vault, priority)
-type EvmTrancheInput = (u8, U256, EvmVaultInput, u8);
+/// `TrancheInput` — (tranche_type, apr, vault, asset, shares, priority)
+type EvmTrancheInput = (u8, U256, EvmVaultInput, Address, Address, u8);
 /// `CollateralInput` — (nft_contract, nft_token_id)
 type EvmCollateralInput = (Address, U256);
 /// `AdapterInput` — (source_type, source_address, weightBps, borrower, collaterals)
@@ -77,20 +77,21 @@ where
 	Runtime::RuntimeCall: From<TrancheSystemCall<Runtime>>,
 	Runtime::RuntimeOrigin: From<pallet_tranche_system::Origin<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
+	Runtime::AccountId: Into<H160>,
 {
 	/// Create a new tranche-system product. See `pallet_tranche_system::create_product`'s
 	/// doc comment for full semantics.
 	///
 	/// @param product_id Hub product ID (already granted to the caller via ProductAdmin)
-	/// @param valuation (valuation_address, settlement_start_timestamp, settlement_length_secs,
-	/// settlement_offset_secs)
+	/// @param valuation (base_asset, valuation_address, settlement_start_timestamp,
+	/// settlement_length_secs, settlement_offset_secs)
 	/// @param tranches Tranche configs; each entry's `priority` (0 = highest) determines the
 	/// stored order, not array position — reverts if two entries share a `priority`, or if
 	/// sorting by `priority` doesn't put every Senior tranche before every Junior one
 	/// @param multichain_adapters MultichainAdapter routing entries, each carrying its own
 	/// nested individual-Adapter registrations
 	#[precompile::public(
-		"create_product(uint256,(address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
+		"create_product(uint256,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
 	)]
 	fn create_product(
 		handle: &mut impl PrecompileHandle,
@@ -106,12 +107,14 @@ where
 		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
 
 		let (
+			base_asset,
 			valuation_address,
 			settlement_start_timestamp,
 			settlement_length_secs,
 			settlement_offset_secs,
 		) = valuation;
 		let valuation_info = ValuationInfo {
+			base_asset: base_asset.0,
 			valuation_address: valuation_address.0,
 			settlement_start_timestamp,
 			settlement_length_secs,
@@ -141,6 +144,7 @@ where
 			solidity::encode_event_data((
 				U256::from(product_id),
 				Address(caller),
+				base_asset,
 				valuation_address,
 				settlement_start_timestamp,
 				settlement_length_secs,
@@ -158,8 +162,11 @@ where
 	///
 	/// @param product_id The product whose tranche is being mutated
 	/// @param action     0 = Add, 1 = Remove, 2 = Update
-	/// @param tranche    (tranche_type, apr, vault, priority); field usage differs by `action`
-	#[precompile::public("set_tranche(uint256,uint8,(uint8,uint256,(uint64,address),uint8))")]
+	/// @param tranche    (tranche_type, apr, vault, asset, shares, priority); field usage
+	/// differs by `action`
+	#[precompile::public(
+		"set_tranche(uint256,uint8,(uint8,uint256,(uint64,address),address,address,uint8))"
+	)]
 	fn set_tranche(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
@@ -171,7 +178,7 @@ where
 		let product_id = to_product_id(product_id)?;
 		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
 		let decoded_action = decode_crud_action(action)?;
-		let (tranche_type_byte, apr, vault, priority) = tranche;
+		let (tranche_type_byte, apr, vault, asset, shares, priority) = tranche;
 		let (vault_chain_id, vault_address) = vault;
 		let tranche_type = decode_tranche_type(tranche_type_byte, apr)?;
 		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
@@ -181,6 +188,8 @@ where
 			action: decoded_action,
 			vault: vault_id,
 			tranche_type,
+			asset: asset.0,
+			shares: shares.0,
 			priority,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -200,6 +209,8 @@ where
 				apr,
 				vault_chain_id,
 				vault_address,
+				asset,
+				shares,
 				priority,
 			)),
 		);
@@ -303,6 +314,113 @@ where
 
 		Ok(())
 	}
+
+	/// Read a product's Valuation binding and settlement-cadence config.
+	///
+	/// @param product_id The product to look up
+	/// @return base_asset, valuation_address, settlement_start_timestamp, settlement_length_secs,
+	/// settlement_offset_secs
+	#[precompile::public("get_product(uint256)")]
+	#[precompile::view]
+	fn get_product(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+	) -> EvmResult<(Address, Address, u64, u64, u64)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		Ok((
+			Address(product.valuation.base_asset),
+			Address(product.valuation.valuation_address),
+			product.valuation.settlement_start_timestamp,
+			product.valuation.settlement_length_secs,
+			product.valuation.settlement_offset_secs,
+		))
+	}
+
+	/// Read a product's tranches, in waterfall priority order (index 0 = highest priority).
+	///
+	/// @param product_id The product to look up
+	/// @return Tranche configs; `priority` in each entry reflects stored order, not
+	/// the original create_product input
+	#[precompile::public("get_tranches(uint256)")]
+	#[precompile::view]
+	fn get_tranches(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+	) -> EvmResult<Vec<EvmTrancheInput>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		Ok(product
+			.tranches
+			.iter()
+			.enumerate()
+			.map(|(idx, tranche)| {
+				let (tranche_type, apr) = match &tranche.tranche_type {
+					TrancheType::Junior => (0u8, U256::zero()),
+					TrancheType::Senior { apr } => (1u8, *apr),
+				};
+				(
+					tranche_type,
+					apr,
+					(tranche.vault.chain_id, Address(tranche.vault.vault_address)),
+					Address(tranche.asset),
+					Address(tranche.shares),
+					idx as u8,
+				)
+			})
+			.collect())
+	}
+
+	/// Read a product's MultichainAdapter routing table, each entry carrying its own
+	/// nested individual-Adapter registrations.
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_multichain_adapters(uint256)")]
+	#[precompile::view]
+	fn get_multichain_adapters(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+	) -> EvmResult<Vec<EvmMultichainAdapterInput>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		Ok(product
+			.multichain_adapters
+			.iter()
+			.map(|(key, info)| {
+				let adapters: Vec<EvmAdapterInput> = info
+					.adapters
+					.iter()
+					.map(|(address, adapter_info)| {
+						let (source_type, borrower, collaterals) = match &adapter_info.source_type {
+							SourceType::OffchainSource { borrower, collaterals } => (
+								0u8,
+								Address(borrower.clone().into()),
+								collaterals
+									.iter()
+									.map(|c| (Address(c.nft_contract), c.nft_token_id))
+									.collect::<Vec<EvmCollateralInput>>(),
+							),
+							SourceType::OnchainSource => (1u8, Address(H160::zero()), Vec::new()),
+						};
+						(
+							source_type,
+							Address(*address),
+							adapter_info.weight_bps,
+							borrower,
+							collaterals,
+						)
+					})
+					.collect();
+				(Address(key.address), key.chain_id, info.weight_bps, adapters)
+			})
+			.collect())
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -362,12 +480,18 @@ fn decode_tranches(
 	tranches: &[EvmTrancheInput],
 ) -> EvmResult<BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>> {
 	let mut bounded = BoundedVec::<TrancheInput, ConstU32<MAX_TRANCHES>>::default();
-	for (tranche_type, apr, vault, priority) in tranches.iter().cloned() {
+	for (tranche_type, apr, vault, asset, shares, priority) in tranches.iter().cloned() {
 		let (chain_id, vault_address) = vault;
 		let tranche_type = decode_tranche_type(tranche_type, apr)?;
 		let vault_id = VaultId { chain_id, vault_address: vault_address.0 };
 		bounded
-			.try_push(TrancheInput { priority, tranche_type, vault: vault_id })
+			.try_push(TrancheInput {
+				priority,
+				tranche_type,
+				vault: vault_id,
+				asset: asset.0,
+				shares: shares.0,
+			})
 			.map_err(|_| revert("too many tranches"))?;
 	}
 	Ok(bounded)

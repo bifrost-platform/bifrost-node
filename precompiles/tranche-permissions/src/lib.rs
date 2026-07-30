@@ -181,6 +181,67 @@ where
 
 		Ok(())
 	}
+
+	/// Read whether `who` currently holds the TrancheInvestor whitelist for `vault`.
+	///
+	/// `product_id` is accepted for signature symmetry with the rest of this
+	/// interface (mirrors `grant_permission`) but isn't part of the actual
+	/// check — `TrancheInvestors` is keyed by `vault` alone (globally unique,
+	/// enforced by pallet-tranche-system), same as
+	/// `pallet_tranche_permissions`'s own `has_role`'s TrancheInvestor arm.
+	///
+	/// @param product_id Accepted for signature symmetry; not used in the lookup itself
+	/// @param vault      (chain_id, vault_address) identifying the tranche whose whitelist
+	/// is being checked
+	/// @param who        EVM address to check
+	#[precompile::public("is_tranche_investor(uint256,(uint64,address),address)")]
+	#[precompile::view]
+	fn is_tranche_investor(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		vault: EvmVaultInput,
+		who: Address,
+	) -> EvmResult<bool> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let _ = to_product_id(product_id)?;
+		let (vault_chain_id, vault_address) = vault;
+		let vault = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let who_account = Runtime::AddressMapping::into_account_id(who.0);
+		Ok(pallet_tranche_permissions::TrancheInvestors::<Runtime>::contains_key(
+			vault,
+			who_account,
+		))
+	}
+
+	/// Read whether `who` holds `role` for `product_id`. Only `ProductAdmin` (0) and
+	/// `OracleFeeder` (1) are supported here — `TrancheInvestor` (2) has no `vault`
+	/// parameter on this signature, so use `is_tranche_investor` instead.
+	///
+	/// @param product_id The product to check
+	/// @param role       0 = ProductAdmin, 1 = OracleFeeder (2 = TrancheInvestor reverts)
+	/// @param who        EVM address to check
+	#[precompile::public("has_role(uint256,uint8,address)")]
+	#[precompile::view]
+	fn has_role(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		role: u8,
+		who: Address,
+	) -> EvmResult<bool> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let who_account = Runtime::AddressMapping::into_account_id(who.0);
+		match role {
+			0 => Ok(pallet_tranche_permissions::ProductAdmins::<Runtime>::get(product_id).as_ref()
+				== Some(&who_account)),
+			1 => Ok(pallet_tranche_permissions::OracleFeeders::<Runtime>::contains_key(
+				product_id,
+				&who_account,
+			)),
+			2 => Err(revert("role TrancheInvestor requires a vault — use is_tranche_investor")),
+			_ => Err(revert("invalid role")),
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
