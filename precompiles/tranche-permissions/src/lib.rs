@@ -1,8 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
-use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
-use pallet_evm::AddressMapping;
+extern crate alloc;
+
+use alloc::format;
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	pallet_prelude::Get,
+};
+use pallet_evm::{AddressMapping, Context, ExitReason};
 use pallet_tranche_permissions::{Call as TranchePermissionsCall, Role};
 use pallet_tranche_system::VaultId;
 use precompile_utils::prelude::*;
@@ -18,6 +24,13 @@ pub(crate) const SELECTOR_LOG_PERMISSION_GRANTED: [u8; 32] =
 	keccak256!("PermissionGranted(uint256,uint8,address,uint64,address)");
 pub(crate) const SELECTOR_LOG_PERMISSION_REVOKED: [u8; 32] =
 	keccak256!("PermissionRevoked(uint256,uint8,address,uint64,address)");
+
+/// `Orchestrator.sendWhitelist(uint64,uint256,address,address,uint8)` selector
+/// (`cast sig "sendWhitelist(uint64,uint256,address,address,uint8)"`).
+const ORCHESTRATOR_SEND_WHITELIST_SELECTOR: [u8; 4] = [0xc8, 0x06, 0x2a, 0x4a];
+
+/// Gas limit for the `Orchestrator.sendWhitelist` subcall.
+const ORCHESTRATOR_CALL_GAS_LIMIT: u64 = 1_000_000;
 
 /// `interface.sol`'s `VaultInput` struct, decoded positionally as a tuple —
 /// `(chain_id, vault_address)`.
@@ -41,7 +54,10 @@ pub struct TranchePermissionsPrecompile<Runtime>(PhantomData<Runtime>);
 #[precompile_utils::precompile]
 impl<Runtime> TranchePermissionsPrecompile<Runtime>
 where
-	Runtime: pallet_tranche_permissions::Config + pallet_evm::Config + frame_system::Config,
+	Runtime: pallet_tranche_permissions::Config
+		+ pallet_tranche_system::Config
+		+ pallet_evm::Config
+		+ frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	Runtime::RuntimeCall: From<TranchePermissionsCall<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
@@ -70,6 +86,10 @@ where
 		let product_id = to_product_id(product_id)?;
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
+		let propagate_vault = match &decoded_role {
+			Role::TrancheInvestor(vault) => Some(vault.clone()),
+			_ => None,
+		};
 
 		let call = TranchePermissionsCall::<Runtime>::grant_permission {
 			product_id,
@@ -97,6 +117,10 @@ where
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
 
+		if let Some(vault) = propagate_vault {
+			propagate_whitelist_change::<Runtime>(handle, product_id, &vault, who.0, 1)?;
+		}
+
 		Ok(())
 	}
 
@@ -120,6 +144,10 @@ where
 		let product_id = to_product_id(product_id)?;
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
+		let propagate_vault = match &decoded_role {
+			Role::TrancheInvestor(vault) => Some(vault.clone()),
+			_ => None,
+		};
 
 		let call = TranchePermissionsCall::<Runtime>::revoke_permission {
 			product_id,
@@ -146,6 +174,10 @@ where
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
+
+		if let Some(vault) = propagate_vault {
+			propagate_whitelist_change::<Runtime>(handle, product_id, &vault, who.0, 0)?;
+		}
 
 		Ok(())
 	}
@@ -181,4 +213,94 @@ fn decode_role(role: u8, vault: EvmVaultInput) -> EvmResult<(Role, u64, H160)> {
 		},
 		_ => Err(revert("invalid role")),
 	}
+}
+
+/// Propagates a `TrancheInvestor` grant/revoke to the Spoke chain `vault`
+/// lives on, by calling `Orchestrator.sendWhitelist(chainId, productId,
+/// vaultAddress, who, action)` as a subcall from this precompile's own
+/// address. Uses `handle.call`, never `Runner::call` — this precompile's own
+/// EVM execution is already inside pallet-evm's `forbid-evm-reentrancy`
+/// guard, so a fresh top-level `Runner::call` would trip
+/// `pallet_evm::Error::Reentrancy`. Requires this precompile's runtime
+/// checks tuple to include `SubcallWithMaxNesting`, or the subcall is
+/// rejected before it ever reaches Orchestrator.
+///
+/// Skipped entirely if `vault`'s chain is this Hub chain's own EVM chain ID —
+/// a Hub-issued product's tranche needs no cross-chain propagation; it's
+/// registered locally by `grant_permission`/`revoke_permission` alone.
+///
+/// Reverts (rolling back the permission grant/revoke too, atomically) if
+/// `OrchestratorAddress` isn't configured yet, or if the subcall itself
+/// fails — propagation *triggering* is meant to be atomic with the on-chain
+/// grant; only what happens after the Orchestrator call (Spoke-side relay)
+/// is safe to retry independently of this transaction.
+fn propagate_whitelist_change<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: pallet_tranche_system::ProductId,
+	vault: &VaultId,
+	who: H160,
+	action: u8,
+) -> EvmResult
+where
+	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
+{
+	if vault.chain_id == <Runtime as pallet_evm::Config>::ChainId::get() {
+		return Ok(());
+	}
+
+	let orchestrator = pallet_tranche_system::OrchestratorAddress::<Runtime>::get();
+	if orchestrator == H160::zero() {
+		return Err(revert("orchestrator address not configured"));
+	}
+
+	let calldata =
+		encode_send_whitelist(vault.chain_id, product_id, vault.vault_address, who, action);
+	let context = Context {
+		address: orchestrator,
+		caller: handle.context().address,
+		apparent_value: U256::zero(),
+	};
+	let (exit_reason, _) = handle.call(
+		orchestrator,
+		None,
+		calldata,
+		Some(ORCHESTRATOR_CALL_GAS_LIMIT),
+		false,
+		&context,
+	);
+	match exit_reason {
+		ExitReason::Succeed(_) => Ok(()),
+		other => Err(revert(format!("orchestrator sendWhitelist call failed: {other:?}"))),
+	}
+}
+
+/// ABI-encodes `Orchestrator.sendWhitelist(uint64,uint256,address,address,uint8)`'s
+/// calldata — five statically-sized parameters, so a flat selector + five
+/// 32-byte left-padded slots, no dynamic offsets needed.
+fn encode_send_whitelist(
+	chain_id: u64,
+	product_id: pallet_tranche_system::ProductId,
+	vault_address: H160,
+	who: H160,
+	action: u8,
+) -> sp_std::vec::Vec<u8> {
+	let mut calldata = sp_std::vec::Vec::with_capacity(4 + 32 * 5);
+	calldata.extend_from_slice(&ORCHESTRATOR_SEND_WHITELIST_SELECTOR);
+
+	calldata.extend_from_slice(&[0u8; 24]);
+	calldata.extend_from_slice(&chain_id.to_be_bytes());
+
+	let product_id_bytes: [u8; 32] = U256::from(product_id).to_big_endian();
+	calldata.extend_from_slice(&product_id_bytes);
+
+	calldata.extend_from_slice(&[0u8; 12]);
+	calldata.extend_from_slice(vault_address.as_bytes());
+
+	calldata.extend_from_slice(&[0u8; 12]);
+	calldata.extend_from_slice(who.as_bytes());
+
+	calldata.extend_from_slice(&[0u8; 31]);
+	calldata.push(action);
+
+	calldata
 }

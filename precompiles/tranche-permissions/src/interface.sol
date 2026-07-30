@@ -8,8 +8,7 @@ pragma solidity >=0.8.0;
  *         the old TrancheInvestor-only Permissions precompile — grant/revoke is
  *         now unified across all roles behind one function pair, rather than
  *         the old precompile's narrower `add_tranche_investor`/
- *         `remove_tranche_investor` (which also drove Gateway cross-chain
- *         propagation directly — not modeled here yet, see notes below).
+ *         `remove_tranche_investor`.
  *
  * DRAFT — reflects the tranche-system pivot (2026-07-24), not yet locked in.
  * pallet-tranche-permissions does not exist yet; this interface is written
@@ -32,12 +31,22 @@ pragma solidity >=0.8.0;
  *     "always pass the full struct, ignore what doesn't apply" convention
  *     already used throughout this interface family (e.g. TrancheSystem's
  *     set_tranche/set_adapter). Pass zero/default values for any other role.
- *   - Unlike the old precompile, this draft does NOT yet model propagating a
- *     TrancheInvestor grant/revoke to the Spoke chain via Gateway messaging —
- *     the old `IGateway` subset interface (`grant_tranche_investor`/
- *     `revoke_tranche_investor`) isn't carried over. Whether that's still
- *     needed, and if so whether it belongs in this precompile or elsewhere,
- *     is NOT YET DESIGNED — flagged here rather than silently dropped.
+ *   - A `TrancheInvestor` grant/revoke whose `vault` lives on a Spoke chain
+ *     (`vault.chain_id != this Hub chain's own EVM chain ID`) is propagated
+ *     there automatically: after the on-chain grant/revoke succeeds, this
+ *     precompile calls the Hub-chain Orchestrator contract's
+ *     `sendWhitelist(chainId, productId, vaultAddress, who, action)`
+ *     (`action`: 0 = revoke, 1 = grant), which relays it onward via CCCP to
+ *     the target chain's Whitelist module. The Orchestrator's own address is
+ *     a single global value stored in pallet-tranche-system
+ *     (`OrchestratorAddress`, root-settable only — not exposed on this
+ *     interface). If it isn't a Spoke-chain vault (same chain ID as the
+ *     Hub), or `vault` is irrelevant (any role other than TrancheInvestor),
+ *     no propagation happens — the grant/revoke is local-only. The whole
+ *     call reverts if propagation was needed but `OrchestratorAddress` isn't
+ *     configured, or if the Orchestrator call itself fails — triggering
+ *     propagation is atomic with the permission grant/revoke; only what
+ *     happens after that (Spoke-side relay) is safe to retry independently.
  *   - **No `Borrower` role here** — deliberately removed (2026-07-24). A
  *     product can have multiple OffchainSource adapters, each potentially a
  *     different institution, so there's no single product-scoped "Borrower"
@@ -94,6 +103,8 @@ interface TranchePermissions {
      *      `vault` is only used when `role == TrancheInvestor`; ignored otherwise.
      *      Reverts if `who` already holds `role` for `product_id` (and, for
      *      TrancheInvestor, the given `vault`).
+     *      For TrancheInvestor on a Spoke-chain vault, also propagates to
+     *      Orchestrator.sendWhitelist(..., action: 1) — see notes above.
      *      Emits PermissionGranted on success.
      * @param product_id The product this permission applies to
      * @param role       ProductAdmin, OracleFeeder, or TrancheInvestor
@@ -112,6 +123,8 @@ interface TranchePermissions {
      * @dev Same authorization rules as grant_permission.
      *      Reverts if `who` does not currently hold `role` for `product_id`
      *      (and, for TrancheInvestor, the given `vault`).
+     *      For TrancheInvestor on a Spoke-chain vault, also propagates to
+     *      Orchestrator.sendWhitelist(..., action: 0) — see notes above.
      *      Emits PermissionRevoked on success.
      * @param product_id The product this permission applies to
      * @param role       ProductAdmin, OracleFeeder, or TrancheInvestor

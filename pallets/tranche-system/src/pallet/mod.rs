@@ -149,6 +149,8 @@ pub mod pallet {
 		AdaptersSet { product_id: ProductId, parent_adapter_address: H160, parent_chain_id: u64 },
 		/// A product's entire MultichainAdapter table was replaced wholesale.
 		MultichainAdaptersSet { product_id: ProductId },
+		/// The global Orchestrator contract address was set.
+		OrchestratorAddressSet { address: H160 },
 	}
 
 	// -----------------------------------------------------------------------
@@ -190,6 +192,15 @@ pub mod pallet {
 	/// shape is identical — globally unique across all products, same rationale.
 	pub type MultichainAdapterIndex<T: Config> =
 		StorageMap<_, Blake2_128Concat, AdapterKey, ProductId>;
+
+	#[pallet::storage]
+	/// The single, global Hub-chain Orchestrator contract address — one per
+	/// chain, not per product. The tranche-permissions precompile calls
+	/// `Orchestrator.sendWhitelist(...)` here to propagate a `TrancheInvestor`
+	/// grant/revoke to the Spoke chain a vault lives on. Defaults to the zero
+	/// address (propagation reverts until sudo sets it) — mirrors old pools'
+	/// `GatewayAddress`. Only writable by root.
+	pub type OrchestratorAddress<T: Config> = StorageValue<_, H160, ValueQuery>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
@@ -504,6 +515,17 @@ pub mod pallet {
 			})?;
 
 			Self::deposit_event(Event::MultichainAdaptersSet { product_id });
+			Ok(())
+		}
+
+		/// Set the single, global Orchestrator contract address. Root-only —
+		/// see `OrchestratorAddress`'s doc comment.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_orchestrator_address())]
+		pub fn set_orchestrator_address(origin: OriginFor<T>, address: H160) -> DispatchResult {
+			ensure_root(origin)?;
+			OrchestratorAddress::<T>::put(address);
+			Self::deposit_event(Event::OrchestratorAddressSet { address });
 			Ok(())
 		}
 	}
