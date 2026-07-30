@@ -290,7 +290,7 @@ pub struct ValuationInfo {
 	/// Unix timestamp (seconds) the first settlement cycle begins. Admin-set
 	/// at `create_product` — can be in the future, letting a product's
 	/// settlement schedule be set up before it goes live. Every later cycle
-	/// starts at `settlement_start_secs + k * settlement_length_secs` for
+	/// starts at `settlement_start_timestamp + k * settlement_length_secs` for
 	/// integer `k`.
 	///
 	/// Purely configuration: this pallet takes no action on its own when the
@@ -298,9 +298,9 @@ pub struct ValuationInfo {
 	/// triggered by an off-chain bot reading this schedule — not by
 	/// `on_initialize` — since an internal EVM call from a Substrate hook
 	/// leaves no Ethereum transaction/receipt for anything to look up.
-	pub settlement_start_secs: u64,
+	pub settlement_start_timestamp: u64,
 	/// Length of one settlement cycle, in seconds, counted from
-	/// `settlement_start_secs`. Admin-set; recommended to be at least the
+	/// `settlement_start_timestamp`. Admin-set; recommended to be at least the
 	/// GCD of the underlying yield sources' cycles.
 	pub settlement_length_secs: u64,
 	/// Width, in seconds, of the settlement window at the *end* of each

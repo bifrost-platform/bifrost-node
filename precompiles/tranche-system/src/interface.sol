@@ -123,22 +123,24 @@ interface TrancheSystem {
         uint256 nft_token_id;
     }
 
-    /// @param valuation_address      Hub-chain Valuation contract address for this product
-    /// @param settlement_start_secs  Unix timestamp the first settlement cycle begins; can be in
-    ///                                the future. Every later cycle starts at
-    ///                                settlement_start_secs + k * settlement_length_secs. Purely
-    ///                                configuration — read off-chain by the settlement bot that
-    ///                                calls Valuation.tryUpdateNav(); no on-chain logic acts on it
-    /// @param settlement_length_secs Length of one settlement cycle, in seconds, counted from
-    ///                                settlement_start_secs; admin-set, recommended to be at least
-    ///                                the GCD of the underlying yield sources' cycles
-    /// @param settlement_offset_secs Width, in seconds, of the settlement window at the *end* of
-    ///                                each cycle (e.g. 3600 for a 1-hour window) — not seconds
-    ///                                since the cycle started. Order submission closes ("market
-    ///                                close") when the window opens
+    /// @param valuation_address           Hub-chain Valuation contract address for this product
+    /// @param settlement_start_timestamp  Unix timestamp the first settlement cycle begins; can
+    ///                                     be in the future. Every later cycle starts at
+    ///                                     settlement_start_timestamp + k * settlement_length_secs.
+    ///                                     Purely configuration — read off-chain by the settlement
+    ///                                     bot that calls Valuation.tryUpdateNav(); no on-chain
+    ///                                     logic acts on it
+    /// @param settlement_length_secs      Length of one settlement cycle, in seconds, counted
+    ///                                     from settlement_start_timestamp; admin-set, recommended
+    ///                                     to be at least the GCD of the underlying yield sources'
+    ///                                     cycles
+    /// @param settlement_offset_secs      Width, in seconds, of the settlement window at the
+    ///                                     *end* of each cycle (e.g. 3600 for a 1-hour window) —
+    ///                                     not seconds since the cycle started. Order submission
+    ///                                     closes ("market close") when the window opens
     struct ValuationInput {
         address valuation_address;
-        uint64 settlement_start_secs;
+        uint64 settlement_start_timestamp;
         uint64 settlement_length_secs;
         uint64 settlement_offset_secs;
     }
@@ -201,7 +203,7 @@ interface TrancheSystem {
         uint256 product_id,
         address product_admin,
         address valuation_address,
-        uint64 settlement_start_secs,
+        uint64 settlement_start_timestamp,
         uint64 settlement_length_secs,
         uint64 settlement_offset_secs
     );

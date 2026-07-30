@@ -125,7 +125,7 @@ pub mod pallet {
 			product_id: ProductId,
 			product_admin: T::AccountId,
 			valuation_address: H160,
-			settlement_start_secs: u64,
+			settlement_start_timestamp: u64,
 			settlement_length_secs: u64,
 			settlement_offset_secs: u64,
 		},
@@ -253,7 +253,7 @@ pub mod pallet {
 				product_id,
 				product_admin,
 				valuation_address: valuation.valuation_address,
-				settlement_start_secs: valuation.settlement_start_secs,
+				settlement_start_timestamp: valuation.settlement_start_timestamp,
 				settlement_length_secs: valuation.settlement_length_secs,
 				settlement_offset_secs: valuation.settlement_offset_secs,
 			});

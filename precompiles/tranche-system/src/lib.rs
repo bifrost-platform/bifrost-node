@@ -33,7 +33,7 @@ pub(crate) const SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET: [u8; 32] = keccak256!(
 // interface.sol struct <-> tuple mappings
 // ---------------------------------------------------------------------------
 
-/// `ValuationInput` — (valuation_address, settlement_start_secs, settlement_length_secs,
+/// `ValuationInput` — (valuation_address, settlement_start_timestamp, settlement_length_secs,
 /// settlement_offset_secs)
 type EvmValuationInput = (Address, u64, u64, u64);
 /// `VaultInput` — (chain_id, vault_address)
@@ -82,7 +82,7 @@ where
 	/// doc comment for full semantics.
 	///
 	/// @param product_id Hub product ID (already granted to the caller via ProductAdmin)
-	/// @param valuation (valuation_address, settlement_start_secs, settlement_length_secs,
+	/// @param valuation (valuation_address, settlement_start_timestamp, settlement_length_secs,
 	/// settlement_offset_secs)
 	/// @param tranches Tranche configs; each entry's `priority` (0 = highest) determines the
 	/// stored order, not array position — reverts if two entries share a `priority`, or if
@@ -107,13 +107,13 @@ where
 
 		let (
 			valuation_address,
-			settlement_start_secs,
+			settlement_start_timestamp,
 			settlement_length_secs,
 			settlement_offset_secs,
 		) = valuation;
 		let valuation_info = ValuationInfo {
 			valuation_address: valuation_address.0,
-			settlement_start_secs,
+			settlement_start_timestamp,
 			settlement_length_secs,
 			settlement_offset_secs,
 		};
@@ -142,7 +142,7 @@ where
 				U256::from(product_id),
 				Address(caller),
 				valuation_address,
-				settlement_start_secs,
+				settlement_start_timestamp,
 				settlement_length_secs,
 				settlement_offset_secs,
 			)),
