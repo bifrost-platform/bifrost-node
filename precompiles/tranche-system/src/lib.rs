@@ -19,7 +19,7 @@ use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_PRODUCT_CREATED: [u8; 32] =
-	keccak256!("ProductCreated(uint256,address,address,uint64,uint64)");
+	keccak256!("ProductCreated(uint256,address,address,uint64,uint64,uint64)");
 pub(crate) const SELECTOR_LOG_TRANCHE_SET: [u8; 32] =
 	keccak256!("TrancheSet(uint256,uint8,uint8,uint256,uint64,address,uint8)");
 pub(crate) const SELECTOR_LOG_ADAPTERS_SET: [u8; 32] = keccak256!(
@@ -33,8 +33,9 @@ pub(crate) const SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET: [u8; 32] = keccak256!(
 // interface.sol struct <-> tuple mappings
 // ---------------------------------------------------------------------------
 
-/// `ValuationInput` — (valuation_address, settlement_length_secs, settlement_offset_secs)
-type EvmValuationInput = (Address, u64, u64);
+/// `ValuationInput` — (valuation_address, settlement_start_secs, settlement_length_secs,
+/// settlement_offset_secs)
+type EvmValuationInput = (Address, u64, u64, u64);
 /// `VaultInput` — (chain_id, vault_address)
 type EvmVaultInput = (u64, Address);
 /// `TrancheInput` — (tranche_type, apr, vault, priority)
@@ -81,14 +82,15 @@ where
 	/// doc comment for full semantics.
 	///
 	/// @param product_id Hub product ID (already granted to the caller via ProductAdmin)
-	/// @param valuation (valuation_address, settlement_length_secs, settlement_offset_secs)
+	/// @param valuation (valuation_address, settlement_start_secs, settlement_length_secs,
+	/// settlement_offset_secs)
 	/// @param tranches Tranche configs; each entry's `priority` (0 = highest) determines the
 	/// stored order, not array position — reverts if two entries share a `priority`, or if
 	/// sorting by `priority` doesn't put every Senior tranche before every Junior one
 	/// @param multichain_adapters MultichainAdapter routing entries, each carrying its own
 	/// nested individual-Adapter registrations
 	#[precompile::public(
-		"create_product(uint256,(address,uint64,uint64),(uint8,uint256,(uint64,address),uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
+		"create_product(uint256,(address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
 	)]
 	fn create_product(
 		handle: &mut impl PrecompileHandle,
@@ -103,9 +105,15 @@ where
 
 		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
 
-		let (valuation_address, settlement_length_secs, settlement_offset_secs) = valuation;
+		let (
+			valuation_address,
+			settlement_start_secs,
+			settlement_length_secs,
+			settlement_offset_secs,
+		) = valuation;
 		let valuation_info = ValuationInfo {
 			valuation_address: valuation_address.0,
+			settlement_start_secs,
 			settlement_length_secs,
 			settlement_offset_secs,
 		};
@@ -134,6 +142,7 @@ where
 				U256::from(product_id),
 				Address(caller),
 				valuation_address,
+				settlement_start_secs,
 				settlement_length_secs,
 				settlement_offset_secs,
 			)),

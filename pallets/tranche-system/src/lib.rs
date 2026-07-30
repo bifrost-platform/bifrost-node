@@ -9,7 +9,7 @@ pub use weights::WeightInfo;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, U256};
-use sp_runtime::{BoundedBTreeMap, BoundedVec, DispatchError, RuntimeDebug};
+use sp_runtime::{BoundedBTreeMap, BoundedVec, RuntimeDebug};
 use sp_std::marker::PhantomData;
 
 // ---------------------------------------------------------------------------
@@ -287,19 +287,26 @@ pub struct ValuationInfo {
 	/// the caller against this address (see interface.sol notes — no Gateway
 	/// in that call path).
 	pub valuation_address: H160,
-	/// Length of one epoch, in seconds (`Epoch0` to `Epoch1`). Admin-set;
-	/// recommended to be at least the GCD of the underlying yield sources'
-	/// epochs.
+	/// Unix timestamp (seconds) the first settlement cycle begins. Admin-set
+	/// at `create_product` — can be in the future, letting a product's
+	/// settlement schedule be set up before it goes live. Every later cycle
+	/// starts at `settlement_start_secs + k * settlement_length_secs` for
+	/// integer `k`.
+	///
+	/// Purely configuration: this pallet takes no action on its own when the
+	/// time arrives. Settlement (calling `Valuation.tryUpdateNav()`) is
+	/// triggered by an off-chain bot reading this schedule — not by
+	/// `on_initialize` — since an internal EVM call from a Substrate hook
+	/// leaves no Ethereum transaction/receipt for anything to look up.
+	pub settlement_start_secs: u64,
+	/// Length of one settlement cycle, in seconds, counted from
+	/// `settlement_start_secs`. Admin-set; recommended to be at least the
+	/// GCD of the underlying yield sources' cycles.
 	pub settlement_length_secs: u64,
-	/// Offset, in seconds from the start of each epoch, at which order
-	/// submission closes ("market close") and settlement begins — NOT a
-	/// window at the start of the epoch. `on_initialize` only attempts
-	/// `Valuation.tryUpdateNav()` once `now_secs % settlement_length_secs`
-	/// has passed this point, retrying (see `Pallet::sync_navs`) until either
-	/// it succeeds or the epoch ends at `settlement_length_secs` — so
-	/// `settlement_offset_secs` must be `< settlement_length_secs` to leave
-	/// any settlement window at all. Will move to pallet-auto-pilot once that
-	/// pallet exists; lives directly in this pallet for now.
+	/// Width, in seconds, of the settlement window at the *end* of each
+	/// cycle — e.g. `3600` for a 1-hour window (not "seconds since the cycle
+	/// started"). Order submission closes ("market close") when the window
+	/// opens.
 	pub settlement_offset_secs: u64,
 }
 
@@ -331,52 +338,6 @@ pub struct ProductDetails<AccountId> {
 		MultichainAdapterInfo<AccountId>,
 		ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 	>,
-}
-
-// ---------------------------------------------------------------------------
-// NavSyncState
-// ---------------------------------------------------------------------------
-
-/// Per-product retry state for the *current* epoch's settlement window
-/// (`[settlement_offset_secs, settlement_length_secs)`), as tracked by
-/// `Pallet::sync_navs`. A stored value whose `window_index` doesn't match the
-/// current one is stale and treated as if no state existed yet — that's how
-/// this implicitly resets at the start of each new epoch.
-#[derive(
-	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
-)]
-pub struct NavSyncState {
-	/// The epoch (`now_secs / settlement_length_secs`) this state applies to.
-	pub window_index: u64,
-	/// Number of `tryUpdateNav()` attempts made so far this epoch. Capped at
-	/// `MAX_NAV_SYNC_ATTEMPTS`.
-	pub attempts: u8,
-	/// Unix timestamp (seconds) of the most recent attempt — the next retry
-	/// waits at least `NAV_SYNC_RETRY_INTERVAL_SECS` after this.
-	pub last_attempt_secs: u64,
-	/// Whether an attempt this epoch has already succeeded — once `true`, no
-	/// further attempts are made until the next epoch.
-	pub succeeded: bool,
-}
-
-// ---------------------------------------------------------------------------
-// NavSyncOutcome
-// ---------------------------------------------------------------------------
-
-/// One `Valuation.tryUpdateNav()` attempt's outcome, as recorded by
-/// `Pallet::sync_navs` into `NavSyncLogs` — the only record of these attempts
-/// available anywhere, since they're internal EVM calls with no backing
-/// Ethereum transaction/receipt for an indexer to look up (see
-/// `Pallet::try_update_nav`'s doc comment).
-#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo)]
-pub enum NavSyncOutcome {
-	/// `Runner::call_as_internal_call` returned — the EVM call executed and
-	/// this is its result exactly as returned (`exit_reason` may still be a
-	/// revert; that's still an "executed" outcome, not a `Failed` one).
-	Executed(pallet_evm::CallInfo),
-	/// `Runner::call_as_internal_call` itself returned an error before the
-	/// call could execute (e.g. a gas/config issue).
-	Failed(DispatchError),
 }
 
 // ---------------------------------------------------------------------------
