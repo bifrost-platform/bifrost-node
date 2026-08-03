@@ -1,11 +1,14 @@
 use crate::{
-	AdapterValuation, Allocation, ApprovedInvestment, OrderType, RequestId, RequestedInvestment,
-	SettlementId, TrancheSettle, TrancheSettlement, WeightInfo, MAX_ADAPTER_VALUATIONS,
-	MAX_ALLOCATIONS,
+	migrations, AdapterValuation, Allocation, ApprovedInvestment, OrderType, RequestId,
+	RequestedInvestment, SettlementId, TrancheSettle, TrancheSettlement, WeightInfo,
+	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS,
 };
 use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::BoundedVec;
@@ -15,7 +18,7 @@ use sp_std::collections::btree_set::BTreeSet;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -222,6 +225,13 @@ pub mod pallet {
 	/// `record_tranche_settlement`'s own duplicate-write check, which still
 	/// keys off `TrancheSettlements::contains_key` directly.
 	pub type LastSettlementId<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, SettlementId>;
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
