@@ -80,7 +80,7 @@ interface Investments {
 
     event InvestmentRequested(
         uint256 product_id,
-        uint256 request_id,
+        bytes32 request_id,
         uint256 settlement_id,
         uint64 vault_chain_id,
         address vault_address,
@@ -90,7 +90,7 @@ interface Investments {
     );
     event InvestmentApproved(
         uint256 product_id,
-        uint256 request_id,
+        bytes32 request_id,
         uint256 settlement_id,
         Allocation[] allocations,
         uint256 claimable_assets
@@ -126,7 +126,7 @@ interface Investments {
      */
     function record_investment_request(
         uint256 product_id,
-        uint256 request_id,
+        bytes32 request_id,
         uint256 settlement_id,
         uint64 vault_chain_id,
         address vault_address,
@@ -162,7 +162,7 @@ interface Investments {
      */
     function record_investment_approval(
         uint256 product_id,
-        uint256 request_id,
+        bytes32 request_id,
         uint256 settlement_id,
         Allocation[] calldata allocations,
         uint256 claimable_assets
@@ -261,7 +261,7 @@ interface Investments {
         uint256 settlement_id,
         uint256 offset,
         uint256 limit
-    ) external view returns (uint256[] memory request_ids);
+    ) external view returns (bytes32[] memory request_ids);
 
     /**
      * @notice Read a single request's current state — pending or approved.
@@ -280,7 +280,7 @@ interface Investments {
      */
     function get_request(
         uint256 product_id,
-        uint256 request_id
+        bytes32 request_id
     )
         external
         view
@@ -357,7 +357,7 @@ interface Investments {
      */
     function get_approval(
         uint256 product_id,
-        uint256 request_id
+        bytes32 request_id
     )
         external
         view

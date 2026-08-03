@@ -8,7 +8,7 @@ use pallet_tranche_investments::{
 };
 use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
 use precompile_utils::prelude::*;
-use sp_core::{ConstU32, H160, U256};
+use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec::Vec};
 
@@ -17,9 +17,9 @@ use sp_std::{marker::PhantomData, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_INVESTMENT_REQUESTED: [u8; 32] =
-	keccak256!("InvestmentRequested(uint256,uint256,uint256,uint64,address,address,uint256,uint8)");
+	keccak256!("InvestmentRequested(uint256,bytes32,uint256,uint64,address,address,uint256,uint8)");
 pub(crate) const SELECTOR_LOG_INVESTMENT_APPROVED: [u8; 32] =
-	keccak256!("InvestmentApproved(uint256,uint256,uint256,(address,uint64,uint256)[],uint256)");
+	keccak256!("InvestmentApproved(uint256,bytes32,uint256,(address,uint64,uint256)[],uint256)");
 pub(crate) const SELECTOR_LOG_ADAPTER_VALUATIONS_RECORDED: [u8; 32] = keccak256!(
 	"AdapterValuationsRecorded(uint256,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
 );
@@ -73,12 +73,12 @@ where
 	///
 	/// @param order_type 0 = redeem, 1 = deposit
 	#[precompile::public(
-		"record_investment_request(uint256,uint256,uint256,uint64,address,address,uint256,uint8)"
+		"record_investment_request(uint256,bytes32,uint256,uint64,address,address,uint256,uint8)"
 	)]
 	fn record_investment_request(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
-		request_id: U256,
+		request_id: H256,
 		settlement_id: U256,
 		vault_chain_id: u64,
 		vault_address: Address,
@@ -131,12 +131,12 @@ where
 	/// Record a pending request's full approval. See
 	/// `pallet_tranche_investments::record_investment_approval`'s doc comment.
 	#[precompile::public(
-		"record_investment_approval(uint256,uint256,uint256,(address,uint64,uint256)[],uint256)"
+		"record_investment_approval(uint256,bytes32,uint256,(address,uint64,uint256)[],uint256)"
 	)]
 	fn record_investment_approval(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
-		request_id: U256,
+		request_id: H256,
 		settlement_id: U256,
 		allocations: Vec<EvmAllocation>,
 		claimable_assets: U256,
@@ -293,7 +293,7 @@ where
 		settlement_id: U256,
 		offset: U256,
 		limit: U256,
-	) -> EvmResult<Vec<U256>> {
+	) -> EvmResult<Vec<H256>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
 		let offset = to_u64(offset)?;
@@ -327,12 +327,12 @@ where
 	/// @param request_id The request to look up
 	/// @return investor, vault_chain_id, vault, amount, settlement_id, order_type, status
 	/// (status: 0 = pending, 1 = approved)
-	#[precompile::public("get_request(uint256,uint256)")]
+	#[precompile::public("get_request(uint256,bytes32)")]
 	#[precompile::view]
 	fn get_request(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
-		request_id: U256,
+		request_id: H256,
 	) -> EvmResult<(Address, u64, Address, U256, U256, u8, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
@@ -468,12 +468,12 @@ where
 	/// @param request_id The request to look up
 	/// @return settlement_id, claimable_assets, status (always 1 = approved; reverts if
 	/// no approval is recorded for `request_id`)
-	#[precompile::public("get_approval(uint256,uint256)")]
+	#[precompile::public("get_approval(uint256,bytes32)")]
 	#[precompile::view]
 	fn get_approval(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
-		request_id: U256,
+		request_id: H256,
 	) -> EvmResult<(U256, U256, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
