@@ -8,6 +8,7 @@ pub mod extensions;
 
 use frame_support::traits::Get;
 use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, LastFeeTokenUpdate, Pallet, UserFeeToken};
+use pallet_evm::AddressMapping;
 use sp_core::{H160, U256};
 use sp_runtime::traits::{Saturating, Zero};
 use sp_std::marker::PhantomData;
@@ -29,11 +30,28 @@ use sp_std::marker::PhantomData;
 /// - Rate limiting prevents spam on fee token setup calls
 /// - ERC20 fee payment validation happens both here (pool) and in `BifrostFeeAdapter::withdraw_fee()`
 /// - DoS is prevented by checking token balance at pool validation time
-pub struct BifrostFeelessCalls<T>(PhantomData<T>);
+///
+/// Also covers a third, unrelated feeless case: `pallet-tranche-tx-registry`'s
+/// `record_request_tx`/`record_settlement_tx`/`record_receive_tx`, but only when called by the
+/// account currently registered as that pallet's tx recorder (`TxRecorder`) — see the `R` type
+/// parameter and `TxRegistryRecorderCheck`. Unlike the fee-token-setup calls above, this isn't
+/// rate-limited: the set of callers who can ever reach these three functions at all is already
+/// limited to one account (`pallet_tranche_tx_registry::EnsureTxRecorder` rejects everyone else
+/// at the dispatch level), so there's no spam surface here the way there would be for a call any
+/// EOA can trigger.
+///
+/// `R` is a second, independently-parametrized type (default `()`) rather than folding the
+/// tx-recorder check straight into `T`'s own bounds, specifically so runtimes that don't wire up
+/// `pallet-tranche-tx-registry` at all (as of 2026-08-09: mainnet, testnet) aren't forced to
+/// implement its `Config` just to keep using this filter for the fee-token-setup calls above —
+/// only a runtime that actually wants the tx-registry feeless rule opts in by passing
+/// `TxRegistryRecorder<Runtime>` as `R` (see `runtime/dev`).
+pub struct BifrostFeelessCalls<T, R = ()>(PhantomData<(T, R)>);
 
-impl<T> pallet_evm::FeelessCallFilter for BifrostFeelessCalls<T>
+impl<T, R> pallet_evm::FeelessCallFilter for BifrostFeelessCalls<T, R>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
+	R: TxRegistryRecorderCheck,
 {
 	/// Returns `true` if the call can be submitted with zero native balance.
 	///
@@ -65,9 +83,10 @@ where
 	}
 }
 
-impl<T> BifrostFeelessCalls<T>
+impl<T, R> BifrostFeelessCalls<T, R>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
+	R: TxRegistryRecorderCheck,
 {
 	/// Validate that an ERC20 fee token user has sufficient balance to pay for the transaction.
 	///
@@ -107,11 +126,11 @@ where
 		};
 
 		// Convert native fee to token amount
-		let required_token_amount = match Pallet::<T>::convert_native_to_token(estimated_native_fee, token)
-		{
-			Ok(amount) => amount,
-			Err(_) => return false, // Oracle/conversion failure
-		};
+		let required_token_amount =
+			match Pallet::<T>::convert_native_to_token(estimated_native_fee, token) {
+				Ok(amount) => amount,
+				Err(_) => return false, // Oracle/conversion failure
+			};
 
 		// Get user's token balance
 		let balance =
@@ -126,12 +145,27 @@ where
 
 	/// Returns `true` if this call should have zero gas fee (feeless).
 	///
-	/// Only the fee token setup calls are feeless:
-	/// - `setUserFeeToken(address)` - to set up ERC20 fee payment
-	/// - `clearUserFeeToken()` - to clear fee preference
+	/// Two independent groups of feeless calls:
+	/// - Fee token setup calls (`setUserFeeToken`/`clearUserFeeToken`) — see the doc comments
+	///   further down.
+	/// - `pallet-tranche-tx-registry`'s `record_*` calls, but only when `caller` is the
+	///   registered tx recorder — see `R::is_tx_recorder` (`TxRegistryRecorderCheck`).
 	///
 	/// This is called internally and by the trait implementation.
 	fn is_feeless_internal(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
+		// TrancheTxRegistry precompile address: 0x0000000000000000000000000000000000000203
+		const TX_REGISTRY_PRECOMPILE: H160 =
+			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
+
+		// Function selectors for pallet-tranche-tx-registry's record_* calls (keccak256 of the
+		// canonical signature in precompiles/tranche-tx-registry/src/lib.rs, first 4 bytes).
+		// record_request_tx(uint256,bytes32,address,uint64,address,uint256,uint8,uint8,(uint64,bytes32)) => 0xdd2f4638
+		const RECORD_REQUEST_TX: [u8; 4] = [0xdd, 0x2f, 0x46, 0x38];
+		// record_settlement_tx(uint256,uint256,uint64,uint64[],uint8,(uint64,bytes32)) => 0x8f4ab0af
+		const RECORD_SETTLEMENT_TX: [u8; 4] = [0x8f, 0x4a, 0xb0, 0xaf];
+		// record_receive_tx(uint256,(uint64,address),address,uint8,(uint64,bytes32)) => 0xd20e4822
+		const RECORD_RECEIVE_TX: [u8; 4] = [0xd2, 0x0e, 0x48, 0x22];
+
 		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
 		const TX_PAYMENT_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x10]);
@@ -143,6 +177,15 @@ where
 		const CLEAR_USER_FEE_TOKEN: [u8; 4] = [0xc1, 0xe1, 0xda, 0x08];
 
 		if let Some(target) = target {
+			if target == TX_REGISTRY_PRECOMPILE && input.len() >= 4 {
+				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
+				let is_record_call = matches!(
+					selector,
+					RECORD_REQUEST_TX | RECORD_SETTLEMENT_TX | RECORD_RECEIVE_TX
+				);
+				return is_record_call && R::is_tx_recorder(caller);
+			}
+
 			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
 				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
 				return match selector {
@@ -233,5 +276,40 @@ where
 		}
 
 		false
+	}
+}
+
+/// Checked by `BifrostFeelessCalls<T, R>`'s tx-registry branch to decide whether `caller` is
+/// eligible for the `record_*` feeless rule — see `BifrostFeelessCalls`'s doc comment for why
+/// this is its own trait/type parameter instead of a bound on `BifrostFeelessCalls`'s own `T`.
+pub trait TxRegistryRecorderCheck {
+	fn is_tx_recorder(caller: H160) -> bool;
+}
+
+/// Default: no caller is ever the tx recorder. Used as `BifrostFeelessCalls`'s default `R`, so
+/// runtimes that don't pass a concrete `R` get the pre-existing fee-token-setup-only behavior
+/// with the tx-registry branch permanently inert (falls straight through to `false`).
+impl TxRegistryRecorderCheck for () {
+	fn is_tx_recorder(_caller: H160) -> bool {
+		false
+	}
+}
+
+/// Concrete `TxRegistryRecorderCheck` for a runtime that actually wires up
+/// `pallet-tranche-tx-registry` — checks `caller` (an EVM address) against that pallet's
+/// `TxRecorder` storage. That pallet's own `EnsureTxRecorder`/`RecorderOrigin` already rejects
+/// every other caller at the dispatch level for `record_*`, so this only needs to mirror that
+/// same comparison to know whether a `record_*` call is *eligible* to be feeless in the first
+/// place. Pass as `BifrostFeelessCalls<Runtime, TxRegistryRecorder<Runtime>>`.
+pub struct TxRegistryRecorder<T>(PhantomData<T>);
+
+impl<T> TxRegistryRecorderCheck for TxRegistryRecorder<T>
+where
+	T: pallet_evm::Config + pallet_tranche_tx_registry::Config,
+	<T as pallet_evm::Config>::AddressMapping: AddressMapping<T::AccountId>,
+{
+	fn is_tx_recorder(caller: H160) -> bool {
+		let caller_account = <T as pallet_evm::Config>::AddressMapping::into_account_id(caller);
+		pallet_tranche_tx_registry::TxRecorder::<T>::get() == Some(caller_account)
 	}
 }

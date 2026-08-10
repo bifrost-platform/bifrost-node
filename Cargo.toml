@@ -23,6 +23,7 @@ members = [
 	"pallets/tranche-system",
 	"pallets/tranche-investments",
 	"pallets/tranche-permissions",
+	"pallets/tranche-tx-registry",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -36,6 +37,7 @@ members = [
 	"precompiles/tranche-permissions",
 	"precompiles/tranche-system",
 	"precompiles/tranche-investments",
+	"precompiles/tranche-tx-registry",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
@@ -122,6 +124,7 @@ pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay
 pallet-tranche-system = { default-features = false, path = "pallets/tranche-system" }
 pallet-tranche-investments = { default-features = false, path = "pallets/tranche-investments" }
 pallet-tranche-permissions = { default-features = false, path = "pallets/tranche-permissions" }
+pallet-tranche-tx-registry = { default-features = false, path = "pallets/tranche-tx-registry" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -139,6 +142,7 @@ precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompi
 precompile-tranche-permissions = { default-features = false, path = "precompiles/tranche-permissions" }
 precompile-tranche-system = { default-features = false, path = "precompiles/tranche-system" }
 precompile-tranche-investments = { default-features = false, path = "precompiles/tranche-investments" }
+precompile-tranche-tx-registry = { default-features = false, path = "precompiles/tranche-tx-registry" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

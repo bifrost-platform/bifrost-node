@@ -139,7 +139,7 @@ where
 		request_id: H256,
 		settlement_id: U256,
 		allocations: Vec<EvmAllocation>,
-		claimable_assets: U256,
+		receivable_amount: U256,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let product_id = to_product_id(product_id)?;
@@ -151,7 +151,7 @@ where
 			request_id,
 			settlement_id,
 			allocations: bounded_allocations,
-			claimable_assets,
+			receivable_amount,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -168,7 +168,7 @@ where
 				request_id,
 				settlement_id,
 				allocations,
-				claimable_assets,
+				receivable_amount,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -466,7 +466,7 @@ where
 	///
 	/// @param product_id The product the request belongs to
 	/// @param request_id The request to look up
-	/// @return settlement_id, claimable_assets, status (always 1 = approved; reverts if
+	/// @return settlement_id, receivable_amount, status (always 1 = approved; reverts if
 	/// no approval is recorded for `request_id`)
 	#[precompile::public("get_approval(uint256,bytes32)")]
 	#[precompile::view]
@@ -480,7 +480,7 @@ where
 		let approved =
 			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
 				.ok_or_else(|| revert("approval not found"))?;
-		Ok((approved.settlement_id, approved.claimable_assets, 1u8))
+		Ok((approved.settlement_id, approved.receivable_amount, 1u8))
 	}
 }
 

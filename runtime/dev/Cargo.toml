@@ -97,6 +97,7 @@ pallet-cccp-relay-queue = { workspace = true }
 pallet-tranche-system = { workspace = true }
 pallet-tranche-permissions = { workspace = true }
 pallet-tranche-investments = { workspace = true }
+pallet-tranche-tx-registry = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -117,6 +118,7 @@ precompile-bifrost-evm-tx-payment = { workspace = true }
 precompile-tranche-system = { workspace = true }
 precompile-tranche-permissions = { workspace = true }
 precompile-tranche-investments = { workspace = true }
+precompile-tranche-tx-registry = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -164,6 +166,7 @@ std = [
 	"pallet-tranche-system/std",
 	"pallet-tranche-permissions/std",
 	"pallet-tranche-investments/std",
+	"pallet-tranche-tx-registry/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
@@ -206,6 +209,7 @@ std = [
 	"precompile-tranche-system/std",
 	"precompile-tranche-permissions/std",
 	"precompile-tranche-investments/std",
+	"precompile-tranche-tx-registry/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
