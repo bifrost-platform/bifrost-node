@@ -563,4 +563,14 @@ impl<T: pallet::Config> AdapterInspect for pallet::Pallet<T> {
 	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
 		pallet::AdapterIndex::<T>::get(key) == Some(product_id)
 	}
+
+	fn spoke_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
+		let adapters =
+			pallet::Products::<T>::get(product_id).map(|product| product.multichain_adapters);
+		chain_ids.iter().all(|chain_id| {
+			adapters
+				.as_ref()
+				.is_some_and(|adapters| adapters.keys().any(|key| key.chain_id == *chain_id))
+		})
+	}
 }

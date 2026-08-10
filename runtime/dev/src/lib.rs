@@ -1036,7 +1036,10 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
-	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<
+		Runtime,
+		bifrost_common_runtime::TxRegistryRecorder<Runtime>,
+	>;
 }
 
 parameter_types! {
@@ -1182,6 +1185,14 @@ impl pallet_tranche_investments::Config for Runtime {
 	type WeightInfo = pallet_tranche_investments::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_tranche_tx_registry::Config for Runtime {
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type Investments = TrancheInvestments;
+	type WeightInfo = pallet_tranche_tx_registry::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -1321,6 +1332,9 @@ mod runtime {
 
 	#[runtime::pallet_index(82)]
 	pub type TrancheInvestments = pallet_tranche_investments;
+
+	#[runtime::pallet_index(83)]
+	pub type TrancheTxRegistry = pallet_tranche_tx_registry;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

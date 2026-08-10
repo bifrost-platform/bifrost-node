@@ -8,9 +8,9 @@ pub use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, H160, U256};
+use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{BoundedBTreeMap, BoundedVec, RuntimeDebug};
-use sp_std::marker::PhantomData;
+use sp_std::{marker::PhantomData, vec::Vec};
 
 // ---------------------------------------------------------------------------
 // Primitive type aliases / constants
@@ -394,6 +394,37 @@ pub trait AdapterInspect {
 	/// individual Adapters (see `MultichainAdapterInfo::adapters`), under any
 	/// parent.
 	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool;
+	/// Returns `true` if every id in `chain_ids` is a chain where `product_id`
+	/// has at least one top-level MultichainAdapter (see
+	/// `ProductDetails::multichain_adapters`) — unlike the two methods above,
+	/// this doesn't identify one specific adapter by address, only whether
+	/// each chain itself is one the product actually routes through. Takes a
+	/// slice (rather than one `chain_id` at a time) so an implementation can
+	/// fetch `product_id`'s details once and check the whole batch against
+	/// it, instead of the caller looping and re-fetching per id. Consumed by
+	/// pallet-tranche-tx-registry to reject recording a settlement Trigger
+	/// against spoke chains the product has no MultichainAdapter on.
+	fn spoke_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
+}
+
+/// Unlike `VaultInspect`/`AdapterInspect` above, this is implemented by
+/// pallet-tranche-investments, not by pallet-tranche-system itself — it's hosted in
+/// this crate only because both pallet-tranche-investments and
+/// pallet-tranche-tx-registry already depend on it, and pallet-tranche-tx-registry
+/// deliberately has no dependency on pallet-tranche-investments directly (see that
+/// crate's module docs / interface.sol's DRAFT note on why the two precompiles were
+/// split apart). Consumed by pallet-tranche-tx-registry's `record_settlement_tx` to
+/// automatically close out `InvestorActiveRequests` entries when a settlement's
+/// Finalize-Hooks leg lands, without needing that dependency or an off-chain-attested
+/// request list from the recorder.
+pub trait RequestSettlementInspect {
+	/// Returns every request_id `record_investment_approval` has linked to
+	/// `(product_id, settlement_id)` — i.e. every request approved into that
+	/// settlement cycle, regardless of which chain each one originated on (the
+	/// caller is expected to filter by origin chain itself, since this trait has
+	/// no notion of chains). Empty if no request has been approved into this
+	/// settlement (yet, or ever).
+	fn settlement_requests(product_id: ProductId, settlement_id: U256) -> Vec<H256>;
 }
 
 // ---------------------------------------------------------------------------

@@ -58,6 +58,13 @@ interface Investments {
         bool counted;
     }
 
+    /// @param chain_id      EVM chain ID where the tranche's ERC-7540 vault is deployed
+    /// @param vault_address ERC-7540 vault contract address identifying the tranche
+    struct VaultInput {
+        uint64 chain_id;
+        address vault_address;
+    }
+
     /// @dev Post-waterfall settlement result for a single tranche, one entry per tranche within
     ///      a product. Distinct from AdapterValuation.principal (that's capital deployed into
     ///      one yield source; this is a tranche's own Senior principal claim) — neither
@@ -93,7 +100,7 @@ interface Investments {
         bytes32 request_id,
         uint256 settlement_id,
         Allocation[] allocations,
-        uint256 claimable_assets
+        uint256 receivable_amount
     );
     event AdapterValuationsRecorded(
         uint256 product_id,
@@ -138,7 +145,7 @@ interface Investments {
     /**
      * @notice Record a pending request's full approval: the complete breakdown
      *         of how it was allocated across Adapters, plus what the investor
-     *         can claim as a result.
+     *         can receive as a result.
      * @dev Only callable by the calling product's registered Valuation contract
      *      address. Called exactly once per request_id — `allocations` carries
      *      the full allocation breakdown in one call, so the pallet can mint/pay
@@ -148,24 +155,24 @@ interface Investments {
      *      should still be accounted for by an explicit entry, not omitted).
      *      `order_type` is not a parameter here — it was already recorded
      *      against `request_id` by record_investment_request and is looked up
-     *      from the pending entry rather than passed again; `claimable_assets`
+     *      from the pending entry rather than passed again; `receivable_amount`
      *      is interpreted using that stored order_type: the minted share-token
      *      amount for a deposit request, or the released underlying-asset
      *      amount for a redeem request.
      *      Moves the entry from RequestedInvestments to ApprovedInvestments.
      *      Emits InvestmentApproved on success.
-     * @param product_id       The product this approval belongs to
-     * @param request_id       The pending request being approved
-     * @param settlement_id    Valuation Contract's settlement cycle this approval settles in
-     * @param allocations      Per-Adapter allocation breakdown of the request's amount
-     * @param claimable_assets Finalized claimable amount for the investor — shares (deposit) or assets (redeem), per the request's order_type
+     * @param product_id        The product this approval belongs to
+     * @param request_id        The pending request being approved
+     * @param settlement_id     Valuation Contract's settlement cycle this approval settles in
+     * @param allocations       Per-Adapter allocation breakdown of the request's amount
+     * @param receivable_amount Finalized receivable amount for the investor — shares (deposit) or assets (redeem), per the request's order_type
      */
     function record_investment_approval(
         uint256 product_id,
         bytes32 request_id,
         uint256 settlement_id,
         Allocation[] calldata allocations,
-        uint256 claimable_assets
+        uint256 receivable_amount
     ) external;
 
     /**
@@ -225,19 +232,16 @@ interface Investments {
         uint256 product_nav
     ) external;
 
-    /// @param chain_id      EVM chain ID where the tranche's ERC-7540 vault is deployed
-    /// @param vault_address ERC-7540 vault contract address identifying the tranche
-    struct VaultInput {
-        uint64 chain_id;
-        address vault_address;
-    }
-
     /**
      * @notice Read a product's current settlement_id — the value most recently passed to
      *         record_tranche_settlement.
      * @dev This pallet never generates or increments settlement_id itself — the Valuation
      *      Contract remains the source of truth for assignment; this just echoes back the
-     *      last value it recorded. Zero if the product has never settled yet.
+     *      last value it recorded. Zero if the product has never settled yet — settlement_id
+     *      is 1-indexed protocol-wide (the Valuation Contract's first real settlement is 1,
+     *      never 0) precisely so 0 stays free as this "never settled" sentinel, here and
+     *      everywhere else in this interface that reads settlement_id back (e.g.
+     *      get_request_status).
      * @param product_id The product to look up
      */
     function get_settlement_id(
@@ -351,7 +355,7 @@ interface Investments {
      * @param product_id The product the request belongs to
      * @param request_id The request to look up
      * @return settlement_id      Settlement cycle this approval settled in
-     * @return claimable_assets   Finalized claimable amount for the investor
+     * @return receivable_amount  Finalized receivable amount for the investor
      * @return status             Always 1 (approved) — a distinct status value from
      *                            get_request's 0/1 pair only exists there, not here
      */
@@ -361,5 +365,9 @@ interface Investments {
     )
         external
         view
-        returns (uint256 settlement_id, uint256 claimable_assets, uint8 status);
+        returns (
+            uint256 settlement_id,
+            uint256 receivable_amount,
+            uint8 status
+        );
 }

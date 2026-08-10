@@ -1,9 +1,11 @@
 use crate::{
 	migrations, AdapterValuation, Allocation, ApprovedInvestment, OrderType, RequestId,
 	RequestedInvestment, SettlementId, TrancheSettle, TrancheSettlement, WeightInfo,
-	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS,
+	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
+use pallet_tranche_system::{
+	AdapterInspect, AdapterKey, ProductId, RequestSettlementInspect, VaultId, VaultInspect,
+};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -12,7 +14,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::BoundedVec;
-use sp_std::collections::btree_set::BTreeSet;
+use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -99,6 +101,9 @@ pub mod pallet {
 		/// A tranche settlement was already recorded for this
 		/// (product_id, settlement_id).
 		TrancheSettlementAlreadyRecorded,
+		/// `(product_id, settlement_id)` already has `MAX_SETTLEMENT_REQUESTS`
+		/// requests approved into it.
+		TooManySettlementRequests,
 	}
 
 	// -----------------------------------------------------------------------
@@ -123,7 +128,7 @@ pub mod pallet {
 			product_id: ProductId,
 			request_id: RequestId,
 			settlement_id: SettlementId,
-			claimable_assets: U256,
+			receivable_amount: U256,
 		},
 		/// Per-Adapter NAV breakdown was recorded for a settlement.
 		AdapterValuationsRecorded { product_id: ProductId, settlement_id: SettlementId },
@@ -173,6 +178,24 @@ pub mod pallet {
 		Blake2_128Concat,
 		RequestId,
 		ApprovedInvestment,
+	>;
+
+	#[pallet::storage]
+	/// Reverse index: every request_id approved into a given (product_id,
+	/// settlement_id), written alongside `ApprovedInvestments` by
+	/// `record_investment_approval`. Exists purely so
+	/// `pallet_tranche_system::RequestSettlementInspect` (implemented below) can
+	/// answer "which requests does this settlement cover" in O(1) instead of
+	/// pallet-tranche-tx-registry needing to scan all of `ApprovedInvestments` — see
+	/// that trait's doc comment for the full cross-pallet rationale.
+	pub type SettlementRequests<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
+		BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>,
+		ValueQuery,
 	>;
 
 	#[pallet::storage]
@@ -294,7 +317,7 @@ pub mod pallet {
 		}
 
 		/// Record a pending request's full approval: the complete Adapter
-		/// allocation breakdown, plus what the investor can claim as a result.
+		/// allocation breakdown, plus what the investor can receive as a result.
 		/// Origin must be `ValuationOrigin`. Reverts unless
 		/// `sum(allocations[i].amount) == requested.amount`.
 		#[pallet::call_index(1)]
@@ -305,7 +328,7 @@ pub mod pallet {
 			request_id: RequestId,
 			settlement_id: SettlementId,
 			allocations: BoundedVec<Allocation, ConstU32<MAX_ALLOCATIONS>>,
-			claimable_assets: U256,
+			receivable_amount: U256,
 		) -> DispatchResult {
 			T::ValuationOrigin::ensure_origin(origin)?;
 
@@ -331,18 +354,24 @@ pub mod pallet {
 			}
 			ensure!(sum == requested.amount, Error::<T>::AllocationSumMismatch);
 
+			let mut settlement_requests = SettlementRequests::<T>::get(product_id, settlement_id);
+			settlement_requests
+				.try_push(request_id)
+				.map_err(|_| Error::<T>::TooManySettlementRequests)?;
+
 			RequestedInvestments::<T>::remove(product_id, request_id);
 			ApprovedInvestments::<T>::insert(
 				product_id,
 				request_id,
-				ApprovedInvestment { requested, settlement_id, allocations, claimable_assets },
+				ApprovedInvestment { requested, settlement_id, allocations, receivable_amount },
 			);
+			SettlementRequests::<T>::insert(product_id, settlement_id, settlement_requests);
 
 			Self::deposit_event(Event::InvestmentApproved {
 				product_id,
 				request_id,
 				settlement_id,
-				claimable_assets,
+				receivable_amount,
 			});
 			Ok(())
 		}
@@ -429,5 +458,11 @@ pub mod pallet {
 			});
 			Ok(())
 		}
+	}
+}
+
+impl<T: pallet::Config> RequestSettlementInspect for pallet::Pallet<T> {
+	fn settlement_requests(product_id: ProductId, settlement_id: SettlementId) -> Vec<RequestId> {
+		pallet::SettlementRequests::<T>::get(product_id, settlement_id).into_inner()
 	}
 }

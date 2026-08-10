@@ -41,6 +41,16 @@ pub const MAX_ADAPTER_VALUATIONS: u32 = pallet_tranche_system::MAX_MULTICHAIN_AD
 /// ballpark as other per-entity bounds (e.g. `MAX_COLLATERALS`).
 pub const MAX_ASSET_POSITIONS: u32 = 20;
 
+/// Maximum number of requests that can be approved into a single
+/// (product_id, settlement_id) — bounds `SettlementRequests`, the reverse index
+/// `record_investment_approval` writes to so pallet-tranche-tx-registry can close
+/// out `InvestorActiveRequests` entries once a settlement's Finalize-Hooks leg lands
+/// (see `pallet_tranche_system::RequestSettlementInspect`). No equivalent bound
+/// exists elsewhere in this pallet family — sized generously since it caps "investors
+/// settled together in one cycle", not a per-product structural count like
+/// `MAX_ALLOCATIONS`.
+pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
+
 // ---------------------------------------------------------------------------
 // OrderType
 // ---------------------------------------------------------------------------
@@ -117,10 +127,10 @@ pub struct ApprovedInvestment {
 	/// Per-Adapter allocation breakdown; sum of `amount` across entries is
 	/// expected to equal `requested.amount`.
 	pub allocations: BoundedVec<Allocation, ConstU32<MAX_ALLOCATIONS>>,
-	/// Finalized claimable amount for the investor — minted share-token amount
+	/// Finalized receivable amount for the investor — minted share-token amount
 	/// for a Deposit request, or released underlying-asset amount for a Redeem
 	/// request, per `requested.order_type`.
-	pub claimable_assets: U256,
+	pub receivable_amount: U256,
 }
 
 // ---------------------------------------------------------------------------
