@@ -20,7 +20,7 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -163,7 +163,7 @@ pub mod pallet {
 		ProductId,
 		Blake2_128Concat,
 		RequestId,
-		RequestedInvestment,
+		RequestedInvestment<BlockNumberFor<T>>,
 	>;
 
 	#[pallet::storage]
@@ -177,7 +177,7 @@ pub mod pallet {
 		ProductId,
 		Blake2_128Concat,
 		RequestId,
-		ApprovedInvestment,
+		ApprovedInvestment<BlockNumberFor<T>>,
 	>;
 
 	#[pallet::storage]
@@ -233,7 +233,7 @@ pub mod pallet {
 		ProductId,
 		Blake2_128Concat,
 		SettlementId,
-		TrancheSettlement,
+		TrancheSettlement<BlockNumberFor<T>>,
 	>;
 
 	#[pallet::storage]
@@ -252,7 +252,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+			migrations::v2::MigrateToV2::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -301,6 +301,7 @@ pub mod pallet {
 					investor_address,
 					amount,
 					order_type,
+					recorded_at: frame_system::Pallet::<T>::block_number(),
 				},
 			);
 
@@ -363,7 +364,13 @@ pub mod pallet {
 			ApprovedInvestments::<T>::insert(
 				product_id,
 				request_id,
-				ApprovedInvestment { requested, settlement_id, allocations, receivable_amount },
+				ApprovedInvestment {
+					requested,
+					settlement_id,
+					allocations,
+					receivable_amount,
+					recorded_at: frame_system::Pallet::<T>::block_number(),
+				},
 			);
 			SettlementRequests::<T>::insert(product_id, settlement_id, settlement_requests);
 
@@ -445,7 +452,11 @@ pub mod pallet {
 			TrancheSettlements::<T>::insert(
 				product_id,
 				settlement_id,
-				TrancheSettlement { tranches, pending_deposit_assets },
+				TrancheSettlement {
+					tranches,
+					pending_deposit_assets,
+					recorded_at: frame_system::Pallet::<T>::block_number(),
+				},
 			);
 			ProductNavs::<T>::insert(product_id, settlement_id, product_nav);
 			LastSettlementId::<T>::insert(product_id, settlement_id);

@@ -431,21 +431,33 @@ where
 	///
 	/// @param product_id The product the request belongs to
 	/// @param request_id The request to look up
-	/// @return request_step  0 = Requested, 1 = BridgeExecuted, 2 = HooksExecuted
-	/// @return settlement_id The settlement this request is linked to, 0 if not yet linked
-	/// @return receivable    Whether the investor can now call claim() for this request
+	/// @return investor       Investor address the registry entry was opened with
+	/// @return vault_chain_id EVM chain ID of the tranche vault this request targets
+	/// @return vault_address  ERC-7540 vault contract address this request targets
+	/// @return amount         Investor's full requested amount, as submitted at Requested step
+	/// @return order_type     0 = redeem, 1 = deposit
+	/// @return request_step   0 = Requested, 1 = BridgeExecuted, 2 = HooksExecuted
+	/// @return settlement_id  The settlement this request is linked to, 0 if not yet linked
+	/// @return receivable     Whether the investor can now call claim() for this request
 	#[precompile::public("get_request_status(uint256,bytes32)")]
 	#[precompile::view]
+	#[allow(clippy::type_complexity)]
 	fn get_request_status(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
 		request_id: H256,
-	) -> EvmResult<(u8, U256, bool)> {
+	) -> EvmResult<(Address, u64, Address, U256, u8, u8, U256, bool)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
 		let entry =
 			pallet_tranche_tx_registry::RequestEntries::<Runtime>::get(product_id, request_id)
 				.ok_or_else(|| revert("request not found"))?;
+
+		let investor = Address(entry.investor);
+		let vault_chain_id = entry.vault.chain_id;
+		let vault_address = Address(entry.vault.vault_address);
+		let amount = entry.amount;
+		let order_type = encode_request_order_type(entry.order_type);
 
 		let request_step = if entry.hooks_tx.is_some() {
 			RequestStep::HooksExecuted
@@ -458,7 +470,16 @@ where
 		let Some(approved) =
 			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
 		else {
-			return Ok((encode_request_step(request_step), U256::zero(), false));
+			return Ok((
+				investor,
+				vault_chain_id,
+				vault_address,
+				amount,
+				order_type,
+				encode_request_step(request_step),
+				U256::zero(),
+				false,
+			));
 		};
 		let settlement_id = approved.settlement_id;
 
@@ -470,7 +491,16 @@ where
 		.finalize_hooks_tx
 		.is_some();
 
-		Ok((encode_request_step(request_step), settlement_id, receivable))
+		Ok((
+			investor,
+			vault_chain_id,
+			vault_address,
+			amount,
+			order_type,
+			encode_request_step(request_step),
+			settlement_id,
+			receivable,
+		))
 	}
 }
 
@@ -599,6 +629,13 @@ fn decode_request_order_type(order_type: u8) -> EvmResult<OrderType> {
 		0 => Ok(OrderType::Redeem),
 		1 => Ok(OrderType::Deposit),
 		_ => Err(revert("invalid order_type")),
+	}
+}
+
+fn encode_request_order_type(order_type: OrderType) -> u8 {
+	match order_type {
+		OrderType::Redeem => 0,
+		OrderType::Deposit => 1,
 	}
 }
 
