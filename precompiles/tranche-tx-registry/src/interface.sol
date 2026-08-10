@@ -423,7 +423,9 @@ interface TrancheTxRegistry {
      * @notice Read one request's status, composed directly from its request registry entry
      *         and (once linked) its settlement's Finalize leg for the request's own
      *         origin chain — no separate coarse-status enum, just the two pipelines' own
-     *         vocabulary.
+     *         vocabulary. Also returns the request's own static details (investor/vault/
+     *         amount/order_type, unchanged since record_request_tx's Requested step) so a
+     *         caller doesn't need a separate get_request_record round-trip just for those.
      * @dev Reverts under the same condition as get_request_record (registry entry never
      *      opened). `request_step` is the last completed step of the 3-tx request
      *      pipeline. `settlement_id` is 0 until this request is linked to a settlement via
@@ -444,9 +446,14 @@ interface TrancheTxRegistry {
      *      while `settlement_id == 0`.
      * @param product_id The product the request belongs to
      * @param request_id The request to look up
-     * @return request_step  Last completed step of the request's own 3-tx pipeline
-     * @return settlement_id The settlement this request is linked to, 0 if not yet linked
-     * @return receivable    Whether the investor can now call claim() for this request
+     * @return investor       Investor address the registry entry was opened with
+     * @return vault_chain_id EVM chain ID of the tranche vault this request targets
+     * @return vault_address  ERC-7540 vault contract address this request targets
+     * @return amount         Investor's full requested amount, as submitted at Requested step
+     * @return order_type     0 = redeem, 1 = deposit
+     * @return request_step   Last completed step of the request's own 3-tx pipeline
+     * @return settlement_id  The settlement this request is linked to, 0 if not yet linked
+     * @return receivable     Whether the investor can now call claim() for this request
      */
     function get_request_status(
         uint256 product_id,
@@ -455,6 +462,11 @@ interface TrancheTxRegistry {
         external
         view
         returns (
+            address investor,
+            uint64 vault_chain_id,
+            address vault_address,
+            uint256 amount,
+            uint8 order_type,
             RequestStep request_step,
             uint256 settlement_id,
             bool receivable

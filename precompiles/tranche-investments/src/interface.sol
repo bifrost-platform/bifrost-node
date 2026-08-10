@@ -240,8 +240,8 @@ interface Investments {
      *      last value it recorded. Zero if the product has never settled yet — settlement_id
      *      is 1-indexed protocol-wide (the Valuation Contract's first real settlement is 1,
      *      never 0) precisely so 0 stays free as this "never settled" sentinel, here and
-     *      everywhere else in this interface that reads settlement_id back (e.g.
-     *      get_request_status).
+     *      everywhere else in this interface that reads settlement_id back (e.g. get_request,
+     *      get_approval).
      * @param product_id The product to look up
      */
     function get_settlement_id(

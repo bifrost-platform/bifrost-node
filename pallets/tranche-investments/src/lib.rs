@@ -84,7 +84,7 @@ pub enum OrderType {
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct RequestedInvestment {
+pub struct RequestedInvestment<BlockNumber> {
 	pub product_id: ProductId,
 	/// Valuation Contract's settlement cycle in effect at request time. Can
 	/// differ from the eventual approval's settlement_id if the request isn't
@@ -95,6 +95,10 @@ pub struct RequestedInvestment {
 	/// Investor's full requested amount (18-decimal), pre-allocation.
 	pub amount: U256,
 	pub order_type: OrderType,
+	/// This chain's own block number when `record_investment_request` accepted
+	/// this entry — not to be confused with any timestamp the Valuation
+	/// Contract or a Spoke-side tx might carry; purely local write-time.
+	pub recorded_at: BlockNumber,
 }
 
 // ---------------------------------------------------------------------------
@@ -119,8 +123,8 @@ pub struct Allocation {
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct ApprovedInvestment {
-	pub requested: RequestedInvestment,
+pub struct ApprovedInvestment<BlockNumber> {
+	pub requested: RequestedInvestment<BlockNumber>,
 	/// Valuation Contract's settlement cycle at approval time — distinct from
 	/// `requested.settlement_id` (see that field's doc comment).
 	pub settlement_id: SettlementId,
@@ -131,6 +135,10 @@ pub struct ApprovedInvestment {
 	/// for a Deposit request, or released underlying-asset amount for a Redeem
 	/// request, per `requested.order_type`.
 	pub receivable_amount: U256,
+	/// This chain's own block number when `record_investment_approval` accepted
+	/// this entry — distinct from `requested.recorded_at` (the earlier
+	/// request-time write).
+	pub recorded_at: BlockNumber,
 }
 
 // ---------------------------------------------------------------------------
@@ -220,11 +228,14 @@ pub struct TrancheSettle {
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct TrancheSettlement {
+pub struct TrancheSettlement<BlockNumber> {
 	pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
 	/// Product-level pending/unconfirmed deposit amount as of this
 	/// settlement — not yet reflected in any tranche's `units_outstanding`.
 	pub pending_deposit_assets: U256,
+	/// This chain's own block number when `record_tranche_settlement` accepted
+	/// this entry.
+	pub recorded_at: BlockNumber,
 }
 
 // ---------------------------------------------------------------------------

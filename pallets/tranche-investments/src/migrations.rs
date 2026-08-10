@@ -1,11 +1,18 @@
-use crate::{ApprovedInvestment, Config, Pallet, RequestedInvestment};
-use pallet_tranche_system::ProductId;
+use crate::{
+	Allocation, ApprovedInvestment, Config, OrderType, Pallet, RequestId, RequestedInvestment,
+	SettlementId, TrancheSettle, TrancheSettlement, MAX_ALLOCATIONS,
+};
+use pallet_tranche_system::{ProductId, VaultId};
 
 use frame_support::{
 	migrations::VersionedMigration, pallet_prelude::*, storage_alias,
 	traits::UncheckedOnRuntimeUpgrade, weights::Weight, Blake2_128Concat,
 };
-use sp_core::{H256, U256};
+use frame_system::pallet_prelude::BlockNumberFor;
+use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use scale_info::TypeInfo;
+use sp_core::{ConstU32, H160, U256};
+use sp_runtime::{BoundedVec, RuntimeDebug};
 use sp_std::marker::PhantomData;
 
 pub(crate) const LOG_TARGET: &str = "runtime::tranche-investments";
@@ -20,25 +27,79 @@ macro_rules! log {
 	};
 }
 
-/// v0 -> v1: `RequestId` (the second key of `RequestedInvestments`/`ApprovedInvestments`,
-/// and the value of `get_pending_requests`' returned array) switched from `U256` to `H256`
-/// — interface.sol's `request_id` is now `bytes32` rather than `uint256`, matching what the
-/// Valuation Contract actually generates. This re-keys both maps entry-by-entry rather than
-/// translating values in place, since the key's own type — not just the value — changed.
-pub mod v1 {
+/// v1 -> v2: `RequestedInvestment`/`ApprovedInvestment`/`TrancheSettlement` each gained a
+/// `recorded_at: BlockNumber` field (this chain's own block number when the entry was
+/// written). For entries that already existed before this upgrade, the true original
+/// write-time isn't recoverable from on-chain state, so this migration backfills
+/// `recorded_at` with the migration's own block number instead — an explicit "as of this
+/// upgrade" stamp, not the genuine historical record time. Every entry touched by one
+/// migration run gets the exact same stamp.
+pub mod v2 {
 	use super::*;
 
-	/// Storage as it existed under `STORAGE_VERSION::new(0)`, keyed by the old `U256`
-	/// `RequestId`. Same pallet/item names as the live storage, so this resolves to the
-	/// same storage keys — only the declared `RequestId` type here differs.
+	/// `RequestedInvestment` as it existed under `STORAGE_VERSION::new(1)`, before
+	/// `recorded_at` existed.
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
+	pub struct RequestedInvestmentV1 {
+		pub product_id: ProductId,
+		pub settlement_id: SettlementId,
+		pub vault: VaultId,
+		pub investor_address: H160,
+		pub amount: U256,
+		pub order_type: OrderType,
+	}
+
+	/// `ApprovedInvestment` as it existed under `STORAGE_VERSION::new(1)`.
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
+	pub struct ApprovedInvestmentV1 {
+		pub requested: RequestedInvestmentV1,
+		pub settlement_id: SettlementId,
+		pub allocations: BoundedVec<Allocation, ConstU32<MAX_ALLOCATIONS>>,
+		pub receivable_amount: U256,
+	}
+
+	/// `TrancheSettlement` as it existed under `STORAGE_VERSION::new(1)`.
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
+	pub struct TrancheSettlementV1 {
+		pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+		pub pending_deposit_assets: U256,
+	}
+
 	#[storage_alias]
 	type RequestedInvestments<T: Config> = StorageDoubleMap<
 		Pallet<T>,
 		Blake2_128Concat,
 		ProductId,
 		Blake2_128Concat,
-		U256,
-		RequestedInvestment,
+		RequestId,
+		RequestedInvestmentV1,
 	>;
 
 	#[storage_alias]
@@ -47,31 +108,46 @@ pub mod v1 {
 		Blake2_128Concat,
 		ProductId,
 		Blake2_128Concat,
-		U256,
-		ApprovedInvestment,
+		RequestId,
+		ApprovedInvestmentV1,
 	>;
 
-	/// Reinterprets a `U256` request_id as `H256` by writing out its big-endian byte
-	/// representation — the same bytes a Solidity `bytes32(uint256(request_id))` cast would
-	/// produce, so a request_id that used to read as e.g. `5` keeps meaning
-	/// `0x00..05` under the new encoding.
-	fn to_h256(id: U256) -> H256 {
-		H256(id.to_big_endian())
-	}
+	#[storage_alias]
+	type TrancheSettlements<T: Config> = StorageDoubleMap<
+		Pallet<T>,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
+		TrancheSettlementV1,
+	>;
 
-	pub struct MigrateV0ToV1<T>(PhantomData<T>);
+	pub struct MigrateV1ToV2<T>(PhantomData<T>);
 
-	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV0ToV1<T> {
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV1ToV2<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
+			let recorded_at: BlockNumberFor<T> = frame_system::Pallet::<T>::block_number();
 
 			let requested = RequestedInvestments::<T>::drain().collect::<sp_std::vec::Vec<_>>();
 			weight = weight.saturating_add(
 				T::DbWeight::get().reads_writes(requested.len() as u64, requested.len() as u64),
 			);
 			let requested_count = requested.len();
-			for (product_id, old_id, value) in requested {
-				crate::RequestedInvestments::<T>::insert(product_id, to_h256(old_id), value);
+			for (product_id, request_id, old) in requested {
+				crate::RequestedInvestments::<T>::insert(
+					product_id,
+					request_id,
+					RequestedInvestment {
+						product_id: old.product_id,
+						settlement_id: old.settlement_id,
+						vault: old.vault,
+						investor_address: old.investor_address,
+						amount: old.amount,
+						order_type: old.order_type,
+						recorded_at,
+					},
+				);
 			}
 			weight = weight.saturating_add(T::DbWeight::get().writes(requested_count as u64));
 
@@ -80,28 +156,66 @@ pub mod v1 {
 				T::DbWeight::get().reads_writes(approved.len() as u64, approved.len() as u64),
 			);
 			let approved_count = approved.len();
-			for (product_id, old_id, value) in approved {
-				crate::ApprovedInvestments::<T>::insert(product_id, to_h256(old_id), value);
+			for (product_id, request_id, old) in approved {
+				crate::ApprovedInvestments::<T>::insert(
+					product_id,
+					request_id,
+					ApprovedInvestment {
+						requested: RequestedInvestment {
+							product_id: old.requested.product_id,
+							settlement_id: old.requested.settlement_id,
+							vault: old.requested.vault,
+							investor_address: old.requested.investor_address,
+							amount: old.requested.amount,
+							order_type: old.requested.order_type,
+							recorded_at,
+						},
+						settlement_id: old.settlement_id,
+						allocations: old.allocations,
+						receivable_amount: old.receivable_amount,
+						recorded_at,
+					},
+				);
 			}
 			weight = weight.saturating_add(T::DbWeight::get().writes(approved_count as u64));
 
+			let settlements = TrancheSettlements::<T>::drain().collect::<sp_std::vec::Vec<_>>();
+			weight = weight.saturating_add(
+				T::DbWeight::get().reads_writes(settlements.len() as u64, settlements.len() as u64),
+			);
+			let settlements_count = settlements.len();
+			for (product_id, settlement_id, old) in settlements {
+				crate::TrancheSettlements::<T>::insert(
+					product_id,
+					settlement_id,
+					TrancheSettlement {
+						tranches: old.tranches,
+						pending_deposit_assets: old.pending_deposit_assets,
+						recorded_at,
+					},
+				);
+			}
+			weight = weight.saturating_add(T::DbWeight::get().writes(settlements_count as u64));
+
 			log!(
 				info,
-				"tranche-investments v0->v1: re-keyed {} RequestedInvestments and {} ApprovedInvestments entries (RequestId U256 -> H256) ✅",
+				"tranche-investments v1->v2: backfilled recorded_at (stamped with migration block {:?}, not original write time) for {} RequestedInvestments, {} ApprovedInvestments, {} TrancheSettlements entries ✅",
+				recorded_at,
 				requested_count,
 				approved_count,
+				settlements_count,
 			);
 
 			weight
 		}
 	}
 
-	/// Gated `on_chain == 0 && in_code == 1`, and bumps the on-chain version itself —
-	/// wire this (not `MigrateV0ToV1` directly) into the runtime's migrations tuple.
-	pub type MigrateToV1<T> = VersionedMigration<
-		0,
+	/// Gated `on_chain == 1 && in_code == 2`, and bumps the on-chain version itself —
+	/// wire this (not `MigrateV1ToV2` directly) into the runtime's migrations tuple.
+	pub type MigrateToV2<T> = VersionedMigration<
 		1,
-		MigrateV0ToV1<T>,
+		2,
+		MigrateV1ToV2<T>,
 		Pallet<T>,
 		<T as frame_system::Config>::DbWeight,
 	>;
