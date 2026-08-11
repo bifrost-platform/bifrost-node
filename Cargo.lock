@@ -8450,6 +8450,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "pallet-evm",
  "pallet-tranche-system",
  "parity-scale-codec",
  "scale-info",

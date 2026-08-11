@@ -379,6 +379,13 @@ pub trait VaultInspect {
 	/// Returns `true` if `vault` is registered as one of `product_id`'s
 	/// tranches.
 	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool;
+	/// Returns `true` if every id in `chain_ids` is a chain where `product_id` has at
+	/// least one tranche vault. Takes a slice (rather than one `chain_id` at a time) so
+	/// an implementation can fetch `product_id`'s details once and check the whole batch
+	/// against it. Consumed by pallet-tranche-tx-registry to validate a settlement
+	/// Trigger's declared `finalize_chain_ids` — the chains needing a Finalize leg,
+	/// since Finalize delivers a settlement's result to a vault, never an Adapter.
+	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
 }
 
 /// Implemented by pallet-tranche-system itself (it owns the `MultichainAdapterIndex`/
@@ -394,17 +401,18 @@ pub trait AdapterInspect {
 	/// individual Adapters (see `MultichainAdapterInfo::adapters`), under any
 	/// parent.
 	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool;
-	/// Returns `true` if every id in `chain_ids` is a chain where `product_id`
-	/// has at least one top-level MultichainAdapter (see
-	/// `ProductDetails::multichain_adapters`) — unlike the two methods above,
-	/// this doesn't identify one specific adapter by address, only whether
-	/// each chain itself is one the product actually routes through. Takes a
-	/// slice (rather than one `chain_id` at a time) so an implementation can
-	/// fetch `product_id`'s details once and check the whole batch against
-	/// it, instead of the caller looping and re-fetching per id. Consumed by
-	/// pallet-tranche-tx-registry to reject recording a settlement Trigger
-	/// against spoke chains the product has no MultichainAdapter on.
-	fn spoke_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
+	/// Returns `true` if every id in `chain_ids` is a chain where `product_id` has a
+	/// top-level MultichainAdapter registered — *regardless* of that adapter's current
+	/// `weight_bps` (a chain that's since been de-weighted to 0 can still hold capital
+	/// allocated to it while its weight was non-zero, so it can't be dropped from this
+	/// check just because its weight is 0 now). Takes a slice (rather than one
+	/// `chain_id` at a time) so an implementation can fetch `product_id`'s details once
+	/// and check the whole batch against it. Consumed by pallet-tranche-tx-registry to
+	/// validate a request's declared `adapter_chain_ids` (an Adapter leg always
+	/// targets a yield-source chain, never a vault) and a settlement Trigger's declared
+	/// `collect_response_chain_ids` (Collect/Response query NAV from an Adapter, never a
+	/// vault).
+	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
 }
 
 /// Unlike `VaultInspect`/`AdapterInspect` above, this is implemented by

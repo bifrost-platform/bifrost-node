@@ -1,7 +1,9 @@
+mod impls;
+
 use crate::{
-	ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestEntry, RequestId, RequestOpening,
-	RequestStep, SettlementChainEntry, SettlementId, SettlementStep, TxRecord, WeightInfo,
-	MAX_SPOKE_CHAINS,
+	ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry, RequestEntry, RequestId,
+	RequestOpening, RequestStep, SettlementChainEntry, SettlementId, SettlementStep, TxRecord,
+	WeightInfo, MAX_SPOKE_CHAINS,
 };
 use pallet_tranche_system::{AdapterInspect, RequestSettlementInspect, VaultId, VaultInspect};
 
@@ -21,20 +23,27 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	/// `pallet_evm::Config` supplies `<Self as pallet_evm::Config>::ChainId`, this chain's
+	/// own EVM chain ID — needed by `record_request_tx` to tell a Hub-vault request (no
+	/// Inbound leg, `adapter_chain_ids` declared at `Requested`) apart from a
+	/// Spoke-vault one (Inbound leg required, `adapter_chain_ids` deferred to its
+	/// `InboundHooksExecuted`) — see `RequestStep`'s doc comment.
+	pub trait Config: frame_system::Config + pallet_evm::Config {
 		/// Only accepted origin for all `record_*` extrinsics. Wire as
 		/// `type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>` in
 		/// the runtime — mirrors `pallet_tranche_investments::Config::ValuationOrigin`,
 		/// except this checks an ordinary signed origin against the `TxRecorder` storage
 		/// value directly rather than a precompile-constructed custom `Origin` variant.
 		type RecorderOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-		/// Vault inspector — implemented by pallet-tranche-system. Used to
-		/// verify a vault actually belongs to `product_id` before recording a
-		/// request or receive against it.
+		/// Vault inspector — implemented by pallet-tranche-system. Used to verify a
+		/// vault actually belongs to `product_id` before recording a request or
+		/// receive against it, and to verify a settlement's declared
+		/// `finalize_chain_ids` each have a registered vault.
 		type Vaults: VaultInspect;
-		/// Adapter inspector — implemented by pallet-tranche-system. Used to
-		/// verify a settlement's spoke chains are ones `product_id` actually
-		/// has a MultichainAdapter on, before recording a Trigger against them.
+		/// Adapter inspector — implemented by pallet-tranche-system. Used to verify
+		/// a request's declared `adapter_chain_ids`, or a settlement's
+		/// declared `collect_response_chain_ids`, each have a registered
+		/// MultichainAdapter, before recording against them.
 		type Adapters: AdapterInspect;
 		/// Request-settlement linkage inspector — implemented by
 		/// pallet-tranche-investments (see `RequestSettlementInspect`'s doc comment
@@ -54,8 +63,11 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// The vault does not belong to `product_id`.
 		VaultNotRegistered,
-		/// One of `spoke_chain_ids` is not a chain `product_id` has a
-		/// MultichainAdapter registered on.
+		/// One of the declared chains doesn't have the role required for the set it
+		/// was declared in: `adapter_chain_ids` (Request) or
+		/// `collect_response_chain_ids` (Settlement) requires a registered
+		/// MultichainAdapter on that chain; `finalize_chain_ids` (Settlement)
+		/// requires a registered tranche vault.
 		SpokeChainNotRegistered,
 		/// A registry entry already exists for this (product_id, request_id).
 		RequestAlreadyOpened,
@@ -65,27 +77,58 @@ pub mod pallet {
 		RequestOpeningRequired,
 		/// `opening` must be `None` for every step other than `Requested`.
 		UnexpectedRequestOpening,
+		/// `adapter_chain_ids` must be `Some` when `step == RequestStep::Requested` AND
+		/// the vault is on Hub (no Inbound leg — the deposit is at the Valuation Contract
+		/// already), or when `step == RequestStep::InboundHooksExecuted` (the Inbound leg's
+		/// own Hooks phase, only reachable when the vault is on a Spoke chain). See
+		/// `RequestStep`'s doc comment for why it can't be declared any earlier for a
+		/// Spoke-vault request.
+		RequestAdapterChainsRequired,
+		/// `adapter_chain_ids` must be `None` everywhere else — including
+		/// `step == RequestStep::Requested` for a Spoke-vault request (deferred to
+		/// `InboundHooksExecuted` instead).
+		UnexpectedRequestAdapterChains,
+		/// `chain_id` is not among the chains declared for Adapter.
+		UnknownAdapterChain,
+		/// `adapter_chain_ids` has not been declared yet for this request — either it
+		/// hasn't been opened at all, or it's a Spoke-vault request still awaiting its
+		/// Inbound leg's `InboundHooksExecuted`.
+		AdapterChainsNotDeclared,
+		/// `step == RequestStep::InboundBridgeExecuted`/`InboundHooksExecuted` was recorded
+		/// for a request whose vault is on Hub — a Hub-vault request has no Inbound leg at
+		/// all (`Requested` already means the deposit is at the Valuation Contract).
+		UnexpectedInboundLeg,
 		/// The step being recorded skips over an earlier, not-yet-recorded step.
 		RequestStepOutOfOrder,
 		/// This step has already been recorded for this request.
 		RequestStepAlreadyRecorded,
+		/// `step` must be one of the five recordable values — never
+		/// `RequestStep::Queued`/`Completed`, both read-only sentinels.
+		InvalidRequestStep,
 		/// `step` must be one of the seven recordable values — never
 		/// `SettlementStep::Queued`/`Settled`, both read-only sentinels.
 		InvalidSettlementStep,
-		/// `spoke_chain_ids` must be `Some` and non-empty when
-		/// `step == SettlementStep::Triggered`.
+		/// `collect_response_chain_ids` and `finalize_chain_ids` must both be `Some`
+		/// when `step == SettlementStep::Triggered` (each may independently be
+		/// empty — a chain missing from both sets needs no leg at all for this
+		/// settlement; both empty means the settlement needs no cross-chain action
+		/// at all).
 		SpokeChainIdsRequired,
-		/// `spoke_chain_ids` must be `None` for every step other than `Triggered`.
+		/// `collect_response_chain_ids` and `finalize_chain_ids` must both be `None`
+		/// for every step other than `Triggered`.
 		UnexpectedSpokeChainIds,
-		/// `spoke_chain_id` must be `Some` for every step other than `Triggered`.
+		/// `spoke_chain_id` must be `Some` for every leg step (every step other than
+		/// `Triggered`).
 		SpokeChainIdRequired,
-		/// `spoke_chain_id` must be `None` when `step == SettlementStep::Triggered`.
+		/// `spoke_chain_id` must be `None` when `step == Triggered`.
 		UnexpectedSpokeChainId,
 		/// Trigger has already been recorded for this (product_id, settlement_id).
 		SettlementAlreadyTriggered,
 		/// Trigger has not been recorded yet for this (product_id, settlement_id).
 		SettlementNotTriggered,
-		/// `spoke_chain_id` is not among the chains registered at Trigger time.
+		/// `spoke_chain_id` is not among the chains registered for the leg kind
+		/// being recorded — `collect_response_chain_ids` for a Collect/Response leg,
+		/// `finalize_chain_ids` for a Finalize leg.
 		UnknownSpokeChain,
 		/// The leg step being recorded skips over its Bridge phase.
 		SettlementStepOutOfOrder,
@@ -104,11 +147,12 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// The tx recorder account was (re)configured via `set_tx_recorder`.
 		TxRecorderSet { old: Option<T::AccountId>, new: T::AccountId },
-		/// One tx in a request's 3-tx pipeline was recorded.
+		/// One tx in a request's pipeline was recorded.
 		RequestTxRecorded {
 			product_id: ProductId,
 			request_id: RequestId,
 			opening: Option<RequestOpening>,
+			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -118,7 +162,8 @@ pub mod pallet {
 			product_id: ProductId,
 			settlement_id: SettlementId,
 			spoke_chain_id: Option<ChainId>,
-			spoke_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			step: SettlementStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -153,14 +198,16 @@ pub mod pallet {
 	pub type TxRecorder<T: Config> = StorageValue<_, T::AccountId>;
 
 	#[pallet::storage]
-	/// A request's 3-tx registry entry. Keyed by `(product_id, request_id)`,
-	/// NOT `request_id` alone — `request_id` is only unique within a product's
+	/// A request's registry entry. Keyed by `(product_id, request_id)`, NOT
+	/// `request_id` alone — `request_id` is only unique within a product's
 	/// own namespace (each product's Valuation Contract generates its own
 	/// sequence), same rationale as
 	/// `pallet_tranche_investments::RequestedInvestments`. Opened by
-	/// `record_request_tx`'s `RequestStep::Requested` step; the other two
-	/// steps (`BridgeExecuted`/`HooksExecuted`) fill in `bridge_tx`/`hooks_tx`
-	/// on the existing entry rather than inserting a new one.
+	/// `record_request_tx`'s `RequestStep::Requested` step; its own Inbound
+	/// leg evidence (`bridge_tx`/`hooks_tx`) is filled in afterward by
+	/// `InboundBridgeExecuted`/`InboundHooksExecuted` (only reachable for a
+	/// Spoke-vault request — see `RequestEntry`'s doc comment). Adapter
+	/// leg evidence lives in `RequestChainEntries` instead, not here.
 	pub type RequestEntries<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -171,19 +218,62 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	/// The chains (besides Hub) a request's capital gets distributed out to, in
+	/// the order the recorder supplied them — every one of them will need its
+	/// own `AdapterBridgeExecuted`/`AdapterHooksExecuted` leg in
+	/// `RequestChainEntries` before the request is `Completed`. Empty means no
+	/// Adapter is needed at all. Written by `record_request_tx` either at
+	/// `step == Requested` (Hub-vault request — no Inbound leg, so the
+	/// Adapter decision is already known) or at the Inbound leg's own
+	/// `step == InboundHooksExecuted` (Spoke-vault request — deferred until the
+	/// capital actually arrives at the Valuation Contract) — see `RequestStep`'s
+	/// doc comment for why. Kept as a separate storage item rather than folded
+	/// into `RequestEntry`, same pattern as `SettlementCollectResponseChains`/
+	/// `SettlementFinalizeChains` alongside `SettlementTriggers`.
+	pub type RequestAdapterChains<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		RequestId,
+		BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>,
+	>;
+
+	#[pallet::storage]
+	/// One chain's Adapter leg (Bridge+Hooks) registry entry within a
+	/// request. Keyed by `(product_id, request_id, chain_id)`. `ValueQuery`
+	/// with `RequestChainEntry`'s `Default` impl (rather than `OptionQuery`),
+	/// same rationale as `SettlementChainEntries` — every field inside is
+	/// already independently `Option`-typed, so a fully-empty default entry
+	/// and "nothing recorded for this chain yet" are the same state.
+	pub type RequestChainEntries<T: Config> = StorageNMap<
+		_,
+		(
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, RequestId>,
+			NMapKey<Blake2_128Concat, ChainId>,
+		),
+		RequestChainEntry<BlockNumberFor<T>>,
+		ValueQuery,
+	>;
+
+	#[pallet::storage]
 	#[pallet::unbounded]
 	/// An investor's currently in-flight requests — registered here the moment
 	/// their `RequestEntries` entry is opened (`RequestStep::Requested`), removed
-	/// automatically by `record_settlement_tx` when it records a settlement's
-	/// Finalize-Hooks leg: at that point it asks
+	/// automatically by `record_settlement_tx` either when it records a
+	/// settlement's Finalize-Hooks leg, or when it Triggers a settlement with an
+	/// empty spoke chain set (no cross-chain action needed, so there will never be
+	/// a Finalize leg to close them on later): at that point it asks
 	/// `T::Investments::settlement_requests(product_id, settlement_id)` (implemented
 	/// by pallet-tranche-investments, see `RequestSettlementInspect`'s doc comment
 	/// for why this doesn't require a hard dependency on that pallet) for every
 	/// request_id approved into that settlement, and removes the ones whose own
 	/// origin chain (`RequestEntry::vault::chain_id`) matches the leg just
-	/// finalized. Bounded by `pallet_tranche_investments::MAX_SETTLEMENT_REQUESTS`
-	/// on the writing side, so this stays a fixed-cost operation rather than an
-	/// unbounded scan.
+	/// finalized (or, for the empty-Trigger case, every one of them
+	/// unconditionally — see `close_active_requests`). Bounded by
+	/// `pallet_tranche_investments::MAX_SETTLEMENT_REQUESTS` on the writing side, so
+	/// this stays a fixed-cost operation rather than an unbounded scan.
 	///
 	/// Deliberately unbounded — an investor legitimately opening requests
 	/// across many products concurrently shouldn't be capped by an arbitrary
@@ -212,15 +302,41 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// The spoke chains registered for a settlement at Trigger time, in the
-	/// order the recorder supplied them. Always written alongside
-	/// `SettlementTriggers` (both by the same `record_settlement_tx` call for
-	/// `step == Triggered`) — kept as a separate storage item rather than
-	/// folded into one struct, same pattern already used by
+	/// The chains registered for a settlement's Collect/Response legs at Trigger
+	/// time (those with a registered Adapter, excluding Hub itself — an Adapter
+	/// on Hub is queried locally, no Bridge&Call leg needed), in the order the
+	/// recorder supplied them. A chain never reaches `ResponseHooksExecuted`
+	/// unless it's in this set. Always written alongside `SettlementTriggers`
+	/// and `SettlementFinalizeChains` (all by the same `record_settlement_tx`
+	/// call for `step == Triggered`) — kept as separate storage items rather
+	/// than folded into one struct, same pattern already used by
 	/// `pallet_tranche_investments`' `AdapterValuations`/`ProductNavs`/
 	/// `TrancheSettlements` (three separate maps written together by one
 	/// extrinsic).
-	pub type SettlementSpokeChains<T: Config> = StorageDoubleMap<
+	pub type SettlementCollectResponseChains<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
+		BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>,
+	>;
+
+	#[pallet::storage]
+	/// The chains registered for a settlement's Finalize leg at Trigger time
+	/// (those with a registered tranche vault, excluding Hub itself — a Hub
+	/// vault's result is delivered locally, no Bridge&Call leg needed), in the
+	/// order the recorder supplied them. A chain never reaches
+	/// `FinalizeHooksExecuted` unless it's in this set — this is also the set
+	/// `get_settlement`/`get_request` wait on for their own
+	/// `status`/`settled` completion, since a chain in
+	/// `SettlementCollectResponseChains` but not here has no vault to deliver a
+	/// result to (it terminates at `ResponseHooksExecuted` instead — see
+	/// `SettlementStep`'s doc comment). Written alongside `SettlementTriggers`
+	/// and `SettlementCollectResponseChains`, same rationale as that storage's
+	/// doc comment. A chain may appear in both sets (Type 3-style: it has both a
+	/// vault and an Adapter).
+	pub type SettlementFinalizeChains<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		ProductId,
@@ -292,10 +408,18 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Attest to one tx in a request's 3-tx pipeline. Origin must be
-		/// `RecorderOrigin`. `opening` MUST be `Some` iff `step ==
-		/// RequestStep::Requested` — see interface.sol's `record_request_tx` for
-		/// the full sentinel-gating/ordering contract this mirrors.
+		/// Attest to one tx in a request's pipeline — the single Requested tx, one
+		/// Bridge/Hooks half of the Inbound leg (Spoke-vault requests only), or one
+		/// Bridge/Hooks half of a per-chain Adapter leg (see `RequestStep`'s
+		/// doc comment for exactly which chains need one, and why
+		/// `adapter_chain_ids` attaches to a different step depending on
+		/// whether the vault is on Hub or Spoke). Origin must be `RecorderOrigin`.
+		/// `opening` MUST be `Some` iff `step == RequestStep::Requested`, `None`
+		/// otherwise. `adapter_chain_ids` MUST be `Some` iff `step ==
+		/// RequestStep::Requested` for a Hub-vault request, or `step ==
+		/// RequestStep::InboundHooksExecuted` for a Spoke-vault request, `None`
+		/// otherwise — see interface.sol's `record_request_tx` for the full
+		/// sentinel-gating/ordering contract this mirrors.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx())]
 		pub fn record_request_tx(
@@ -303,6 +427,7 @@ pub mod pallet {
 			product_id: ProductId,
 			request_id: RequestId,
 			opening: Option<RequestOpening>,
+			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -311,6 +436,7 @@ pub mod pallet {
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
 
 			match step {
 				RequestStep::Requested => {
@@ -323,6 +449,25 @@ pub mod pallet {
 						!RequestEntries::<T>::contains_key(product_id, request_id),
 						Error::<T>::RequestAlreadyOpened
 					);
+					if opening.vault.chain_id == hub_chain_id {
+						// No Inbound leg — the deposit is already at the Valuation Contract,
+						// so the Adapter decision is knowable right now.
+						let chains = adapter_chain_ids
+							.clone()
+							.ok_or(Error::<T>::RequestAdapterChainsRequired)?;
+						ensure!(
+							T::Adapters::adapter_chains_belong_to_product(product_id, &chains),
+							Error::<T>::SpokeChainNotRegistered
+						);
+						RequestAdapterChains::<T>::insert(product_id, request_id, chains);
+					} else {
+						// Spoke-vault — Adapter isn't knowable until the Inbound leg's
+						// own InboundHooksExecuted lands at the Valuation Contract.
+						ensure!(
+							adapter_chain_ids.is_none(),
+							Error::<T>::UnexpectedRequestAdapterChains
+						);
+					}
 					RequestEntries::<T>::insert(
 						product_id,
 						request_id,
@@ -341,26 +486,72 @@ pub mod pallet {
 						requests.push((product_id, request_id));
 					});
 				},
-				RequestStep::BridgeExecuted => {
+				RequestStep::InboundBridgeExecuted => {
 					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					// `entry`'s mere existence already guarantees `request_tx.is_some()` — it's
-					// only ever inserted by the `Requested` arm above, which always sets it,
-					// and no path clears it afterward — so there's no separate ordering check
-					// to make here beyond the duplicate check below.
+					ensure!(
+						adapter_chain_ids.is_none(),
+						Error::<T>::UnexpectedRequestAdapterChains
+					);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
+					ensure!(entry.vault.chain_id != hub_chain_id, Error::<T>::UnexpectedInboundLeg);
 					ensure!(entry.bridge_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
 					entry.bridge_tx = Some(tx);
 					RequestEntries::<T>::insert(product_id, request_id, entry);
 				},
-				RequestStep::HooksExecuted => {
+				RequestStep::InboundHooksExecuted => {
 					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
+					ensure!(entry.vault.chain_id != hub_chain_id, Error::<T>::UnexpectedInboundLeg);
+					ensure!(entry.bridge_tx.is_some(), Error::<T>::RequestStepOutOfOrder);
+					ensure!(entry.hooks_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
+					// The Inbound leg's arrival at the Valuation Contract — this is where a
+					// Spoke-vault request's Adapter decision first becomes knowable.
+					let chains = adapter_chain_ids
+						.clone()
+						.ok_or(Error::<T>::RequestAdapterChainsRequired)?;
+					ensure!(
+						T::Adapters::adapter_chains_belong_to_product(product_id, &chains),
+						Error::<T>::SpokeChainNotRegistered
+					);
+					RequestAdapterChains::<T>::insert(product_id, request_id, chains);
+					entry.hooks_tx = Some(tx);
+					RequestEntries::<T>::insert(product_id, request_id, entry);
+				},
+				RequestStep::AdapterBridgeExecuted => {
+					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
+					ensure!(
+						adapter_chain_ids.is_none(),
+						Error::<T>::UnexpectedRequestAdapterChains
+					);
+					let chains = RequestAdapterChains::<T>::get(product_id, request_id)
+						.ok_or(Error::<T>::AdapterChainsNotDeclared)?;
+					ensure!(chains.contains(&chain_id), Error::<T>::UnknownAdapterChain);
+					let mut entry =
+						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
+					ensure!(entry.bridge_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
+					entry.bridge_tx = Some(tx);
+					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
+				},
+				RequestStep::AdapterHooksExecuted => {
+					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
+					ensure!(
+						adapter_chain_ids.is_none(),
+						Error::<T>::UnexpectedRequestAdapterChains
+					);
+					let chains = RequestAdapterChains::<T>::get(product_id, request_id)
+						.ok_or(Error::<T>::AdapterChainsNotDeclared)?;
+					ensure!(chains.contains(&chain_id), Error::<T>::UnknownAdapterChain);
+					let mut entry =
+						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
 					ensure!(entry.bridge_tx.is_some(), Error::<T>::RequestStepOutOfOrder);
 					ensure!(entry.hooks_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
 					entry.hooks_tx = Some(tx);
-					RequestEntries::<T>::insert(product_id, request_id, entry);
+					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
+				},
+				RequestStep::Queued | RequestStep::Completed => {
+					return Err(Error::<T>::InvalidRequestStep.into());
 				},
 			}
 
@@ -368,6 +559,7 @@ pub mod pallet {
 				product_id,
 				request_id,
 				opening,
+				adapter_chain_ids,
 				step,
 				chain_id,
 				tx_hash,
@@ -377,16 +569,36 @@ pub mod pallet {
 
 		/// Attest to one tx in a settlement's pipeline: either the single Trigger
 		/// tx, or one bridge/hooks half of a Collect/Response/Finalize leg for one
-		/// chain. Origin must be `RecorderOrigin`. `spoke_chain_ids` MUST be `Some`
-		/// (and non-empty) iff `step == SettlementStep::Triggered`; `spoke_chain_id`
-		/// MUST be `Some` for every other step — see interface.sol's
-		/// `record_settlement_tx` for the full contract this mirrors.
+		/// chain. Origin must be `RecorderOrigin`. `collect_response_chain_ids` and
+		/// `finalize_chain_ids` MUST both be `Some` iff `step ==
+		/// SettlementStep::Triggered` (each may independently be empty — see below);
+		/// `spoke_chain_id` MUST be `Some` for every leg step (every step other than
+		/// `Triggered`) — see interface.sol's `record_settlement_tx` for the full
+		/// contract this mirrors.
 		///
-		/// Side effect on `step == SettlementStep::FinalizeHooksExecuted`: also
-		/// closes out `InvestorActiveRequests` for every request approved into
-		/// this settlement whose own origin chain is `spoke_chain_id` — see
-		/// `InvestorActiveRequests`'s storage doc comment for the full mechanism
-		/// (`T::Investments::settlement_requests` + `ActiveRequestClosed`).
+		/// The two sets declare, per chain, which leg kind(s) it needs — Collect/
+		/// Response for a chain with a registered Adapter, Finalize for a chain with
+		/// a registered vault, both for a chain with both (excluding Hub itself in
+		/// either case — see `SettlementCollectResponseChains`/`SettlementFinalizeChains`'s
+		/// doc comments). A chain absent from `finalize_chain_ids` never blocks
+		/// completion on a Finalize leg it was never going to get — completion waits
+		/// on `ResponseHooksExecuted` for it instead (see `SettlementStep`'s doc
+		/// comment). A settlement needing no cross-chain action at all is recorded as
+		/// `Triggered` with both sets empty — every read path already reports this
+		/// correctly via vacuous truth, with no dedicated step needed for it.
+		///
+		/// Side effects on `InvestorActiveRequests` (see its own storage doc comment
+		/// for the full mechanism — `T::Investments::settlement_requests` +
+		/// `ActiveRequestClosed`): `step == SettlementStep::FinalizeHooksExecuted`
+		/// closes every Spoke-vault request approved into this settlement whose own
+		/// origin chain is `spoke_chain_id`. `step == SettlementStep::Triggered` and
+		/// `step == SettlementStep::ResponseHooksExecuted` both additionally try to
+		/// close every *Hub*-vault request approved into this settlement, via
+		/// `try_close_hub_vault_requests` — a Hub-vault request has no Finalize leg
+		/// of its own to trigger on (see `SettlementStep`'s doc comment), so this
+		/// runs instead every time `collect_response_chain_ids` might have just
+		/// become fully responded (including vacuously, right at Trigger, if it was
+		/// declared empty).
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx())]
 		pub fn record_settlement_tx(
@@ -394,7 +606,8 @@ pub mod pallet {
 			product_id: ProductId,
 			settlement_id: SettlementId,
 			spoke_chain_id: Option<ChainId>,
-			spoke_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			step: SettlementStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -406,10 +619,19 @@ pub mod pallet {
 
 			if step == SettlementStep::Triggered {
 				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
-				let chains = spoke_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
-				ensure!(!chains.is_empty(), Error::<T>::SpokeChainIdsRequired);
+				let collect_response_chains =
+					collect_response_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
+				let finalize_chains =
+					finalize_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
 				ensure!(
-					T::Adapters::spoke_chains_belong_to_product(product_id, &chains),
+					T::Adapters::adapter_chains_belong_to_product(
+						product_id,
+						&collect_response_chains
+					),
+					Error::<T>::SpokeChainNotRegistered
+				);
+				ensure!(
+					T::Vaults::vault_chains_belong_to_product(product_id, &finalize_chains),
 					Error::<T>::SpokeChainNotRegistered
 				);
 				ensure!(
@@ -417,12 +639,35 @@ pub mod pallet {
 					Error::<T>::SettlementAlreadyTriggered
 				);
 				SettlementTriggers::<T>::insert(product_id, settlement_id, tx);
-				SettlementSpokeChains::<T>::insert(product_id, settlement_id, chains);
+				SettlementCollectResponseChains::<T>::insert(
+					product_id,
+					settlement_id,
+					collect_response_chains.clone(),
+				);
+				SettlementFinalizeChains::<T>::insert(product_id, settlement_id, finalize_chains);
+
+				// Closes every Hub-vault request approved into this settlement if
+				// `collect_response_chains` is already fully responded — vacuously true
+				// right away when it's empty (no Adapter anywhere off-Hub, or a fully local
+				// settlement), same as a leg-by-leg `ResponseHooksExecuted` reaching this
+				// state later would.
+				Self::try_close_hub_vault_requests(product_id, settlement_id);
 			} else {
-				ensure!(spoke_chain_ids.is_none(), Error::<T>::UnexpectedSpokeChainIds);
+				ensure!(
+					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
+					Error::<T>::UnexpectedSpokeChainIds
+				);
 				let spoke_chain_id = spoke_chain_id.ok_or(Error::<T>::SpokeChainIdRequired)?;
-				let chains = SettlementSpokeChains::<T>::get(product_id, settlement_id)
-					.ok_or(Error::<T>::SettlementNotTriggered)?;
+				let is_finalize_step = matches!(
+					step,
+					SettlementStep::FinalizeBridgeExecuted | SettlementStep::FinalizeHooksExecuted
+				);
+				let chains = if is_finalize_step {
+					SettlementFinalizeChains::<T>::get(product_id, settlement_id)
+				} else {
+					SettlementCollectResponseChains::<T>::get(product_id, settlement_id)
+				}
+				.ok_or(Error::<T>::SettlementNotTriggered)?;
 				ensure!(chains.contains(&spoke_chain_id), Error::<T>::UnknownSpokeChain);
 
 				let mut entry =
@@ -494,29 +739,9 @@ pub mod pallet {
 				);
 
 				if step == SettlementStep::FinalizeHooksExecuted {
-					for request_id in T::Investments::settlement_requests(product_id, settlement_id)
-					{
-						let Some(request_entry) = RequestEntries::<T>::get(product_id, request_id)
-						else {
-							continue;
-						};
-						if request_entry.vault.chain_id != spoke_chain_id {
-							continue;
-						}
-						let mut requests = InvestorActiveRequests::<T>::get(request_entry.investor);
-						let Some(pos) =
-							requests.iter().position(|r| *r == (product_id, request_id))
-						else {
-							continue;
-						};
-						requests.swap_remove(pos);
-						InvestorActiveRequests::<T>::insert(request_entry.investor, requests);
-						Self::deposit_event(Event::ActiveRequestClosed {
-							product_id,
-							request_id,
-							investor: request_entry.investor,
-						});
-					}
+					Self::close_active_requests(product_id, settlement_id, Some(spoke_chain_id));
+				} else if step == SettlementStep::ResponseHooksExecuted {
+					Self::try_close_hub_vault_requests(product_id, settlement_id);
 				}
 			}
 
@@ -524,7 +749,8 @@ pub mod pallet {
 				product_id,
 				settlement_id,
 				spoke_chain_id,
-				spoke_chain_ids,
+				collect_response_chain_ids,
+				finalize_chain_ids,
 				step,
 				chain_id,
 				tx_hash,
