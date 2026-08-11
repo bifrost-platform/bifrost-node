@@ -136,6 +136,13 @@ pub mod pallet {
 		SettlementStepAlreadyRecorded,
 		/// A receive has already been recorded for this (investor, vault, tx_hash).
 		ReceiveAlreadyRecorded,
+		/// `tx_hash` must not be the zero hash — a zero `tx_hash` can never be a
+		/// genuine attested transaction, and `TxRecord::recorded_at == 0` (not
+		/// `tx_hash`) is already this pallet's own "not yet recorded" sentinel
+		/// everywhere it's read (see e.g. get_request/get_settlement's read-side
+		/// docs), so a zero `tx_hash` slipping into storage would be indistinguishable
+		/// from a genuine attestation to any caller inspecting `tx_hash` alone.
+		TxHashRequired,
 	}
 
 	// -----------------------------------------------------------------------
@@ -283,6 +290,38 @@ pub mod pallet {
 	/// reasoning as `RequestEntry::investor`.
 	pub type InvestorActiveRequests<T: Config> =
 		StorageMap<_, Blake2_128Concat, H160, Vec<(ProductId, RequestId)>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Every `request_id` an investor has ever opened for a given product, in the
+	/// order opened — written once, at `RequestStep::Requested`, alongside
+	/// `InvestorActiveRequests`, but (unlike that storage) **never removed from**.
+	/// A request's presence here says nothing about whether it's still in
+	/// flight — cross-reference against `InvestorActiveRequests` (or
+	/// `get_request`'s own `status`/`settled`) for that; this storage exists
+	/// purely so a completed request's `request_id` isn't lost once it drops out
+	/// of `InvestorActiveRequests`, giving `get_investor_request_history` (see
+	/// the precompile) something to page through for a "past requests" screen.
+	///
+	/// Deliberately unbounded and never pruned, same `#[pallet::unbounded]`
+	/// rationale as `InvestorActiveRequests` — growth is bounded in practice by
+	/// how many real Requested calls a genuine investor generates over a
+	/// product's lifetime (each one traces back to a real on-chain Vault
+	/// request, itself gas-costed on its own origin chain), not by anything
+	/// this pallet caps directly. Keyed by `(H160, ProductId)` rather than
+	/// folding `product_id` into the value alongside every other investor's
+	/// products (unlike `InvestorActiveRequests`'s cross-product `Vec`) so a
+	/// single-product history read never has to decode entries for products
+	/// the caller doesn't care about.
+	pub type InvestorRequestHistory<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		H160,
+		Blake2_128Concat,
+		ProductId,
+		Vec<RequestId>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	/// A settlement's Trigger evidence. Keyed by `(product_id, settlement_id)`
@@ -433,6 +472,7 @@ pub mod pallet {
 			tx_hash: H256,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
+			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
@@ -484,6 +524,9 @@ pub mod pallet {
 					);
 					InvestorActiveRequests::<T>::mutate(opening.investor, |requests| {
 						requests.push((product_id, request_id));
+					});
+					InvestorRequestHistory::<T>::mutate(opening.investor, product_id, |history| {
+						history.push(request_id);
 					});
 				},
 				RequestStep::InboundBridgeExecuted => {
@@ -613,6 +656,7 @@ pub mod pallet {
 			tx_hash: H256,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
+			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
@@ -774,6 +818,7 @@ pub mod pallet {
 			tx_hash: H256,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
+			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
 
 			ensure!(
 				T::Vaults::vault_belongs_to_product(product_id, &vault),

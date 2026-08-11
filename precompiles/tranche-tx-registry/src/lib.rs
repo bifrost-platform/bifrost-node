@@ -50,6 +50,13 @@ type EvmRequestInfo = (Address, EvmVaultInput, U256, u8);
 /// `InvestorRequest` — (product_id, request_id)
 type EvmInvestorRequest = (U256, H256);
 
+/// Upper bound on `get_investor_request_history`'s `limit` — caps the page size
+/// so a single `eth_call` can't be asked to serialize an unbounded response,
+/// independent of how large the underlying `InvestorRequestHistory` entry has
+/// grown. Rejected (not silently clamped) if exceeded, same "catch caller bugs
+/// early" convention as every other sentinel-gated parameter in this file.
+const MAX_HISTORY_PAGE_SIZE: usize = 50;
+
 // ---------------------------------------------------------------------------
 // Precompile
 // ---------------------------------------------------------------------------
@@ -135,8 +142,13 @@ where
 			amount,
 			order_type,
 		)?;
-		let decoded_adapter_chains =
-			decode_request_adapter_chains(decoded_step, &adapter_chain_ids)?;
+		let hub_chain_id = <Runtime as pallet_evm::Config>::ChainId::get();
+		let decoded_adapter_chains = decode_request_adapter_chains(
+			decoded_step,
+			vault_chain_id,
+			hub_chain_id,
+			&adapter_chain_ids,
+		)?;
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -438,10 +450,11 @@ where
 	}
 
 	/// Enumerate an investor's currently in-flight requests. An empty array means the
-	/// investor has no in-flight request; this is not an error. See
-	/// `InvestorActiveRequests`'s doc comment for the current append-only limitation
-	/// (a request already Finalized still shows up here until the cross-pallet link
-	/// this needs is designed).
+	/// investor has no in-flight request; this is not an error. A request is removed
+	/// from here automatically once its settlement's Finalize-Hooks leg lands (or, for
+	/// a Hub-vault request, once its settlement's Collect/Response completes) — see
+	/// `InvestorActiveRequests`'s own doc comment for the exact mechanism. For requests
+	/// that have already dropped out of this list, see `get_investor_request_history`.
 	///
 	/// @param investor The investor address to look up
 	/// @return requests The investor's in-flight (product_id, request_id) pairs
@@ -458,6 +471,67 @@ where
 			.into_iter()
 			.map(|(product_id, request_id)| (U256::from(product_id), request_id))
 			.collect())
+	}
+
+	/// Page through an investor's full request history for one product — every
+	/// `request_id` ever opened (`RequestStep::Requested`), including ones long since
+	/// completed and no longer in `get_investor_active_requests`. Returned most-recent
+	/// first; `offset`/`limit` index into that most-recent-first order (`offset == 0`
+	/// is the single most recent request). `total` is the full history length for this
+	/// (investor, product_id), so a caller can compute page count without a separate
+	/// call; `offset >= total` returns an empty array rather than reverting, so a
+	/// caller can page forward until it gets one back.
+	///
+	/// `limit` MUST NOT exceed `MAX_HISTORY_PAGE_SIZE` (rejected otherwise) — this
+	/// bounds the response size regardless of how large the underlying history has
+	/// grown, but does NOT bound the underlying storage read cost: `InvestorRequestHistory`
+	/// is stored as one `Vec` per (investor, product_id), and Substrate has no way to
+	/// read/decode only a slice of a stored `Vec` — the full history is always read and
+	/// decoded from storage first, then sliced down to the requested page in memory.
+	/// `record_cost` below still only charges for one DB read (this pallet's existing
+	/// convention — see e.g. `get_request`'s per-loop-iteration charging elsewhere in
+	/// this file for the pattern this deliberately does NOT need here, since this is a
+	/// single read of a single storage entry, not one read per loop iteration), so a
+	/// very long history is charged the same gas as a short one despite doing more
+	/// real work — accepted for now since growth is bounded by real, gas-costed
+	/// on-chain requests, not something this precompile can be tricked into inflating
+	/// for free. See `InvestorRequestHistory`'s own doc comment for the full rationale.
+	///
+	/// @param investor    The investor address to look up
+	/// @param product_id  The product to page history for
+	/// @param offset      How many of the most-recent entries to skip
+	/// @param limit       Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+	/// @return request_ids Up to `limit` request_ids, most-recent first
+	/// @return total       Total history length for this (investor, product_id)
+	#[precompile::public("get_investor_request_history(address,uint256,uint256,uint256)")]
+	#[precompile::view]
+	fn get_investor_request_history(
+		handle: &mut impl PrecompileHandle,
+		investor: Address,
+		product_id: U256,
+		offset: U256,
+		limit: U256,
+	) -> EvmResult<(Vec<H256>, U256)> {
+		let product_id = to_product_id(product_id)?;
+		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		}
+		let limit = limit.as_usize();
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let history = pallet_tranche_tx_registry::InvestorRequestHistory::<Runtime>::get(
+			investor.0, product_id,
+		);
+		let total = U256::from(history.len());
+		if offset >= total {
+			return Ok((Vec::new(), total));
+		}
+		// Safe: offset < total, and total was itself built from a real `usize`
+		// (`history.len()`) above, so offset necessarily fits in a `usize` too.
+		let offset = offset.as_usize();
+
+		let request_ids = history.iter().rev().skip(offset).take(limit).copied().collect();
+		Ok((request_ids, total))
 	}
 
 	/// Read a request's full state in one call: its static details (bundled as one
@@ -839,21 +913,35 @@ fn decode_request_opening(
 
 /// Translates `record_request_tx`'s `adapter_chain_ids` calldata into the
 /// pallet's `Option<BoundedVec<..>>`. Meaningful (and possibly empty) for
-/// `step == Requested` or `step == InboundHooksExecuted` — the two steps that
-/// can represent a request's capital arriving at the Valuation Contract
-/// (Hub-vault and Spoke-vault respectively) — must be empty for every other
-/// step. Whether a given `step`/vault-chain combination is actually *valid* for
-/// declaring adapter_chain_ids at all (e.g. `Requested` only accepts it for
-/// a Hub-vault request) is left to the pallet to enforce, since only it knows
-/// the request's own vault chain once `step != Requested`. Reverts on any
-/// syntactically inconsistent combination, matching interface.sol's documented
-/// contract.
+/// `step == InboundHooksExecuted` (always Spoke-vault — see below) and for
+/// `step == Requested` on a Hub-vault request only; must be `None`/empty for
+/// every other case. `step == Requested` needs `vault_chain_id`/`hub_chain_id`
+/// to disambiguate — unlike every later step (where the precompile boundary
+/// only ever sees zeroed sentinel values and must leave hub-vs-spoke
+/// enforcement to the pallet's own stored `RequestEntry`), `Requested` is the
+/// one call where the real vault chain is actually present in the calldata
+/// (as `decode_request_opening`'s `vault_chain_id`), so there's no other way
+/// to tell a Hub-vault's "genuinely zero adapters" (`Some(empty)`) apart from
+/// a Spoke-vault's "not knowable yet" (`None`) — both look like an empty
+/// `uint64[]` over the wire. Reverts on any syntactically inconsistent
+/// combination, matching interface.sol's documented contract.
 fn decode_request_adapter_chains(
 	step: RequestStep,
+	vault_chain_id: u64,
+	hub_chain_id: u64,
 	adapter_chain_ids: &[u64],
 ) -> EvmResult<Option<BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_SPOKE_CHAINS>>>>
 {
 	match step {
+		RequestStep::Requested if vault_chain_id != hub_chain_id => {
+			// Spoke-vault — not knowable until InboundHooksExecuted.
+			if !adapter_chain_ids.is_empty() {
+				return Err(revert(
+					"adapter_chain_ids must be empty for a Spoke-vault request at step == Requested",
+				));
+			}
+			Ok(None)
+		},
 		RequestStep::Requested | RequestStep::InboundHooksExecuted => {
 			let bounded = BoundedVec::try_from(adapter_chain_ids.to_vec())
 				.map_err(|_| revert("too many adapter chains"))?;
