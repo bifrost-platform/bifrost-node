@@ -553,6 +553,15 @@ impl<T: pallet::Config> VaultInspect for pallet::Pallet<T> {
 	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool {
 		pallet::Vaults::<T>::get(vault) == Some(product_id)
 	}
+
+	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
+		let product = pallet::Products::<T>::get(product_id);
+		chain_ids.iter().all(|chain_id| {
+			product.as_ref().is_some_and(|product| {
+				product.tranches.iter().any(|tranche| tranche.vault.chain_id == *chain_id)
+			})
+		})
+	}
 }
 
 impl<T: pallet::Config> AdapterInspect for pallet::Pallet<T> {
@@ -564,13 +573,12 @@ impl<T: pallet::Config> AdapterInspect for pallet::Pallet<T> {
 		pallet::AdapterIndex::<T>::get(key) == Some(product_id)
 	}
 
-	fn spoke_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
-		let adapters =
-			pallet::Products::<T>::get(product_id).map(|product| product.multichain_adapters);
+	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
+		let product = pallet::Products::<T>::get(product_id);
 		chain_ids.iter().all(|chain_id| {
-			adapters
-				.as_ref()
-				.is_some_and(|adapters| adapters.keys().any(|key| key.chain_id == *chain_id))
+			product.as_ref().is_some_and(|product| {
+				product.multichain_adapters.keys().any(|key| key.chain_id == *chain_id)
+			})
 		})
 	}
 }

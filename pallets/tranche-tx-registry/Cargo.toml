@@ -24,6 +24,9 @@ sp-core = { workspace = true }
 sp-std = { workspace = true }
 sp-io = { workspace = true }
 
+# Frontier
+pallet-evm = { workspace = true }
+
 # OmniFi tranche-system
 pallet-tranche-system = { workspace = true }
 
@@ -39,6 +42,7 @@ std = [
 	"sp-std/std",
 	"sp-core/std",
 	"sp-io/std",
+	"pallet-evm/std",
 	"pallet-tranche-system/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
