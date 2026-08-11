@@ -313,8 +313,12 @@ interface TrancheTxRegistry {
      * @notice Attest to one tx in a request's pipeline — the single Requested tx, one
      *         Bridge/Hooks half of the Inbound leg (Spoke-vault requests only), or one
      *         Bridge/Hooks half of a per-chain Adapter leg.
-     * @dev Only callable by the pallet-registered tx recorder account. `investor`/
-     *      `vault_chain_id`/`vault_address`/`amount`/`order_type` are sentinel-gated
+     * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
+     *      MUST NOT be the zero hash (rejected otherwise) — the pallet's own "not yet
+     *      recorded" sentinel is a stored TxRecord's `recorded_at == 0`, never `tx_hash`, so
+     *      a zero `tx_hash` slipping into storage would be indistinguishable from a genuine
+     *      attestation to any reader inspecting `tx_hash` alone.
+     *      `investor`/`vault_chain_id`/`vault_address`/`amount`/`order_type` are sentinel-gated
      *      together: they MUST all be non-zero/non-empty when `step == Requested` (opens a
      *      fresh registry entry) and MUST all be zero/empty for every other step (rejected
      *      otherwise, to catch caller bugs early rather than silently ignoring a stray
@@ -385,8 +389,10 @@ interface TrancheTxRegistry {
     /**
      * @notice Attest to one tx in a settlement's pipeline: either the single Trigger tx, or
      *         one bridge/hooks half of a Collect/Response/Finalize leg for one chain.
-     * @dev Only callable by the pallet-registered tx recorder account. `step` MUST NOT be
-     *      `SettlementStep.Queued` or `SettlementStep.Settled` — both are read-only
+     * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
+     *      MUST NOT be the zero hash (rejected otherwise) — same rationale as
+     *      record_request_tx's own `tx_hash` check.
+     *      `step` MUST NOT be `SettlementStep.Queued` or `SettlementStep.Settled` — both are read-only
      *      sentinels reserved for get_settlement's own `status`, never a
      *      valid attestation to record. `settlement_id` is only unique within
      *      `product_id`'s own namespace — each product's Valuation
@@ -443,7 +449,9 @@ interface TrancheTxRegistry {
      *         pools receivable amounts per (investor, vault) rather than per request_id, so
      *         this is intentionally NOT keyed by request_id and has no step ordering — one
      *         attestation per receive.
-     * @dev Only callable by the pallet-registered tx recorder account. There is no
+     * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
+     *      MUST NOT be the zero hash (rejected otherwise) — same rationale as
+     *      record_request_tx's own `tx_hash` check. There is no
      *      per-request_id link here — once a request becomes `settled` (see get_request),
      *      tracking "was THIS request specifically claimed" stops being meaningful, since a
      *      single claim() may drain a pooled balance spanning several distributed requests
@@ -521,6 +529,36 @@ interface TrancheTxRegistry {
     function get_investor_active_requests(
         address investor
     ) external view returns (InvestorRequest[] memory requests);
+
+    /**
+     * @notice Page through an investor's full request history for one product — every
+     *         request_id ever opened (record_request_tx, step == Requested), including
+     *         ones long since completed and no longer in get_investor_active_requests.
+     * @dev Returned most-recent first; `offset`/`limit` index into that most-recent-first
+     *      order (`offset == 0` is the single most recent request). `total` is the full
+     *      history length for this (investor, product_id), so a caller can compute page
+     *      count without a separate call; `offset >= total` returns an empty array rather
+     *      than reverting, so a caller can page forward until it gets one back.
+     *      `limit` MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50) — rejected, not silently
+     *      clamped, same "catch caller bugs early" convention as every other sentinel-gated
+     *      parameter in this interface. This bounds the response size, but does NOT bound
+     *      the underlying storage read cost: the full per-(investor, product_id) history is
+     *      always read and decoded from storage first, then sliced down to the requested
+     *      page — a very long history costs the same gas as a short one despite doing more
+     *      real work under the hood.
+     * @param investor    The investor address to look up
+     * @param product_id  The product to page history for
+     * @param offset      How many of the most-recent entries to skip
+     * @param limit       Max entries to return — MUST NOT exceed 50
+     * @return request_ids Up to `limit` request_ids, most-recent first
+     * @return total       Total history length for this (investor, product_id)
+     */
+    function get_investor_request_history(
+        address investor,
+        uint256 product_id,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (bytes32[] memory request_ids, uint256 total);
 
     /**
      * @notice Read a request's full state in one call: its static details (bundled as one
