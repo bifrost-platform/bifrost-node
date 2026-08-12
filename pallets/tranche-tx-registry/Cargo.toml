@@ -1,7 +1,7 @@
 [package]
 name = "pallet-tranche-tx-registry"
 version = "1.0.0"
-description = "A pallet registering off-chain tx evidence for the OmniFi tranche-system's request/settlement/claim pipelines, attested by a single trusted recorder account"
+description = "A pallet registering off-chain tx evidence for the OmniFi tranche-system's request/settlement/receive pipelines, attested by a single trusted recorder account"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
