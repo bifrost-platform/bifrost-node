@@ -1,6 +1,6 @@
 use crate::{
 	migrations, AdapterValuation, Allocation, ApprovedInvestment, OrderType, RequestId,
-	RequestedInvestment, SettlementId, TrancheSettle, TrancheSettlement, WeightInfo,
+	RequestedInvestment, Settlement, SettlementId, TrancheSettle, WeightInfo,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
@@ -20,7 +20,7 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -49,7 +49,7 @@ pub mod pallet {
 	}
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_timestamp::Config<Moment = u64> {
 		/// Only accepted origin for all four extrinsics in this pallet.
 		/// Wire as `pallet_tranche_investments::EnsureValuation` in the runtime
 		/// so that only the tranche-investments precompile can invoke them.
@@ -212,7 +212,7 @@ pub mod pallet {
 
 	#[pallet::storage]
 	/// Settlement's finalized aggregate NAV across all of the product's
-	/// sources, as recorded by `record_tranche_settlement` alongside the
+	/// sources, as recorded by `record_settlement` alongside the
 	/// per-tranche breakdown -- a separate entry from `AdapterValuations`,
 	/// not derived from it (Valuation is trusted for the aggregation, not
 	/// independently re-checked against the per-Adapter breakdown). Keyed by
@@ -222,37 +222,37 @@ pub mod pallet {
 
 	#[pallet::storage]
 	/// Post-waterfall per-tranche settlement result for a completed
-	/// settlement, as recorded by `record_tranche_settlement`. Keyed by
+	/// settlement, as recorded by `record_settlement`. Keyed by
 	/// `(product_id, settlement_id)`, same rationale as `AdapterValuations`/
 	/// `ProductNavs`. `units_outstanding`/`principal` are overwritten
 	/// wholesale by each new settlement — nothing else in this pallet
 	/// separately accumulates them.
-	pub type TrancheSettlements<T: Config> = StorageDoubleMap<
+	pub type Settlements<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		ProductId,
 		Blake2_128Concat,
 		SettlementId,
-		TrancheSettlement<BlockNumberFor<T>>,
+		Settlement<BlockNumberFor<T>>,
 	>;
 
 	#[pallet::storage]
 	/// The most recently recorded `settlement_id` per product, written
-	/// alongside `TrancheSettlements`/`ProductNavs` by `record_tranche_settlement`.
+	/// alongside `Settlements`/`ProductNavs` by `record_settlement`.
 	/// The Valuation Contract remains the source of truth for settlement_id
 	/// assignment/incrementing (this pallet never generates or advances it on
 	/// its own) — this pointer exists purely to serve read-side queries that
 	/// need "the latest settlement" without a `settlement_id` parameter
 	/// (`get_settlement_id`/`get_tranche_state`/`get_pending_deposit_assets`/
 	/// `get_last_settlement` on the precompile). It plays no role in
-	/// `record_tranche_settlement`'s own duplicate-write check, which still
-	/// keys off `TrancheSettlements::contains_key` directly.
+	/// `record_settlement`'s own duplicate-write check, which still
+	/// keys off `Settlements::contains_key` directly.
 	pub type LastSettlementId<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, SettlementId>;
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v2::MigrateToV2::<T>::on_runtime_upgrade()
+			migrations::v3::MigrateToV3::<T>::on_runtime_upgrade()
 		}
 	}
 
@@ -302,6 +302,7 @@ pub mod pallet {
 					amount,
 					order_type,
 					recorded_at: frame_system::Pallet::<T>::block_number(),
+					timestamp: pallet_timestamp::Pallet::<T>::get(),
 				},
 			);
 
@@ -370,6 +371,7 @@ pub mod pallet {
 					allocations,
 					receivable_amount,
 					recorded_at: frame_system::Pallet::<T>::block_number(),
+					timestamp: pallet_timestamp::Pallet::<T>::get(),
 				},
 			);
 			SettlementRequests::<T>::insert(product_id, settlement_id, settlement_requests);
@@ -424,8 +426,8 @@ pub mod pallet {
 		/// atomically in one call). Origin must be `ValuationOrigin`. Callable
 		/// at most once per (product_id, settlement_id).
 		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::record_tranche_settlement())]
-		pub fn record_tranche_settlement(
+		#[pallet::weight(<T as Config>::WeightInfo::record_settlement())]
+		pub fn record_settlement(
 			origin: OriginFor<T>,
 			product_id: ProductId,
 			settlement_id: SettlementId,
@@ -436,7 +438,7 @@ pub mod pallet {
 			T::ValuationOrigin::ensure_origin(origin)?;
 
 			ensure!(
-				!TrancheSettlements::<T>::contains_key(product_id, settlement_id),
+				!Settlements::<T>::contains_key(product_id, settlement_id),
 				Error::<T>::TrancheSettlementAlreadyRecorded
 			);
 
@@ -449,13 +451,14 @@ pub mod pallet {
 				);
 			}
 
-			TrancheSettlements::<T>::insert(
+			Settlements::<T>::insert(
 				product_id,
 				settlement_id,
-				TrancheSettlement {
+				Settlement {
 					tranches,
 					pending_deposit_assets,
 					recorded_at: frame_system::Pallet::<T>::block_number(),
+					timestamp: pallet_timestamp::Pallet::<T>::get(),
 				},
 			);
 			ProductNavs::<T>::insert(product_id, settlement_id, product_nav);

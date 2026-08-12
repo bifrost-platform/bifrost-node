@@ -409,7 +409,7 @@ interface TrancheTxRegistry {
      *      valid attestation to record. `settlement_id` is only unique within
      *      `product_id`'s own namespace — each product's Valuation
      *      Contract generates its own sequence, same scoping as every settlement_id use in
-     *      the Investments precompile (e.g. record_tranche_settlement) — so all storage
+     *      the Investments precompile (e.g. record_settlement) — so all storage
      *      here is keyed by (product_id, settlement_id), never settlement_id alone.
      *      `spoke_chain_id` and the two chain-set params are sentinel-gated, mirroring
      *      record_request_tx: for `step == Triggered`, `spoke_chain_id` MUST be 0 and both

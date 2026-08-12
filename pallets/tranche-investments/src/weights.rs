@@ -12,7 +12,7 @@ pub trait WeightInfo {
 	fn record_investment_request() -> Weight;
 	fn record_investment_approval() -> Weight;
 	fn record_adapter_valuations() -> Weight;
-	fn record_tranche_settlement() -> Weight;
+	fn record_settlement() -> Weight;
 }
 
 /// Weights for `pallet_tranche_investments` using the Substrate node and recommended hardware.
@@ -33,7 +33,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
-	fn record_tranche_settlement() -> Weight {
+	fn record_settlement() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(3_u64))
@@ -57,7 +57,7 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
-	fn record_tranche_settlement() -> Weight {
+	fn record_settlement() -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))

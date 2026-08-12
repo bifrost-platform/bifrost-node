@@ -187,7 +187,7 @@ interface Investments {
      *      function's signature; now that the shape is a fixed struct (one entry per Adapter),
      *      that flexibility is gone, so the name narrows to match what this call actually
      *      records. The settlement's aggregate total is recorded separately, as
-     *      part of `record_tranche_settlement` below.
+     *      part of `record_settlement` below.
      *      Emits AdapterValuationsRecorded on success.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  Valuation Contract's settlement cycle this info belongs to
@@ -226,7 +226,7 @@ interface Investments {
      * @param product_nav             Finalized total NAV across all sources for this settlement
      *                                (sum, not per-source)
      */
-    function record_tranche_settlement(
+    function record_settlement(
         uint256 product_id,
         uint256 settlement_id,
         TrancheSettle[] calldata tranches,
@@ -236,7 +236,7 @@ interface Investments {
 
     /**
      * @notice Read a product's current settlement_id — the value most recently passed to
-     *         record_tranche_settlement.
+     *         record_settlement.
      * @dev This pallet never generates or increments settlement_id itself — the Valuation
      *      Contract remains the source of truth for assignment; this just echoes back the
      *      last value it recorded. Zero if the product has never settled yet — settlement_id
@@ -334,7 +334,7 @@ interface Investments {
      * @dev Reverts if the product has no recorded settlement yet. `share_prices`/
      *      `tranche_navs` are ordered by the product's CURRENT tranche priority order
      *      (TrancheSystem.get_tranches' order), not by whatever order Valuation happened
-     *      to submit `tranches` in when it called record_tranche_settlement — reverts if
+     *      to submit `tranches` in when it called record_settlement — reverts if
      *      a currently-registered tranche is missing from the latest settlement's
      *      tranches array (a partial settlement can't be summarized this way).
      * @param product_id The product to look up
@@ -350,6 +350,60 @@ interface Investments {
             uint256[] memory tranche_navs,
             uint256 product_nav
         );
+
+    /**
+     * @notice Read one specific settlement's full state — unlike get_last_settlement
+     *         (which only ever reads the product's most recent one), this looks up any
+     *         settlement_id that's ever been recorded for product_id.
+     * @dev Returns the raw per-tranche breakdown (TrancheSettle[], keyed by vault rather
+     *      than pre-matched against pallet-tranche-system's tranche ordering the way
+     *      get_last_settlement's share_prices/tranche_navs arrays are) alongside
+     *      pending_deposit_assets, product_nav, and both write-time fields
+     *      (recorded_at/timestamp — recorded_at is this chain's own block number,
+     *      timestamp is pallet_timestamp's value in ms since Unix epoch at that same
+     *      moment; stored separately since a block number alone doesn't let a caller
+     *      compute a real-world date without also knowing this chain's block time).
+     *      Reverts if no settlement with this settlement_id was ever recorded for
+     *      product_id — same convention as get_last_settlement.
+     * @param product_id    The product the settlement belongs to
+     * @param settlement_id The settlement to look up
+     * @return tranches Per-tranche breakdown, one entry per tranche settled
+     * @return pending_deposit_assets Product-level pending/unconfirmed deposit total as of
+     *                                this settlement
+     * @return product_nav Product's finalized aggregate NAV as of this settlement
+     * @return recorded_at This chain's own block number when this settlement was recorded
+     * @return timestamp This chain's pallet_timestamp value (ms since Unix epoch) at the
+     *                    same moment as recorded_at
+     */
+    function get_settlement_state(
+        uint256 product_id,
+        uint256 settlement_id
+    )
+        external
+        view
+        returns (
+            TrancheSettle[] memory tranches,
+            uint256 pending_deposit_assets,
+            uint256 product_nav,
+            uint256 recorded_at,
+            uint256 timestamp
+        );
+
+    /**
+     * @notice Read one settlement's full per-Adapter NAV breakdown, as recorded by
+     *         record_adapter_valuations — one entry per Adapter, each with its own
+     *         per-asset position breakdown.
+     * @dev No other function exposes this; it's only otherwise observable via
+     *      AdapterValuationsRecorded. Reverts if no Adapter valuations were ever recorded
+     *      for this (product_id, settlement_id) — same convention as get_settlement_state.
+     * @param product_id    The product the settlement belongs to
+     * @param settlement_id The settlement to look up
+     * @return valuations Per-Adapter NAV breakdown, one entry per Adapter
+     */
+    function get_adapter_valuations(
+        uint256 product_id,
+        uint256 settlement_id
+    ) external view returns (AdapterValuation[] memory valuations);
 
     /**
      * @notice Read a request's approval details.
