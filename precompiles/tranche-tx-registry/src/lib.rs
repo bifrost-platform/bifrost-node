@@ -600,6 +600,51 @@ where
 		Ok((receives, total))
 	}
 
+	/// Resolve one `(investor, vault, tx_hash)` entry from `get_investor_receive_history`
+	/// (or observed directly off a `ReceiveTxRecorded` event) into its full detail —
+	/// exactly the same "history gives you an identifier, this resolves it" relationship
+	/// `get_request`/`get_settlement` have with `request_id`/`settlement_id`, except
+	/// receives need all three key parts since `ReceiveEntries` has no single-field
+	/// lookup the way `RequestEntries`/`SettlementTriggers` do.
+	///
+	/// Reverts if no such entry exists (`investor`/`vault`/`tx_hash` must exactly match
+	/// a prior `record_receive_tx` call) — same convention as `get_request`, not
+	/// `get_settlement`'s more lenient zeroed-response-for-not-yet-triggered behavior,
+	/// since there's no meaningful "not yet" state for a receive: either the tx_hash was
+	/// attested or it wasn't.
+	///
+	/// @param investor The controller whose request this receive() call settled
+	/// @param vault    The vault this receive() call was against
+	/// @param tx_hash  The receive() tx's hash on that vault's chain
+	/// @return receiver Who actually received the funds — may differ from investor
+	/// @return amount   Shares received (kind == Deposit) or assets received (kind == Redeem)
+	/// @return kind     Which receivable pool this receive() call drained
+	/// @return tx       Evidence for this receive() tx
+	#[precompile::public("get_receive(address,(uint64,address),bytes32)")]
+	#[precompile::view]
+	fn get_receive(
+		handle: &mut impl PrecompileHandle,
+		investor: Address,
+		vault: EvmVaultInput,
+		tx_hash: H256,
+	) -> EvmResult<(Address, U256, u8, EvmTxRecord)> {
+		let (vault_chain_id, vault_address) = vault;
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let entry = pallet_tranche_tx_registry::ReceiveEntries::<Runtime>::get((
+			investor.0, vault_id, tx_hash,
+		))
+		.ok_or_else(|| revert("receive not found"))?;
+
+		Ok((
+			Address(entry.receiver),
+			entry.amount,
+			encode_receive_kind(entry.kind),
+			encode_tx_record(Some(entry.tx)),
+		))
+	}
+
 	/// Read a request's full state in one call: its static details (bundled as one
 	/// `RequestInfo`), the Requested/Inbound-leg evidence (bundled as one ordered
 	/// `request_steps` array, same "step, tx" shape as every per-chain leg entry —
@@ -913,6 +958,13 @@ fn decode_receive_kind(kind: u8) -> EvmResult<ReceiveKind> {
 		0 => Ok(ReceiveKind::Redeem),
 		1 => Ok(ReceiveKind::Deposit),
 		_ => Err(revert("invalid kind")),
+	}
+}
+
+fn encode_receive_kind(kind: ReceiveKind) -> u8 {
+	match kind {
+		ReceiveKind::Redeem => 0,
+		ReceiveKind::Deposit => 1,
 	}
 }
 

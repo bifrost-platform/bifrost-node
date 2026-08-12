@@ -502,9 +502,8 @@ interface TrancheTxRegistry {
      *      rationale, including why pagination bounds the response size but not the
      *      underlying storage read cost) — this is its receive-side equivalent, since a
      *      receive isn't linked to a specific request_id the way a request's own history is.
-     *      Each returned (vault, tx_hash) pair is exactly what would be needed to look up
-     *      the full ReceiveEntry at the storage level, if a dedicated single-entry getter is
-     *      ever added.
+     *      Each returned (vault, tx_hash) pair is exactly what get_receive needs (together
+     *      with this same investor) to resolve the full ReceiveEntry.
      *      `limit` MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50) — rejected, not silently
      *      clamped.
      * @param investor   The investor (controller) address to look up
@@ -523,6 +522,32 @@ interface TrancheTxRegistry {
         external
         view
         returns (ReceiveHistoryEntry[] memory receives, uint256 total);
+
+    /**
+     * @notice Resolve one (investor, vault, tx_hash) entry from get_investor_receive_history
+     *         (or observed directly off a ReceiveTxRecorded event) into its full detail.
+     * @dev Exactly the same "history gives you an identifier, this resolves it" relationship
+     *      get_request/get_settlement have with request_id/settlement_id, except receives
+     *      need all three key parts since ReceiveEntries has no single-field lookup the way
+     *      RequestEntries/SettlementTriggers do.
+     *      Reverts if no such entry exists (investor/vault/tx_hash must exactly match a
+     *      prior record_receive_tx call) — same convention as get_request, not
+     *      get_settlement's more lenient zeroed-response-for-not-yet-triggered behavior,
+     *      since there's no meaningful "not yet" state for a receive: either the tx_hash
+     *      was attested or it wasn't.
+     * @param investor The controller whose request this receive() call settled
+     * @param vault    The vault this receive() call was against
+     * @param tx_hash  The receive() tx's hash on that vault's chain
+     * @return receiver Who actually received the funds — may differ from investor
+     * @return amount   Shares received (kind == Deposit) or assets received (kind == Redeem)
+     * @return kind     Which receivable pool this receive() call drained
+     * @return tx       Evidence for this receive() tx
+     */
+    function get_receive(
+        address investor,
+        VaultInput calldata vault,
+        bytes32 tx_hash
+    ) external view returns (address receiver, uint256 amount, ReceiveKind kind, TxRecord memory tx);
 
     /**
      * @notice Read a settlement's full state in one call: Trigger evidence, the
