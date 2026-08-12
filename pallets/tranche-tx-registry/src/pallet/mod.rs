@@ -9,7 +9,7 @@ use pallet_tranche_system::{AdapterInspect, RequestSettlementInspect, VaultId, V
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
-use sp_core::{ConstU32, H160, H256};
+use sp_core::{ConstU32, H160, H256, U256};
 use sp_std::vec::Vec;
 
 #[frame_support::pallet]
@@ -175,11 +175,13 @@ pub mod pallet {
 			chain_id: ChainId,
 			tx_hash: H256,
 		},
-		/// A claim() tx was recorded.
+		/// A receive() tx was recorded.
 		ReceiveTxRecorded {
 			product_id: ProductId,
 			vault: VaultId,
 			investor: H160,
+			receiver: H160,
+			amount: U256,
 			kind: ReceiveKind,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -404,18 +406,21 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// Every claim() tx recorded, one storage slot per receive. Keyed by
-	/// `(investor, vault, tx_hash)` — `product_id` is deliberately not part
-	/// of the key at all: `VaultId` is already globally unique (enforced by
-	/// pallet-tranche-system), so it would be redundant for addressing
-	/// purposes. `tx_hash` is the receive's own natural unique identifier, so
-	/// there's no bounded-size cap or eviction logic needed the way a
-	/// `Vec`-valued map would require. TrancheManager pools receivable
-	/// amounts per (investor, vault), not per request_id, so there is no
-	/// single request_id a receive could be keyed by instead.
+	/// Every receive() tx recorded, one storage slot per receive. Keyed by
+	/// `(investor, vault, tx_hash)` — `investor` is the controller (see
+	/// `ReceiveEntry`'s own doc comment). `vault` stays in the key alongside
+	/// `tx_hash` because `tx_hash` alone is only unique within its own chain,
+	/// not globally — `vault`'s `chain_id` is what rules out two different
+	/// chains coincidentally producing the same hash. `product_id` is
+	/// deliberately not part of the key: `VaultId` is already globally unique
+	/// (enforced by pallet-tranche-system), so it would be redundant for
+	/// addressing purposes. TrancheManager pools receivable amounts per
+	/// (investor, vault), not per request_id, so there is no single
+	/// request_id a receive could be keyed by instead.
 	///
 	/// Enumerate one investor's receive history for one vault via
-	/// `iter_prefix((investor, vault))`.
+	/// `iter_prefix((investor, vault))`, or use `InvestorReceiveHistory` to
+	/// page through it scoped to one product instead.
 	pub type ReceiveEntries<T: Config> = StorageNMap<
 		_,
 		(
@@ -424,6 +429,31 @@ pub mod pallet {
 			NMapKey<Blake2_128Concat, H256>,
 		),
 		ReceiveEntry<BlockNumberFor<T>>,
+	>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Every `(vault, tx_hash)` an investor has ever had recorded via
+	/// `record_receive_tx` for a given product, in the order recorded —
+	/// append-only, never pruned. Written alongside `ReceiveEntries` by
+	/// `record_receive_tx`. Mirrors `InvestorRequestHistory`'s shape/rationale
+	/// exactly (see that storage's own doc comment) — the parallel structure is
+	/// deliberate: a receive isn't linked to a specific `request_id`
+	/// (TrancheManager pools receivable amounts per (investor, vault) rather
+	/// than per request), so this is the receive-side equivalent of "give me
+	/// this investor's history for this product" that `InvestorRequestHistory`
+	/// provides for requests. `vault` has to travel alongside `tx_hash` here
+	/// (unlike `InvestorRequestHistory`'s bare `Vec<RequestId>`) since
+	/// `ReceiveEntries`' own key needs `vault` too — see that storage's doc
+	/// comment for why `tx_hash` alone isn't a safe enough identifier.
+	pub type InvestorReceiveHistory<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		H160,
+		Blake2_128Concat,
+		ProductId,
+		Vec<(VaultId, H256)>,
+		ValueQuery,
 	>;
 
 	// -----------------------------------------------------------------------
@@ -802,7 +832,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Attest to an investor's claim() tx on a vault — a plain local Spoke-chain
+		/// Attest to an investor's receive() tx on a vault — a plain local Spoke-chain
 		/// tx, not part of the Bridge&Call request/settlement pipelines above.
 		/// Origin must be `RecorderOrigin`. See interface.sol's `record_receive_tx`
 		/// for the full contract this mirrors.
@@ -813,6 +843,8 @@ pub mod pallet {
 			product_id: ProductId,
 			vault: VaultId,
 			investor: H160,
+			receiver: H160,
+			amount: U256,
 			kind: ReceiveKind,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -833,13 +865,18 @@ pub mod pallet {
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
 			ReceiveEntries::<T>::insert(
 				(investor, vault.clone(), tx_hash),
-				ReceiveEntry { tx, kind },
+				ReceiveEntry { investor, vault: vault.clone(), receiver, amount, tx, kind },
 			);
+			InvestorReceiveHistory::<T>::mutate(investor, product_id, |history| {
+				history.push((vault.clone(), tx_hash));
+			});
 
 			Self::deposit_event(Event::ReceiveTxRecorded {
 				product_id,
 				vault,
 				investor,
+				receiver,
+				amount,
 				kind,
 				chain_id,
 				tx_hash,

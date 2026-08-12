@@ -355,10 +355,10 @@ pub struct SettlementChainEntry<BlockNumber> {
 // Receives
 // ---------------------------------------------------------------------------
 
-/// Which receivable pool a claim() tx drained (renamed from `ClaimKind`
+/// Which receivable pool a receive() tx drained (renamed from `ClaimKind`
 /// 2026-08-06 — "Claim" as a term for this whole tracking pipeline was
 /// replaced with "Receive" throughout; the underlying investor-facing
-/// Solidity call being tracked is still literally named `claim()` on
+/// Solidity call being tracked is still literally named `receive()` on
 /// TrancheVault, that's an external fact this rename doesn't change).
 /// Mirrors interface.sol's `ReceiveKind` — TrancheManager pools receivable
 /// amounts per (investor, vault), not per request_id, so redeem/deposit still
@@ -381,14 +381,23 @@ pub enum ReceiveKind {
 	Deposit,
 }
 
-/// One recorded claim() tx. Stored under `ReceiveEntries`' `(investor, vault,
-/// tx_hash)` key — `product_id` is deliberately not part of the key at all
-/// (unlike `RequestEntry`/settlement storage): `VaultId` is already globally
-/// unique (enforced by pallet-tranche-system), so it would be redundant for
-/// addressing purposes. `tx_hash` (inside `tx`, and also the key's third
-/// level) is the claim's own natural unique identifier, so there's no
-/// bounded-size cap or eviction logic needed the way a `Vec`-valued map would
-/// require — one claim, one storage slot.
+/// One recorded receive() tx. Stored under `ReceiveEntries`' `(investor,
+/// vault, tx_hash)` key. `investor` here is the *controller* (ERC-7540
+/// terminology — the party whose depositRequest/redeemRequest this receive()
+/// call settles, matching `RequestEntry::investor` and everything keyed by
+/// "investor" elsewhere in this pallet, e.g.
+/// `InvestorActiveRequests`/`InvestorRequestHistory`), not necessarily who the
+/// funds went to — see `receiver` below. `vault` is part of the key alongside
+/// `tx_hash` — unlike `request_id`/`settlement_id`, which are only unique
+/// within their own `product_id` namespace, `tx_hash` alone is only unique
+/// within its own *chain*, so `vault` (whose `chain_id` disambiguates it) has
+/// to stay in the key to rule out two different chains coincidentally
+/// producing the same hash. `product_id` is still not part of the key —
+/// `VaultId` is already globally unique (enforced by pallet-tranche-system),
+/// so keying on `product_id` too would be redundant. `investor`/`vault` are
+/// both also duplicated into the value itself (fields below), same rationale
+/// as `RequestEntry::product_id`: a value read out of storage carries enough
+/// context to act on independent of the key it was fetched with.
 #[derive(
 	Clone,
 	Encode,
@@ -401,6 +410,20 @@ pub enum ReceiveKind {
 	MaxEncodedLen,
 )]
 pub struct ReceiveEntry<BlockNumber> {
+	/// The controller whose request this receive() call settles — same value
+	/// as this entry's own storage key. ERC-7540 calls this the controller;
+	/// named `investor` here to match every other "who does this belong to"
+	/// field in this pallet.
+	pub investor: H160,
+	/// The tranche vault this receive() call was against — same value as this
+	/// entry's own storage key.
+	pub vault: VaultId,
+	/// Who actually received the funds. TrancheManager's receive() call lets
+	/// the controller (`investor` above) designate a different receiver;
+	/// `receiver == investor` when the controller receives for themselves.
+	pub receiver: H160,
+	/// Shares received (`kind == Deposit`) or assets received (`kind == Redeem`).
+	pub amount: U256,
 	pub tx: TxRecord<BlockNumber>,
 	pub kind: ReceiveKind,
 }

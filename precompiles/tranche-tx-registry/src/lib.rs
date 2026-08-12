@@ -24,8 +24,9 @@ pub(crate) const SELECTOR_LOG_REQUEST_TX_RECORDED: [u8; 32] = keccak256!(
 pub(crate) const SELECTOR_LOG_SETTLEMENT_TX_RECORDED: [u8; 32] = keccak256!(
 	"SettlementTxRecorded(uint256,uint256,uint64,uint8,uint64[],uint64[],(uint64,bytes32))"
 );
-pub(crate) const SELECTOR_LOG_RECEIVE_TX_RECORDED: [u8; 32] =
-	keccak256!("ReceiveTxRecorded(uint256,address,(uint64,address),uint8,(uint64,bytes32))");
+pub(crate) const SELECTOR_LOG_RECEIVE_TX_RECORDED: [u8; 32] = keccak256!(
+	"ReceiveTxRecorded(uint256,address,(uint64,address),address,uint256,uint8,(uint64,bytes32))"
+);
 
 // ---------------------------------------------------------------------------
 // interface.sol struct <-> tuple mappings
@@ -49,6 +50,8 @@ type EvmAdapterLeg = (u64, Vec<EvmRequestTxStep>);
 type EvmRequestInfo = (Address, EvmVaultInput, U256, u8);
 /// `InvestorRequest` — (product_id, request_id)
 type EvmInvestorRequest = (U256, H256);
+/// `ReceiveHistoryEntry` — (vault, tx_hash)
+type EvmReceiveHistoryEntry = (EvmVaultInput, H256);
 
 /// Upper bound on `get_investor_request_history`'s `limit` — caps the page size
 /// so a single `eth_call` can't be asked to serialize an unbounded response,
@@ -269,19 +272,24 @@ where
 		Ok(())
 	}
 
-	/// Attest to an investor's claim() tx on a vault. See
+	/// Attest to an investor's receive() tx on a vault. See
 	/// `pallet_tranche_tx_registry::record_receive_tx`'s doc comment for the full
 	/// contract this dispatches into.
 	///
-	/// @param kind 0 = Redeem, 1 = Deposit
+	/// @param investor Controller whose depositRequest/redeemRequest this settles
+	/// @param receiver Who actually received the funds — may differ from investor
+	/// @param amount   Shares received (kind == Deposit) or assets received (kind == Redeem)
+	/// @param kind     0 = Redeem, 1 = Deposit
 	#[precompile::public(
-		"record_receive_tx(uint256,(uint64,address),address,uint8,(uint64,bytes32))"
+		"record_receive_tx(uint256,(uint64,address),address,address,uint256,uint8,(uint64,bytes32))"
 	)]
 	fn record_receive_tx(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
 		vault: EvmVaultInput,
 		investor: Address,
+		receiver: Address,
+		amount: U256,
 		kind: u8,
 		attestation: EvmTxAttestation,
 	) -> EvmResult {
@@ -295,6 +303,8 @@ where
 			product_id: to_product_id(product_id)?,
 			vault: vault_id,
 			investor: investor.0,
+			receiver: receiver.0,
+			amount,
 			kind: decoded_kind,
 			chain_id,
 			tx_hash,
@@ -311,7 +321,7 @@ where
 			SELECTOR_LOG_RECEIVE_TX_RECORDED,
 			topic_u256(product_id),
 			topic_h160(investor.0),
-			solidity::encode_event_data((vault, kind, attestation)),
+			solidity::encode_event_data((vault, receiver, amount, kind, attestation)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
@@ -534,6 +544,62 @@ where
 		Ok((request_ids, total))
 	}
 
+	/// Page through an investor's full receive() history for one product — every
+	/// `(vault, tx_hash)` ever recorded via `record_receive_tx`. Same
+	/// most-recent-first/`offset`/`limit`/`total` contract as
+	/// `get_investor_request_history` (see that function's own doc comment for the
+	/// full rationale, including why pagination bounds the response size but not
+	/// the underlying storage read cost) — this is its receive-side equivalent,
+	/// since a receive isn't linked to a specific `request_id` the way a request's
+	/// own history is (TrancheManager pools receivable amounts per (investor,
+	/// vault), not per request). Each returned `(vault, tx_hash)` pair is exactly
+	/// what `ReceiveEntries`' own key needs, so pass it straight through to a
+	/// storage-level lookup if the full `ReceiveEntry` is ever exposed via a
+	/// dedicated getter.
+	///
+	/// @param investor    The investor (controller) address to look up
+	/// @param product_id  The product to page history for
+	/// @param offset      How many of the most-recent entries to skip
+	/// @param limit       Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+	/// @return receives Up to `limit` (vault, tx_hash) pairs, most-recent first
+	/// @return total    Total history length for this (investor, product_id)
+	#[precompile::public("get_investor_receive_history(address,uint256,uint256,uint256)")]
+	#[precompile::view]
+	fn get_investor_receive_history(
+		handle: &mut impl PrecompileHandle,
+		investor: Address,
+		product_id: U256,
+		offset: U256,
+		limit: U256,
+	) -> EvmResult<(Vec<EvmReceiveHistoryEntry>, U256)> {
+		let product_id = to_product_id(product_id)?;
+		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		}
+		let limit = limit.as_usize();
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let history = pallet_tranche_tx_registry::InvestorReceiveHistory::<Runtime>::get(
+			investor.0, product_id,
+		);
+		let total = U256::from(history.len());
+		if offset >= total {
+			return Ok((Vec::new(), total));
+		}
+		// Safe: offset < total, and total was itself built from a real `usize`
+		// (`history.len()`) above, so offset necessarily fits in a `usize` too.
+		let offset = offset.as_usize();
+
+		let receives = history
+			.iter()
+			.rev()
+			.skip(offset)
+			.take(limit)
+			.map(|(vault, tx_hash)| ((vault.chain_id, Address(vault.vault_address)), *tx_hash))
+			.collect();
+		Ok((receives, total))
+	}
+
 	/// Read a request's full state in one call: its static details (bundled as one
 	/// `RequestInfo`), the Requested/Inbound-leg evidence (bundled as one ordered
 	/// `request_steps` array, same "step, tx" shape as every per-chain leg entry —
@@ -590,7 +656,7 @@ where
 	/// @return status `Requested` or `Completed`, see above
 	/// @return settlement_id  The settlement this request is linked to, 0 if not yet linked
 	/// @return settled        Whether this request's settlement has fully completed (the
-	/// investor can now call claim() for it, though that call itself isn't tracked here —
+	/// investor can now call receive() for it, though that call itself isn't tracked here —
 	/// see record_receive_tx)
 	#[precompile::public("get_request(uint256,bytes32)")]
 	#[precompile::view]

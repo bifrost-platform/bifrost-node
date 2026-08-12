@@ -4,11 +4,11 @@ pragma solidity >=0.8.0;
 /**
  * @title Tranche Tx Registry Precompile Interface (tranche-system draft)
  * @notice Off-chain tx registry for the tranche-system's deposit/redeem request pipeline,
- *         settlement pipeline, and vault claims. CCCP-v2 is a Bridge&Call protocol: every
+ *         settlement pipeline, and vault receives. CCCP-v2 is a Bridge&Call protocol: every
  *         cross-chain message costs two on-chain tx — a bridge-vote tx (relayers submit
  *         ⅔+ signatures, emitting SocketMessage.status = Executed) followed by a separate
  *         tx that calls Hooks.execute() on the destination chain to actually run the
- *         payload. Neither of those tx (nor a vault's local claim() tx) touches the
+ *         payload. Neither of those tx (nor a vault's local receive() tx) touches the
  *         Investments pallet directly, so a single trusted off-chain recorder account
  *         attests to each one after independently detecting it, giving
  *         investors/dashboards a way to verify exactly which step a request or settlement
@@ -41,7 +41,7 @@ pragma solidity >=0.8.0;
  *    Each leg is its own bridge_tx/hooks_tx pair. Legs progress independently per chain;
  *    there is no cross-chain ordering constraint. A settlement needing no cross-chain
  *    action at all is Triggered with both sets empty.
- *  - Receive (per investor per vault): a plain local Spoke-chain claim() tx, not part of
+ *  - Receive (per investor per vault): a plain local Spoke-chain receive() tx, not part of
  *    the Bridge&Call pipelines above. TrancheManager pools receivable amounts per
  *    (investor, vault) rather than per request_id, so receives are tracked separately
  *    from the request pipeline (see record_receive_tx's dev notes for why).
@@ -171,6 +171,16 @@ interface TrancheTxRegistry {
         bytes32 request_id;
     }
 
+    /// @dev One entry in an investor's receive() history — see
+    ///      get_investor_receive_history. Together with the investor/product_id already
+    ///      passed to that call, this pair is exactly what ReceiveEntries is keyed by.
+    /// @param vault   The vault this receive() call was against
+    /// @param tx_hash The receive() tx's hash on that vault's chain
+    struct ReceiveHistoryEntry {
+        VaultInput vault;
+        bytes32 tx_hash;
+    }
+
     /// @dev Step within a request's pipeline. `Requested`/`InboundBridgeExecuted`/
     ///      `InboundHooksExecuted`/`AdapterBridgeExecuted`/`AdapterHooksExecuted`
     ///      are the only five values record_request_tx ever accepts as input. Fragmented
@@ -253,12 +263,12 @@ interface TrancheTxRegistry {
         Settled
     }
 
-    /// @dev Which receivable pool a claim() tx drained — TrancheManager pools receivable
+    /// @dev Which receivable pool a receive() tx drained — TrancheManager pools receivable
     ///      amounts per (investor, vault), not per request_id, so redeem/deposit still need
     ///      distinguishing even though neither is tied to one specific request anymore.
     ///      Renamed from `ClaimKind` (2026-08-06) — "Claim" as a term for this whole
     ///      tracking pipeline was replaced with "Receive" throughout; the underlying
-    ///      investor-facing Solidity call being tracked is still literally named `claim()`
+    ///      investor-facing Solidity call being tracked is still literally named `receive()`
     ///      on TrancheVault, that's an external fact this rename doesn't change.
     enum ReceiveKind {
         Redeem,
@@ -305,6 +315,8 @@ interface TrancheTxRegistry {
         uint256 indexed product_id,
         address indexed investor,
         VaultInput vault,
+        address receiver,
+        uint256 amount,
         ReceiveKind kind,
         TxAttestation attestation
     );
@@ -444,7 +456,7 @@ interface TrancheTxRegistry {
     ) external;
 
     /**
-     * @notice Attest to an investor's claim() tx on a vault — a plain local Spoke-chain tx,
+     * @notice Attest to an investor's receive() tx on a vault — a plain local Spoke-chain tx,
      *         not part of the Bridge&Call request/settlement pipelines above. TrancheManager
      *         pools receivable amounts per (investor, vault) rather than per request_id, so
      *         this is intentionally NOT keyed by request_id and has no step ordering — one
@@ -453,24 +465,64 @@ interface TrancheTxRegistry {
      *      MUST NOT be the zero hash (rejected otherwise) — same rationale as
      *      record_request_tx's own `tx_hash` check. There is no
      *      per-request_id link here — once a request becomes `settled` (see get_request),
-     *      tracking "was THIS request specifically claimed" stops being meaningful, since a
-     *      single claim() may drain a pooled balance spanning several distributed requests
-     *      at once. No dedicated getter yet — ReceiveTxRecorded is the only way to observe
-     *      receives for now.
+     *      tracking "was THIS request specifically received" stops being meaningful, since a
+     *      single receive() may drain a pooled balance spanning several distributed requests
+     *      at once.
+     *      `investor` is the ERC-7540 controller — the party whose depositRequest/
+     *      redeemRequest this settles, matching every other "investor" field in this
+     *      interface (RequestInfo.investor, get_investor_active_requests, etc.). `receiver`
+     *      is who actually got the funds — TrancheManager's receive() call lets the
+     *      controller designate a different receiver, so `receiver` can differ from
+     *      `investor`; `receiver == investor` when the controller receives for themselves.
+     *      For get_investor_receive_history to page through history, see below.
      *      Emits ReceiveTxRecorded.
-     * @param product_id  The product the claimed vault belongs to
-     * @param vault       The vault the investor claimed against
-     * @param investor    The investor who claimed
-     * @param kind        Which receivable pool this claim drained
-     * @param attestation The attested off-chain claim tx
+     * @param product_id The product the received-against vault belongs to
+     * @param vault      The vault this receive() call was against
+     * @param investor   The controller whose request this settles
+     * @param receiver   Who actually received the funds — may differ from investor
+     * @param amount     Shares received (kind == Deposit) or assets received (kind == Redeem)
+     * @param kind       Which receivable pool this receive() call drained
+     * @param attestation The attested off-chain receive tx
      */
     function record_receive_tx(
         uint256 product_id,
         VaultInput calldata vault,
         address investor,
+        address receiver,
+        uint256 amount,
         ReceiveKind kind,
         TxAttestation calldata attestation
     ) external;
+
+    /**
+     * @notice Page through an investor's full receive() history for one product — every
+     *         (vault, tx_hash) ever recorded via record_receive_tx.
+     * @dev Same most-recent-first/offset/limit/total contract as
+     *      get_investor_request_history (see that function's own dev notes for the full
+     *      rationale, including why pagination bounds the response size but not the
+     *      underlying storage read cost) — this is its receive-side equivalent, since a
+     *      receive isn't linked to a specific request_id the way a request's own history is.
+     *      Each returned (vault, tx_hash) pair is exactly what would be needed to look up
+     *      the full ReceiveEntry at the storage level, if a dedicated single-entry getter is
+     *      ever added.
+     *      `limit` MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50) — rejected, not silently
+     *      clamped.
+     * @param investor   The investor (controller) address to look up
+     * @param product_id The product to page history for
+     * @param offset     How many of the most-recent entries to skip
+     * @param limit      Max entries to return — MUST NOT exceed 50
+     * @return receives Up to `limit` (vault, tx_hash) pairs, most-recent first
+     * @return total    Total history length for this (investor, product_id)
+     */
+    function get_investor_receive_history(
+        address investor,
+        uint256 product_id,
+        uint256 offset,
+        uint256 limit
+    )
+        external
+        view
+        returns (ReceiveHistoryEntry[] memory receives, uint256 total);
 
     /**
      * @notice Read a settlement's full state in one call: Trigger evidence, the
@@ -615,7 +667,7 @@ interface TrancheTxRegistry {
      *      Named `settled` rather than `receivable` to read naturally against
      *      `settlement_id`: non-zero `settlement_id` + `settled == false` means still being
      *      settled; non-zero `settlement_id` + `settled == true` means fully settled. It
-     *      does not mean received: the investor's own separate claim() call (withdraw/redeem
+     *      does not mean received: the investor's own separate receive() call (withdraw/redeem
      *      or deposit/mint), taken at whatever later time they choose, is not tracked
      *      per-request — see record_receive_tx (ReceiveTxRecorded), which tracks receives
      *      per (investor, vault) instead, since TrancheManager pools receivable amounts
@@ -632,7 +684,7 @@ interface TrancheTxRegistry {
      * @return status         `Requested` or `Completed` — see dev notes above
      * @return settlement_id  The settlement this request is linked to, 0 if not yet linked
      * @return settled        Whether this request's settlement has fully completed (the
-     *                        investor can now call claim() for it, though that call itself
+     *                        investor can now call receive() for it, though that call itself
      *                        isn't tracked here — see record_receive_tx)
      */
     function get_request(
