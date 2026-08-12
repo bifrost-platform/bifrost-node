@@ -296,7 +296,6 @@ where
 		offset: U256,
 		limit: U256,
 	) -> EvmResult<Vec<H256>> {
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
 		let offset = to_u64(offset)?;
 		let limit = to_u64(limit)?;
@@ -307,6 +306,10 @@ where
 		for (request_id, requested) in
 			pallet_tranche_investments::RequestedInvestments::<Runtime>::iter_prefix(product_id)
 		{
+			// One charge per entry `iter_prefix` actually yields — not once per
+			// function call — since a caller can force many more entries to be
+			// scanned (and filtered out below) than `limit` ever returns.
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 			if requested.settlement_id != settlement_id {
 				continue;
 			}
