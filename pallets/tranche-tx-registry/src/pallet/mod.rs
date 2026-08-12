@@ -352,7 +352,7 @@ pub mod pallet {
 	/// call for `step == Triggered`) — kept as separate storage items rather
 	/// than folded into one struct, same pattern already used by
 	/// `pallet_tranche_investments`' `AdapterValuations`/`ProductNavs`/
-	/// `TrancheSettlements` (three separate maps written together by one
+	/// `Settlements` (three separate maps written together by one
 	/// extrinsic).
 	pub type SettlementCollectResponseChains<T: Config> = StorageDoubleMap<
 		_,

@@ -102,6 +102,11 @@ pub struct RequestedInvestment<BlockNumber> {
 	/// this entry — not to be confused with any timestamp the Valuation
 	/// Contract or a Spoke-side tx might carry; purely local write-time.
 	pub recorded_at: BlockNumber,
+	/// Wall-clock companion to `recorded_at` — `pallet_timestamp`'s value (ms
+	/// since Unix epoch) at the same moment, since a block number alone
+	/// doesn't let a caller compute a real-world date without also knowing
+	/// this chain's block time.
+	pub timestamp: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +147,9 @@ pub struct ApprovedInvestment<BlockNumber> {
 	/// this entry — distinct from `requested.recorded_at` (the earlier
 	/// request-time write).
 	pub recorded_at: BlockNumber,
+	/// Wall-clock companion to `recorded_at` — see `RequestedInvestment::timestamp`'s
+	/// doc comment for why this exists alongside the block number.
+	pub timestamp: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -198,11 +206,11 @@ pub struct AssetPosition {
 }
 
 // ---------------------------------------------------------------------------
-// TrancheSettle / TrancheSettlement
+// TrancheSettle / Settlement
 // ---------------------------------------------------------------------------
 
 /// Post-waterfall settlement result for a single tranche, as recorded by
-/// `record_tranche_settlement`. Read back by the next settlement cycle to
+/// `record_settlement`. Read back by the next settlement cycle to
 /// know each tranche's current NAV/share price/units/principal without
 /// re-deriving them — the write half of that read/write pair.
 ///
@@ -226,19 +234,22 @@ pub struct TrancheSettle {
 }
 
 /// One settlement's full tranche-level result for a product, as recorded by
-/// `record_tranche_settlement` — one entry per tranche, plus the product's
+/// `record_settlement` — one entry per tranche, plus the product's
 /// pending (unconfirmed) deposit total.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct TrancheSettlement<BlockNumber> {
+pub struct Settlement<BlockNumber> {
 	pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
 	/// Product-level pending/unconfirmed deposit amount as of this
 	/// settlement — not yet reflected in any tranche's `units_outstanding`.
 	pub pending_deposit_assets: U256,
-	/// This chain's own block number when `record_tranche_settlement` accepted
+	/// This chain's own block number when `record_settlement` accepted
 	/// this entry.
 	pub recorded_at: BlockNumber,
+	/// Wall-clock companion to `recorded_at` — see `RequestedInvestment::timestamp`'s
+	/// doc comment for why this exists alongside the block number.
+	pub timestamp: u64,
 }
 
 // ---------------------------------------------------------------------------

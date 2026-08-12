@@ -2,6 +2,7 @@
 #![warn(unused_crate_dependencies)]
 
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_tranche_investments::{
 	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, OrderType, TrancheSettle,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_ASSET_POSITIONS,
@@ -67,6 +68,7 @@ where
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	Runtime::RuntimeCall: From<InvestmentsCall<Runtime>>,
 	Runtime::RuntimeOrigin: From<pallet_tranche_investments::Origin>,
+	BlockNumberFor<Runtime>: Into<U256>,
 {
 	/// Record a pending deposit or redeem request. See
 	/// `pallet_tranche_investments::record_investment_request`'s doc comment.
@@ -218,11 +220,11 @@ where
 
 	/// Record the post-waterfall per-tranche settlement result, plus the
 	/// product's finalized aggregate NAV. See
-	/// `pallet_tranche_investments::record_tranche_settlement`'s doc comment.
+	/// `pallet_tranche_investments::record_settlement`'s doc comment.
 	#[precompile::public(
-		"record_tranche_settlement(uint256,uint256,(uint64,address,uint256,uint256,uint256,uint256)[],uint256,uint256)"
+		"record_settlement(uint256,uint256,(uint64,address,uint256,uint256,uint256,uint256)[],uint256,uint256)"
 	)]
-	fn record_tranche_settlement(
+	fn record_settlement(
 		handle: &mut impl PrecompileHandle,
 		product_id: U256,
 		settlement_id: U256,
@@ -235,7 +237,7 @@ where
 		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
 		let bounded_tranches = decode_tranche_settles(&tranches)?;
 
-		let call = InvestmentsCall::<Runtime>::record_tranche_settlement {
+		let call = InvestmentsCall::<Runtime>::record_settlement {
 			product_id,
 			settlement_id,
 			tranches: bounded_tranches,
@@ -266,7 +268,7 @@ where
 	}
 
 	/// Read a product's current settlement_id — the value most recently passed to
-	/// `record_tranche_settlement`. Zero if the product has never settled yet.
+	/// `record_settlement`. Zero if the product has never settled yet.
 	///
 	/// @param product_id The product to look up
 	#[precompile::public("get_settlement_id(uint256)")]
@@ -388,7 +390,7 @@ where
 		let last_id = pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let settlement =
-			pallet_tranche_investments::TrancheSettlements::<Runtime>::get(product_id, last_id)
+			pallet_tranche_investments::Settlements::<Runtime>::get(product_id, last_id)
 				.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let settle = settlement
 			.tranches
@@ -415,7 +417,7 @@ where
 		else {
 			return Ok(U256::zero());
 		};
-		Ok(pallet_tranche_investments::TrancheSettlements::<Runtime>::get(product_id, last_id)
+		Ok(pallet_tranche_investments::Settlements::<Runtime>::get(product_id, last_id)
 			.map(|s| s.pending_deposit_assets)
 			.unwrap_or_default())
 	}
@@ -438,7 +440,7 @@ where
 		let last_id = pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let settlement =
-			pallet_tranche_investments::TrancheSettlements::<Runtime>::get(product_id, last_id)
+			pallet_tranche_investments::Settlements::<Runtime>::get(product_id, last_id)
 				.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let product_nav =
 			pallet_tranche_investments::ProductNavs::<Runtime>::get(product_id, last_id)
@@ -460,6 +462,100 @@ where
 		}
 
 		Ok((last_id, share_prices, tranche_navs, product_nav))
+	}
+
+	/// Read one specific settlement's full state — unlike `get_last_settlement` (which
+	/// only ever reads the product's most recent one), this looks up any `settlement_id`
+	/// that's ever been recorded for `product_id`. Returns the raw per-tranche breakdown
+	/// (`TrancheSettle[]`, keyed by vault rather than pre-matched against
+	/// `pallet-tranche-system`'s tranche ordering the way `get_last_settlement`'s
+	/// `share_prices`/`tranche_navs` arrays are) alongside `pending_deposit_assets`,
+	/// `product_nav`, and both write-time fields (`recorded_at`/`timestamp` — see
+	/// `Settlement`'s own doc comment for why both exist).
+	///
+	/// Reverts if no settlement with this `settlement_id` was ever recorded for
+	/// `product_id` — same convention as `get_last_settlement`.
+	///
+	/// @param product_id    The product the settlement belongs to
+	/// @param settlement_id The settlement to look up
+	/// @return tranches Per-tranche breakdown, one entry per tranche settled
+	/// @return pending_deposit_assets Product-level pending/unconfirmed deposit total as of
+	/// this settlement
+	/// @return product_nav Product's finalized aggregate NAV as of this settlement
+	/// @return recorded_at This chain's own block number when this settlement was recorded
+	/// @return timestamp This chain's `pallet_timestamp` value (ms since Unix epoch) at the
+	/// same moment as `recorded_at`
+	#[precompile::public("get_settlement_state(uint256,uint256)")]
+	#[precompile::view]
+	fn get_settlement_state(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		settlement_id: U256,
+	) -> EvmResult<(Vec<EvmTrancheSettle>, U256, U256, U256, U256)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+
+		let settlement =
+			pallet_tranche_investments::Settlements::<Runtime>::get(product_id, settlement_id)
+				.ok_or_else(|| revert("settlement not found"))?;
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_nav =
+			pallet_tranche_investments::ProductNavs::<Runtime>::get(product_id, settlement_id)
+				.ok_or_else(|| revert("settlement not found"))?;
+
+		let tranches = settlement
+			.tranches
+			.iter()
+			.map(|settle| {
+				(
+					settle.vault.chain_id,
+					Address(settle.vault.vault_address),
+					settle.tranche_nav,
+					settle.share_price,
+					settle.units_outstanding,
+					settle.principal,
+				)
+			})
+			.collect();
+
+		Ok((
+			tranches,
+			settlement.pending_deposit_assets,
+			product_nav,
+			settlement.recorded_at.into(),
+			settlement.timestamp.into(),
+		))
+	}
+
+	/// Read one settlement's full per-Adapter NAV breakdown, as recorded by
+	/// `record_adapter_valuations` — one entry per Adapter, each with its own
+	/// per-asset position breakdown. No other function exposes this; it's only
+	/// otherwise observable via `AdapterValuationsRecorded`.
+	///
+	/// Reverts if no Adapter valuations were ever recorded for this
+	/// `(product_id, settlement_id)` — same convention as `get_settlement_state`.
+	///
+	/// @param product_id    The product the settlement belongs to
+	/// @param settlement_id The settlement to look up
+	/// @return valuations Per-Adapter NAV breakdown, one entry per Adapter
+	#[precompile::public("get_adapter_valuations(uint256,uint256)")]
+	#[precompile::view]
+	fn get_adapter_valuations(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		settlement_id: U256,
+	) -> EvmResult<Vec<EvmAdapterValuation>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+
+		let valuations = pallet_tranche_investments::AdapterValuations::<Runtime>::get(
+			product_id,
+			settlement_id,
+		)
+		.ok_or_else(|| revert("adapter valuations not found"))?;
+
+		Ok(valuations.iter().map(encode_adapter_valuation).collect())
 	}
 
 	/// Read a request's approval details.
@@ -559,6 +655,27 @@ fn decode_asset_positions(
 			.map_err(|_| revert("too many asset positions"))?;
 	}
 	Ok(bounded)
+}
+
+fn encode_asset_position(position: &AssetPosition) -> EvmAssetPosition {
+	(
+		Address(position.asset),
+		position.amount,
+		position.price_usd,
+		position.usd_value,
+		position.counted,
+	)
+}
+
+fn encode_adapter_valuation(valuation: &AdapterValuation) -> EvmAdapterValuation {
+	(
+		valuation.chain_id,
+		Address(valuation.adapter),
+		valuation.epoch_id,
+		valuation.valuation_cutoff,
+		valuation.principal,
+		valuation.positions.iter().map(encode_asset_position).collect(),
+	)
 }
 
 fn decode_adapter_valuations(
