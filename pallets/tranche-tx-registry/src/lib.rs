@@ -84,45 +84,62 @@ pub struct TxRecord<BlockNumber> {
 // ---------------------------------------------------------------------------
 
 /// Step within a request's pipeline. Mirrors interface.sol's `RequestStep`.
-/// `Requested`/`InboundBridgeExecuted`/`InboundHooksExecuted`/
-/// `AdapterBridgeExecuted`/`AdapterHooksExecuted` are the only five
-/// values `record_request_tx` ever accepts as input. Fragmented into two
-/// directions, since they're causally sequenced and not interchangeable:
+/// `Requested`/`RequestBridgeExecuted`/`RequestQueued`/
+/// `AdapterBridgeExecuted`/`AdapterApplied` are the only five
+/// values `record_request_tx` ever accepts as input. Named after the
+/// underlying Valuation Contract events wherever one exists 1:1 — `Requested`
+/// (`DepositRequested`/`RedeemRequested`, at TrancheManager), `RequestQueued`
+/// (`DepositQueued`/`RedeemQueued`, at Valuation), `AdapterApplied`
+/// (`Supplied`/`WithdrawRequested`, at the MultichainAdapter) — so a recorder
+/// can map "which event did I just see" to "which step do I record" without
+/// needing to special-case Hub-vault vs Spoke-vault:
 ///
-/// - `Requested`, then (only if the vault is on a Spoke chain)
-///   `InboundBridgeExecuted`/`InboundHooksExecuted` — the *Inbound* leg,
-///   delivering the request itself from the investor's own vault chain to the
-///   Hub Valuation Contract. At most one such leg per request (there's only
-///   one vault), so its evidence lives directly on `RequestEntry` rather than
-///   per-chain. Never recorded at all for a Hub-vault request (`Requested`
-///   already means the deposit is at the Valuation Contract in that same
-///   call).
-/// - `AdapterBridgeExecuted`/`AdapterHooksExecuted`, once per
-///   declared chain — the *Adapter* leg(s), the Hub Valuation Contract
-///   pushing the now-arrived capital back out to each remote, actually-
-///   weighted MultichainAdapter chain (see `record_request_tx`'s dev notes for
-///   exactly which chains belong in that set). Keyed by the extrinsic's own
+/// - `Requested` — the investor's request lands at TrancheManager, wherever
+///   the vault is (Hub or Spoke). Opens the `RequestEntries` entry
+///   (`investor`/`vault`/`amount`/`order_type`), never carries
+///   `adapter_chain_ids` (not knowable yet — even for a Hub-vault request,
+///   TrancheManager's event alone doesn't reveal the Adapter decision;
+///   that's Valuation's job, one step later).
+/// - (only if the vault is on a Spoke chain) `RequestBridgeExecuted` — the
+///   *Inbound* leg's Bridge phase, Spoke -> Hub. At most one per request
+///   (there's only one vault), so its evidence lives directly on
+///   `RequestEntry` rather than per-chain. Never recorded for a Hub-vault
+///   request — there's nothing to bridge when the vault is already on Hub.
+/// - `RequestQueued` — the moment the request's capital is confirmed at the
+///   Hub Valuation Contract and `adapter_chain_ids` becomes known, for
+///   **both** Hub-vault and Spoke-vault requests alike. For a Hub-vault
+///   request this typically lands in the very same transaction as
+///   `Requested` (TrancheManager -> Valuation is a synchronous local call)
+///   but is still a separate `record_request_tx` call — for a Spoke-vault
+///   request it's the Inbound leg's own Hooks phase, only reachable once
+///   `RequestBridgeExecuted` has landed. Evidence recorded on
+///   `RequestEntry::queued_tx`.
+/// - `AdapterBridgeExecuted`/`AdapterApplied`, once per declared
+///   chain — the *Adapter* leg(s), the Hub Valuation Contract pushing the
+///   now-arrived capital back out to each remote, actually-weighted
+///   MultichainAdapter chain (see `record_request_tx`'s dev notes for exactly
+///   which chains belong in that set). Keyed by the extrinsic's own
 ///   `chain_id` parameter (see `RequestChainEntry`), since a request can need
-///   more than one such leg at once.
+///   more than one such leg at once. `AdapterApplied` covers both directions
+///   — `Supplied` for a deposit, `WithdrawRequested` for a redeem — since
+///   both mean the same thing structurally: the Adapter has been notified and
+///   acted on this leg.
 ///
-/// `adapter_chain_ids` — the full set of chains needing an Adapter
-/// leg — can only be declared once the Hub Valuation Contract has actually
-/// decided it, which happens at whichever step first represents "this
-/// request's capital has arrived at the Valuation Contract": `Requested`
-/// itself for a Hub-vault request (no Inbound leg needed), or the Inbound
-/// leg's own `InboundHooksExecuted` for a Spoke-vault request (the Valuation
-/// Contract emits its own event declaring the chains right when that Hooks
-/// call lands, for the recorder to observe and attach here) — never at
-/// `Requested` for a Spoke-vault request, since the adapter decision
-/// genuinely isn't known that early.
+/// `adapter_chain_ids` is only ever supplied at `RequestQueued` — never at
+/// `Requested`, regardless of Hub or Spoke — since `RequestQueued` is
+/// precisely the step defined as "the Valuation Contract has now decided the
+/// Adapter routing," for both vault locations alike.
 ///
-/// `Queued` and `Completed` are read-only sentinels, never valid
-/// `record_request_tx` input (rejected with `Error::InvalidRequestStep`) —
-/// mirrors `SettlementStep`'s `Queued`/`Settled` exactly. `Queued` is a
-/// per-chain Adapter leg's status before its `AdapterBridgeExecuted`
-/// has landed; `Completed` is the request's own overall status once its
-/// Inbound leg (if any) and every declared Adapter chain have reached
-/// their own Hooks phase.
+/// `None` and `Completed` are read-only sentinels, never valid
+/// `record_request_tx` input (rejected with `Error::InvalidRequestStep`).
+/// Unlike `SettlementStep::Queued` (which `get_settlement` genuinely returns
+/// for an untriggered settlement), `None` is never actually returned by
+/// `get_request` either — `get_request` reverts outright for a request_id
+/// that was never opened, so there's no "not yet requested" state to report —
+/// it exists purely so `record_request_tx` has a well-defined way to reject
+/// step `0` as invalid input, same as `Completed`. Named `None` rather than
+/// `Queued` specifically to avoid sitting next to `RequestQueued` under a
+/// near-identical name while meaning something completely different.
 #[derive(
 	Clone,
 	Copy,
@@ -136,12 +153,12 @@ pub struct TxRecord<BlockNumber> {
 	MaxEncodedLen,
 )]
 pub enum RequestStep {
-	Queued,
+	None,
 	Requested,
-	InboundBridgeExecuted,
-	InboundHooksExecuted,
+	RequestBridgeExecuted,
+	RequestQueued,
 	AdapterBridgeExecuted,
-	AdapterHooksExecuted,
+	AdapterApplied,
 	Completed,
 }
 
@@ -209,11 +226,13 @@ pub struct RequestOpening {
 /// request's final leg onward — minus settlement_id, which isn't available
 /// any earlier than that regardless.
 ///
-/// Holds the Inbound leg's evidence directly (`bridge_tx`/`hooks_tx`) rather
-/// than per-chain, unlike the Adapter legs (`RequestChainEntries`) — a
-/// request only ever has one vault, so at most one Inbound leg, always for
-/// that vault's own chain. Left `None` forever for a Hub-vault request (no
-/// Inbound leg applies — see `RequestStep`'s doc comment).
+/// Holds the Inbound leg's Bridge evidence (`bridge_tx`) directly rather than
+/// per-chain, unlike the Adapter legs (`RequestChainEntries`) — a request
+/// only ever has one vault, so at most one Inbound leg, always for that
+/// vault's own chain. `bridge_tx` stays `None` forever for a Hub-vault
+/// request (no Inbound leg applies — see `RequestStep`'s doc comment); unlike
+/// `bridge_tx`, `queued_tx` is populated for **every** request regardless of
+/// Hub or Spoke, since `RequestStep::RequestQueued` applies to both.
 #[derive(
 	Clone,
 	Encode,
@@ -240,20 +259,23 @@ pub struct RequestEntry<BlockNumber> {
 	/// Inbound leg, Bridge phase (Spoke -> Hub). `None` forever if the vault is
 	/// on Hub (no Inbound leg needed).
 	pub bridge_tx: Option<TxRecord<BlockNumber>>,
-	/// Inbound leg, Hooks phase — the moment this request's capital arrives at
-	/// the Hub Valuation Contract, if it wasn't already there from the start.
-	/// `None` forever if the vault is on Hub.
-	pub hooks_tx: Option<TxRecord<BlockNumber>>,
+	/// Evidence for `RequestStep::RequestQueued` — the moment this request's
+	/// capital is confirmed at the Hub Valuation Contract and
+	/// `adapter_chain_ids` becomes known. Populated for every request, Hub or
+	/// Spoke alike (for a Hub-vault request this is typically the same
+	/// `tx_hash` as `request_tx`, recorded via a separate call — see
+	/// `RequestStep::RequestQueued`'s doc comment).
+	pub queued_tx: Option<TxRecord<BlockNumber>>,
 }
 
-/// One chain's Adapter leg (Bridge+Hooks) within a request — the Hub
+/// One chain's Adapter leg (Bridge+Applied) within a request — the Hub
 /// Valuation Contract pushing capital out to one remote, weighted
 /// MultichainAdapter chain. Keyed by `(product_id, request_id, chain_id)` in
 /// storage — unlike interface.sol's `AdapterLeg`, `chain_id` itself is
 /// NOT a field here, since it's already the storage map's own key. Mirrors
 /// `SettlementChainEntry`, except an Adapter leg only ever has one
-/// Bridge+Hooks pair (there's no Collect/Response/Finalize subdivision on the
-/// request side).
+/// Bridge+Applied pair (there's no Collect/Response/Finalize subdivision on
+/// the request side).
 #[derive(
 	Clone,
 	Encode,
@@ -268,7 +290,10 @@ pub struct RequestEntry<BlockNumber> {
 )]
 pub struct RequestChainEntry<BlockNumber> {
 	pub bridge_tx: Option<TxRecord<BlockNumber>>,
-	pub hooks_tx: Option<TxRecord<BlockNumber>>,
+	/// Evidence for `RequestStep::AdapterApplied` — the MultichainAdapter has
+	/// been notified and acted on this leg (`Supplied` for a deposit,
+	/// `WithdrawRequested` for a redeem).
+	pub applied_tx: Option<TxRecord<BlockNumber>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -280,18 +305,23 @@ pub struct RequestChainEntry<BlockNumber> {
 /// `get_settlement`'s own `status` moves through —
 /// `Queued` (not yet triggered), `Triggered` (triggered, awaiting
 /// completion), `Settled` (every chain has reached *its own* terminal step —
-/// `FinalizeHooksExecuted` if it's in `SettlementFinalizeChains`, otherwise
-/// `ResponseHooksExecuted`, since a chain that's Collect/Response-only, i.e.
+/// `SettleApplied` if it's in `SettlementFinalizeChains`, otherwise
+/// `NavReceived`, since a chain that's Collect/Response-only, i.e.
 /// has an Adapter but no vault, never gets a Finalize leg to begin with — see
 /// `record_settlement_tx`'s dev notes). The middle six describe one chain's
 /// own progress instead — a Collect/Response/Finalize leg crossed with a
-/// Bridge/Hooks phase (each suffixed `Executed`, since by the time any of
-/// these six is recorded, that half of the leg has already landed) —
-/// flattened into this same enum so a single `step` parameter can select any
-/// of them. `Queued` and `Settled` are read-only sentinels and must never be
-/// accepted as `record_settlement_tx`'s extrinsic input (rejected with
-/// `Error::InvalidSettlementStep`) — seven recordable values in total
-/// (`Triggered` plus the six leg steps).
+/// Bridge/Hooks phase, flattened into this same enum so a single `step`
+/// parameter can select any of them. The three Bridge-phase values are
+/// suffixed `Executed` (generic Socket-message evidence, nothing more
+/// specific to name them after); the three Hooks-phase values are instead
+/// named after the underlying Contract event each one's evidence actually
+/// is — `NavReported` (TrancheManager, Collect leg), `NavReceived`
+/// (Valuation, Response leg), `SettleApplied` (TrancheManager, Finalize
+/// leg) — same event-name-mirroring convention as `RequestStep`'s
+/// `RequestQueued`/`AdapterApplied`. `Queued` and `Settled` are read-only
+/// sentinels and must never be accepted as `record_settlement_tx`'s
+/// extrinsic input (rejected with `Error::InvalidSettlementStep`) — seven
+/// recordable values in total (`Triggered` plus the six leg steps).
 ///
 /// A settlement that needs no cross-chain action at all is represented by
 /// `Triggered` with both `collect_response_chain_ids` and `finalize_chain_ids`
@@ -317,11 +347,11 @@ pub enum SettlementStep {
 	Queued,
 	Triggered,
 	CollectBridgeExecuted,
-	CollectHooksExecuted,
+	NavReported,
 	ResponseBridgeExecuted,
-	ResponseHooksExecuted,
+	NavReceived,
 	FinalizeBridgeExecuted,
-	FinalizeHooksExecuted,
+	SettleApplied,
 	Settled,
 }
 
@@ -344,11 +374,11 @@ pub enum SettlementStep {
 )]
 pub struct SettlementChainEntry<BlockNumber> {
 	pub collect_bridge_tx: Option<TxRecord<BlockNumber>>,
-	pub collect_hooks_tx: Option<TxRecord<BlockNumber>>,
+	pub nav_reported_tx: Option<TxRecord<BlockNumber>>,
 	pub response_bridge_tx: Option<TxRecord<BlockNumber>>,
-	pub response_hooks_tx: Option<TxRecord<BlockNumber>>,
+	pub nav_received_tx: Option<TxRecord<BlockNumber>>,
 	pub finalize_bridge_tx: Option<TxRecord<BlockNumber>>,
-	pub finalize_hooks_tx: Option<TxRecord<BlockNumber>>,
+	pub settle_applied_tx: Option<TxRecord<BlockNumber>>,
 }
 
 // ---------------------------------------------------------------------------

@@ -20,17 +20,19 @@ pragma solidity >=0.8.0;
  *         that registration.
  *
  * Three things are covered by this registry:
- *  - Request (per request_id): a single request_tx (opens the entry), then two independent
- *    kinds of leg — an Inbound leg (Spoke->Hub, only if the vault is on a Spoke chain, at
- *    most one) delivering the request itself to the Hub Valuation Contract, and zero or
- *    more Adapter legs (Hub->Spoke, one per remote actually-weighted MultichainAdapter
- *    chain) pushing the now-arrived capital back out. Each leg is its own bridge_tx/hooks_tx
- *    pair. `adapter_chain_ids` — which chains need an Adapter leg — can only be
- *    declared once the capital has genuinely arrived at the Valuation Contract: immediately,
- *    at `Requested` itself, for a Hub-vault request (no Inbound leg needed); or at the
- *    Inbound leg's own `InboundHooksExecuted`, for a Spoke-vault request. A request needing no
- *    cross-chain action at all (Hub vault, no weighted remote Adapters) declares an empty
- *    set at `Requested` and is immediately Completed.
+ *  - Request (per request_id): a single request_tx (opens the entry), a single queued_tx
+ *    (RequestQueued — the request's capital confirmed at the Hub Valuation Contract, Hub-vault
+ *    or Spoke-vault alike), plus two independent kinds of leg — an Inbound leg (Spoke->Hub,
+ *    only if the vault is on a Spoke chain, at most one, Bridge phase only — its own Hooks
+ *    phase is what RequestQueued represents) delivering the request itself to the Hub
+ *    Valuation Contract, and zero or more Adapter legs (Hub->Spoke, one per remote
+ *    actually-weighted MultichainAdapter chain) pushing the now-arrived capital back out. Each
+ *    leg is its own bridge_tx/applied_tx (or bridge_tx/queued_tx) pair. `adapter_chain_ids` —
+ *    which chains need an Adapter leg — can only be declared at `RequestQueued`, once the
+ *    capital has genuinely arrived at the Valuation Contract (never at `Requested` itself,
+ *    Hub-vault or Spoke-vault alike). A request needing no cross-chain action at all (Hub
+ *    vault, no weighted remote Adapters) declares an empty set at `RequestQueued` and is
+ *    immediately Completed.
  *  - Settlement (per settlement_id, fanned out per chain): a single trigger_tx
  *    (Hub-local tryUpdateNAV) that also declares two independent chain sets —
  *    collect_response_chain_ids (chains with a registered Adapter, excluding Hub
@@ -38,7 +40,9 @@ pragma solidity >=0.8.0;
  *    then, per chain, whichever leg kind(s) its role calls for: Collect (Hub->Spoke NAV
  *    request) + Response (Spoke->Hub NAV report) for a collect_response chain, Finalize
  *    (Hub->Spoke settle result) for a finalize chain, both for a chain with both roles.
- *    Each leg is its own bridge_tx/hooks_tx pair. Legs progress independently per chain;
+ *    Each leg is its own Bridge+Hooks tx pair (the Hooks-phase evidence named after its
+ *    own Contract event — NavReported/NavReceived/SettleApplied). Legs progress independently
+ *    per chain;
  *    there is no cross-chain ordering constraint. A settlement needing no cross-chain
  *    action at all is Triggered with both sets empty.
  *  - Receive (per investor per vault): a plain local Spoke-chain receive() tx, not part of
@@ -46,7 +50,7 @@ pragma solidity >=0.8.0;
  *    (investor, vault) rather than per request_id, so receives are tracked separately
  *    from the request pipeline (see record_receive_tx's dev notes for why).
  *
- * Every enum value other than `Queued`/`Completed` (RequestStep) and `Queued`/`Settled`
+ * Every enum value other than `None`/`Completed` (RequestStep) and `Queued`/`Settled`
  * (SettlementStep) is directly recordable by the tx recorder backend — those four are
  * read-only sentinels only ever returned by a view function, never valid record_*_tx input.
  * Determining "does this leg exist at all" or "is this chain's leg done yet" is entirely the
@@ -120,10 +124,10 @@ interface TrancheTxRegistry {
     /// @dev One chain's full ordered step history within a settlement — see this
     ///      interface's top-level dev notes for the array-shape convention this follows.
     /// @param spoke_chain_id The chain these steps are for
-    /// @param steps          Exactly `[CollectBridgeExecuted, CollectHooksExecuted,
-    ///                       ResponseBridgeExecuted, ResponseHooksExecuted]` if this chain
+    /// @param steps          Exactly `[CollectBridgeExecuted, NavReported,
+    ///                       ResponseBridgeExecuted, NavReceived]` if this chain
     ///                       only has a registered Adapter, `[FinalizeBridgeExecuted,
-    ///                       FinalizeHooksExecuted]` if it only has a registered vault, or
+    ///                       SettleApplied]` if it only has a registered vault, or
     ///                       all six (Collect/Response then Finalize) if it has both. This
     ///                       chain is fully done iff `steps[steps.length - 1].tx.recorded_at
     ///                       != 0`.
@@ -141,10 +145,10 @@ interface TrancheTxRegistry {
     }
 
     /// @dev One chain's Adapter leg — always exactly `[AdapterBridgeExecuted,
-    ///      AdapterHooksExecuted]`, since every declared Adapter chain needs the same two
+    ///      AdapterApplied]`, since every declared Adapter chain needs the same two
     ///      steps. This leg is done iff `steps[1].tx.recorded_at != 0`.
     /// @param chain_id The chain this leg is for
-    /// @param steps    `[AdapterBridgeExecuted, AdapterHooksExecuted]`
+    /// @param steps    `[AdapterBridgeExecuted, AdapterApplied]`
     struct AdapterLeg {
         uint64 chain_id;
         RequestTxStep[] steps;
@@ -181,46 +185,58 @@ interface TrancheTxRegistry {
         bytes32 tx_hash;
     }
 
-    /// @dev Step within a request's pipeline. `Requested`/`InboundBridgeExecuted`/
-    ///      `InboundHooksExecuted`/`AdapterBridgeExecuted`/`AdapterHooksExecuted`
-    ///      are the only five values record_request_tx ever accepts as input. Fragmented
-    ///      into two directions, since they're causally sequenced and not interchangeable:
+    /// @dev Step within a request's pipeline. `Requested`/`RequestBridgeExecuted`/
+    ///      `RequestQueued`/`AdapterBridgeExecuted`/`AdapterApplied` are the only five
+    ///      values record_request_tx ever accepts as input. Named after the underlying
+    ///      Valuation Contract events wherever one exists 1:1 — `Requested`
+    ///      (DepositRequested/RedeemRequested, at TrancheManager), `RequestQueued`
+    ///      (DepositQueued/RedeemQueued, at Valuation), `AdapterApplied`
+    ///      (Supplied/WithdrawRequested, at the MultichainAdapter) — so a recorder can map
+    ///      "which event did I just see" to "which step do I record" without needing to
+    ///      special-case Hub-vault vs Spoke-vault:
     ///
-    ///      - `Requested`, then (only if the vault is on a Spoke chain)
-    ///        `InboundBridgeExecuted`/`InboundHooksExecuted` — the *Inbound* leg, delivering
-    ///        the request itself from the investor's own vault chain to the Hub Valuation
-    ///        Contract. At most one such leg per request. Never recorded at all for a
-    ///        Hub-vault request (`Requested` already means the deposit is at the Valuation
-    ///        Contract in that same call).
-    ///      - `AdapterBridgeExecuted`/`AdapterHooksExecuted`, once per declared
-    ///        chain — the *Adapter* leg(s), the Hub Valuation Contract pushing the
-    ///        now-arrived capital back out to each remote, actually-weighted
-    ///        MultichainAdapter chain (see record_request_tx's dev notes for exactly which
-    ///        chains belong in that set). Keyed by the call's own `attestation.chain_id`,
-    ///        since a request can need more than one such leg at once.
+    ///      - `Requested` — the investor's request lands at TrancheManager, wherever the
+    ///        vault is (Hub or Spoke). Opens the registry entry, never carries
+    ///        `adapter_chain_ids` (not knowable yet, even for a Hub-vault request —
+    ///        that's `RequestQueued`'s job, one step later).
+    ///      - (only if the vault is on a Spoke chain) `RequestBridgeExecuted` — the
+    ///        *Inbound* leg's Bridge phase, Spoke -> Hub. At most one per request. Never
+    ///        recorded for a Hub-vault request — there's nothing to bridge when the vault
+    ///        is already on Hub.
+    ///      - `RequestQueued` — the moment the request's capital is confirmed at the Hub
+    ///        Valuation Contract and `adapter_chain_ids` becomes known, for **both**
+    ///        Hub-vault and Spoke-vault requests alike. For a Hub-vault request this
+    ///        typically lands in the very same transaction as `Requested` (TrancheManager
+    ///        -> Valuation is a synchronous local call) but is still a separate
+    ///        record_request_tx call — for a Spoke-vault request it's the Inbound leg's
+    ///        own Hooks phase, only reachable once `RequestBridgeExecuted` has landed.
+    ///      - `AdapterBridgeExecuted`/`AdapterApplied`, once per declared chain — the
+    ///        *Adapter* leg(s), the Hub Valuation Contract pushing the now-arrived capital
+    ///        back out to each remote, actually-weighted MultichainAdapter chain (see
+    ///        record_request_tx's dev notes for exactly which chains belong in that set).
+    ///        Keyed by the call's own `attestation.chain_id`, since a request can need
+    ///        more than one such leg at once. `AdapterApplied` covers both directions —
+    ///        `Supplied` for a deposit, `WithdrawRequested` for a redeem — since both mean
+    ///        the same thing structurally: the Adapter has been notified and acted on this
+    ///        leg.
     ///
-    ///      `adapter_chain_ids` — the full set of chains needing an Adapter leg —
-    ///      can only be declared once the Hub Valuation Contract has actually decided it,
-    ///      which happens at whichever step first represents "this request's capital has
-    ///      arrived at the Valuation Contract": `Requested` itself for a Hub-vault request,
-    ///      or the Inbound leg's own `InboundHooksExecuted` for a Spoke-vault request (the
-    ///      Valuation Contract emits its own event declaring the chains right when that
-    ///      Hooks call lands, for the recorder to observe and attach here) — never at
-    ///      `Requested` for a Spoke-vault request, since the adapter decision genuinely
-    ///      isn't known that early.
+    ///      `adapter_chain_ids` is only ever supplied at `RequestQueued` — never at
+    ///      `Requested`, regardless of Hub or Spoke.
     ///
-    ///      `Queued` and `Completed` are read-only sentinels, never valid record_request_tx
-    ///      input — mirrors SettlementStep's `Queued`/`Settled`, and (unlike an earlier
-    ///      version of this interface) no longer appear anywhere in get_request's return
-    ///      shape either, since a step's mere presence/absence in a steps array plus its own
-    ///      `tx.recorded_at` already convey everything `Queued` used to.
+    ///      `None` and `Completed` are read-only sentinels, never valid record_request_tx
+    ///      input. Unlike SettlementStep.Queued (which get_settlement genuinely returns for
+    ///      an untriggered settlement), `None` is never actually returned by get_request
+    ///      either — get_request reverts outright for a request_id that was never opened,
+    ///      so there's no "not yet requested" state to report. Named `None` rather than
+    ///      `Queued` specifically to avoid sitting next to `RequestQueued` under a
+    ///      near-identical name while meaning something completely different.
     enum RequestStep {
-        Queued,
+        None,
         Requested,
-        InboundBridgeExecuted,
-        InboundHooksExecuted,
+        RequestBridgeExecuted,
+        RequestQueued,
         AdapterBridgeExecuted,
-        AdapterHooksExecuted,
+        AdapterApplied,
         Completed
     }
 
@@ -229,18 +245,23 @@ interface TrancheTxRegistry {
     ///      `Queued` (not yet triggered), `Triggered` (triggered, awaiting completion),
     ///      `Settled` (every chain has reached *its own* terminal step — see below). The
     ///      middle six describe one chain's own progress instead — a
-    ///      Collect/Response/Finalize leg crossed with a Bridge/Hooks phase (each suffixed
-    ///      `Executed`, since by the time any of these six is recorded, that half of the leg
-    ///      has already landed) — flattened into this same enum so record_settlement_tx
-    ///      takes a single step argument. `Queued` and `Settled` are read-only sentinels —
-    ///      "nothing recorded yet" and "settlement fully complete", respectively — and must
-    ///      never be passed to record_settlement_tx (seven recordable values in total:
-    ///      `Triggered` plus the six leg steps).
+    ///      Collect/Response/Finalize leg crossed with a Bridge/Hooks phase, flattened into
+    ///      this same enum so record_settlement_tx takes a single step argument. The three
+    ///      Bridge-phase values are suffixed `Executed` (generic Socket-message evidence,
+    ///      nothing more specific to name them after); the three Hooks-phase values are
+    ///      instead named after the underlying Contract event each one's evidence actually
+    ///      is — `NavReported` (TrancheManager, Collect leg), `NavReceived` (Valuation,
+    ///      Response leg), `SettleApplied` (TrancheManager, Finalize leg) — same
+    ///      event-name-mirroring convention as RequestStep's `RequestQueued`/`AdapterApplied`.
+    ///      `Queued` and `Settled` are read-only sentinels — "nothing recorded yet" and
+    ///      "settlement fully complete", respectively — and must never be passed to
+    ///      record_settlement_tx (seven recordable values in total: `Triggered` plus the six
+    ///      leg steps).
     ///
     ///      Each chain's own terminal step depends on its role, declared at Trigger time
-    ///      (see record_settlement_tx's dev notes): `FinalizeHooksExecuted` if it's in
+    ///      (see record_settlement_tx's dev notes): `SettleApplied` if it's in
     ///      `finalize_chain_ids` (it has a vault to deliver a result to), otherwise
-    ///      `ResponseHooksExecuted` (it only has an Adapter — Collect/Response-only chains
+    ///      `NavReceived` (it only has an Adapter — Collect/Response-only chains
     ///      never get a Finalize leg to begin with, and never have Finalize entries in
     ///      get_settlement's `steps` array at all). get_settlement's `status == Settled`
     ///      once every chain has reached its own terminal step.
@@ -255,11 +276,11 @@ interface TrancheTxRegistry {
         Queued,
         Triggered,
         CollectBridgeExecuted,
-        CollectHooksExecuted,
+        NavReported,
         ResponseBridgeExecuted,
-        ResponseHooksExecuted,
+        NavReceived,
         FinalizeBridgeExecuted,
-        FinalizeHooksExecuted,
+        SettleApplied,
         Settled
     }
 
@@ -278,8 +299,8 @@ interface TrancheTxRegistry {
     /// @dev `investor`/`vault_chain_id`/`vault_address`/`amount`/`order_type` are only
     ///      meaningful when `step == Requested` (zero/empty otherwise) — same sentinel
     ///      convention as record_request_tx's own parameters. `adapter_chain_ids` is
-    ///      meaningful (and may be empty) when `step == Requested` (Hub-vault request) or
-    ///      `step == InboundHooksExecuted` (Spoke-vault request's Inbound leg), empty otherwise.
+    ///      meaningful (and may be empty) exclusively when `step == RequestQueued`, empty
+    ///      otherwise.
     ///      Deliberately no `settlement_id` field here — see record_request_tx's dev notes
     ///      for why.
     event RequestTxRecorded(
@@ -344,25 +365,20 @@ interface TrancheTxRegistry {
      *      MultichainAdapter the deposited capital gets distributed to, but only those
      *      currently weighted (non-zero weightBps) at the moment the Valuation Contract
      *      actually processes the request; a remote Adapter weighted to 0 receives no
-     *      allocation, so it doesn't force a leg. It's meaningful (and may be empty) at
-     *      exactly one of two steps, depending on whether the vault is on Hub or Spoke — see
-     *      RequestStep's dev notes:
-     *      - `step == Requested`, for a Hub-vault request (no Inbound leg — the deposit is
-     *        already at the Valuation Contract, so the decision is knowable immediately).
-     *        MUST be omitted (empty) at `Requested` for a Spoke-vault request instead.
-     *      - `step == InboundHooksExecuted`, for a Spoke-vault request (the Inbound leg's own
-     *        arrival at the Valuation Contract — not knowable any earlier). Never valid for
-     *        a Hub-vault request, which has no Inbound leg to begin with.
-     *      An empty set means the request needs no Adapter at all — once its Inbound
-     *      leg (if any) is done, it's immediately Completed.
+     *      allocation, so it doesn't force a leg. It's meaningful (and may be empty)
+     *      exclusively at `step == RequestQueued` — never at `Requested`, for either a
+     *      Hub-vault or a Spoke-vault request; see RequestStep's dev notes for why this is
+     *      now uniform across both. MUST be omitted (empty) at every other step.
+     *      An empty set means the request needs no Adapter at all — once `RequestQueued` is
+     *      recorded, it's immediately Completed.
      *      Each declared Adapter chain then needs exactly one
-     *      AdapterBridgeExecuted then AdapterHooksExecuted call, identified by
+     *      AdapterBridgeExecuted then AdapterApplied call, identified by
      *      `attestation.chain_id` — no ordering constraint across different chains, only
-     *      within one chain's own Bridge-then-Hooks pair, and only after that request's
+     *      within one chain's own Bridge-then-Applied pair, and only after that request's
      *      Adapter chains have actually been declared. Likewise the Inbound leg's own
-     *      Bridge must precede its Hooks. `step == Requested` must not be called twice for
-     *      the same request_id, and InboundBridgeExecuted/InboundHooksExecuted revert if
-     *      called for a Hub-vault request.
+     *      Bridge must precede `RequestQueued` for a Spoke-vault request. `step == Requested`
+     *      must not be called twice for the same request_id, and RequestBridgeExecuted
+     *      reverts if called for a Hub-vault request.
      *      Opening a registry entry registers (product_id, request_id) under the investor for
      *      get_investor_active_requests; this registration is independent of, and can
      *      precede, the Investments precompile's record_investment_request (which is only
@@ -379,9 +395,8 @@ interface TrancheTxRegistry {
      *                               step == Requested
      * @param order_type             0 = redeem, 1 = deposit — meaningful iff step == Requested
      * @param adapter_chain_ids Every chain (besides Hub) needing its own Adapter
-     *                               leg — meaningful (and may be empty) iff step == Requested
-     *                               (Hub-vault only) or step == InboundHooksExecuted
-     *                               (Spoke-vault only), empty otherwise
+     *                               leg — meaningful (and may be empty) iff
+     *                               step == RequestQueued, empty otherwise
      * @param step                   Which pipeline step this attestation is for
      * @param attestation            The attested off-chain tx
      */
@@ -419,15 +434,15 @@ interface TrancheTxRegistry {
      *      chain-set params MUST be empty. Safe as a sentinel because no EVM chain in this
      *      protocol's supported set is ever assigned chain_id 0. `spoke_chain_id` identifies
      *      which chain a leg step is about — not necessarily the chain `attestation.chain_id`
-     *      itself executed on, since e.g. the Response leg's bridge_tx/hooks_tx both
-     *      physically execute on the Hub (see get_settlement's dev notes) even though
+     *      itself executed on, since e.g. the Response leg's ResponseBridgeExecuted/NavReceived
+     *      both physically execute on the Hub (see get_settlement's dev notes) even though
      *      `spoke_chain_id` there still names the chain being responded for.
      *      `collect_response_chain_ids` declares every chain (excluding Hub) with a
      *      registered Adapter this settlement queries NAV from — a CollectBridgeExecuted/
-     *      CollectHooksExecuted/ResponseBridgeExecuted/ResponseHooksExecuted call is only
+     *      NavReported/ResponseBridgeExecuted/NavReceived call is only
      *      valid for a chain in this set. `finalize_chain_ids` declares every chain
      *      (excluding Hub) with a registered vault this settlement delivers a result to — a
-     *      FinalizeBridgeExecuted/FinalizeHooksExecuted call is only valid for a chain in
+     *      FinalizeBridgeExecuted/SettleApplied call is only valid for a chain in
      *      this set. A chain may appear in both (it has both a registered Adapter and a
      *      registered vault) or just one. `step == Triggered` must be recorded exactly once
      *      per (product_id, settlement_id), before any leg step for that settlement. Within
@@ -647,20 +662,22 @@ interface TrancheTxRegistry {
      * @dev Reverts if record_request_tx has never been called with step == Requested for
      *      this request_id.
      *      `request_steps[0]` is always `(Requested, request_tx)` — every request that
-     *      exists has one, unconditionally. For a Hub-vault request (no Inbound leg
-     *      applies at all — `info.vault.chain_id` equals this chain's own EVM chain ID),
-     *      that's the array's only entry; for a Spoke-vault one, two more entries follow:
-     *      `(InboundBridgeExecuted, ...)` then `(InboundHooksExecuted, ...)` — same "absent
-     *      means not applicable" convention as get_settlement's `steps` arrays, so check
-     *      `request_steps.length` (1 vs 3) to tell whether this request has an Inbound leg
-     *      at all. Each `adapter_legs[i].steps` is always exactly `[AdapterBridgeExecuted,
-     *      AdapterHooksExecuted]`, ordered as declared (at `Requested` for a Hub-vault
-     *      request, at the Inbound leg's own `InboundHooksExecuted` for a Spoke-vault one;
-     *      empty if none were declared, yet or ever).
-     *      `status` only ever takes `Requested` (Inbound leg, if any, or some
-     *      Adapter leg still has an unfinished step) or `Completed` (Inbound leg, if any,
-     *      done, and every declared Adapter chain's last step landed, or none were declared
-     *      at all — immediate for a fully local request).
+     *      exists has one, unconditionally. `request_steps`' last entry is always
+     *      `(RequestQueued, queued_tx)` — every request reaches this step, Hub-vault or
+     *      Spoke-vault alike. For a Hub-vault request (no Inbound leg applies at all —
+     *      `info.vault.chain_id` equals this chain's own EVM chain ID), that's the array's
+     *      only other entry (length 2); for a Spoke-vault one, a `RequestBridgeExecuted`
+     *      entry sits between them (length 3). Same "absent means not applicable,
+     *      present-but-zeroed means pending" convention as get_settlement's `steps` arrays,
+     *      so check `request_steps.length` (2 vs 3) to tell whether this request has an
+     *      Inbound leg at all, and each present entry's own `tx.recorded_at` to tell whether
+     *      it's landed yet. Each `adapter_legs[i].steps` is always exactly
+     *      `[AdapterBridgeExecuted, AdapterApplied]`, ordered as declared at the request's
+     *      own `RequestQueued` (empty if none were declared, yet or ever).
+     *      `status` only ever takes `Requested` (`RequestQueued` not yet reached, or some
+     *      Adapter leg still has an unfinished step) or `Completed` (`RequestQueued`
+     *      reached, and every declared Adapter chain's last step landed, or none were
+     *      declared at all — immediate for a fully local request).
      *      Unlike every other function here, this also reads
      *      `pallet-tranche-investments::ApprovedInvestments` directly to resolve
      *      `settlement_id`/`settled` — `pallet_tranche_tx_registry` the pallet deliberately
@@ -685,7 +702,7 @@ interface TrancheTxRegistry {
      *        escrow share burn + payout-receivable for redeem, or distributeShares for
      *        deposit.
      *      - Hub vault: true once every one of `settlement_id`'s `collect_response_chain_ids`
-     *        has reached `ResponseHooksExecuted` (vacuously true, and immediate, if that set
+     *        has reached `NavReceived` (vacuously true, and immediate, if that set
      *        was declared empty at Trigger) — NAV must be fully known before the Hub vault's
      *        own payout/allocation can be computed, which then happens synchronously with no
      *        Finalize leg of its own.
