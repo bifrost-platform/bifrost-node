@@ -95,15 +95,13 @@ where
 	BlockNumberFor<Runtime>: Into<U256>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
-	/// Attest to one tx in a request's pipeline — the single Requested tx, one
-	/// Bridge/Hooks half of the Inbound leg (Spoke-vault requests only), or one
-	/// Bridge/Hooks half of a per-chain Adapter leg. See
+	/// Attest to one tx in a request's pipeline — the single Requested tx, the
+	/// single RequestQueued tx, one Bridge half of the Inbound leg (Spoke-vault
+	/// requests only), or one Bridge/Applied half of a per-chain Adapter leg. See
 	/// `pallet_tranche_tx_registry::record_request_tx`'s doc comment for the full
-	/// ordering/duplicate-recording contract this dispatches into (including
-	/// exactly when `adapter_chain_ids` attaches to `Requested` vs
-	/// `InboundHooksExecuted`); this function's own job is only translating
-	/// interface.sol's flat, sentinel-gated calldata into the pallet's
-	/// `Option<RequestOpening>`/`Option<BoundedVec<..>>` shapes.
+	/// ordering/duplicate-recording contract this dispatches into; this function's
+	/// own job is only translating interface.sol's flat, sentinel-gated calldata
+	/// into the pallet's `Option<RequestOpening>`/`Option<BoundedVec<..>>` shapes.
 	///
 	/// @param investor              Investor address — required iff step == Requested
 	/// @param vault_chain_id        EVM chain ID of the tranche vault — required iff
@@ -114,11 +112,11 @@ where
 	/// step == Requested
 	/// @param order_type            0 = redeem, 1 = deposit — meaningful iff step == Requested
 	/// @param adapter_chain_ids Every chain (besides Hub) needing its own Adapter
-	/// leg — meaningful (and may be empty) iff step == Requested (Hub-vault only) or
-	/// step == InboundHooksExecuted (Spoke-vault only), empty otherwise
-	/// @param step                  0 = Queued (never valid here), 1 = Requested,
-	/// 2 = InboundBridgeExecuted, 3 = InboundHooksExecuted,
-	/// 4 = AdapterBridgeExecuted, 5 = AdapterHooksExecuted,
+	/// leg — meaningful (and may be empty) iff step == RequestQueued (Hub-vault or
+	/// Spoke-vault alike), empty otherwise
+	/// @param step                  0 = None (never valid here), 1 = Requested,
+	/// 2 = RequestBridgeExecuted, 3 = RequestQueued,
+	/// 4 = AdapterBridgeExecuted, 5 = AdapterApplied,
 	/// 6 = Completed (never valid here)
 	#[precompile::public(
 		"record_request_tx(uint256,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32))"
@@ -145,13 +143,8 @@ where
 			amount,
 			order_type,
 		)?;
-		let hub_chain_id = <Runtime as pallet_evm::Config>::ChainId::get();
-		let decoded_adapter_chains = decode_request_adapter_chains(
-			decoded_step,
-			vault_chain_id,
-			hub_chain_id,
-			&adapter_chain_ids,
-		)?;
+		let decoded_adapter_chains =
+			decode_request_adapter_chains(decoded_step, &adapter_chain_ids)?;
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -336,9 +329,9 @@ where
 	/// untriggered (product_id, settlement_id) — returns a zeroed `trigger_tx`,
 	/// `status == Queued`, and empty `spoke_chains` instead.
 	///
-	/// `spoke_chains[i].steps` is exactly `[CollectBridgeExecuted, CollectHooksExecuted,
-	/// ResponseBridgeExecuted, ResponseHooksExecuted]` for a chain with only a
-	/// registered Adapter, `[FinalizeBridgeExecuted, FinalizeHooksExecuted]` for a
+	/// `spoke_chains[i].steps` is exactly `[CollectBridgeExecuted, NavReported,
+	/// ResponseBridgeExecuted, NavReceived]` for a chain with only a
+	/// registered Adapter, `[FinalizeBridgeExecuted, SettleApplied]` for a
 	/// chain with only a registered vault, or all six (Collect/Response then Finalize)
 	/// for a chain with both — a step never present in this array means it doesn't
 	/// apply to this chain at all, not merely "not yet reached." Within the array,
@@ -413,9 +406,9 @@ where
 			// lands; a Collect/Response-only chain (no vault, never gets a Finalize
 			// leg — see `SettlementStep`'s doc comment) is complete once Response does.
 			let complete = if needs_finalize {
-				entry.finalize_hooks_tx.is_some()
+				entry.settle_applied_tx.is_some()
 			} else {
-				entry.response_hooks_tx.is_some()
+				entry.nav_received_tx.is_some()
 			};
 			if !complete {
 				all_complete = false;
@@ -430,16 +423,16 @@ where
 					encode_tx_record(entry.collect_bridge_tx),
 				));
 				steps.push((
-					encode_settlement_step(SettlementStep::CollectHooksExecuted),
-					encode_tx_record(entry.collect_hooks_tx),
+					encode_settlement_step(SettlementStep::NavReported),
+					encode_tx_record(entry.nav_reported_tx),
 				));
 				steps.push((
 					encode_settlement_step(SettlementStep::ResponseBridgeExecuted),
 					encode_tx_record(entry.response_bridge_tx),
 				));
 				steps.push((
-					encode_settlement_step(SettlementStep::ResponseHooksExecuted),
-					encode_tx_record(entry.response_hooks_tx),
+					encode_settlement_step(SettlementStep::NavReceived),
+					encode_tx_record(entry.nav_received_tx),
 				));
 			}
 			if needs_finalize {
@@ -448,8 +441,8 @@ where
 					encode_tx_record(entry.finalize_bridge_tx),
 				));
 				steps.push((
-					encode_settlement_step(SettlementStep::FinalizeHooksExecuted),
-					encode_tx_record(entry.finalize_hooks_tx),
+					encode_settlement_step(SettlementStep::SettleApplied),
+					encode_tx_record(entry.settle_applied_tx),
 				));
 			}
 			spoke_chains.push((*chain_id, steps));
@@ -461,7 +454,7 @@ where
 
 	/// Enumerate an investor's currently in-flight requests. An empty array means the
 	/// investor has no in-flight request; this is not an error. A request is removed
-	/// from here automatically once its settlement's Finalize-Hooks leg lands (or, for
+	/// from here automatically once its settlement's `SettleApplied` leg lands (or, for
 	/// a Hub-vault request, once its settlement's Collect/Response completes) — see
 	/// `InvestorActiveRequests`'s own doc comment for the exact mechanism. For requests
 	/// that have already dropped out of this list, see `get_investor_request_history`.
@@ -654,23 +647,24 @@ where
 	/// this `request_id`.
 	///
 	/// `request_steps[0]` is always `(Requested, request_tx)` — every request that
-	/// exists has one, unconditionally. For a Hub-vault request (no Inbound leg
-	/// applies at all — `info.vault.chain_id` equals this chain's own EVM chain ID),
-	/// that's the array's only entry; for a Spoke-vault one, two more entries follow:
-	/// `(InboundBridgeExecuted, ...)` then `(InboundHooksExecuted, ...)`. Same
-	/// "absent means not applicable, present-but-zeroed means pending" convention as
-	/// `get_settlement`'s `spoke_chains[i].steps` — check `request_steps.length` (1
+	/// exists has one, unconditionally. `request_steps`' last entry is always
+	/// `(RequestQueued, queued_tx)` — every request reaches this step, Hub-vault or
+	/// Spoke-vault alike. For a Hub-vault request (no Inbound leg applies at all —
+	/// `info.vault.chain_id` equals this chain's own EVM chain ID), that's the
+	/// array's only other entry (length 2); for a Spoke-vault one, an
+	/// `RequestBridgeExecuted` entry sits between them (length 3). Same "absent
+	/// means not applicable, present-but-zeroed means pending" convention as
+	/// `get_settlement`'s `spoke_chains[i].steps` — check `request_steps.length` (2
 	/// vs 3) to tell whether this request has an Inbound leg at all, and each
 	/// present entry's own `tx.recorded_at` to tell whether it's landed yet. Each
 	/// `adapter_legs[i].steps` is always exactly `[AdapterBridgeExecuted,
-	/// AdapterHooksExecuted]`, ordered as declared (at `Requested` for a Hub-vault
-	/// request, at the Inbound leg's own `InboundHooksExecuted` for a Spoke-vault
-	/// one).
+	/// AdapterApplied]`, ordered as declared at the request's own `RequestQueued`.
 	///
-	/// `status` only ever takes `Requested` (Inbound leg, if any, or some
-	/// Adapter leg still has an unfinished step) or `Completed` (Inbound leg, if
-	/// any, done, and every declared Adapter chain's last step landed, or none were
-	/// declared at all — immediate for a fully local request).
+	/// `status` only ever takes `Requested` (`RequestQueued` not yet reached, or
+	/// some Adapter leg still has an unfinished step) or `Completed`
+	/// (`RequestQueued` reached, and every declared Adapter chain's last step
+	/// landed, or none were declared at all — immediate for a fully local
+	/// request).
 	///
 	/// Unlike every other function here, this also reads
 	/// `pallet-tranche-investments::ApprovedInvestments` directly to resolve
@@ -688,7 +682,7 @@ where
 	/// Spoke vault, true once the Finalize leg's Hooks phase lands for this request's
 	/// own origin chain; for a Hub vault (no Finalize leg of its own to wait on),
 	/// true once every one of the linked settlement's `collect_response_chain_ids`
-	/// reaches `ResponseHooksExecuted` (vacuously true, and immediate, if that set
+	/// reaches `NavReceived` (vacuously true, and immediate, if that set
 	/// was declared empty). `settled` is always false while `settlement_id == 0`,
 	/// and is entirely independent of `status`/`adapter_legs` — a request's
 	/// own delivery to the Hub and its linked settlement's delivery of results back
@@ -724,23 +718,25 @@ where
 			encode_request_order_type(entry.order_type),
 		);
 
-		// A Hub-vault request has no Inbound leg at all (Requested already means the
-		// deposit is at the Valuation Contract) — trivially "done" for completion purposes.
+		// A Hub-vault request has no Inbound leg at all (nothing to bridge when the
+		// vault is already on Hub) — `has_inbound_leg` still matters below for the
+		// `settled` computation, which asks a different question (Finalize leg vs.
+		// Collect/Response completion) than `request_steps`/`queued_done` do.
 		let hub_chain_id = <Runtime as pallet_evm::Config>::ChainId::get();
 		let has_inbound_leg = entry.vault.chain_id != hub_chain_id;
-		let inbound_done = !has_inbound_leg || entry.hooks_tx.is_some();
+		let queued_done = entry.queued_tx.is_some();
 		let mut request_steps =
 			vec![(encode_request_step(RequestStep::Requested), encode_tx_record(entry.request_tx))];
 		if has_inbound_leg {
 			request_steps.push((
-				encode_request_step(RequestStep::InboundBridgeExecuted),
+				encode_request_step(RequestStep::RequestBridgeExecuted),
 				encode_tx_record(entry.bridge_tx),
 			));
-			request_steps.push((
-				encode_request_step(RequestStep::InboundHooksExecuted),
-				encode_tx_record(entry.hooks_tx),
-			));
 		}
+		request_steps.push((
+			encode_request_step(RequestStep::RequestQueued),
+			encode_tx_record(entry.queued_tx),
+		));
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let adapter_chain_ids = pallet_tranche_tx_registry::RequestAdapterChains::<Runtime>::get(
@@ -755,7 +751,7 @@ where
 			let leg = pallet_tranche_tx_registry::RequestChainEntries::<Runtime>::get((
 				product_id, request_id, *chain_id,
 			));
-			if leg.hooks_tx.is_none() {
+			if leg.applied_tx.is_none() {
 				all_adapter_done = false;
 			}
 			let steps = vec![
@@ -764,13 +760,13 @@ where
 					encode_tx_record(leg.bridge_tx),
 				),
 				(
-					encode_request_step(RequestStep::AdapterHooksExecuted),
-					encode_tx_record(leg.hooks_tx),
+					encode_request_step(RequestStep::AdapterApplied),
+					encode_tx_record(leg.applied_tx),
 				),
 			];
 			adapter_legs.push((*chain_id, steps));
 		}
-		let status = if inbound_done && all_adapter_done {
+		let status = if queued_done && all_adapter_done {
 			RequestStep::Completed
 		} else {
 			RequestStep::Requested
@@ -793,10 +789,10 @@ where
 
 		// A Hub-vault request has no Finalize leg of its own to wait on (mirrors
 		// `inbound_done` above) — it's settled once every one of
-		// `SettlementCollectResponseChains` has reached `ResponseHooksExecuted`
+		// `SettlementCollectResponseChains` has reached `NavReceived`
 		// (vacuously true, including if that set is empty), same criterion
 		// `try_close_hub_vault_requests` uses pallet-side. A Spoke-vault request
-		// instead waits on its own chain's `FinalizeHooksExecuted`, via
+		// instead waits on its own chain's `SettleApplied`, via
 		// `SettlementFinalizeChains`.
 		let settled =
 			if !has_inbound_leg {
@@ -812,7 +808,7 @@ where
 							let responded = pallet_tranche_tx_registry::SettlementChainEntries::<
 								Runtime,
 							>::get((product_id, settlement_id, *chain_id))
-							.response_hooks_tx
+							.nav_received_tx
 							.is_some();
 							if !responded {
 								all_responded = false;
@@ -836,7 +832,7 @@ where
 							settlement_id,
 							entry.vault.chain_id,
 						))
-						.finalize_hooks_tx
+						.settle_applied_tx
 						.is_some()
 					},
 					None => false,
@@ -901,12 +897,12 @@ fn union_chain_ids(a: &[pallet_tranche_tx_registry::ChainId], b: &[u64]) -> Vec<
 
 fn decode_request_step(step: u8) -> EvmResult<RequestStep> {
 	match step {
-		0 => Ok(RequestStep::Queued),
+		0 => Ok(RequestStep::None),
 		1 => Ok(RequestStep::Requested),
-		2 => Ok(RequestStep::InboundBridgeExecuted),
-		3 => Ok(RequestStep::InboundHooksExecuted),
+		2 => Ok(RequestStep::RequestBridgeExecuted),
+		3 => Ok(RequestStep::RequestQueued),
 		4 => Ok(RequestStep::AdapterBridgeExecuted),
-		5 => Ok(RequestStep::AdapterHooksExecuted),
+		5 => Ok(RequestStep::AdapterApplied),
 		6 => Ok(RequestStep::Completed),
 		_ => Err(revert("invalid step")),
 	}
@@ -914,12 +910,12 @@ fn decode_request_step(step: u8) -> EvmResult<RequestStep> {
 
 fn encode_request_step(step: RequestStep) -> u8 {
 	match step {
-		RequestStep::Queued => 0,
+		RequestStep::None => 0,
 		RequestStep::Requested => 1,
-		RequestStep::InboundBridgeExecuted => 2,
-		RequestStep::InboundHooksExecuted => 3,
+		RequestStep::RequestBridgeExecuted => 2,
+		RequestStep::RequestQueued => 3,
 		RequestStep::AdapterBridgeExecuted => 4,
-		RequestStep::AdapterHooksExecuted => 5,
+		RequestStep::AdapterApplied => 5,
 		RequestStep::Completed => 6,
 	}
 }
@@ -929,11 +925,11 @@ fn decode_settlement_step(step: u8) -> EvmResult<SettlementStep> {
 		0 => Ok(SettlementStep::Queued),
 		1 => Ok(SettlementStep::Triggered),
 		2 => Ok(SettlementStep::CollectBridgeExecuted),
-		3 => Ok(SettlementStep::CollectHooksExecuted),
+		3 => Ok(SettlementStep::NavReported),
 		4 => Ok(SettlementStep::ResponseBridgeExecuted),
-		5 => Ok(SettlementStep::ResponseHooksExecuted),
+		5 => Ok(SettlementStep::NavReceived),
 		6 => Ok(SettlementStep::FinalizeBridgeExecuted),
-		7 => Ok(SettlementStep::FinalizeHooksExecuted),
+		7 => Ok(SettlementStep::SettleApplied),
 		8 => Ok(SettlementStep::Settled),
 		_ => Err(revert("invalid step")),
 	}
@@ -944,11 +940,11 @@ fn encode_settlement_step(step: SettlementStep) -> u8 {
 		SettlementStep::Queued => 0,
 		SettlementStep::Triggered => 1,
 		SettlementStep::CollectBridgeExecuted => 2,
-		SettlementStep::CollectHooksExecuted => 3,
+		SettlementStep::NavReported => 3,
 		SettlementStep::ResponseBridgeExecuted => 4,
-		SettlementStep::ResponseHooksExecuted => 5,
+		SettlementStep::NavReceived => 5,
 		SettlementStep::FinalizeBridgeExecuted => 6,
-		SettlementStep::FinalizeHooksExecuted => 7,
+		SettlementStep::SettleApplied => 7,
 		SettlementStep::Settled => 8,
 	}
 }
@@ -1030,46 +1026,26 @@ fn decode_request_opening(
 }
 
 /// Translates `record_request_tx`'s `adapter_chain_ids` calldata into the
-/// pallet's `Option<BoundedVec<..>>`. Meaningful (and possibly empty) for
-/// `step == InboundHooksExecuted` (always Spoke-vault — see below) and for
-/// `step == Requested` on a Hub-vault request only; must be `None`/empty for
-/// every other case. `step == Requested` needs `vault_chain_id`/`hub_chain_id`
-/// to disambiguate — unlike every later step (where the precompile boundary
-/// only ever sees zeroed sentinel values and must leave hub-vs-spoke
-/// enforcement to the pallet's own stored `RequestEntry`), `Requested` is the
-/// one call where the real vault chain is actually present in the calldata
-/// (as `decode_request_opening`'s `vault_chain_id`), so there's no other way
-/// to tell a Hub-vault's "genuinely zero adapters" (`Some(empty)`) apart from
-/// a Spoke-vault's "not knowable yet" (`None`) — both look like an empty
-/// `uint64[]` over the wire. Reverts on any syntactically inconsistent
+/// pallet's `Option<BoundedVec<..>>`. Meaningful (and possibly empty) only for
+/// `step == RequestQueued` — Hub-vault and Spoke-vault alike, since
+/// `RequestQueued` is precisely the step defined as "the Adapter decision is
+/// now known," regardless of vault location — `None`/empty for every other
+/// step, including `Requested`. Reverts on any syntactically inconsistent
 /// combination, matching interface.sol's documented contract.
 fn decode_request_adapter_chains(
 	step: RequestStep,
-	vault_chain_id: u64,
-	hub_chain_id: u64,
 	adapter_chain_ids: &[u64],
 ) -> EvmResult<Option<BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_SPOKE_CHAINS>>>>
 {
 	match step {
-		RequestStep::Requested if vault_chain_id != hub_chain_id => {
-			// Spoke-vault — not knowable until InboundHooksExecuted.
-			if !adapter_chain_ids.is_empty() {
-				return Err(revert(
-					"adapter_chain_ids must be empty for a Spoke-vault request at step == Requested",
-				));
-			}
-			Ok(None)
-		},
-		RequestStep::Requested | RequestStep::InboundHooksExecuted => {
+		RequestStep::RequestQueued => {
 			let bounded = BoundedVec::try_from(adapter_chain_ids.to_vec())
 				.map_err(|_| revert("too many adapter chains"))?;
 			Ok(Some(bounded))
 		},
 		_ => {
 			if !adapter_chain_ids.is_empty() {
-				return Err(revert(
-					"adapter_chain_ids must be empty unless step == Requested or InboundHooksExecuted",
-				));
+				return Err(revert("adapter_chain_ids must be empty unless step == RequestQueued"));
 			}
 			Ok(None)
 		},

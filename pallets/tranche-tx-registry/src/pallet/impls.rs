@@ -7,7 +7,7 @@ use frame_support::traits::Get;
 // Private, non-extrinsic helpers — kept in their own `impl` block, separate from
 // `#[pallet::call]`, so they don't become part of the `Call` enum.
 impl<T: Config> Pallet<T> {
-	/// Shared by `record_settlement_tx`'s `FinalizeHooksExecuted` leg arm (called
+	/// Shared by `record_settlement_tx`'s `SettleApplied` leg arm (called
 	/// with `chain_id = Some(spoke_chain_id)`) and `try_close_hub_vault_requests`
 	/// (called with `chain_id = Some(hub_chain_id)`): closes out
 	/// `InvestorActiveRequests` for every request approved into `settlement_id`
@@ -45,13 +45,13 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// A Hub-vault request's settlement completes once every one of
-	/// `SettlementCollectResponseChains` has reached `ResponseHooksExecuted` —
+	/// `SettlementCollectResponseChains` has reached `NavReceived` —
 	/// NAV must be fully known before the Hub vault's own payout/allocation can
 	/// be computed, which then happens synchronously with no Finalize leg of its
 	/// own (see `SettlementStep`'s doc comment). Vacuously true the moment
 	/// `collect_response_chain_ids` is declared empty at Trigger (no Adapter
 	/// anywhere off-Hub), so this is safe to call unconditionally right after
-	/// writing that storage, as well as after every `ResponseHooksExecuted`
+	/// writing that storage, as well as after every `NavReceived`
 	/// — closes `InvestorActiveRequests` for every Hub-vault request approved
 	/// into `settlement_id` once true, via `close_active_requests(chain_id =
 	/// Some(hub_chain_id))`. A no-op (does nothing, cheaply) if the condition
@@ -62,7 +62,7 @@ impl<T: Config> Pallet<T> {
 				.unwrap_or_default();
 		let all_responded = collect_response_chains.iter().all(|chain_id| {
 			SettlementChainEntries::<T>::get((product_id, settlement_id, *chain_id))
-				.response_hooks_tx
+				.nav_received_tx
 				.is_some()
 		});
 		if all_responded {
