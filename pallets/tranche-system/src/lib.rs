@@ -33,7 +33,7 @@ pub const MAX_MULTICHAIN_ADAPTERS: u32 = 20;
 /// (see `MultichainAdapterInfo`) instead of in a flat, product-wide registry.
 pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 20;
 
-/// Maximum number of per-Spoke-chain TrancheManager bindings per product (see
+/// Maximum number of per-chain TrancheManager bindings per product (see
 /// `ProductDetails::multichain_tranche_managers`).
 pub const MAX_TRANCHE_MANAGERS: u32 = 20;
 
@@ -369,13 +369,12 @@ pub struct ProductDetails<AccountId> {
 		MultichainAdapterInfo<AccountId>,
 		ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 	>,
-	/// This product's TrancheManager contract address on each Spoke chain one
-	/// of its vaults is deployed on — keyed by `chain_id`, one entry per
-	/// chain (never the Hub chain: `create_product` reverts if any entry's
-	/// `chain_id` equals the Hub's own EVM chain ID, since a Hub-vault
-	/// request reaches the Valuation Contract directly with no separate
-	/// TrancheManager hop). Independent per product — two products sharing a
-	/// Spoke chain each bind their own TrancheManager instance there.
+	/// This product's TrancheManager contract address on each chain one of
+	/// its vaults is deployed on — keyed by `chain_id`, one entry per chain.
+	/// Hub included: a Hub-chain entry is required if (and only if) the
+	/// product has a Hub-deployed vault, same as any Spoke chain. Independent
+	/// per product — two products sharing a chain each bind their own
+	/// TrancheManager instance there.
 	pub multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
 }
 
@@ -399,6 +398,14 @@ pub trait VaultInspect {
 	/// Trigger's declared `finalize_chain_ids` — the chains needing a Finalize leg,
 	/// since Finalize delivers a settlement's result to a vault, never an Adapter.
 	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
+	/// Reverse lookup: which product `vault` belongs to, if any — unlike
+	/// `vault_belongs_to_product`, the caller doesn't need to already know
+	/// `product_id`. Consumed by pallet-tranche-tx-registry's
+	/// `record_whitelist_tx`, whose only chain-observed evidence (vault, who,
+	/// grant, nonce) never carries `product_id` itself the way
+	/// `DepositRequested`/`DepositReceived` do — `product_id` is resolved
+	/// once, at that pipeline's own Trigger step, via this instead.
+	fn product_id_for_vault(vault: &VaultId) -> Option<ProductId>;
 }
 
 /// Implemented by pallet-tranche-system itself (it owns the `MultichainAdapterIndex`/

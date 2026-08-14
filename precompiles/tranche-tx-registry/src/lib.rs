@@ -7,7 +7,7 @@ use pallet_evm::AddressMapping;
 use pallet_tranche_system::VaultId;
 use pallet_tranche_tx_registry::{
 	Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening, RequestStep, SettlementStep,
-	TxRecord, MAX_SPOKE_CHAINS,
+	TxRecord, WhitelistStep, MAX_SPOKE_CHAINS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, Get, H160, H256, U256};
@@ -27,6 +27,8 @@ pub(crate) const SELECTOR_LOG_SETTLEMENT_TX_RECORDED: [u8; 32] = keccak256!(
 pub(crate) const SELECTOR_LOG_RECEIVE_TX_RECORDED: [u8; 32] = keccak256!(
 	"ReceiveTxRecorded(uint256,address,(uint64,address),address,uint256,uint8,(uint64,bytes32))"
 );
+pub(crate) const SELECTOR_LOG_WHITELIST_TX_RECORDED: [u8; 32] =
+	keccak256!("WhitelistTxRecorded(address,(uint64,address),bool,uint256,uint8,(uint64,bytes32))");
 
 // ---------------------------------------------------------------------------
 // interface.sol struct <-> tuple mappings
@@ -52,6 +54,8 @@ type EvmRequestInfo = (Address, EvmVaultInput, U256, u8);
 type EvmInvestorRequest = (U256, H256);
 /// `ReceiveHistoryEntry` — (vault, tx_hash)
 type EvmReceiveHistoryEntry = (EvmVaultInput, H256);
+/// `WhitelistTxStep` — (step, tx)
+type EvmWhitelistTxStep = (u8, EvmTxRecord);
 
 /// Upper bound on `get_investor_request_history`'s `limit` — caps the page size
 /// so a single `eth_call` can't be asked to serialize an unbounded response,
@@ -315,6 +319,65 @@ where
 			topic_u256(product_id),
 			topic_h160(investor.0),
 			solidity::encode_event_data((vault, receiver, amount, kind, attestation)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Attest to one tx in a whitelist grant/revoke action's pipeline. See
+	/// `pallet_tranche_tx_registry::record_whitelist_tx`'s doc comment for the full
+	/// contract this dispatches into — notably, unlike every other record_*_tx
+	/// function here, this one takes no `product_id` input at all; the pallet
+	/// resolves it internally from `vault`.
+	///
+	/// @param vault  The tranche vault this whitelist action targets
+	/// @param who    The account whose whitelist status is being changed
+	/// @param grant  true = grant, false = revoke — fixed for this action, resupplied at
+	/// every step
+	/// @param nonce  Orchestrator-generated correlator for this action
+	/// @param step   0 = None (invalid), 1 = WhitelistRequested, 2 = BridgeExecuted,
+	/// 3 = WhitelistApplied
+	#[precompile::public(
+		"record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32))"
+	)]
+	fn record_whitelist_tx(
+		handle: &mut impl PrecompileHandle,
+		vault: EvmVaultInput,
+		who: Address,
+		grant: bool,
+		nonce: U256,
+		step: u8,
+		attestation: EvmTxAttestation,
+	) -> EvmResult {
+		let (vault_chain_id, vault_address) = vault;
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let decoded_step = decode_whitelist_step(step)?;
+		let (chain_id, tx_hash) = attestation;
+
+		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		let call = TxRegistryCall::<Runtime>::record_whitelist_tx {
+			vault: vault_id,
+			who: who.0,
+			grant,
+			nonce,
+			step: decoded_step,
+			chain_id,
+			tx_hash,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			frame_system::RawOrigin::Signed(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log2(
+			handle.context().address,
+			SELECTOR_LOG_WHITELIST_TX_RECORDED,
+			topic_h160(who.0),
+			solidity::encode_event_data((vault, grant, nonce, step, attestation)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
@@ -636,6 +699,94 @@ where
 			encode_receive_kind(entry.kind),
 			encode_tx_record(Some(entry.tx)),
 		))
+	}
+
+	/// Read the most recent whitelist action's `nonce` for a given `(vault, who)`.
+	/// Reverts if no `WhitelistRequested` has ever been recorded for this pair.
+	/// Pass the returned `nonce` straight into `get_whitelist` for that action's
+	/// full state — this pallet keeps no history array (see
+	/// `pallet_tranche_tx_registry::LatestWhitelistNonce`'s doc comment for why),
+	/// so this is the only on-chain way to discover a `(vault, who)` pair's
+	/// current `nonce` without already knowing it from watching
+	/// `WhitelistTxRecorded`.
+	///
+	/// @param vault The tranche vault to look up
+	/// @param who   The account whose whitelist status to look up
+	/// @return nonce The most recent whitelist action's nonce for this pair
+	#[precompile::public("get_latest_whitelist_nonce((uint64,address),address)")]
+	#[precompile::view]
+	fn get_latest_whitelist_nonce(
+		handle: &mut impl PrecompileHandle,
+		vault: EvmVaultInput,
+		who: Address,
+	) -> EvmResult<U256> {
+		let (vault_chain_id, vault_address) = vault;
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		pallet_tranche_tx_registry::LatestWhitelistNonce::<Runtime>::get(who.0, vault_id)
+			.ok_or_else(|| revert("no whitelist action recorded for this (vault, who)"))
+	}
+
+	/// Read a whitelist grant/revoke action's full state in one call. Reverts if
+	/// `record_whitelist_tx` has never been called with `step == WhitelistRequested`
+	/// for this `(vault, who, nonce)`.
+	///
+	/// `steps[0]` is always `(WhitelistRequested, request_tx)` and `steps`' last
+	/// entry is always `(WhitelistApplied, applied_tx)` — same Hub-vault/
+	/// Spoke-vault branching as `get_request`'s `request_steps`: for a Hub-vault
+	/// action (`vault.chain_id` equals this chain's own EVM chain ID), that's the
+	/// array's only two entries (length 2, no Bridge leg); for a Spoke-vault one,
+	/// a `BridgeExecuted` entry sits between them (length 3). `status` is the
+	/// last step whose evidence has actually landed.
+	///
+	/// @param vault The tranche vault this whitelist action targeted
+	/// @param who   The account whose whitelist status was being changed
+	/// @param nonce The Orchestrator-generated correlator identifying this action
+	/// @return grant  true = grant, false = revoke
+	/// @return steps  Ordered step history — length 2 (Hub-vault) or 3 (Spoke-vault)
+	/// @return status The furthest step reached so far
+	#[precompile::public("get_whitelist((uint64,address),address,uint256)")]
+	#[precompile::view]
+	fn get_whitelist(
+		handle: &mut impl PrecompileHandle,
+		vault: EvmVaultInput,
+		who: Address,
+		nonce: U256,
+	) -> EvmResult<(bool, Vec<EvmWhitelistTxStep>, u8)> {
+		let (vault_chain_id, vault_address) = vault;
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let entry =
+			pallet_tranche_tx_registry::WhitelistEntries::<Runtime>::get((who.0, vault_id, nonce))
+				.ok_or_else(|| revert("whitelist action not found"))?;
+
+		let hub_chain_id = <Runtime as pallet_evm::Config>::ChainId::get();
+		let has_bridge_leg = entry.vault.chain_id != hub_chain_id;
+		let status = if entry.applied_tx.is_some() {
+			WhitelistStep::WhitelistApplied
+		} else if entry.bridge_tx.is_some() {
+			WhitelistStep::BridgeExecuted
+		} else {
+			WhitelistStep::WhitelistRequested
+		};
+		let mut steps = vec![(
+			encode_whitelist_step(WhitelistStep::WhitelistRequested),
+			encode_tx_record(entry.request_tx),
+		)];
+		if has_bridge_leg {
+			steps.push((
+				encode_whitelist_step(WhitelistStep::BridgeExecuted),
+				encode_tx_record(entry.bridge_tx),
+			));
+		}
+		steps.push((
+			encode_whitelist_step(WhitelistStep::WhitelistApplied),
+			encode_tx_record(entry.applied_tx),
+		));
+
+		Ok((entry.grant, steps, encode_whitelist_step(status)))
 	}
 
 	/// Read a request's full state in one call: its static details (bundled as one
@@ -969,6 +1120,25 @@ fn decode_request_order_type(order_type: u8) -> EvmResult<OrderType> {
 		0 => Ok(OrderType::Redeem),
 		1 => Ok(OrderType::Deposit),
 		_ => Err(revert("invalid order_type")),
+	}
+}
+
+fn decode_whitelist_step(step: u8) -> EvmResult<WhitelistStep> {
+	match step {
+		0 => Ok(WhitelistStep::None),
+		1 => Ok(WhitelistStep::WhitelistRequested),
+		2 => Ok(WhitelistStep::BridgeExecuted),
+		3 => Ok(WhitelistStep::WhitelistApplied),
+		_ => Err(revert("invalid step")),
+	}
+}
+
+fn encode_whitelist_step(step: WhitelistStep) -> u8 {
+	match step {
+		WhitelistStep::None => 0,
+		WhitelistStep::WhitelistRequested => 1,
+		WhitelistStep::BridgeExecuted => 2,
+		WhitelistStep::WhitelistApplied => 3,
 	}
 }
 

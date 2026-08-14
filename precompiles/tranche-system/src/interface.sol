@@ -96,12 +96,11 @@ pragma solidity >=0.8.0;
  *     pallet directly (bypassing this precompile) is impossible regardless of
  *     role — there is no signed-origin fallback path.
  *   - `multichain_tranche_managers` (added 2026-08-14): each product independently
- *     binds its own TrancheManager contract address per Spoke chain one of its
- *     vaults is deployed on — distinct from `MultichainAdapterInput`'s per-chain
- *     table (routes capital to yield sources) even though both are keyed by
- *     `chain_id`. Never has a Hub-chain entry: a Hub-vault request reaches the
- *     Valuation Contract directly, with no separate TrancheManager hop, so
- *     create_product reverts if any entry's `chain_id` is the Hub chain's own.
+ *     binds its own TrancheManager contract address per chain one of its vaults is
+ *     deployed on — distinct from `MultichainAdapterInput`'s per-chain table
+ *     (routes capital to yield sources) even though both are keyed by `chain_id`.
+ *     Hub included: a product with a Hub-deployed vault needs a Hub-chain entry
+ *     here too, same as any Spoke chain.
  *
  * Address: 0x0000000000000000000000000000000000000200
  */
@@ -223,13 +222,11 @@ interface TrancheSystem {
         AdapterInput[] adapters;
     }
 
-    /// @param chain_id                EVM chain ID this TrancheManager is deployed on. MUST NOT be
-    ///                                the Hub chain's own chain ID (create_product reverts
-    ///                                otherwise) — a Hub-vault request reaches the Valuation
-    ///                                Contract directly, with no separate TrancheManager hop, so
-    ///                                this product config never needs a Hub-chain entry
+    /// @param chain_id                EVM chain ID this TrancheManager is deployed on. Hub
+    ///                                included: a product with a Hub-deployed vault needs a
+    ///                                Hub-chain entry here too, same as any Spoke chain
     /// @param tranche_manager_address This product's TrancheManager contract address on `chain_id`.
-    ///                                Independent per product — two products sharing a Spoke chain
+    ///                                Independent per product — two products sharing a chain
     ///                                each bind their own TrancheManager instance there
     struct MultichainTrancheManagerInput {
         uint64 chain_id;
@@ -278,7 +275,7 @@ interface TrancheSystem {
     /**
      * @notice Create a new tranche-system product: its Valuation contract binding,
      *         its tranches, its MultichainAdapter routing table, its individual
-     *         yield-source Adapter registrations, and its per-Spoke-chain
+     *         yield-source Adapter registrations, and its per-chain
      *         TrancheManager bindings.
      * @dev Flow mirrors old pallet-pools: sudo grants ProductAdmin for `product_id`
      *      via pallet-tranche-permissions BEFORE this is ever called (`product_id`
@@ -299,8 +296,7 @@ interface TrancheSystem {
      *      appears under two different `multichain_adapters` entries,
      *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`,
      *      `valuation.settlement_start_timestamp` is not strictly after the current
-     *      block time, or any `multichain_tranche_managers` entry's `chain_id` is
-     *      the Hub chain's own chain ID.
+     *      block time.
      *      Emits ProductCreated on success.
      * @param product_id                   Hub product ID (already granted to the caller via
      *                                     ProductAdmin)
@@ -311,9 +307,9 @@ interface TrancheSystem {
      * @param multichain_adapters          Array of MultichainAdapter routing entries, each
      *                                     carrying its own nested individual-Adapter
      *                                     registrations (address, chain_id, weightBps, adapters)
-     * @param multichain_tranche_managers  Array of this product's per-Spoke-chain TrancheManager
-     *                                     bindings (chain_id, tranche_manager_address); no Hub-chain
-     *                                     entry allowed, see MultichainTrancheManagerInput
+     * @param multichain_tranche_managers  Array of this product's per-chain TrancheManager
+     *                                     bindings (chain_id, tranche_manager_address); Hub
+     *                                     included, see MultichainTrancheManagerInput
      */
     function create_product(
         uint256 product_id,
@@ -437,7 +433,7 @@ interface TrancheSystem {
     ) external;
 
     /**
-     * @notice Replace a product's entire per-Spoke-chain TrancheManager table atomically.
+     * @notice Replace a product's entire per-chain TrancheManager table atomically.
      * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
@@ -446,11 +442,9 @@ interface TrancheSystem {
      *      intended end-state list every time, not deltas, same full-array-replace
      *      rationale as set_multichain_adapters (here: simplicity, since there's no
      *      cross-entry invariant like weightBps to protect).
-     *      Reverts if any entry's `chain_id` is the Hub chain's own — see
-     *      MultichainTrancheManagerInput.
      *      Emits MultichainTrancheManagersSet on success.
      * @param product_id                   The product whose TrancheManager table is being replaced
-     * @param multichain_tranche_managers  The full intended end-state list of per-Spoke-chain
+     * @param multichain_tranche_managers  The full intended end-state list of per-chain
      *                                     bindings
      */
     function set_multichain_tranche_managers(
@@ -502,9 +496,8 @@ interface TrancheSystem {
         returns (MultichainAdapterInput[] memory multichain_adapters);
 
     /**
-     * @notice Read a product's per-Spoke-chain TrancheManager bindings.
-     * @dev Reverts if `product_id` doesn't exist. Never includes a Hub-chain entry — see
-     *      MultichainTrancheManagerInput.
+     * @notice Read a product's per-chain TrancheManager bindings.
+     * @dev Reverts if `product_id` doesn't exist. See MultichainTrancheManagerInput.
      * @param product_id The product to look up
      */
     function get_multichain_tranche_managers(

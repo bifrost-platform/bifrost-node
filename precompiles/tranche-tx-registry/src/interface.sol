@@ -49,10 +49,23 @@ pragma solidity >=0.8.0;
  *    the Bridge&Call pipelines above. TrancheManager pools receivable amounts per
  *    (investor, vault) rather than per request_id, so receives are tracked separately
  *    from the request pipeline (see record_receive_tx's dev notes for why).
+ *  - Whitelist (per vault per who per nonce, added 2026-08-14): a single trigger_tx
+ *    (Orchestrator's WhitelistRequested, Hub) then either just an Applied tx (Hub-vault
+ *    — TrancheManager applies the grant/revoke locally, no bridging needed) or a
+ *    Bridge+Applied pair (Spoke-vault — TrancheManager's WhitelistApplied), same
+ *    Hub-vault/Spoke-vault branching as Request. No `product_id` input on
+ *    record_whitelist_tx — resolved internally from `vault` (see that function's dev
+ *    notes). Unlike Request/Settlement/Receive, this pipeline keeps no on-chain
+ *    history array — only the latest nonce per (vault, who) is tracked
+ *    (get_latest_whitelist_nonce), since nonces increment per (product, chain) and a
+ *    past one is still directly readable via get_whitelist by anyone who already has
+ *    it (e.g. from watching WhitelistTxRecorded); full history browsing is left to an
+ *    off-chain indexer.
  *
- * Every enum value other than `None`/`Completed` (RequestStep) and `Queued`/`Settled`
- * (SettlementStep) is directly recordable by the tx recorder backend — those four are
- * read-only sentinels only ever returned by a view function, never valid record_*_tx input.
+ * Every enum value other than `None`/`Completed` (RequestStep), `Queued`/`Settled`
+ * (SettlementStep), and `None` (WhitelistStep) is directly recordable by the tx recorder
+ * backend — those five are read-only sentinels only ever returned by a view function,
+ * never valid record_*_tx input.
  * Determining "does this leg exist at all" or "is this chain's leg done yet" is entirely the
  * pallet's job on the read side, not something the recorder declares as a special step.
  *
@@ -141,6 +154,14 @@ interface TrancheTxRegistry {
     /// @param tx   Evidence for this step — zeroed (recorded_at == 0) iff not yet reached
     struct RequestTxStep {
         RequestStep step;
+        TxRecord tx;
+    }
+
+    /// @dev One step's evidence within a whitelist grant/revoke action's history.
+    /// @param step Which WhitelistStep this entry is for
+    /// @param tx   Evidence for this step — zeroed (recorded_at == 0) iff not yet reached
+    struct WhitelistTxStep {
+        WhitelistStep step;
         TxRecord tx;
     }
 
@@ -296,6 +317,31 @@ interface TrancheTxRegistry {
         Deposit
     }
 
+    /// @dev Step within a whitelist grant/revoke action's pipeline. Named after the
+    ///      underlying Contract event wherever one exists 1:1 — `WhitelistRequested`
+    ///      (Orchestrator, Hub) and `WhitelistApplied` (TrancheManager, either chain) —
+    ///      same event-name-mirroring convention as RequestStep/SettlementStep.
+    ///      `BridgeExecuted` is the generic Bridge-phase Socket evidence in between,
+    ///      same as every other pipeline's Bridge phase.
+    ///
+    ///      Same Hub-vault/Spoke-vault branching as RequestStep: a whitelist action
+    ///      always originates on Hub (a ProductAdmin's grant_permission/
+    ///      revoke_permission call, routed through Orchestrator), but TrancheManager
+    ///      (the contract that actually applies the grant/revoke) can live on Hub too
+    ///      — a product with a Hub-deployed vault binds a Hub-chain TrancheManager
+    ///      entry the same as any Spoke chain. For a Hub-vault action,
+    ///      `WhitelistApplied` follows `WhitelistRequested` directly (no Bridge leg
+    ///      — `BridgeExecuted` reverts if attempted); for a Spoke-vault action, all
+    ///      three steps are needed, in order.
+    ///
+    ///      `None` is a read-only sentinel, never valid record_whitelist_tx input.
+    enum WhitelistStep {
+        None,
+        WhitelistRequested,
+        BridgeExecuted,
+        WhitelistApplied
+    }
+
     /// @dev `investor`/`vault_chain_id`/`vault_address`/`amount`/`order_type` are only
     ///      meaningful when `step == Requested` (zero/empty otherwise) — same sentinel
     ///      convention as record_request_tx's own parameters. `adapter_chain_ids` is
@@ -339,6 +385,21 @@ interface TrancheTxRegistry {
         address receiver,
         uint256 amount,
         ReceiveKind kind,
+        TxAttestation attestation
+    );
+
+    /// @dev No `product_id` topic here, unlike every other *TxRecorded event — deliberate:
+    ///      record_whitelist_tx takes no product_id input (see its own dev notes for why),
+    ///      so emitting one here would need an extra storage read this event doesn't
+    ///      otherwise need. `product_id` is still recorded pallet-side (see
+    ///      pallet_tranche_tx_registry::Event::WhitelistTxRecorded) for anything that
+    ///      needs it.
+    event WhitelistTxRecorded(
+        address indexed who,
+        VaultInput vault,
+        bool grant,
+        uint256 nonce,
+        WhitelistStep step,
         TxAttestation attestation
     );
 
@@ -510,6 +571,50 @@ interface TrancheTxRegistry {
     ) external;
 
     /**
+     * @notice Attest to one tx in a whitelist grant/revoke action's pipeline — the
+     *         Trigger tx (Orchestrator's WhitelistRequested), the Bridge phase, or the
+     *         Applied tx (TrancheManager's WhitelistApplied).
+     * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
+     *      MUST NOT be the zero hash (rejected otherwise) — same convention as
+     *      record_request_tx/record_settlement_tx.
+     *      Unlike every other record_*_tx function here, this one takes no `product_id`
+     *      parameter — none of this pipeline's chain-observed evidence (vault, who, grant,
+     *      nonce) carries it directly the way DepositRequested/DepositReceived do, so the
+     *      pallet resolves it internally from `vault` instead, at the WhitelistRequested
+     *      step (reverts if `vault` isn't registered to any product).
+     *      `grant` must be resupplied identically at every step (Solidity has no
+     *      `Option<bool>` to leave it sentinel-gated the way e.g. record_request_tx's
+     *      investor/amount fields are) — reverts if it doesn't match the value this
+     *      action was opened with at WhitelistRequested.
+     *      `nonce` is the Orchestrator-generated correlator that ties this action's tx
+     *      together — present from WhitelistRequested onward, threaded through the CCCP
+     *      bridge message's own variants payload unchanged, and echoed back verbatim by
+     *      WhitelistApplied.
+     *      `step == WhitelistRequested` must not be called twice for the same
+     *      (vault, who, nonce). `step == BridgeExecuted` reverts if `vault` is on Hub —
+     *      a Hub-vault action has no Bridge leg at all (TrancheManager applies the
+     *      grant/revoke locally on Hub, same branching as record_request_tx's
+     *      RequestBridgeExecuted); for a Spoke-vault action, WhitelistApplied is only
+     *      reachable once BridgeExecuted has landed.
+     *      Emits WhitelistTxRecorded.
+     * @param vault        The tranche vault this whitelist action targets
+     * @param who          The account whose whitelist status is being changed
+     * @param grant        true = grant, false = revoke — fixed for this action, resupplied
+     *                     at every step
+     * @param nonce        Orchestrator-generated correlator for this action
+     * @param step         Which pipeline step this attestation is for
+     * @param attestation  The attested off-chain tx
+     */
+    function record_whitelist_tx(
+        VaultInput calldata vault,
+        address who,
+        bool grant,
+        uint256 nonce,
+        WhitelistStep step,
+        TxAttestation calldata attestation
+    ) external;
+
+    /**
      * @notice Page through an investor's full receive() history for one product — every
      *         (vault, tx_hash) ever recorded via record_receive_tx.
      * @dev Same most-recent-first/offset/limit/total contract as
@@ -562,7 +667,67 @@ interface TrancheTxRegistry {
         address investor,
         VaultInput calldata vault,
         bytes32 tx_hash
-    ) external view returns (address receiver, uint256 amount, ReceiveKind kind, TxRecord memory tx);
+    )
+        external
+        view
+        returns (
+            address receiver,
+            uint256 amount,
+            ReceiveKind kind,
+            TxRecord memory tx
+        );
+
+    /**
+     * @notice Read the most recent whitelist action's nonce for a given (vault, who).
+     * @dev Reverts if no WhitelistRequested has ever been recorded for this pair. Pass the
+     *      returned nonce straight into get_whitelist for that action's full state — this
+     *      interface keeps no history array (see the top-level Whitelist notes above), so
+     *      this is the only on-chain way to discover a (vault, who) pair's current nonce
+     *      without already knowing it from watching WhitelistTxRecorded.
+     * @param vault The tranche vault to look up
+     * @param who   The account whose whitelist status to look up
+     * @return nonce The most recent whitelist action's nonce for this pair
+     */
+    function get_latest_whitelist_nonce(
+        VaultInput calldata vault,
+        address who
+    ) external view returns (uint256 nonce);
+
+    /**
+     * @notice Read a whitelist grant/revoke action's full state in one call.
+     * @dev Reverts if record_whitelist_tx has never been called with
+     *      step == WhitelistRequested for this (vault, who, nonce) — same convention as
+     *      get_request, not get_settlement's more lenient zeroed-response-for-not-yet-triggered
+     *      behavior, since there's no meaningful "not yet" state to report: a whitelist
+     *      action doesn't exist at all until it's been triggered.
+     *      `steps[0]` is always `(WhitelistRequested, request_tx)` and `steps`' last
+     *      entry is always `(WhitelistApplied, applied_tx)` — same Hub-vault/
+     *      Spoke-vault branching as get_request's request_steps: for a Hub-vault action
+     *      (`vault.chain_id` equals this chain's own EVM chain ID), that's the array's
+     *      only two entries (length 2, no Bridge leg); for a Spoke-vault one, a
+     *      `BridgeExecuted` entry sits between them (length 3).
+     *      `status` is the last step whose evidence has actually landed
+     *      (`tx.recorded_at != 0`) — always at least WhitelistRequested, since that's
+     *      what "this call didn't revert" already means.
+     * @param vault The tranche vault this whitelist action targeted
+     * @param who   The account whose whitelist status was being changed
+     * @param nonce The Orchestrator-generated correlator identifying this action
+     * @return grant  true = grant, false = revoke
+     * @return steps  Ordered step history — length 2 (Hub-vault) or 3 (Spoke-vault)
+     * @return status The furthest step reached so far
+     */
+    function get_whitelist(
+        VaultInput calldata vault,
+        address who,
+        uint256 nonce
+    )
+        external
+        view
+        returns (
+            bool grant,
+            WhitelistTxStep[] memory steps,
+            WhitelistStep status
+        );
 
     /**
      * @notice Read a settlement's full state in one call: Trigger evidence, the
