@@ -3,7 +3,7 @@ mod impls;
 use crate::{
 	ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry, RequestEntry, RequestId,
 	RequestOpening, RequestStep, SettlementChainEntry, SettlementId, SettlementStep, TxRecord,
-	WeightInfo, MAX_SPOKE_CHAINS,
+	WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_SPOKE_CHAINS,
 };
 use pallet_tranche_system::{AdapterInspect, RequestSettlementInspect, VaultId, VaultInspect};
 
@@ -141,6 +141,29 @@ pub mod pallet {
 		/// docs), so a zero `tx_hash` slipping into storage would be indistinguishable
 		/// from a genuine attestation to any caller inspecting `tx_hash` alone.
 		TxHashRequired,
+		/// `step == WhitelistStep::WhitelistRequested` was recorded for a
+		/// `(who, vault, nonce)` that already has an entry.
+		WhitelistAlreadyTriggered,
+		/// No entry exists yet for this `(who, vault, nonce)` — `record_whitelist_tx`
+		/// must be called with `step == WhitelistStep::WhitelistRequested` first.
+		WhitelistNotTriggered,
+		/// `grant` doesn't match the value this entry was opened with — every step
+		/// after `WhitelistRequested` must resupply the same `grant` it was
+		/// triggered with (see `WhitelistEntry::grant`'s doc comment for why this
+		/// is checked rather than just trusted).
+		UnexpectedWhitelistGrant,
+		/// `step == WhitelistStep::BridgeExecuted` was recorded for a whitelist
+		/// action whose vault is on Hub — a Hub-vault action has no Bridge leg at
+		/// all (there's nothing to bridge when TrancheManager already applies the
+		/// grant/revoke locally on Hub).
+		UnexpectedWhitelistBridgeLeg,
+		/// The step being recorded skips over an earlier, not-yet-recorded step.
+		WhitelistStepOutOfOrder,
+		/// This step has already been recorded for this `(who, vault, nonce)`.
+		WhitelistStepAlreadyRecorded,
+		/// `step` must be one of the three recordable values — never
+		/// `WhitelistStep::None`, a read-only sentinel.
+		InvalidWhitelistStep,
 	}
 
 	// -----------------------------------------------------------------------
@@ -190,6 +213,17 @@ pub mod pallet {
 		/// `SettlementStep::SettleApplied` for the settlement it was
 		/// approved into.
 		ActiveRequestClosed { product_id: ProductId, request_id: RequestId, investor: H160 },
+		/// One tx in a whitelist grant/revoke action's pipeline was recorded.
+		WhitelistTxRecorded {
+			product_id: ProductId,
+			vault: VaultId,
+			who: H160,
+			grant: bool,
+			nonce: WhitelistNonce,
+			step: WhitelistStep,
+			chain_id: ChainId,
+			tx_hash: H256,
+		},
 	}
 
 	// -----------------------------------------------------------------------
@@ -454,6 +488,41 @@ pub mod pallet {
 		Vec<(VaultId, H256)>,
 		ValueQuery,
 	>;
+
+	#[pallet::storage]
+	/// A whitelist grant/revoke action's registry entry. Keyed by `(who, vault,
+	/// nonce)`, NOT `product_id` — `VaultId` is already globally unique (enforced
+	/// by pallet-tranche-system), same rationale as `ReceiveEntries`. Opened by
+	/// `record_whitelist_tx`'s `WhitelistStep::WhitelistRequested` step; presence
+	/// of an entry here (rather than a `WhitelistStep::None`-tagged value) is what
+	/// answers "has this action been triggered yet" — mirrors how `RequestEntries`
+	/// uses entry-presence rather than an explicit sentinel step.
+	pub type WhitelistEntries<T: Config> = StorageNMap<
+		_,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, VaultId>,
+			NMapKey<Blake2_128Concat, WhitelistNonce>,
+		),
+		WhitelistEntry<BlockNumberFor<T>>,
+	>;
+
+	#[pallet::storage]
+	/// The most recent whitelist action's `nonce` for a given `(who, vault)` —
+	/// updated (not appended) at `WhitelistStep::WhitelistRequested`, but only
+	/// when the newly submitted `nonce` is strictly greater than whatever's
+	/// already stored here; a lower/equal nonce leaves this untouched. That
+	/// guard matters because "which `WhitelistRequested` call the recorder
+	/// happens to submit last" isn't guaranteed to match on-chain nonce order
+	/// (retries, catching up on missed blocks out of sequence, etc.) — without
+	/// it, a late-arriving call for an older action could clobber this back
+	/// to a stale value. Deliberately no history array: nonces are
+	/// permanently readable via `WhitelistEntries` for anyone who already has
+	/// one (e.g. from watching `WhitelistTxRecorded`), but only the latest is
+	/// discoverable on-chain without already knowing it — full history
+	/// browsing is an indexer's job, not something this pallet carries itself.
+	pub type LatestWhitelistNonce<T: Config> =
+		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, VaultId, WhitelistNonce>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
@@ -866,6 +935,118 @@ pub mod pallet {
 				receiver,
 				amount,
 				kind,
+				chain_id,
+				tx_hash,
+			});
+			Ok(())
+		}
+
+		/// Attest to one tx in a whitelist grant/revoke action's pipeline — the
+		/// Trigger tx (Orchestrator's `WhitelistRequested`), the Bridge phase, or
+		/// the Applied tx (TrancheManager's `WhitelistApplied`). Origin must be
+		/// `RecorderOrigin`. See interface.sol's `record_whitelist_tx` for the
+		/// full contract this mirrors.
+		///
+		/// `grant` must be resupplied at every step (Solidity has no
+		/// `Option<bool>` to sentinel-gate it the way `RequestOpening`-style
+		/// fields are gated) and is checked against the value the entry was
+		/// opened with at `WhitelistRequested` — reverts on mismatch.
+		/// `product_id` is not a parameter — resolved internally via
+		/// `T::Vaults::product_id_for_vault(&vault)` at `WhitelistRequested`
+		/// time, since none of this pipeline's chain-observed evidence carries
+		/// it directly the way `DepositRequested`/`DepositReceived` do.
+		///
+		/// `step == BridgeExecuted` reverts (`Error::UnexpectedWhitelistBridgeLeg`)
+		/// if `vault` is on Hub — see `WhitelistStep`'s doc comment for why a
+		/// Hub-vault action has no Bridge leg at all.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::record_whitelist_tx())]
+		pub fn record_whitelist_tx(
+			origin: OriginFor<T>,
+			vault: VaultId,
+			who: H160,
+			grant: bool,
+			nonce: WhitelistNonce,
+			step: WhitelistStep,
+			chain_id: ChainId,
+			tx_hash: H256,
+		) -> DispatchResult {
+			T::RecorderOrigin::ensure_origin(origin)?;
+			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
+
+			let recorded_at = frame_system::Pallet::<T>::block_number();
+			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			let key = (who, vault.clone(), nonce);
+
+			let product_id = match step {
+				WhitelistStep::WhitelistRequested => {
+					ensure!(
+						!WhitelistEntries::<T>::contains_key(key.clone()),
+						Error::<T>::WhitelistAlreadyTriggered
+					);
+					let product_id = T::Vaults::product_id_for_vault(&vault)
+						.ok_or(Error::<T>::VaultNotRegistered)?;
+					WhitelistEntries::<T>::insert(
+						key,
+						WhitelistEntry {
+							product_id,
+							vault: vault.clone(),
+							who,
+							grant,
+							request_tx: Some(tx),
+							bridge_tx: None,
+							applied_tx: None,
+						},
+					);
+					let is_newer = match LatestWhitelistNonce::<T>::get(who, vault.clone()) {
+						Some(latest) => nonce > latest,
+						None => true,
+					};
+					if is_newer {
+						LatestWhitelistNonce::<T>::insert(who, vault.clone(), nonce);
+					}
+					product_id
+				},
+				WhitelistStep::BridgeExecuted => {
+					let mut entry = WhitelistEntries::<T>::get(key.clone())
+						.ok_or(Error::<T>::WhitelistNotTriggered)?;
+					ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
+					ensure!(
+						entry.vault.chain_id != hub_chain_id,
+						Error::<T>::UnexpectedWhitelistBridgeLeg
+					);
+					ensure!(entry.bridge_tx.is_none(), Error::<T>::WhitelistStepAlreadyRecorded);
+					entry.bridge_tx = Some(tx);
+					let product_id = entry.product_id;
+					WhitelistEntries::<T>::insert(key, entry);
+					product_id
+				},
+				WhitelistStep::WhitelistApplied => {
+					let mut entry = WhitelistEntries::<T>::get(key.clone())
+						.ok_or(Error::<T>::WhitelistNotTriggered)?;
+					ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
+					if entry.vault.chain_id != hub_chain_id {
+						ensure!(entry.bridge_tx.is_some(), Error::<T>::WhitelistStepOutOfOrder);
+					}
+					ensure!(entry.applied_tx.is_none(), Error::<T>::WhitelistStepAlreadyRecorded);
+					entry.applied_tx = Some(tx);
+					let product_id = entry.product_id;
+					WhitelistEntries::<T>::insert(key, entry);
+					product_id
+				},
+				WhitelistStep::None => {
+					return Err(Error::<T>::InvalidWhitelistStep.into());
+				},
+			};
+
+			Self::deposit_event(Event::WhitelistTxRecorded {
+				product_id,
+				vault,
+				who,
+				grant,
+				nonce,
+				step,
 				chain_id,
 				tx_hash,
 			});

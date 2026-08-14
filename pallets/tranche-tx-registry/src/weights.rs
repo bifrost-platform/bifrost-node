@@ -13,6 +13,7 @@ pub trait WeightInfo {
 	fn record_request_tx() -> Weight;
 	fn record_settlement_tx() -> Weight;
 	fn record_receive_tx() -> Weight;
+	fn record_whitelist_tx() -> Weight;
 }
 
 /// Weights for `pallet_tranche_tx_registry` using the Substrate node and recommended hardware.
@@ -38,6 +39,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	fn record_whitelist_tx() -> Weight {
+		Weight::from_parts(20_000_000, 0)
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
 }
 
 // For backwards compatibility and tests
@@ -61,5 +67,10 @@ impl WeightInfo for () {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	fn record_whitelist_tx() -> Weight {
+		Weight::from_parts(20_000_000, 0)
+			.saturating_add(RocksDbWeight::get().reads(3_u64))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
 }

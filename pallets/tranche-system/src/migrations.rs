@@ -27,17 +27,17 @@ macro_rules! log {
 
 /// v0 -> v1: `ProductDetails` gained a `multichain_tranche_managers: BoundedBTreeMap<u64,
 /// H160, ConstU32<MAX_TRANCHE_MANAGERS>>` field — one TrancheManager contract address per
-/// Spoke chain a product's vaults span (never Hub, see `ProductDetails::
+/// chain a product's vaults span, Hub included (see `ProductDetails::
 /// multichain_tranche_managers`'s doc comment).
 ///
 /// For every product that already existed before this upgrade, the real TrancheManager
 /// addresses aren't recoverable from on-chain state, so this migration backfills one entry
-/// per non-Hub chain the product already has a tranche vault on — derived from `tranches`,
+/// per distinct chain the product already has a tranche vault on — derived from `tranches`,
 /// which IS already known — each pointed at the zero address as an explicit placeholder,
 /// not a real binding. `set_multichain_tranche_managers` must be called afterward, per
 /// product, to fill in the genuine addresses; until then, any flow reading this table sees
 /// zero addresses rather than an empty (and therefore ambiguous — "not backfilled yet" vs.
-/// "genuinely has no Spoke chains") table.
+/// "genuinely has no vaults") table.
 pub mod v1 {
 	use super::*;
 
@@ -76,7 +76,6 @@ pub mod v1 {
 	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV0ToV1<T> {
 		fn on_runtime_upgrade() -> Weight {
 			let mut weight = Weight::zero();
-			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
 
 			let products = Products::<T>::drain().collect::<Vec<_>>();
 			// `drain()` removes each entry as it's iterated (1 read + 1 write per
@@ -88,9 +87,7 @@ pub mod v1 {
 			for (product_id, old) in products {
 				let mut chain_ids = BTreeSet::new();
 				for tranche in old.tranches.iter() {
-					if tranche.vault.chain_id != hub_chain_id {
-						chain_ids.insert(tranche.vault.chain_id);
-					}
+					chain_ids.insert(tranche.vault.chain_id);
 				}
 				let multichain_tranche_managers: BoundedBTreeMap<
 					u64,
@@ -103,8 +100,8 @@ pub mod v1 {
 						.collect::<sp_std::collections::btree_map::BTreeMap<_, _>>(),
 				)
 				// `MAX_TRANCHES` (10) <= `MAX_TRANCHE_MANAGERS` (20), so the set of
-				// distinct non-Hub tranche chain_ids can never overflow this bound —
-				// falls back to an empty table in the unreachable case it somehow did,
+				// distinct tranche chain_ids can never overflow this bound — falls
+				// back to an empty table in the unreachable case it somehow did,
 				// rather than panicking a migration.
 				.unwrap_or_default();
 
@@ -122,7 +119,7 @@ pub mod v1 {
 
 			log!(
 				info,
-				"tranche-system v0->v1: backfilled multichain_tranche_managers (zero address per non-Hub tranche chain, must be replaced via set_multichain_tranche_managers) for {} products ✅",
+				"tranche-system v0->v1: backfilled multichain_tranche_managers (zero address per distinct tranche chain, must be replaced via set_multichain_tranche_managers) for {} products ✅",
 				products_count,
 			);
 

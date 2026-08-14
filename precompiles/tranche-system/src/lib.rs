@@ -94,8 +94,9 @@ where
 	/// sorting by `priority` doesn't put every Senior tranche before every Junior one
 	/// @param multichain_adapters MultichainAdapter routing entries, each carrying its own
 	/// nested individual-Adapter registrations
-	/// @param multichain_tranche_managers This product's per-Spoke-chain TrancheManager
-	/// bindings (chain_id, tranche_manager_address); no Hub-chain entry allowed
+	/// @param multichain_tranche_managers This product's per-chain TrancheManager
+	/// bindings (chain_id, tranche_manager_address); Hub included, if the product has a
+	/// Hub-deployed vault
 	#[precompile::public(
 		"create_product(uint256,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[],(uint64,address)[])"
 	)]
@@ -325,13 +326,13 @@ where
 		Ok(())
 	}
 
-	/// Replace a product's entire per-Spoke-chain TrancheManager table atomically. See
+	/// Replace a product's entire per-chain TrancheManager table atomically. See
 	/// `pallet_tranche_system::set_multichain_tranche_managers`'s doc comment for full
 	/// semantics.
 	///
 	/// @param product_id                  The product whose TrancheManager table is being replaced
-	/// @param multichain_tranche_managers The full intended end-state list of per-Spoke-chain
-	/// bindings; reverts if any entry's chain_id is the Hub chain's own
+	/// @param multichain_tranche_managers The full intended end-state list of per-chain
+	/// bindings
 	#[precompile::public("set_multichain_tranche_managers(uint256,(uint64,address)[])")]
 	fn set_multichain_tranche_managers(
 		handle: &mut impl PrecompileHandle,
@@ -474,9 +475,8 @@ where
 			.collect())
 	}
 
-	/// Read a product's per-Spoke-chain TrancheManager bindings. Never includes a
-	/// Hub-chain entry — see `ProductDetails::multichain_tranche_managers`'s doc
-	/// comment.
+	/// Read a product's per-chain TrancheManager bindings — see
+	/// `ProductDetails::multichain_tranche_managers`'s doc comment.
 	///
 	/// @param product_id The product to look up
 	#[precompile::public("get_multichain_tranche_managers(uint256)")]
