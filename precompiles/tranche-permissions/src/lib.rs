@@ -4,10 +4,7 @@
 extern crate alloc;
 
 use alloc::format;
-use frame_support::{
-	dispatch::{GetDispatchInfo, PostDispatchInfo},
-	pallet_prelude::Get,
-};
+use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::{AddressMapping, Context, ExitReason};
 use pallet_tranche_permissions::{Call as TranchePermissionsCall, Role};
 use pallet_tranche_system::VaultId;
@@ -305,10 +302,6 @@ fn propagate_whitelist_change<Runtime>(
 where
 	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
 {
-	if vault.chain_id == <Runtime as pallet_evm::Config>::ChainId::get() {
-		return Ok(());
-	}
-
 	let orchestrator = pallet_tranche_system::OrchestratorAddress::<Runtime>::get();
 	if orchestrator == H160::zero() {
 		return Err(revert("orchestrator address not configured"));
