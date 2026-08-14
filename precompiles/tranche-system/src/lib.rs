@@ -7,7 +7,7 @@ use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductId, SourceType, TrancheInput, TrancheType, ValuationInfo,
 	VaultId, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
-	MAX_TRANCHES,
+	MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
@@ -28,6 +28,8 @@ pub(crate) const SELECTOR_LOG_ADAPTERS_SET: [u8; 32] = keccak256!(
 pub(crate) const SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET: [u8; 32] = keccak256!(
 	"MultichainAdaptersSet(uint256,(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
 );
+pub(crate) const SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET: [u8; 32] =
+	keccak256!("MultichainTrancheManagersSet(uint256,(uint64,address)[])");
 
 // ---------------------------------------------------------------------------
 // interface.sol struct <-> tuple mappings
@@ -46,6 +48,8 @@ type EvmCollateralInput = (Address, U256);
 type EvmAdapterInput = (u8, Address, u16, Address, Vec<EvmCollateralInput>);
 /// `MultichainAdapterInput` — (adapter_address, chain_id, weightBps, adapters)
 type EvmMultichainAdapterInput = (Address, u64, u16, Vec<EvmAdapterInput>);
+/// `MultichainTrancheManagerInput` — (chain_id, tranche_manager_address)
+type EvmMultichainTrancheManagerInput = (u64, Address);
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -90,8 +94,10 @@ where
 	/// sorting by `priority` doesn't put every Senior tranche before every Junior one
 	/// @param multichain_adapters MultichainAdapter routing entries, each carrying its own
 	/// nested individual-Adapter registrations
+	/// @param multichain_tranche_managers This product's per-Spoke-chain TrancheManager
+	/// bindings (chain_id, tranche_manager_address); no Hub-chain entry allowed
 	#[precompile::public(
-		"create_product(uint256,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
+		"create_product(uint256,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[],(uint64,address)[])"
 	)]
 	fn create_product(
 		handle: &mut impl PrecompileHandle,
@@ -99,6 +105,7 @@ where
 		valuation: EvmValuationInput,
 		tranches: Vec<EvmTrancheInput>,
 		multichain_adapters: Vec<EvmMultichainAdapterInput>,
+		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
@@ -124,12 +131,15 @@ where
 		let bounded_tranches = decode_tranches(&tranches)?;
 		let bounded_multichain_adapters =
 			decode_multichain_adapters::<Runtime>(&multichain_adapters)?;
+		let bounded_multichain_tranche_managers =
+			decode_multichain_tranche_managers(&multichain_tranche_managers)?;
 
 		let call = TrancheSystemCall::<Runtime>::create_product {
 			product_id,
 			valuation: valuation_info,
 			tranches: bounded_tranches,
 			multichain_adapters: bounded_multichain_adapters,
+			multichain_tranche_managers: bounded_multichain_tranche_managers,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -315,6 +325,48 @@ where
 		Ok(())
 	}
 
+	/// Replace a product's entire per-Spoke-chain TrancheManager table atomically. See
+	/// `pallet_tranche_system::set_multichain_tranche_managers`'s doc comment for full
+	/// semantics.
+	///
+	/// @param product_id                  The product whose TrancheManager table is being replaced
+	/// @param multichain_tranche_managers The full intended end-state list of per-Spoke-chain
+	/// bindings; reverts if any entry's chain_id is the Hub chain's own
+	#[precompile::public("set_multichain_tranche_managers(uint256,(uint64,address)[])")]
+	fn set_multichain_tranche_managers(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		let product_id = to_product_id(product_id)?;
+		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		let bounded_multichain_tranche_managers =
+			decode_multichain_tranche_managers(&multichain_tranche_managers)?;
+
+		let call = TrancheSystemCall::<Runtime>::set_multichain_tranche_managers {
+			product_id,
+			multichain_tranche_managers: bounded_multichain_tranche_managers,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET,
+			solidity::encode_event_data((U256::from(product_id), multichain_tranche_managers)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
 	/// Read a product's Valuation binding and settlement-cadence config.
 	///
 	/// @param product_id The product to look up
@@ -419,6 +471,28 @@ where
 					.collect();
 				(Address(key.address), key.chain_id, info.weight_bps, adapters)
 			})
+			.collect())
+	}
+
+	/// Read a product's per-Spoke-chain TrancheManager bindings. Never includes a
+	/// Hub-chain entry — see `ProductDetails::multichain_tranche_managers`'s doc
+	/// comment.
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_multichain_tranche_managers(uint256)")]
+	#[precompile::view]
+	fn get_multichain_tranche_managers(
+		handle: &mut impl PrecompileHandle,
+		product_id: U256,
+	) -> EvmResult<Vec<EvmMultichainTrancheManagerInput>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product_id = to_product_id(product_id)?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		Ok(product
+			.multichain_tranche_managers
+			.iter()
+			.map(|(chain_id, address)| (*chain_id, Address(*address)))
 			.collect())
 	}
 }
@@ -584,4 +658,21 @@ where
 		}
 	}
 	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many multichain_adapters"))
+}
+
+/// Decodes a `multichain_tranche_managers` array. Reverts on a duplicate
+/// `chain_id`, same reasoning as `decode_multichain_adapters` — the incoming
+/// array has no uniqueness guarantee the way a `BoundedBTreeMap` would.
+/// Hub-chain exclusion is validated pallet-side (`create_product` reverts on
+/// it), not here.
+fn decode_multichain_tranche_managers(
+	multichain_tranche_managers: &[EvmMultichainTrancheManagerInput],
+) -> EvmResult<BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>> {
+	let mut map = BTreeMap::new();
+	for (chain_id, tranche_manager_address) in multichain_tranche_managers.iter().cloned() {
+		if map.insert(chain_id, tranche_manager_address.0).is_some() {
+			return Err(revert("duplicate chain_id in multichain_tranche_managers"));
+		}
+	}
+	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many multichain_tranche_managers"))
 }

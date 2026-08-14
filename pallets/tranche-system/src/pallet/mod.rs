@@ -1,12 +1,16 @@
 mod impls;
 
 use crate::{
-	AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo, ProductDetails,
-	ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId, VaultInspect,
-	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
+	migrations, AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo,
+	ProductDetails, ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
+	VaultInspect, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
 };
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 use sp_core::H160;
 use sp_std::vec::Vec;
@@ -15,7 +19,7 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -47,7 +51,13 @@ pub mod pallet {
 	}
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_timestamp::Config<Moment = u64> {
+	/// `pallet_evm::Config` supplies `<Self as pallet_evm::Config>::ChainId`, this
+	/// chain's own EVM chain ID — needed by `create_product` to reject a
+	/// `multichain_tranche_managers` entry whose `chain_id` is the Hub's own (see
+	/// `ProductDetails::multichain_tranche_managers`'s doc comment).
+	pub trait Config:
+		frame_system::Config + pallet_timestamp::Config<Moment = u64> + pallet_evm::Config
+	{
 		/// Only accepted origin for every extrinsic in this pallet
 		/// (`create_product`, `set_tranche`, `set_adapters`,
 		/// `set_multichain_adapters`) — none of them can be called via a plain
@@ -119,6 +129,11 @@ pub mod pallet {
 		/// `settlement_start_timestamp` must be strictly after the current
 		/// block time.
 		SettlementStartMustBeInFuture,
+		/// A `multichain_tranche_managers` entry's `chain_id` equals the Hub's
+		/// own EVM chain ID — a Hub-vault request reaches the Valuation
+		/// Contract directly, with no separate TrancheManager hop, so this
+		/// product config never needs a Hub-chain entry.
+		TrancheManagerCannotBeOnHubChain,
 	}
 
 	// -----------------------------------------------------------------------
@@ -152,6 +167,9 @@ pub mod pallet {
 		AdaptersSet { product_id: ProductId, parent_adapter_address: H160, parent_chain_id: u64 },
 		/// A product's entire MultichainAdapter table was replaced wholesale.
 		MultichainAdaptersSet { product_id: ProductId },
+		/// A product's entire per-Spoke-chain TrancheManager table was replaced
+		/// wholesale.
+		MultichainTrancheManagersSet { product_id: ProductId },
 		/// The global Orchestrator contract address was set.
 		OrchestratorAddressSet { address: H160 },
 	}
@@ -206,14 +224,26 @@ pub mod pallet {
 	pub type OrchestratorAddress<T: Config> = StorageValue<_, H160, ValueQuery>;
 
 	// -----------------------------------------------------------------------
+	// Hooks
+	// -----------------------------------------------------------------------
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+		}
+	}
+
+	// -----------------------------------------------------------------------
 	// Extrinsics
 	// -----------------------------------------------------------------------
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Create a new tranche-system product: its Valuation contract binding,
-		/// its tranches, and its MultichainAdapter routing table (each entry
-		/// carrying its own nested individual-Adapter registrations).
+		/// its tranches, its MultichainAdapter routing table (each entry
+		/// carrying its own nested individual-Adapter registrations), and its
+		/// per-Spoke-chain TrancheManager bindings.
 		///
 		/// Origin must be `ProductAdminOrigin` — the tranche-system precompile
 		/// constructs it after verifying the caller holds ProductAdmin for
@@ -225,6 +255,10 @@ pub mod pallet {
 		/// `ProductDetails::tranches`' final order. Reverts if two entries share
 		/// a `priority`, or if sorting by `priority` doesn't put every `Senior`
 		/// tranche before every `Junior` one.
+		///
+		/// `multichain_tranche_managers` reverts if any entry's `chain_id`
+		/// equals the Hub's own EVM chain ID — see
+		/// `ProductDetails::multichain_tranche_managers`'s doc comment for why.
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::create_product())]
 		pub fn create_product(
@@ -237,6 +271,7 @@ pub mod pallet {
 				MultichainAdapterInfo<T::AccountId>,
 				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 			>,
+			multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
 		) -> DispatchResult {
 			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
 
@@ -250,6 +285,12 @@ pub mod pallet {
 			ensure!(
 				valuation.settlement_start_timestamp > now_secs,
 				Error::<T>::SettlementStartMustBeInFuture
+			);
+
+			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
+			ensure!(
+				multichain_tranche_managers.keys().all(|chain_id| *chain_id != hub_chain_id),
+				Error::<T>::TrancheManagerCannotBeOnHubChain
 			);
 
 			Self::ensure_weights_sum_to_10000(
@@ -297,7 +338,12 @@ pub mod pallet {
 
 			Products::<T>::insert(
 				product_id,
-				ProductDetails { valuation, tranches, multichain_adapters },
+				ProductDetails {
+					valuation,
+					tranches,
+					multichain_adapters,
+					multichain_tranche_managers,
+				},
 			);
 
 			Ok(())
@@ -544,6 +590,36 @@ pub mod pallet {
 			ensure_root(origin)?;
 			OrchestratorAddress::<T>::put(address);
 			Self::deposit_event(Event::OrchestratorAddressSet { address });
+			Ok(())
+		}
+
+		/// Replace a product's entire per-Spoke-chain TrancheManager table
+		/// atomically. Origin must be `ProductAdminOrigin` — same
+		/// precompile-only gating as `create_product`. Reverts if any entry's
+		/// `chain_id` equals the Hub's own EVM chain ID — see
+		/// `ProductDetails::multichain_tranche_managers`'s doc comment for why.
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_tranche_managers())]
+		pub fn set_multichain_tranche_managers(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
+		) -> DispatchResult {
+			T::ProductAdminOrigin::ensure_origin(origin)?;
+
+			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
+			ensure!(
+				multichain_tranche_managers.keys().all(|chain_id| *chain_id != hub_chain_id),
+				Error::<T>::TrancheManagerCannotBeOnHubChain
+			);
+
+			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
+				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+				product.multichain_tranche_managers = multichain_tranche_managers;
+				Ok(())
+			})?;
+
+			Self::deposit_event(Event::MultichainTrancheManagersSet { product_id });
 			Ok(())
 		}
 	}
