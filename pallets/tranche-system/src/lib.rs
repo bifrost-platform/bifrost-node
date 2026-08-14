@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod migrations;
 mod pallet;
 pub mod weights;
 
@@ -31,6 +32,10 @@ pub const MAX_MULTICHAIN_ADAPTERS: u32 = 20;
 /// (2026-07-27): adapters now live nested under their parent MultichainAdapter
 /// (see `MultichainAdapterInfo`) instead of in a flat, product-wide registry.
 pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 20;
+
+/// Maximum number of per-Spoke-chain TrancheManager bindings per product (see
+/// `ProductDetails::multichain_tranche_managers`).
+pub const MAX_TRANCHE_MANAGERS: u32 = 20;
 
 /// Maximum number of collateral NFTs per (OffchainSource) Adapter.
 /// Carried over from pallet-pools' `MAX_COLLATERALS`, now scoped per-adapter
@@ -364,6 +369,14 @@ pub struct ProductDetails<AccountId> {
 		MultichainAdapterInfo<AccountId>,
 		ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 	>,
+	/// This product's TrancheManager contract address on each Spoke chain one
+	/// of its vaults is deployed on — keyed by `chain_id`, one entry per
+	/// chain (never the Hub chain: `create_product` reverts if any entry's
+	/// `chain_id` equals the Hub's own EVM chain ID, since a Hub-vault
+	/// request reaches the Valuation Contract directly with no separate
+	/// TrancheManager hop). Independent per product — two products sharing a
+	/// Spoke chain each bind their own TrancheManager instance there.
+	pub multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
 }
 
 // ---------------------------------------------------------------------------

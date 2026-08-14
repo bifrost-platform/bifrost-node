@@ -95,6 +95,13 @@ pragma solidity >=0.8.0;
  *     precompile constructs after checking ProductAdmin itself, so calling the
  *     pallet directly (bypassing this precompile) is impossible regardless of
  *     role — there is no signed-origin fallback path.
+ *   - `multichain_tranche_managers` (added 2026-08-14): each product independently
+ *     binds its own TrancheManager contract address per Spoke chain one of its
+ *     vaults is deployed on — distinct from `MultichainAdapterInput`'s per-chain
+ *     table (routes capital to yield sources) even though both are keyed by
+ *     `chain_id`. Never has a Hub-chain entry: a Hub-vault request reaches the
+ *     Valuation Contract directly, with no separate TrancheManager hop, so
+ *     create_product reverts if any entry's `chain_id` is the Hub chain's own.
  *
  * Address: 0x0000000000000000000000000000000000000200
  */
@@ -216,6 +223,19 @@ interface TrancheSystem {
         AdapterInput[] adapters;
     }
 
+    /// @param chain_id                EVM chain ID this TrancheManager is deployed on. MUST NOT be
+    ///                                the Hub chain's own chain ID (create_product reverts
+    ///                                otherwise) — a Hub-vault request reaches the Valuation
+    ///                                Contract directly, with no separate TrancheManager hop, so
+    ///                                this product config never needs a Hub-chain entry
+    /// @param tranche_manager_address This product's TrancheManager contract address on `chain_id`.
+    ///                                Independent per product — two products sharing a Spoke chain
+    ///                                each bind their own TrancheManager instance there
+    struct MultichainTrancheManagerInput {
+        uint64 chain_id;
+        address tranche_manager_address;
+    }
+
     /// @dev `product_admin` is not a function input on create_product (see below) —
     ///      it's the caller's own EVM address, already proven to hold ProductAdmin
     ///      for `product_id` by the precompile before dispatch. Included here only
@@ -250,11 +270,16 @@ interface TrancheSystem {
         uint256 product_id,
         MultichainAdapterInput[] multichain_adapters
     );
+    event MultichainTrancheManagersSet(
+        uint256 product_id,
+        MultichainTrancheManagerInput[] multichain_tranche_managers
+    );
 
     /**
      * @notice Create a new tranche-system product: its Valuation contract binding,
-     *         its tranches, its MultichainAdapter routing table, and its individual
-     *         yield-source Adapter registrations.
+     *         its tranches, its MultichainAdapter routing table, its individual
+     *         yield-source Adapter registrations, and its per-Spoke-chain
+     *         TrancheManager bindings.
      * @dev Flow mirrors old pallet-pools: sudo grants ProductAdmin for `product_id`
      *      via pallet-tranche-permissions BEFORE this is ever called (`product_id`
      *      is reserved to an admin up front, not decided here) — that admin then
@@ -272,23 +297,30 @@ interface TrancheSystem {
      *      to 100% (10_000 bps), any entry's nested `adapters` weightBps don't
      *      themselves sum to 100%, the same nested Adapter (address, chain_id)
      *      appears under two different `multichain_adapters` entries,
-     *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`, or
+     *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`,
      *      `valuation.settlement_start_timestamp` is not strictly after the current
-     *      block time.
+     *      block time, or any `multichain_tranche_managers` entry's `chain_id` is
+     *      the Hub chain's own chain ID.
      *      Emits ProductCreated on success.
-     * @param product_id          Hub product ID (already granted to the caller via ProductAdmin)
-     * @param valuation           Valuation contract binding + settlement cadence config
-     * @param tranches            Array of tranche configurations (each identified by its vault);
-     *                             `priority`, not array order, determines final stored order
-     * @param multichain_adapters Array of MultichainAdapter routing entries, each carrying its
-     *                             own nested individual-Adapter registrations (address, chain_id,
-     *                             weightBps, adapters)
+     * @param product_id                   Hub product ID (already granted to the caller via
+     *                                     ProductAdmin)
+     * @param valuation                    Valuation contract binding + settlement cadence config
+     * @param tranches                     Array of tranche configurations (each identified by its
+     *                                     vault); `priority`, not array order, determines final
+     *                                     stored order
+     * @param multichain_adapters          Array of MultichainAdapter routing entries, each
+     *                                     carrying its own nested individual-Adapter
+     *                                     registrations (address, chain_id, weightBps, adapters)
+     * @param multichain_tranche_managers  Array of this product's per-Spoke-chain TrancheManager
+     *                                     bindings (chain_id, tranche_manager_address); no Hub-chain
+     *                                     entry allowed, see MultichainTrancheManagerInput
      */
     function create_product(
         uint256 product_id,
         ValuationInput calldata valuation,
         TrancheInput[] calldata tranches,
-        MultichainAdapterInput[] calldata multichain_adapters
+        MultichainAdapterInput[] calldata multichain_adapters,
+        MultichainTrancheManagerInput[] calldata multichain_tranche_managers
     ) external;
 
     /**
@@ -405,6 +437,28 @@ interface TrancheSystem {
     ) external;
 
     /**
+     * @notice Replace a product's entire per-Spoke-chain TrancheManager table atomically.
+     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     *      pallet itself, not just this precompile: it only accepts an origin this
+     *      precompile constructs after checking ProductAdmin, so there is no signed-origin
+     *      path that bypasses this check.
+     *      Not a single-entity add/remove/update call — callers must submit the full
+     *      intended end-state list every time, not deltas, same full-array-replace
+     *      rationale as set_multichain_adapters (here: simplicity, since there's no
+     *      cross-entry invariant like weightBps to protect).
+     *      Reverts if any entry's `chain_id` is the Hub chain's own — see
+     *      MultichainTrancheManagerInput.
+     *      Emits MultichainTrancheManagersSet on success.
+     * @param product_id                   The product whose TrancheManager table is being replaced
+     * @param multichain_tranche_managers  The full intended end-state list of per-Spoke-chain
+     *                                     bindings
+     */
+    function set_multichain_tranche_managers(
+        uint256 product_id,
+        MultichainTrancheManagerInput[] calldata multichain_tranche_managers
+    ) external;
+
+    /**
      * @notice Read a product's Valuation binding and settlement-cadence config.
      * @dev Reverts if `product_id` doesn't exist.
      * @param product_id The product to look up
@@ -446,4 +500,19 @@ interface TrancheSystem {
         external
         view
         returns (MultichainAdapterInput[] memory multichain_adapters);
+
+    /**
+     * @notice Read a product's per-Spoke-chain TrancheManager bindings.
+     * @dev Reverts if `product_id` doesn't exist. Never includes a Hub-chain entry — see
+     *      MultichainTrancheManagerInput.
+     * @param product_id The product to look up
+     */
+    function get_multichain_tranche_managers(
+        uint256 product_id
+    )
+        external
+        view
+        returns (
+            MultichainTrancheManagerInput[] memory multichain_tranche_managers
+        );
 }
