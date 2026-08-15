@@ -32,13 +32,14 @@ use sp_std::marker::PhantomData;
 /// - DoS is prevented by checking token balance at pool validation time
 ///
 /// Also covers a third, unrelated feeless case: `pallet-tranche-tx-registry`'s
-/// `record_request_tx`/`record_settlement_tx`/`record_receive_tx`, but only when called by the
-/// account currently registered as that pallet's tx recorder (`TxRecorder`) — see the `R` type
-/// parameter and `TxRegistryRecorderCheck`. Unlike the fee-token-setup calls above, this isn't
-/// rate-limited: the set of callers who can ever reach these three functions at all is already
-/// limited to one account (`pallet_tranche_tx_registry::EnsureTxRecorder` rejects everyone else
-/// at the dispatch level), so there's no spam surface here the way there would be for a call any
-/// EOA can trigger.
+/// `record_request_tx`/`record_settlement_tx`/`record_receive_tx`/`record_whitelist_tx`, but
+/// only when called by the account currently registered as that pallet's tx recorder
+/// (`TxRecorder`) — see the `R` type parameter and `TxRegistryRecorderCheck`. Unlike the
+/// fee-token-setup calls above, this isn't rate-limited: the set of callers who can ever reach
+/// these four functions at all is already limited to one account
+/// (`pallet_tranche_tx_registry::EnsureTxRecorder` rejects everyone else at the dispatch
+/// level), so there's no spam surface here the way there would be for a call any EOA can
+/// trigger.
 ///
 /// `R` is a second, independently-parametrized type (default `()`) rather than folding the
 /// tx-recorder check straight into `T`'s own bounds, specifically so runtimes that don't wire up
@@ -158,13 +159,18 @@ where
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
 
 		// Function selectors for pallet-tranche-tx-registry's record_* calls (keccak256 of the
-		// canonical signature in precompiles/tranche-tx-registry/src/lib.rs, first 4 bytes).
-		// record_request_tx(uint256,bytes32,address,uint64,address,uint256,uint8,uint8,(uint64,bytes32)) => 0xdd2f4638
-		const RECORD_REQUEST_TX: [u8; 4] = [0xdd, 0x2f, 0x46, 0x38];
-		// record_settlement_tx(uint256,uint256,uint64,uint64[],uint8,(uint64,bytes32)) => 0x8f4ab0af
-		const RECORD_SETTLEMENT_TX: [u8; 4] = [0x8f, 0x4a, 0xb0, 0xaf];
-		// record_receive_tx(uint256,(uint64,address),address,uint8,(uint64,bytes32)) => 0xd20e4822
-		const RECORD_RECEIVE_TX: [u8; 4] = [0xd2, 0x0e, 0x48, 0x22];
+		// canonical signature in precompiles/tranche-tx-registry/src/lib.rs's
+		// `#[precompile::public(...)]` strings, first 4 bytes — verified against those exact
+		// strings via `cast sig`, not reconstructed from memory, since the previous values here
+		// had drifted out of sync with the interface and never actually matched any real call).
+		// record_request_tx(uint256,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32)) => 0x3dedbae7
+		const RECORD_REQUEST_TX: [u8; 4] = [0x3d, 0xed, 0xba, 0xe7];
+		// record_settlement_tx(uint256,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32)) => 0xad1808bb
+		const RECORD_SETTLEMENT_TX: [u8; 4] = [0xad, 0x18, 0x08, 0xbb];
+		// record_receive_tx(uint256,(uint64,address),address,address,uint256,uint8,(uint64,bytes32)) => 0x9e4b70d4
+		const RECORD_RECEIVE_TX: [u8; 4] = [0x9e, 0x4b, 0x70, 0xd4];
+		// record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32)) => 0x888fa3de
+		const RECORD_WHITELIST_TX: [u8; 4] = [0x88, 0x8f, 0xa3, 0xde];
 
 		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
 		const TX_PAYMENT_PRECOMPILE: H160 =
@@ -181,7 +187,10 @@ where
 				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
 				let is_record_call = matches!(
 					selector,
-					RECORD_REQUEST_TX | RECORD_SETTLEMENT_TX | RECORD_RECEIVE_TX
+					RECORD_REQUEST_TX
+						| RECORD_SETTLEMENT_TX
+						| RECORD_RECEIVE_TX
+						| RECORD_WHITELIST_TX
 				);
 				return is_record_call && R::is_tx_recorder(caller);
 			}

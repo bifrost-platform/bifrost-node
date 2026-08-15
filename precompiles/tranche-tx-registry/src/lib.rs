@@ -115,9 +115,11 @@ where
 	/// @param amount                Investor's full requested amount — required iff
 	/// step == Requested
 	/// @param order_type            0 = redeem, 1 = deposit — meaningful iff step == Requested
-	/// @param adapter_chain_ids Every chain (besides Hub) needing its own Adapter
-	/// leg — meaningful (and may be empty) iff step == RequestQueued (Hub-vault or
-	/// Spoke-vault alike), empty otherwise
+	/// @param adapter_chain_ids Every chain needing its own Adapter leg — meaningful
+	/// (and may be empty) iff step == RequestQueued (Hub-vault or Spoke-vault alike),
+	/// empty otherwise. Not the only way a chain ends up declared — see
+	/// `pallet_tranche_tx_registry::record_request_tx`'s doc comment on self-declaration
+	/// via AdapterBridgeExecuted/AdapterApplied
 	/// @param step                  0 = None (never valid here), 1 = Requested,
 	/// 2 = RequestBridgeExecuted, 3 = RequestQueued,
 	/// 4 = AdapterBridgeExecuted, 5 = AdapterApplied,
@@ -807,9 +809,19 @@ where
 	/// means not applicable, present-but-zeroed means pending" convention as
 	/// `get_settlement`'s `spoke_chains[i].steps` — check `request_steps.length` (2
 	/// vs 3) to tell whether this request has an Inbound leg at all, and each
-	/// present entry's own `tx.recorded_at` to tell whether it's landed yet. Each
-	/// `adapter_legs[i].steps` is always exactly `[AdapterBridgeExecuted,
-	/// AdapterApplied]`, ordered as declared at the request's own `RequestQueued`.
+	/// present entry's own `tx.recorded_at` to tell whether it's landed yet.
+	/// `adapter_legs[i].steps` is `[AdapterBridgeExecuted, AdapterApplied]` (length
+	/// 2) for a genuinely remote chain, but just `[AdapterApplied]` (length 1) for
+	/// a chain that's the same as the origin vault's own chain, or Hub — same
+	/// "absent means not applicable" convention as `request_steps` above, since
+	/// such a chain never gets a Bridge phase at all (fulfilled synchronously — see
+	/// `pallet_tranche_tx_registry::record_request_tx`'s dev notes), not merely
+	/// pending one. Check `adapter_legs[i].steps.length` (1 vs 2) the same way
+	/// `request_steps.length` is checked, rather than assuming a fixed shape.
+	/// `RequestAdapterChains`' own order (and so `adapter_legs`' order) is normally
+	/// the order declared at `RequestQueued`, but a self-fulfilling chain (recorded
+	/// before `RequestQueued` ever ran) appears in whatever order it was first
+	/// touched instead.
 	///
 	/// `status` only ever takes `Requested` (`RequestQueued` not yet reached, or
 	/// some Adapter leg still has an unfinished step) or `Completed`
@@ -905,16 +917,31 @@ where
 			if leg.applied_tx.is_none() {
 				all_adapter_done = false;
 			}
-			let steps = vec![
-				(
-					encode_request_step(RequestStep::AdapterBridgeExecuted),
-					encode_tx_record(leg.bridge_tx),
-				),
-				(
+			// A chain that's the same as the origin vault's own chain, or Hub, never
+			// gets a Bridge phase at all (fulfilled synchronously — see
+			// `pallet_tranche_tx_registry::record_request_tx`'s dev notes), so
+			// `AdapterBridgeExecuted` is permanently inapplicable for it, not merely
+			// pending — omit it entirely rather than showing a zeroed entry, same
+			// "absent means not applicable" convention `request_steps` uses for a
+			// Hub-vault request's Inbound leg above.
+			let is_self_fulfilling = *chain_id == entry.vault.chain_id || *chain_id == hub_chain_id;
+			let steps = if is_self_fulfilling {
+				vec![(
 					encode_request_step(RequestStep::AdapterApplied),
 					encode_tx_record(leg.applied_tx),
-				),
-			];
+				)]
+			} else {
+				vec![
+					(
+						encode_request_step(RequestStep::AdapterBridgeExecuted),
+						encode_tx_record(leg.bridge_tx),
+					),
+					(
+						encode_request_step(RequestStep::AdapterApplied),
+						encode_tx_record(leg.applied_tx),
+					),
+				]
+			};
 			adapter_legs.push((*chain_id, steps));
 		}
 		let status = if queued_done && all_adapter_done {
