@@ -1,12 +1,42 @@
-use crate::{ChainId, ProductId, SettlementId};
-use pallet_tranche_system::RequestSettlementInspect;
+use crate::{ChainId, ProductId, RequestId, SettlementId};
+use pallet_tranche_system::{AdapterInspect, RequestSettlementInspect};
 
 use super::pallet::*;
-use frame_support::traits::Get;
+use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 
 // Private, non-extrinsic helpers — kept in their own `impl` block, separate from
 // `#[pallet::call]`, so they don't become part of the `Call` enum.
 impl<T: Config> Pallet<T> {
+	/// Self-declares `chain_id` into `RequestAdapterChains` if it isn't already
+	/// there — shared by `record_request_tx`'s `AdapterBridgeExecuted`/
+	/// `AdapterApplied` arms. Adapter-leg evidence for a chain can arrive before
+	/// `RequestStep::RequestQueued` ever explicitly declares it: the origin vault's
+	/// own chain, or the Hub chain, can self-fulfill a weighted Adapter allocation
+	/// synchronously (no Bridge leg at all — see `RequestStep`'s doc comment), so
+	/// the recorder may observe that chain's `AdapterApplied` evidence before the
+	/// pipeline event that would normally declare it. This lets `record_request_tx`
+	/// accept `AdapterBridgeExecuted`/`AdapterApplied` calls in whatever order the
+	/// recorder actually observed the underlying events, rather than requiring
+	/// `RequestQueued`'s own declaration to land first. `RequestQueued` itself
+	/// merges its own `adapter_chain_ids` into whatever's already here rather than
+	/// overwriting, so self-declared chains survive it.
+	pub(crate) fn ensure_adapter_chain_declared(
+		product_id: ProductId,
+		request_id: RequestId,
+		chain_id: ChainId,
+	) -> DispatchResult {
+		let mut chains = RequestAdapterChains::<T>::get(product_id, request_id).unwrap_or_default();
+		if !chains.contains(&chain_id) {
+			ensure!(
+				T::Adapters::adapter_chains_belong_to_product(product_id, &[chain_id]),
+				Error::<T>::SpokeChainNotRegistered
+			);
+			chains.try_push(chain_id).map_err(|_| Error::<T>::TooManyAdapterChains)?;
+			RequestAdapterChains::<T>::insert(product_id, request_id, chains);
+		}
+		Ok(())
+	}
+
 	/// Shared by `record_settlement_tx`'s `SettleApplied` leg arm (called
 	/// with `chain_id = Some(spoke_chain_id)`) and `try_close_hub_vault_requests`
 	/// (called with `chain_id = Some(hub_chain_id)`): closes out

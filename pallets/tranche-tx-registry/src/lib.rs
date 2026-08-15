@@ -123,12 +123,24 @@ pub struct TxRecord<BlockNumber> {
 ///   more than one such leg at once. `AdapterApplied` covers both directions
 ///   — `Supplied` for a deposit, `WithdrawRequested` for a redeem — since
 ///   both mean the same thing structurally: the Adapter has been notified and
-///   acted on this leg.
+///   acted on this leg. Not every chain in this set needs an
+///   `AdapterBridgeExecuted` first: a chain that's *also* the origin vault's
+///   own chain, or Hub, can self-fulfill its allocation synchronously (no
+///   Bridge leg at all — the Adapter Contract call is local), so
+///   `AdapterApplied` alone is valid for it. Such a chain may not even be in
+///   `RequestAdapterChains` yet when its `AdapterApplied` evidence arrives —
+///   see `Pallet::ensure_adapter_chain_declared`'s doc comment for why this
+///   pallet self-declares it on first touch rather than requiring
+///   `RequestQueued` to have already listed it.
 ///
-/// `adapter_chain_ids` is only ever supplied at `RequestQueued` — never at
-/// `Requested`, regardless of Hub or Spoke — since `RequestQueued` is
-/// precisely the step defined as "the Valuation Contract has now decided the
-/// Adapter routing," for both vault locations alike.
+/// `adapter_chain_ids` (the explicit parameter) is only ever supplied at
+/// `RequestQueued` — never at `Requested`, regardless of Hub or Spoke — since
+/// `RequestQueued` is precisely the step defined as "the Valuation Contract
+/// has now decided the Adapter routing," for both vault locations alike. But
+/// `RequestAdapterChains` itself (the actual stored set) can already contain
+/// entries before `RequestQueued` ever runs, via the self-declare mechanism
+/// above — `RequestQueued` merges its `adapter_chain_ids` into whatever's
+/// already there rather than overwriting it.
 ///
 /// `None` and `Completed` are read-only sentinels, never valid
 /// `record_request_tx` input (rejected with `Error::InvalidRequestStep`).

@@ -87,11 +87,11 @@ pub mod pallet {
 		/// `step == RequestStep::Requested`, Hub-vault or Spoke-vault alike (deferred to
 		/// `RequestQueued` instead).
 		UnexpectedRequestAdapterChains,
-		/// `chain_id` is not among the chains declared for Adapter.
-		UnknownAdapterChain,
-		/// `adapter_chain_ids` has not been declared yet for this request — either it
-		/// hasn't been opened at all, or it's still awaiting its own `RequestQueued`.
-		AdapterChainsNotDeclared,
+		/// A request's `RequestAdapterChains` can't hold any more distinct chains —
+		/// bounded by `MAX_SPOKE_CHAINS`. Surfaced both by `RequestQueued`'s own
+		/// declared `adapter_chain_ids` and by `AdapterBridgeExecuted`/`AdapterApplied`
+		/// self-declaring a not-yet-seen chain (see `Pallet::ensure_adapter_chain_declared`).
+		TooManyAdapterChains,
 		/// `step == RequestStep::RequestBridgeExecuted` was recorded for a request whose
 		/// vault is on Hub — a Hub-vault request has no Inbound leg at all (there's
 		/// nothing to bridge when the vault is already on Hub).
@@ -259,14 +259,26 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// The chains (besides Hub) a request's capital gets distributed out to, in
-	/// the order the recorder supplied them — every one of them will need its
-	/// own `AdapterBridgeExecuted`/`AdapterApplied` leg in
-	/// `RequestChainEntries` before the request is `Completed`. Empty means no
-	/// Adapter is needed at all. Written by `record_request_tx` at
-	/// `step == RequestQueued` — the moment the request's capital is confirmed
-	/// at the Valuation Contract, Hub-vault or Spoke-vault alike (see
-	/// `RequestStep`'s doc comment for why it's never known any earlier).
+	/// The chains a request's capital gets distributed out to, in the order
+	/// they were declared — every one of them will need its own
+	/// `AdapterBridgeExecuted`/`AdapterApplied` leg in `RequestChainEntries`
+	/// before the request is `Completed`. Empty means no Adapter is needed at
+	/// all. Can include Hub itself, or the origin vault's own chain, when
+	/// either self-fulfills a weighted allocation synchronously (no Bridge leg
+	/// — see `RequestStep`'s doc comment).
+	///
+	/// Populated two ways, which can interleave in either order:
+	/// `record_request_tx` at `step == RequestQueued` writes whatever
+	/// `adapter_chain_ids` the Valuation Contract explicitly declared at that
+	/// point (merged, not overwritten, into whatever's already here — see
+	/// below), while `AdapterBridgeExecuted`/`AdapterApplied` self-declare a
+	/// not-yet-seen `chain_id` on first touch (see
+	/// `Pallet::ensure_adapter_chain_declared`) — needed because a
+	/// self-fulfilling chain's `AdapterApplied` evidence can arrive before
+	/// `RequestQueued` ever runs, and this pallet accepts `record_request_tx`
+	/// calls in whatever order the recorder actually observed the underlying
+	/// events, not a pipeline-assumed order.
+	///
 	/// Kept as a separate storage item rather than folded into `RequestEntry`,
 	/// same pattern as `SettlementCollectResponseChains`/
 	/// `SettlementFinalizeChains` alongside `SettlementTriggers`.
@@ -554,6 +566,15 @@ pub mod pallet {
 		/// `Some` iff `step == RequestStep::RequestQueued` (Hub-vault or Spoke-vault
 		/// alike), `None` otherwise — see interface.sol's `record_request_tx` for the
 		/// full sentinel-gating/ordering contract this mirrors.
+		///
+		/// Steps do NOT need to be recorded in the pipeline's own conceptual order —
+		/// only in the order the recorder actually observed the underlying events
+		/// on-chain. In particular, `AdapterBridgeExecuted`/`AdapterApplied` for a
+		/// chain that self-fulfills (the origin vault's own chain, or Hub) can arrive
+		/// before `Requested`/`RequestQueued` ever run, since that chain's Adapter
+		/// Contract call happens locally, in the same tx as (and possibly logged
+		/// before) the domain event that would otherwise open/advance this request —
+		/// see `RequestStep`'s doc comment and `Pallet::ensure_adapter_chain_declared`.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx())]
 		pub fn record_request_tx(
@@ -645,7 +666,23 @@ pub mod pallet {
 						T::Adapters::adapter_chains_belong_to_product(product_id, &chains),
 						Error::<T>::SpokeChainNotRegistered
 					);
-					RequestAdapterChains::<T>::insert(product_id, request_id, chains);
+					// Merge, not overwrite: `AdapterBridgeExecuted`/`AdapterApplied` may
+					// already have self-declared a chain here (the origin vault's own
+					// chain, or Hub, self-fulfilling with no Bridge leg at all — see
+					// `Pallet::ensure_adapter_chain_declared`) before this step ever ran,
+					// since the recorder may observe events out of the order this
+					// pipeline model would otherwise assume. Overwriting would silently
+					// drop that already-recorded evidence's declaration.
+					let mut merged =
+						RequestAdapterChains::<T>::get(product_id, request_id).unwrap_or_default();
+					for declared_chain_id in chains.iter() {
+						if !merged.contains(declared_chain_id) {
+							merged
+								.try_push(*declared_chain_id)
+								.map_err(|_| Error::<T>::TooManyAdapterChains)?;
+						}
+					}
+					RequestAdapterChains::<T>::insert(product_id, request_id, merged);
 					entry.queued_tx = Some(tx);
 					RequestEntries::<T>::insert(product_id, request_id, entry);
 				},
@@ -655,9 +692,7 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
-					let chains = RequestAdapterChains::<T>::get(product_id, request_id)
-						.ok_or(Error::<T>::AdapterChainsNotDeclared)?;
-					ensure!(chains.contains(&chain_id), Error::<T>::UnknownAdapterChain);
+					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
 						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
 					ensure!(entry.bridge_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
@@ -670,12 +705,14 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
-					let chains = RequestAdapterChains::<T>::get(product_id, request_id)
-						.ok_or(Error::<T>::AdapterChainsNotDeclared)?;
-					ensure!(chains.contains(&chain_id), Error::<T>::UnknownAdapterChain);
+					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
 						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
-					ensure!(entry.bridge_tx.is_some(), Error::<T>::RequestStepOutOfOrder);
+					// No `entry.bridge_tx.is_some()` precondition here (unlike every other
+					// Bridge-then-Applied/Hooks pair in this pallet) — a chain that
+					// self-fulfills locally (origin vault's own chain, or Hub) never gets
+					// a Bridge leg at all, so `AdapterApplied` must be recordable on its
+					// own. See `Pallet::ensure_adapter_chain_declared`'s doc comment.
 					ensure!(entry.applied_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
 					entry.applied_tx = Some(tx);
 					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
