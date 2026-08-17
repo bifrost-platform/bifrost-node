@@ -508,4 +508,13 @@ interface TrancheSystem {
         returns (
             MultichainTrancheManagerInput[] memory multichain_tranche_managers
         );
+
+    /**
+     * @notice Read the single, global Hub-chain Orchestrator contract address.
+     * @dev Not per-product — same value regardless of caller. Never reverts; defaults to
+     *      the zero address until root calls set_orchestrator_address (not exposed on this
+     *      interface — see pallet_tranche_system::OrchestratorAddress's doc comment).
+     * @return orchestrator The Orchestrator contract address, or the zero address if unset
+     */
+    function get_orchestrator() external view returns (address orchestrator);
 }

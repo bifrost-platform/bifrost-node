@@ -495,6 +495,17 @@ where
 			.map(|(chain_id, address)| (*chain_id, Address(*address)))
 			.collect())
 	}
+
+	/// Read the single, global Hub-chain Orchestrator contract address — see
+	/// `pallet_tranche_system::OrchestratorAddress`'s doc comment. Not
+	/// per-product; same value regardless of caller. Never reverts — defaults
+	/// to the zero address until root calls `set_orchestrator_address`.
+	#[precompile::public("get_orchestrator()")]
+	#[precompile::view]
+	fn get_orchestrator(handle: &mut impl PrecompileHandle) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		Ok(Address(pallet_tranche_system::OrchestratorAddress::<Runtime>::get()))
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -662,9 +673,9 @@ where
 
 /// Decodes a `multichain_tranche_managers` array. Reverts on a duplicate
 /// `chain_id`, same reasoning as `decode_multichain_adapters` — the incoming
-/// array has no uniqueness guarantee the way a `BoundedBTreeMap` would.
-/// Hub-chain exclusion is validated pallet-side (`create_product` reverts on
-/// it), not here.
+/// array has no uniqueness guarantee the way a `BoundedBTreeMap` would. Hub
+/// is a valid `chain_id` here (no exclusion) — see
+/// `ProductDetails::multichain_tranche_managers`'s doc comment.
 fn decode_multichain_tranche_managers(
 	multichain_tranche_managers: &[EvmMultichainTrancheManagerInput],
 ) -> EvmResult<BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>> {
