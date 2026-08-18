@@ -166,8 +166,8 @@ where
 		// silently changes every selector here except `record_whitelist_tx`'s (it takes no
 		// `product_id` param at all, resolved internally from `vault`), so re-derive rather
 		// than hand-edit if this ever changes again.
-		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32)) => 0x6142247c
-		const RECORD_REQUEST_TX: [u8; 4] = [0x61, 0x42, 0x24, 0x7c];
+		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256) => 0xa2a34630
+		const RECORD_REQUEST_TX: [u8; 4] = [0xa2, 0xa3, 0x46, 0x30];
 		// record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32)) => 0xb59cb2d0
 		const RECORD_SETTLEMENT_TX: [u8; 4] = [0xb5, 0x9c, 0xb2, 0xd0];
 		// record_receive_tx(uint64,(uint64,address),address,address,uint256,uint8,(uint64,bytes32)) => 0x8ef97ccd

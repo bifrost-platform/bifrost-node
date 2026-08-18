@@ -19,7 +19,7 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_REQUEST_TX_RECORDED: [u8; 32] = keccak256!(
-	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32))"
+	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32),uint256)"
 );
 pub(crate) const SELECTOR_LOG_SETTLEMENT_TX_RECORDED: [u8; 32] = keccak256!(
 	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],(uint64,bytes32))"
@@ -69,11 +69,13 @@ const MAX_HISTORY_PAGE_SIZE: usize = 50;
 // ---------------------------------------------------------------------------
 
 /// A precompile that wraps `pallet_tranche_tx_registry`'s `record_*` extrinsics and
-/// exposes read-only visibility into its registry storage — plus, for
-/// `get_request` only, a read into `pallet-tranche-investments`'
-/// `ApprovedInvestments` to resolve a request's linked `settlement_id`/`settled`
-/// (see that function's doc comment for why this precompile, unlike the pallet it
-/// wraps, is allowed to read across both pallets directly).
+/// exposes read-only visibility into its registry storage. `get_request`'s
+/// `settlement_id`/`settled` are resolved entirely from this pallet's own
+/// `RequestEntries`/`SettlementChainEntries`/`SettlementCollectResponseChains` —
+/// no cross-pallet read into `pallet-tranche-investments` is needed here (unlike
+/// an earlier version of this precompile, before `RequestStep::SettlementApproved`
+/// gave this pallet its own copy of the request<->settlement linkage — see
+/// `pallet_tranche_tx_registry::SettlementRequests`'s doc comment).
 ///
 /// Called exclusively by the pallet-registered tx recorder account — not a Gateway,
 /// not a product's Valuation contract. Every `record_*` function dispatches with a
@@ -90,7 +92,6 @@ pub struct TrancheTxRegistryPrecompile<Runtime>(PhantomData<Runtime>);
 impl<Runtime> TrancheTxRegistryPrecompile<Runtime>
 where
 	Runtime: pallet_tranche_tx_registry::Config
-		+ pallet_tranche_investments::Config
 		+ pallet_tranche_system::Config
 		+ pallet_evm::Config
 		+ frame_system::Config,
@@ -101,11 +102,13 @@ where
 {
 	/// Attest to one tx in a request's pipeline — the single Requested tx, the
 	/// single RequestQueued tx, one Bridge half of the Inbound leg (Spoke-vault
-	/// requests only), or one Bridge/Applied half of a per-chain Adapter leg. See
+	/// requests only), one Bridge/Applied half of a per-chain Adapter leg, or the
+	/// single SettlementApproved tx. See
 	/// `pallet_tranche_tx_registry::record_request_tx`'s doc comment for the full
 	/// ordering/duplicate-recording contract this dispatches into; this function's
 	/// own job is only translating interface.sol's flat, sentinel-gated calldata
-	/// into the pallet's `Option<RequestOpening>`/`Option<BoundedVec<..>>` shapes.
+	/// into the pallet's `Option<RequestOpening>`/`Option<BoundedVec<..>>`/
+	/// `Option<SettlementId>` shapes.
 	///
 	/// @param investor              Investor address — required iff step == Requested
 	/// @param vault_chain_id        EVM chain ID of the tranche vault — required iff
@@ -123,9 +126,11 @@ where
 	/// @param step                  0 = None (never valid here), 1 = Requested,
 	/// 2 = RequestBridgeExecuted, 3 = RequestQueued,
 	/// 4 = AdapterBridgeExecuted, 5 = AdapterApplied,
-	/// 6 = Completed (never valid here)
+	/// 6 = RequestCompleted (never valid here), 7 = SettlementApproved
+	/// @param settlement_id         The settlement this request is approved into —
+	/// required (non-zero) iff step == SettlementApproved, zero otherwise
 	#[precompile::public(
-		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32))"
+		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256)"
 	)]
 	fn record_request_tx(
 		handle: &mut impl PrecompileHandle,
@@ -139,6 +144,7 @@ where
 		adapter_chain_ids: Vec<u64>,
 		step: u8,
 		attestation: EvmTxAttestation,
+		settlement_id: U256,
 	) -> EvmResult {
 		let decoded_step = decode_request_step(step)?;
 		let opening = decode_request_opening(
@@ -151,6 +157,7 @@ where
 		)?;
 		let decoded_adapter_chains =
 			decode_request_adapter_chains(decoded_step, &adapter_chain_ids)?;
+		let decoded_settlement_id = decode_request_settlement_id(decoded_step, settlement_id)?;
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -162,6 +169,7 @@ where
 			step: decoded_step,
 			chain_id,
 			tx_hash,
+			settlement_id: decoded_settlement_id,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -184,6 +192,7 @@ where
 				step,
 				adapter_chain_ids,
 				attestation,
+				settlement_id,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -817,38 +826,34 @@ where
 	/// touched instead.
 	///
 	/// `status` only ever takes `Requested` (`RequestQueued` not yet reached, or
-	/// some Adapter leg still has an unfinished step) or `Completed`
+	/// some Adapter leg still has an unfinished step) or `RequestCompleted`
 	/// (`RequestQueued` reached, and every declared Adapter chain's last step
 	/// landed, or none were declared at all — immediate for a fully local
-	/// request).
+	/// request). This is deliberately unrelated to `settlement_id`/`settled`
+	/// below — see `RequestStep`'s doc comment for why `RequestCompleted` was
+	/// renamed from `Completed` to disambiguate the two.
 	///
-	/// Unlike every other function here, this also reads
-	/// `pallet-tranche-investments::ApprovedInvestments` directly to resolve
-	/// `settlement_id`/`settled` — `pallet_tranche_tx_registry` the pallet
-	/// deliberately has no dependency on `pallet-tranche-investments` (see this
-	/// pallet's module docs on why the two precompiles were split apart), but that
-	/// decoupling is a pallet-level concern, not a precompile-level one: this
-	/// precompile crate is the per-runtime aggregation layer, and
-	/// `TrancheInvestmentsPrecompile` itself already sets the precedent of reading
-	/// `pallet-tranche-system`'s storage directly despite `pallet-tranche-investments`
-	/// not depending on that pallet either. `settlement_id` is 0 until this request is
-	/// linked to a settlement via the Investments precompile's
-	/// `record_investment_approval`. `settled` depends on whether this request's own
-	/// vault is on Hub or Spoke, mirroring the Inbound-leg asymmetry above: for a
-	/// Spoke vault, true once the Finalize leg's Hooks phase lands for this request's
-	/// own origin chain; for a Hub vault (no Finalize leg of its own to wait on),
-	/// true once every one of the linked settlement's `collect_response_chain_ids`
-	/// reaches `NavReceived` (vacuously true, and immediate, if that set
-	/// was declared empty). `settled` is always false while `settlement_id == 0`,
-	/// and is entirely independent of `status`/`adapter_legs` — a request's
-	/// own delivery to the Hub and its linked settlement's delivery of results back
-	/// out are two separate concerns.
+	/// `settlement_id`/`settled` are resolved from `entry.settlement_id`/
+	/// `entry.approved_tx`, written by `record_request_tx`'s
+	/// `RequestStep::SettlementApproved` arm — `settlement_id` is 0 until that step
+	/// is recorded (Valuation's `DepositApproved`/`RedeemApproved` event). `settled`
+	/// depends on whether this request's own vault is on Hub or Spoke, mirroring the
+	/// Inbound-leg asymmetry above: for a Spoke vault, true once the Finalize leg's
+	/// Hooks phase lands for this request's own origin chain; for a Hub vault (no
+	/// Finalize leg of its own to wait on), true once every one of the linked
+	/// settlement's `collect_response_chain_ids` reaches `NavReceived` (vacuously
+	/// true, and immediate, if that set was declared empty) — same criterion
+	/// `Pallet::try_close_request`/`try_close_hub_vault_requests` use pallet-side.
+	/// `settled` is always false while `settlement_id == 0`, and is entirely
+	/// independent of `status`/`adapter_legs` — a request's own delivery to the Hub
+	/// and its linked settlement's delivery of results back out are two separate
+	/// concerns.
 	/// @param product_id The product the request belongs to
 	/// @param request_id The request to look up
 	/// @return info           Investor/vault/amount/order_type, unchanged since Requested
 	/// @return request_steps  Ordered Requested + Inbound-leg step history, see above
 	/// @return adapter_legs   Per-chain ordered Adapter-leg step history, see above
-	/// @return status `Requested` or `Completed`, see above
+	/// @return status `Requested` or `RequestCompleted`, see above
 	/// @return settlement_id  The settlement this request is linked to, 0 if not yet linked
 	/// @return settled        Whether this request's settlement has fully completed (the
 	/// investor can now call receive() for it, though that call itself isn't tracked here —
@@ -937,15 +942,12 @@ where
 			adapter_legs.push((*chain_id, steps));
 		}
 		let status = if queued_done && all_adapter_done {
-			RequestStep::Completed
+			RequestStep::RequestCompleted
 		} else {
 			RequestStep::Requested
 		};
 
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let Some(approved) =
-			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
-		else {
+		let Some(settlement_id) = entry.settlement_id else {
 			return Ok((
 				info,
 				request_steps,
@@ -955,7 +957,6 @@ where
 				false,
 			));
 		};
-		let settlement_id = approved.settlement_id;
 
 		// A Hub-vault request has no Finalize leg of its own to wait on (mirrors
 		// `inbound_done` above) — it's settled once every one of
@@ -1063,7 +1064,8 @@ fn decode_request_step(step: u8) -> EvmResult<RequestStep> {
 		3 => Ok(RequestStep::RequestQueued),
 		4 => Ok(RequestStep::AdapterBridgeExecuted),
 		5 => Ok(RequestStep::AdapterApplied),
-		6 => Ok(RequestStep::Completed),
+		6 => Ok(RequestStep::RequestCompleted),
+		7 => Ok(RequestStep::SettlementApproved),
 		_ => Err(revert("invalid step")),
 	}
 }
@@ -1076,7 +1078,8 @@ fn encode_request_step(step: RequestStep) -> u8 {
 		RequestStep::RequestQueued => 3,
 		RequestStep::AdapterBridgeExecuted => 4,
 		RequestStep::AdapterApplied => 5,
-		RequestStep::Completed => 6,
+		RequestStep::RequestCompleted => 6,
+		RequestStep::SettlementApproved => 7,
 	}
 }
 
@@ -1225,6 +1228,29 @@ fn decode_request_adapter_chains(
 		_ => {
 			if !adapter_chain_ids.is_empty() {
 				return Err(revert("adapter_chain_ids must be empty unless step == RequestQueued"));
+			}
+			Ok(None)
+		},
+	}
+}
+
+/// Translates `record_request_tx`'s `settlement_id` calldata into the pallet's
+/// `Option<SettlementId>`. Meaningful (and required non-zero) only for
+/// `step == SettlementApproved` — zero/`None` for every other step, same
+/// sentinel-gating convention as `decode_request_adapter_chains`. Reverts on any
+/// syntactically inconsistent combination, matching interface.sol's documented
+/// contract.
+fn decode_request_settlement_id(step: RequestStep, settlement_id: U256) -> EvmResult<Option<U256>> {
+	match step {
+		RequestStep::SettlementApproved => {
+			if settlement_id.is_zero() {
+				return Err(revert("settlement_id required when step == SettlementApproved"));
+			}
+			Ok(Some(settlement_id))
+		},
+		_ => {
+			if !settlement_id.is_zero() {
+				return Err(revert("settlement_id must be zero unless step == SettlementApproved"));
 			}
 			Ok(None)
 		},

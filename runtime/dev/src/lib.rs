@@ -1189,7 +1189,6 @@ impl pallet_tranche_tx_registry::Config for Runtime {
 	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
 	type Vaults = TrancheSystem;
 	type Adapters = TrancheSystem;
-	type Investments = TrancheInvestments;
 	type WeightInfo = pallet_tranche_tx_registry::weights::SubstrateWeight<Runtime>;
 }
 

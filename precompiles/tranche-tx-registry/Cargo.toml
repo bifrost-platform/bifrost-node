@@ -11,7 +11,6 @@ repository = { workspace = true }
 [dependencies]
 # OmniFi tranche-system
 pallet-tranche-system = { workspace = true }
-pallet-tranche-investments = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
 precompile-utils = { workspace = true }
 
@@ -33,7 +32,6 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-tranche-system/std",
-	"pallet-tranche-investments/std",
 	"pallet-tranche-tx-registry/std",
 	"pallet-evm/std",
 	"precompile-utils/std",
