@@ -46,12 +46,14 @@ pub const MAX_ASSET_POSITIONS: u32 = 20;
 
 /// Maximum number of requests that can be approved into a single
 /// (product_id, settlement_id) — bounds `SettlementRequests`, the reverse index
-/// `record_investment_approval` writes to so pallet-tranche-tx-registry can close
-/// out `InvestorActiveRequests` entries once a settlement's Finalize-Hooks leg lands
-/// (see `pallet_tranche_system::RequestSettlementInspect`). No equivalent bound
-/// exists elsewhere in this pallet family — sized generously since it caps "investors
-/// settled together in one cycle", not a per-product structural count like
-/// `MAX_ALLOCATIONS`.
+/// `record_investment_approval` writes to. pallet-tranche-tx-registry used to read
+/// this cross-pallet (via the now-removed `RequestSettlementInspect` trait) to close
+/// out its own `InvestorActiveRequests` entries; it now keeps an independent,
+/// event-sourced copy of the same linkage instead (see
+/// `pallet_tranche_tx_registry::SettlementRequests`'s doc comment). No equivalent
+/// bound exists elsewhere in this pallet family — sized generously since it caps
+/// "investors settled together in one cycle", not a per-product structural count
+/// like `MAX_ALLOCATIONS`.
 pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
 
 // ---------------------------------------------------------------------------

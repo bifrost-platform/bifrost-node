@@ -3,9 +3,7 @@ use crate::{
 	RequestedInvestment, Settlement, SettlementId, TrancheSettle, WeightInfo,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{
-	AdapterInspect, AdapterKey, ProductId, RequestSettlementInspect, VaultId, VaultInspect,
-};
+use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -14,7 +12,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, U256};
 use sp_runtime::BoundedVec;
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::collections::btree_set::BTreeSet;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -183,11 +181,13 @@ pub mod pallet {
 	#[pallet::storage]
 	/// Reverse index: every request_id approved into a given (product_id,
 	/// settlement_id), written alongside `ApprovedInvestments` by
-	/// `record_investment_approval`. Exists purely so
-	/// `pallet_tranche_system::RequestSettlementInspect` (implemented below) can
-	/// answer "which requests does this settlement cover" in O(1) instead of
-	/// pallet-tranche-tx-registry needing to scan all of `ApprovedInvestments` — see
-	/// that trait's doc comment for the full cross-pallet rationale.
+	/// `record_investment_approval`. Originally read cross-pallet by
+	/// pallet-tranche-tx-registry (via the now-removed `RequestSettlementInspect`
+	/// trait) to answer "which requests does this settlement cover" when closing
+	/// out its own `InvestorActiveRequests` entries — that pallet now keeps an
+	/// independent, event-sourced copy of the same linkage instead (see
+	/// `pallet_tranche_tx_registry::SettlementRequests`'s doc comment), so this
+	/// storage is this pallet's own bookkeeping only from here on.
 	pub type SettlementRequests<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -472,11 +472,5 @@ pub mod pallet {
 			});
 			Ok(())
 		}
-	}
-}
-
-impl<T: pallet::Config> RequestSettlementInspect for pallet::Pallet<T> {
-	fn settlement_requests(product_id: ProductId, settlement_id: SettlementId) -> Vec<RequestId> {
-		pallet::SettlementRequests::<T>::get(product_id, settlement_id).into_inner()
 	}
 }

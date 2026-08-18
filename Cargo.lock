@@ -9561,7 +9561,6 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-evm",
- "pallet-tranche-investments",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
  "precompile-utils",

@@ -1,13 +1,16 @@
 mod impls;
 
 use crate::{
-	ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry, RequestEntry, RequestId,
-	RequestOpening, RequestStep, SettlementChainEntry, SettlementId, SettlementStep, TxRecord,
-	WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_SPOKE_CHAINS,
+	migrations, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry, RequestEntry,
+	RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId, SettlementStep,
+	TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_SPOKE_CHAINS,
 };
-use pallet_tranche_system::{AdapterInspect, RequestSettlementInspect, VaultId, VaultInspect};
+use pallet_tranche_system::{AdapterInspect, VaultId, VaultInspect};
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_std::vec::Vec;
@@ -16,11 +19,18 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::config]
 	/// `pallet_evm::Config` supplies `<Self as pallet_evm::Config>::ChainId`, this chain's
@@ -45,12 +55,6 @@ pub mod pallet {
 		/// declared `collect_response_chain_ids`, each have a registered
 		/// MultichainAdapter, before recording against them.
 		type Adapters: AdapterInspect;
-		/// Request-settlement linkage inspector — implemented by
-		/// pallet-tranche-investments (see `RequestSettlementInspect`'s doc comment
-		/// for why it's hosted in pallet-tranche-system instead). Used by
-		/// `record_settlement_tx` to automatically close out `InvestorActiveRequests`
-		/// entries when a settlement's `SettleApplied`/`NavReceived` leg lands.
-		type Investments: RequestSettlementInspect;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -100,9 +104,13 @@ pub mod pallet {
 		RequestStepOutOfOrder,
 		/// This step has already been recorded for this request.
 		RequestStepAlreadyRecorded,
-		/// `step` must be one of the five recordable values — never
-		/// `RequestStep::None`/`Completed`, both read-only sentinels.
+		/// `step` must be one of the six recordable values — never
+		/// `RequestStep::None`/`RequestCompleted`, both read-only sentinels.
 		InvalidRequestStep,
+		/// `settlement_id` must be `Some` when `step == RequestStep::SettlementApproved`.
+		RequestSettlementIdRequired,
+		/// `settlement_id` must be `None` for every step other than `SettlementApproved`.
+		UnexpectedRequestSettlementId,
 		/// `step` must be one of the seven recordable values — never
 		/// `SettlementStep::Queued`/`Settled`, both read-only sentinels.
 		InvalidSettlementStep,
@@ -181,6 +189,7 @@ pub mod pallet {
 			request_id: RequestId,
 			opening: Option<RequestOpening>,
 			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			settlement_id: Option<SettlementId>,
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -320,14 +329,10 @@ pub mod pallet {
 	/// been fully responded to (every chain has reached `NavReceived` —
 	/// vacuously true, and checked immediately, if that set was declared empty
 	/// at Trigger time — see `try_close_hub_vault_requests`): at that point it
-	/// asks `T::Investments::settlement_requests(product_id, settlement_id)`
-	/// (implemented by pallet-tranche-investments, see
-	/// `RequestSettlementInspect`'s doc comment for why this doesn't require a
-	/// hard dependency on that pallet) for every request_id approved into that
-	/// settlement, and removes the ones whose own origin chain
-	/// (`RequestEntry::vault::chain_id`) matches the leg just closed. Bounded by
-	/// `pallet_tranche_investments::MAX_SETTLEMENT_REQUESTS` on the writing side, so
-	/// this stays a fixed-cost operation rather than an unbounded scan.
+	/// reads `SettlementRequests::<T>::get(product_id, settlement_id)` for every
+	/// request_id approved into that settlement, and removes the ones whose own
+	/// origin chain (`RequestEntry::vault::chain_id`) matches the leg just
+	/// closed.
 	///
 	/// Deliberately unbounded — an investor legitimately opening requests
 	/// across many products concurrently shouldn't be capped by an arbitrary
@@ -366,6 +371,36 @@ pub mod pallet {
 		H160,
 		Blake2_128Concat,
 		ProductId,
+		Vec<RequestId>,
+		ValueQuery,
+	>;
+
+	#[pallet::storage]
+	#[pallet::unbounded]
+	/// Every `request_id` approved into a given `(product_id, settlement_id)`,
+	/// in the order `RequestStep::SettlementApproved` recorded them — this
+	/// pallet's own copy of the request<->settlement linkage, read by
+	/// `close_active_requests`/`try_close_hub_vault_requests`/
+	/// `try_close_request` to know which `InvestorActiveRequests` entries to
+	/// drop once a settlement (or one of its legs) completes. Originally this
+	/// linkage was queried cross-pallet from pallet-tranche-investments (via
+	/// the now-removed `RequestSettlementInspect` trait), but that pallet only
+	/// ever learns of the approval secondhand — `DepositApproved`/
+	/// `RedeemApproved` fires at Valuation, the same event this pallet's own
+	/// `RequestStep::SettlementApproved` step is recorded from — so keeping an
+	/// independent, event-sourced copy here removes the hard dependency
+	/// entirely rather than just hiding it behind a trait.
+	///
+	/// Deliberately unbounded, same `#[pallet::unbounded]` rationale as
+	/// `InvestorActiveRequests` — growth is bounded in practice by how many
+	/// requests a single settlement cycle can genuinely batch, not by anything
+	/// this pallet caps directly.
+	pub type SettlementRequests<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
 		Vec<RequestId>,
 		ValueQuery,
 	>;
@@ -559,13 +594,15 @@ pub mod pallet {
 
 		/// Attest to one tx in a request's pipeline — the single Requested tx, the
 		/// single RequestQueued tx, one Bridge half of the Inbound leg (Spoke-vault
-		/// requests only), or one Bridge/Applied half of a per-chain Adapter leg (see
-		/// `RequestStep`'s doc comment for exactly which chains need one). Origin must
-		/// be `RecorderOrigin`. `opening` MUST be `Some` iff `step ==
-		/// RequestStep::Requested`, `None` otherwise. `adapter_chain_ids` MUST be
-		/// `Some` iff `step == RequestStep::RequestQueued` (Hub-vault or Spoke-vault
-		/// alike), `None` otherwise — see interface.sol's `record_request_tx` for the
-		/// full sentinel-gating/ordering contract this mirrors.
+		/// requests only), one Bridge/Applied half of a per-chain Adapter leg (see
+		/// `RequestStep`'s doc comment for exactly which chains need one), or the
+		/// single SettlementApproved tx. Origin must be `RecorderOrigin`. `opening`
+		/// MUST be `Some` iff `step == RequestStep::Requested`, `None` otherwise.
+		/// `adapter_chain_ids` MUST be `Some` iff `step == RequestStep::RequestQueued`
+		/// (Hub-vault or Spoke-vault alike), `None` otherwise. `settlement_id` MUST be
+		/// `Some` iff `step == RequestStep::SettlementApproved`, `None` otherwise —
+		/// see interface.sol's `record_request_tx` for the full sentinel-gating/
+		/// ordering contract this mirrors.
 		///
 		/// Steps do NOT need to be recorded in the pipeline's own conceptual order —
 		/// only in the order the recorder actually observed the underlying events
@@ -575,6 +612,9 @@ pub mod pallet {
 		/// Contract call happens locally, in the same tx as (and possibly logged
 		/// before) the domain event that would otherwise open/advance this request —
 		/// see `RequestStep`'s doc comment and `Pallet::ensure_adapter_chain_declared`.
+		/// `SettlementApproved` races with the settlement-side completion trigger for
+		/// the same reason — see `RequestStep::SettlementApproved`'s doc comment and
+		/// `Pallet::try_close_request`.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx())]
 		pub fn record_request_tx(
@@ -586,6 +626,7 @@ pub mod pallet {
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
+			settlement_id: Option<SettlementId>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
@@ -611,6 +652,7 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
+					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					RequestEntries::<T>::insert(
 						product_id,
 						request_id,
@@ -623,6 +665,8 @@ pub mod pallet {
 							request_tx: Some(tx),
 							bridge_tx: None,
 							queued_tx: None,
+							settlement_id: None,
+							approved_tx: None,
 						},
 					);
 					InvestorActiveRequests::<T>::mutate(opening.investor, |requests| {
@@ -638,6 +682,7 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
+					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
 					ensure!(entry.vault.chain_id != hub_chain_id, Error::<T>::UnexpectedInboundLeg);
@@ -647,6 +692,7 @@ pub mod pallet {
 				},
 				RequestStep::RequestQueued => {
 					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
+					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
 					if entry.vault.chain_id != hub_chain_id {
@@ -692,6 +738,7 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
+					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
 						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
@@ -705,6 +752,7 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
+					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
 						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
@@ -717,7 +765,30 @@ pub mod pallet {
 					entry.applied_tx = Some(tx);
 					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
 				},
-				RequestStep::None | RequestStep::Completed => {
+				RequestStep::SettlementApproved => {
+					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
+					ensure!(
+						adapter_chain_ids.is_none(),
+						Error::<T>::UnexpectedRequestAdapterChains
+					);
+					let settlement_id =
+						settlement_id.ok_or(Error::<T>::RequestSettlementIdRequired)?;
+					let mut entry = RequestEntries::<T>::get(product_id, request_id)
+						.ok_or(Error::<T>::RequestNotOpened)?;
+					ensure!(entry.approved_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
+					entry.settlement_id = Some(settlement_id);
+					entry.approved_tx = Some(tx);
+					RequestEntries::<T>::insert(product_id, request_id, entry);
+					SettlementRequests::<T>::mutate(product_id, settlement_id, |requests| {
+						requests.push(request_id);
+					});
+					// Opportunistically self-close: this can race with the settlement-side
+					// completion trigger (`try_close_hub_vault_requests`/
+					// `close_active_requests`) — see `RequestStep::SettlementApproved`'s doc
+					// comment.
+					Self::try_close_request(product_id, settlement_id, request_id);
+				},
+				RequestStep::None | RequestStep::RequestCompleted => {
 					return Err(Error::<T>::InvalidRequestStep.into());
 				},
 			}
@@ -727,6 +798,7 @@ pub mod pallet {
 				request_id,
 				opening,
 				adapter_chain_ids,
+				settlement_id,
 				step,
 				chain_id,
 				tx_hash,
@@ -755,7 +827,7 @@ pub mod pallet {
 		/// correctly via vacuous truth, with no dedicated step needed for it.
 		///
 		/// Side effects on `InvestorActiveRequests` (see its own storage doc comment
-		/// for the full mechanism — `T::Investments::settlement_requests` +
+		/// for the full mechanism — `SettlementRequests` +
 		/// `ActiveRequestClosed`): `step == SettlementStep::SettleApplied`
 		/// closes every Spoke-vault request approved into this settlement whose own
 		/// origin chain is `spoke_chain_id`. `step == SettlementStep::Triggered` and

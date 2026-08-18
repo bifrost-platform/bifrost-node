@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod migrations;
 mod pallet;
 pub mod weights;
 
@@ -85,8 +86,8 @@ pub struct TxRecord<BlockNumber> {
 
 /// Step within a request's pipeline. Mirrors interface.sol's `RequestStep`.
 /// `Requested`/`RequestBridgeExecuted`/`RequestQueued`/
-/// `AdapterBridgeExecuted`/`AdapterApplied` are the only five
-/// values `record_request_tx` ever accepts as input. Named after the
+/// `AdapterBridgeExecuted`/`AdapterApplied`/`SettlementApproved` are the only
+/// six values `record_request_tx` ever accepts as input. Named after the
 /// underlying Valuation Contract events wherever one exists 1:1 — `Requested`
 /// (`DepositRequested`/`RedeemRequested`, at TrancheManager), `RequestQueued`
 /// (`DepositQueued`/`RedeemQueued`, at Valuation), `AdapterApplied`
@@ -132,6 +133,27 @@ pub struct TxRecord<BlockNumber> {
 ///   see `Pallet::ensure_adapter_chain_declared`'s doc comment for why this
 ///   pallet self-declares it on first touch rather than requiring
 ///   `RequestQueued` to have already listed it.
+/// - `SettlementApproved` — Valuation's `DepositApproved`/`RedeemApproved` event,
+///   which links this request to a `settlement_id`. Named to be unmistakable next to
+///   `RequestCompleted` below: this is about the request being approved *into a
+///   settlement*, not about the request's own delivery pipeline finishing (a
+///   deliberately different concept — see `RequestCompleted`'s own note). For a
+///   Multichain product this fires at Hub Valuation right after every one of the
+///   settlement's `collect_response_chain_ids` has reported NAV (see
+///   `docs/tranche-tx-registry/settlement-flow.md`'s 1.5) — i.e. at essentially the
+///   same moment the settlement's own Hub-vault completion condition
+///   (`try_close_hub_vault_requests`) becomes true, via a separate,
+///   independently-ordered `record_settlement_tx` call. Recording
+///   `SettlementApproved` both writes `RequestEntry::settlement_id`/`approved_tx` and
+///   links `request_id` into `SettlementRequests` — see that storage's doc comment
+///   for why this pallet keeps its own copy of this linkage rather than asking
+///   pallet-tranche-investments for it. Because of the race with the settlement-side
+///   trigger described above, recording `SettlementApproved` also opportunistically
+///   closes this one request out of `InvestorActiveRequests` immediately if its
+///   settlement's completion condition has *already* landed by the time this call
+///   runs (see `Pallet::try_close_request`) — otherwise it would sit there forever,
+///   since nothing else re-triggers once the settlement-side condition has already
+///   fired.
 ///
 /// `adapter_chain_ids` (the explicit parameter) is only ever supplied at
 /// `RequestQueued` — never at `Requested`, regardless of Hub or Spoke — since
@@ -142,16 +164,25 @@ pub struct TxRecord<BlockNumber> {
 /// above — `RequestQueued` merges its `adapter_chain_ids` into whatever's
 /// already there rather than overwriting it.
 ///
-/// `None` and `Completed` are read-only sentinels, never valid
+/// `None` and `RequestCompleted` are read-only sentinels, never valid
 /// `record_request_tx` input (rejected with `Error::InvalidRequestStep`).
 /// Unlike `SettlementStep::Queued` (which `get_settlement` genuinely returns
 /// for an untriggered settlement), `None` is never actually returned by
 /// `get_request` either — `get_request` reverts outright for a request_id
 /// that was never opened, so there's no "not yet requested" state to report —
 /// it exists purely so `record_request_tx` has a well-defined way to reject
-/// step `0` as invalid input, same as `Completed`. Named `None` rather than
-/// `Queued` specifically to avoid sitting next to `RequestQueued` under a
+/// step `0` as invalid input, same as `RequestCompleted`. Named `None` rather
+/// than `Queued` specifically to avoid sitting next to `RequestQueued` under a
 /// near-identical name while meaning something completely different.
+///
+/// `RequestCompleted` (renamed from `Completed`) is `get_request`'s own
+/// `status` value once `RequestQueued` has landed and every declared Adapter
+/// chain's last step has too (or none were declared) — it describes the
+/// request's own delivery pipeline finishing, and is deliberately unrelated to
+/// whether the settlement it's linked to (see `SettlementApproved` above) has
+/// itself settled. `get_request`'s separate `settled` return value answers
+/// that second question — the bare name `Completed` read as ambiguous between
+/// the two once `SettlementApproved` existed alongside it, hence the rename.
 #[derive(
 	Clone,
 	Copy,
@@ -171,7 +202,17 @@ pub enum RequestStep {
 	RequestQueued,
 	AdapterBridgeExecuted,
 	AdapterApplied,
-	Completed,
+	/// Renamed from `Completed` — see this enum's doc comment for why, now that
+	/// `SettlementApproved` exists alongside it. Purely a Rust/interface.sol
+	/// identifier rename: enum variant *names* don't affect SCALE or Solidity
+	/// ABI encoding (only declaration order/discriminant does), so this didn't
+	/// need a migration despite `RequestStep` already being live.
+	RequestCompleted,
+	/// Appended after `RequestCompleted` (not inserted among the earlier
+	/// variants) to preserve their existing on-chain discriminants — this
+	/// pallet's `record_request_tx`/`RequestStep` were already live before this
+	/// variant was added.
+	SettlementApproved,
 }
 
 /// 0 = redeem, 1 = deposit — mirrors interface.sol's `order_type` and
@@ -227,16 +268,7 @@ pub struct RequestOpening {
 /// `Requested` step is recorded, and stay fixed from then on. Mirrors most of
 /// `pallet_tranche_investments::record_investment_request`'s parameter list
 /// (its `product_id`/`request_id` are this entry's own storage keys instead
-/// of fields) — `settlement_id` is deliberately NOT included: it isn't
-/// actually knowable at request_tx time. It's assigned by the Valuation
-/// Contract only once the request lands on the Hub and
-/// `record_investment_request` runs; the Spoke-side bridge message itself
-/// (Msg A / the redeem-request message) carries no settlement_id field for
-/// the recorder to observe. So this entry gives investors/dashboards the
-/// same request detail visibility during the request's own pipeline window
-/// that only exists officially in `pallet-tranche-investments` from the
-/// request's final leg onward — minus settlement_id, which isn't available
-/// any earlier than that regardless.
+/// of fields).
 ///
 /// Holds the Inbound leg's Bridge evidence (`bridge_tx`) directly rather than
 /// per-chain, unlike the Adapter legs (`RequestChainEntries`) — a request
@@ -245,6 +277,14 @@ pub struct RequestOpening {
 /// request (no Inbound leg applies — see `RequestStep`'s doc comment); unlike
 /// `bridge_tx`, `queued_tx` is populated for **every** request regardless of
 /// Hub or Spoke, since `RequestStep::RequestQueued` applies to both.
+///
+/// `settlement_id`/`approved_tx` were originally left out entirely (this
+/// pallet had no way to learn `settlement_id` before Valuation's
+/// `DepositApproved`/`RedeemApproved` event existed as a recordable step) —
+/// they're written by `RequestStep::SettlementApproved`, see that variant's
+/// doc comment on `RequestStep` for the full mechanism, including why this
+/// pallet now keeps its own copy of this linkage rather than asking
+/// `pallet-tranche-investments` for it.
 #[derive(
 	Clone,
 	Encode,
@@ -278,6 +318,12 @@ pub struct RequestEntry<BlockNumber> {
 	/// `tx_hash` as `request_tx`, recorded via a separate call — see
 	/// `RequestStep::RequestQueued`'s doc comment).
 	pub queued_tx: Option<TxRecord<BlockNumber>>,
+	/// The settlement cycle this request was approved into. `None` until
+	/// `RequestStep::SettlementApproved` is recorded — see that variant's doc
+	/// comment on `RequestStep`.
+	pub settlement_id: Option<SettlementId>,
+	/// Evidence for `RequestStep::SettlementApproved`.
+	pub approved_tx: Option<TxRecord<BlockNumber>>,
 }
 
 /// One chain's Adapter leg (Bridge+Applied) within a request — the Hub

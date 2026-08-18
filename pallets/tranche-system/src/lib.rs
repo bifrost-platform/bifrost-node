@@ -9,9 +9,9 @@ pub use weights::WeightInfo;
 
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, H160, H256, U256};
+use sp_core::{ConstU32, H160, U256};
 use sp_runtime::{BoundedBTreeMap, BoundedVec, RuntimeDebug};
-use sp_std::{marker::PhantomData, vec::Vec};
+use sp_std::marker::PhantomData;
 
 // ---------------------------------------------------------------------------
 // Primitive type aliases / constants
@@ -574,26 +574,6 @@ pub trait AdapterInspect {
 	/// `collect_response_chain_ids` (Collect/Response query NAV from an Adapter, never a
 	/// vault).
 	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
-}
-
-/// Unlike `VaultInspect`/`AdapterInspect` above, this is implemented by
-/// pallet-tranche-investments, not by pallet-tranche-system itself — it's hosted in
-/// this crate only because both pallet-tranche-investments and
-/// pallet-tranche-tx-registry already depend on it, and pallet-tranche-tx-registry
-/// deliberately has no dependency on pallet-tranche-investments directly (see that
-/// crate's module docs / interface.sol's DRAFT note on why the two precompiles were
-/// split apart). Consumed by pallet-tranche-tx-registry's `record_settlement_tx` to
-/// automatically close out `InvestorActiveRequests` entries when a settlement's
-/// Finalize-Hooks leg lands, without needing that dependency or an off-chain-attested
-/// request list from the recorder.
-pub trait RequestSettlementInspect {
-	/// Returns every request_id `record_investment_approval` has linked to
-	/// `(product_id, settlement_id)` — i.e. every request approved into that
-	/// settlement cycle, regardless of which chain each one originated on (the
-	/// caller is expected to filter by origin chain itself, since this trait has
-	/// no notion of chains). Empty if no request has been approved into this
-	/// settlement (yet, or ever).
-	fn settlement_requests(product_id: ProductId, settlement_id: U256) -> Vec<H256>;
 }
 
 // ---------------------------------------------------------------------------
