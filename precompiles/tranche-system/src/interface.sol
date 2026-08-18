@@ -101,6 +101,35 @@ pragma solidity >=0.8.0;
  *     (routes capital to yield sources) even though both are keyed by `chain_id`.
  *     Hub included: a product with a Hub-deployed vault needs a Hub-chain entry
  *     here too, same as any Spoke chain.
+ *   - Single-chain products (added 2026-08-18): everything above describes the
+ *     hub-spoke multichain model (`create_product` and friends), where a Hub-chain
+ *     Valuation Contract prices vaults that may live on other chains. A product can
+ *     instead be entirely single-chain — Vault(s), TrancheManager, Valuation,
+ *     Adapters, and a Ledger contract all on one EVM chain (not necessarily the
+ *     Hub) — via `create_single_chain_product`. `get_product`, `get_tranches`, and
+ *     `get_adapters` are model-agnostic: they work for both kinds (see each
+ *     function's own doc for how single-chain values map onto their return shape).
+ *     `get_multichain_adapters`/`get_multichain_tranche_managers` only work for the
+ *     multichain kind (revert otherwise); `get_tranche_manager`/`get_ledger` only
+ *     work for the single-chain kind (revert otherwise, no multichain equivalent
+ *     for `get_ledger` — see below).
+ *   - Single-chain products additionally support `SettlementMode.Sync`: request and
+ *     settlement happen atomically, in the same transaction, since there's no
+ *     cross-chain leg to wait on. Only structurally possible single-chain — a
+ *     multichain product is always `Async` (implicitly, via `ValuationInput`'s
+ *     settlement fields), since a cross-chain leg always takes more than one block.
+ *     `SettlementModeInput.is_sync` discriminates the two; the three settlement_*
+ *     fields are `0` and not meaningful when `is_sync == true`.
+ *   - A single-chain product has no `pallet-tranche-investments` interaction at all
+ *     (that pallet assumes a Hub-deployed Valuation) — instead, its `ledger`
+ *     contract, on the same chain, mirrors pallet-tranche-investments' interface
+ *     and plays that role locally. This pallet only stores its address.
+ *   - A single-chain product's Adapters are a flat, ungrouped list — there is no
+ *     MultichainAdapter routing layer above them (`MultichainAdapterInput` simply
+ *     doesn't exist in this model), since there's nothing to route between with
+ *     only one chain. `AdapterInput.weightBps` across the whole flat list must sum
+ *     to exactly 10_000, same invariant as one `MultichainAdapterInput`'s nested
+ *     `adapters`.
  *
  * Address: 0x0000000000000000000000000000000000000200
  */
@@ -233,6 +262,37 @@ interface TrancheSystem {
         address tranche_manager_address;
     }
 
+    /// @param is_sync                      True = settle atomically in the same transaction as
+    ///                                     the request, no settlement cycle at all. Only valid
+    ///                                     for single-chain products, see notes above. False =
+    ///                                     same cadence semantics as ValuationInput's fields
+    /// @param settlement_start_timestamp  Ignored when is_sync; see ValuationInput's field of
+    ///                                     the same name otherwise
+    /// @param settlement_length_secs      Ignored when is_sync; see ValuationInput's field of
+    ///                                     the same name otherwise
+    /// @param settlement_offset_secs      Ignored when is_sync; see ValuationInput's field of
+    ///                                     the same name otherwise
+    struct SettlementModeInput {
+        bool is_sync;
+        uint64 settlement_start_timestamp;
+        uint64 settlement_length_secs;
+        uint64 settlement_offset_secs;
+    }
+
+    /// @param base_asset          The product's denomination asset, on the product's chain_id
+    /// @param valuation_address   The Valuation contract address, on the product's chain_id —
+    ///                            NOT necessarily the Hub chain, unlike ValuationInput's field
+    ///                            of the same name
+    /// @param settlement_mode     Sync or Async settlement — see SettlementModeInput
+    /// @dev A parallel type to ValuationInput, not a reuse of it — ValuationInput's settlement
+    ///      fields are already live on-chain via create_product, so this stays separate rather
+    ///      than reshaping that already-shipped interface just to share a type here.
+    struct SingleChainValuationInput {
+        address base_asset;
+        address valuation_address;
+        SettlementModeInput settlement_mode;
+    }
+
     /// @dev `product_admin` is not a function input on create_product (see below) —
     ///      it's the caller's own EVM address, already proven to hold ProductAdmin
     ///      for `product_id` by the precompile before dispatch. Included here only
@@ -270,6 +330,21 @@ interface TrancheSystem {
     event MultichainTrancheManagersSet(
         uint256 product_id,
         MultichainTrancheManagerInput[] multichain_tranche_managers
+    );
+    /// @dev `product_admin` is not a function input on create_single_chain_product, same
+    ///      reasoning as ProductCreated's `product_admin` above.
+    event SingleChainProductCreated(
+        uint256 product_id,
+        address product_admin,
+        uint64 chain_id,
+        address base_asset,
+        address valuation_address,
+        address tranche_manager,
+        address ledger,
+        bool is_sync,
+        uint64 settlement_start_timestamp,
+        uint64 settlement_length_secs,
+        uint64 settlement_offset_secs
     );
 
     /**
@@ -320,9 +395,49 @@ interface TrancheSystem {
     ) external;
 
     /**
+     * @notice Create a new single-chain product: every contract (Vault(s),
+     *         TrancheManager, Valuation, Adapters, Ledger) lives on one EVM chain
+     *         (`chain_id`), not necessarily the Hub — see notes above for how this
+     *         differs from create_product's hub-spoke model.
+     * @dev Same caller-authorization model as create_product (ProductAdmin for
+     *      `product_id`, checked by the precompile before dispatch).
+     *      `tranches` uses the same priority-sort-and-validate rules as
+     *      create_product's `tranches`, plus one extra check: every entry's
+     *      `vault.chain_id` must equal `chain_id` (reverts otherwise).
+     *      `adapters` is a flat list — see notes above — and its `weightBps` must
+     *      sum to exactly 10_000, same invariant as one MultichainAdapterInput's
+     *      nested `adapters`.
+     *      When `valuation.settlement_mode.is_sync` is false, the same
+     *      `settlement_offset_secs < settlement_length_secs` and
+     *      `settlement_start_timestamp > now` checks as create_product apply.
+     *      Emits SingleChainProductCreated on success.
+     * @param product_id        Hub product ID (already granted to the caller via ProductAdmin)
+     * @param chain_id          The single EVM chain every contract in this product lives on
+     * @param valuation         (base_asset, valuation_address, settlement_mode) — see
+     *                          SingleChainValuationInput
+     * @param tranches          Tranche configs; every entry's vault.chain_id must equal chain_id
+     * @param tranche_manager   The single TrancheManager contract address, on chain_id
+     * @param adapters          Flat individual-Adapter registrations (no MultichainAdapter
+     *                          routing layer above them)
+     * @param ledger            The Ledger contract address, on chain_id — mirrors
+     *                          pallet-tranche-investments' interface locally for this product
+     */
+    function create_single_chain_product(
+        uint256 product_id,
+        uint64 chain_id,
+        SingleChainValuationInput calldata valuation,
+        TrancheInput[] calldata tranches,
+        address tranche_manager,
+        AdapterInput[] calldata adapters,
+        address ledger
+    ) external;
+
+    /**
      * @notice Add, remove, or update a tranche on an existing product, identified
      *         by its vault (chain_id, vault_address).
-     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     * @dev Only applies to Multichain products — reverts if `product_id` is a
+     *      single-chain product (its tranches are fixed at create_single_chain_product time).
+     *      Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
      *      path that bypasses this check.
@@ -365,7 +480,9 @@ interface TrancheSystem {
      * @notice Replace, atomically, the entire set of individual yield-source
      *         Adapters nested under one of an existing product's MultichainAdapter
      *         entries (identified by `parent_adapter_address`, `parent_chain_id`).
-     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     * @dev Only applies to Multichain products — reverts if `product_id` is a
+     *      single-chain product (it has no MultichainAdapter routing layer at all).
+     *      Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
      *      path that bypasses this check.
@@ -399,7 +516,9 @@ interface TrancheSystem {
 
     /**
      * @notice Replace a product's entire MultichainAdapter routing table atomically.
-     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     * @dev Only applies to Multichain products — reverts if `product_id` is a
+     *      single-chain product (it has no MultichainAdapter routing layer at all).
+     *      Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
      *      path that bypasses this check.
@@ -434,7 +553,10 @@ interface TrancheSystem {
 
     /**
      * @notice Replace a product's entire per-chain TrancheManager table atomically.
-     * @dev Caller must hold the ProductAdmin role for `product_id` — enforced by the
+     * @dev Only applies to Multichain products — reverts if `product_id` is a
+     *      single-chain product (it has a single fixed `tranche_manager` address instead,
+     *      set at create_single_chain_product time).
+     *      Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
      *      path that bypasses this check.
@@ -453,8 +575,11 @@ interface TrancheSystem {
     ) external;
 
     /**
-     * @notice Read a product's Valuation binding and settlement-cadence config.
-     * @dev Reverts if `product_id` doesn't exist.
+     * @notice Read a product's Valuation binding and settlement-cadence config. Works for
+     *         both Multichain and single-chain products.
+     * @dev Reverts if `product_id` doesn't exist. For a single-chain product settling SYNC
+     *      (see SettlementModeInput), the three settlement_* fields below are all 0 and not
+     *      meaningful — treat all-zero as SYNC.
      * @param product_id The product to look up
      */
     function get_product(
@@ -473,8 +598,9 @@ interface TrancheSystem {
     /**
      * @notice Read a product's tranches, in waterfall priority order (index 0 = highest
      *         priority — see notes above).
-     * @dev Reverts if `product_id` doesn't exist. Each returned entry's `priority` field
-     *      reflects current stored order, not necessarily whatever `priority` value the
+     * @dev Reverts if `product_id` doesn't exist. Works for both Multichain and
+     *      single-chain products. Each returned entry's `priority` field reflects
+     *      current stored order, not necessarily whatever `priority` value the
      *      tranche was originally added/updated with.
      * @param product_id The product to look up
      */
@@ -483,9 +609,10 @@ interface TrancheSystem {
     ) external view returns (TrancheInput[] memory tranches);
 
     /**
-     * @notice Read a product's MultichainAdapter routing table, each entry carrying its
-     *         own nested individual-Adapter registrations.
-     * @dev Reverts if `product_id` doesn't exist.
+     * @notice Read a Multichain product's MultichainAdapter routing table, each entry
+     *         carrying its own nested individual-Adapter registrations.
+     * @dev Reverts if `product_id` doesn't exist, or if it's a single-chain product (see
+     *      get_adapters for a simpler, model-agnostic alternative).
      * @param product_id The product to look up
      */
     function get_multichain_adapters(
@@ -495,9 +622,33 @@ interface TrancheSystem {
         view
         returns (MultichainAdapterInput[] memory multichain_adapters);
 
+    /// @param chain_id EVM chain ID these adapters live on
+    /// @param adapters Individual Adapters on this chain
+    struct AdaptersByChain {
+        uint64 chain_id;
+        AdapterInput[] adapters;
+    }
+
     /**
-     * @notice Read a product's per-chain TrancheManager bindings.
-     * @dev Reverts if `product_id` doesn't exist. See MultichainTrancheManagerInput.
+     * @notice Read a product's Adapters, grouped by the chain they live on. Works for both
+     *         Multichain and single-chain products.
+     * @dev Reverts if `product_id` doesn't exist. For a Multichain product, one entry per
+     *      MultichainAdapter routing entry — `chain_id` is that entry's own `chain_id`,
+     *      `adapters` its nested individual-Adapter list (the MultichainAdapter's own
+     *      routing address/weightBps aren't included here — use get_multichain_adapters for
+     *      that full detail). For a single-chain product, always exactly one entry: the
+     *      product's single `chain_id` and its flat Adapter list.
+     * @param product_id The product to look up
+     */
+    function get_adapters(
+        uint256 product_id
+    ) external view returns (AdaptersByChain[] memory adapters_by_chain);
+
+    /**
+     * @notice Read a Multichain product's per-chain TrancheManager bindings.
+     * @dev Reverts if `product_id` doesn't exist, or if it's a single-chain product
+     *      (which has a single tranche_manager address instead — see
+     *      get_tranche_manager). See MultichainTrancheManagerInput.
      * @param product_id The product to look up
      */
     function get_multichain_tranche_managers(
@@ -508,6 +659,29 @@ interface TrancheSystem {
         returns (
             MultichainTrancheManagerInput[] memory multichain_tranche_managers
         );
+
+    /**
+     * @notice Read a single-chain product's single TrancheManager contract address.
+     * @dev Reverts if `product_id` doesn't exist, or if it's a Multichain product (which has
+     *      a per-chain table instead — see get_multichain_tranche_managers).
+     * @param product_id The product to look up
+     * @return tranche_manager The TrancheManager contract address, on the product's chain_id
+     */
+    function get_tranche_manager(
+        uint256 product_id
+    ) external view returns (address tranche_manager);
+
+    /**
+     * @notice Read a single-chain product's Ledger contract address — mirrors
+     *         pallet-tranche-investments' interface locally for this product.
+     * @dev Reverts if `product_id` doesn't exist, or if it's a Multichain product (which has
+     *      no Ledger contract at all; it interacts with pallet-tranche-investments directly).
+     * @param product_id The product to look up
+     * @return ledger The Ledger contract address, on the product's chain_id
+     */
+    function get_ledger(
+        uint256 product_id
+    ) external view returns (address ledger);
 
     /**
      * @notice Read the single, global Hub-chain Orchestrator contract address.

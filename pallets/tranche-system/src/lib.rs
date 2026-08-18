@@ -34,8 +34,15 @@ pub const MAX_MULTICHAIN_ADAPTERS: u32 = 20;
 pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 20;
 
 /// Maximum number of per-chain TrancheManager bindings per product (see
-/// `ProductDetails::multichain_tranche_managers`).
+/// `MultichainProductDetails::multichain_tranche_managers`).
 pub const MAX_TRANCHE_MANAGERS: u32 = 20;
+
+/// Maximum number of individual Adapters per single-chain product (see
+/// `SingleChainProductDetails::adapters`) — a flat list, unlike
+/// `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER`'s per-MultichainAdapter nesting,
+/// since a single-chain product has no MultichainAdapter wrapper at all.
+/// Same bound as `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER` — no reason to differ.
+pub const MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT: u32 = 20;
 
 /// Maximum number of collateral NFTs per (OffchainSource) Adapter.
 /// Carried over from pallet-pools' `MAX_COLLATERALS`, now scoped per-adapter
@@ -79,8 +86,8 @@ pub struct VaultId {
 ///
 /// Nested Adapters (see `AdapterInfo`) are NOT keyed by this type — they carry
 /// no `chain_id` of their own (removed 2026-07-27; a nested adapter always
-/// lives on its parent MultichainAdapter's chain), so `ProductDetails`'s nested
-/// `adapters` map is keyed by plain `H160` instead. `AdapterIndex`'s reverse-index
+/// lives on its parent MultichainAdapter's chain), so `MultichainProductDetails`'s
+/// nested `adapters` map is keyed by plain `H160` instead. `AdapterIndex`'s reverse-index
 /// (see pallet/mod.rs) still uses this type, though — global adapter uniqueness
 /// stays chain-aware (some on-chain protocols share the same contract address
 /// across different chains via CREATE2), it's just derived from the parent
@@ -158,7 +165,9 @@ pub enum TrancheType {
 /// A single tranche within a product.
 ///
 /// Deliberately has NO explicit `priority` field — priority is represented by
-/// this entry's position within `ProductDetails::tranches` (a `BoundedVec`).
+/// this entry's position within the owning product's `tranches`
+/// (`MultichainProductDetails::tranches` or `SingleChainProductDetails::tranches`
+/// — both a `BoundedVec`).
 /// `set_tranche`'s insert-and-shift semantics (see interface.sol) map directly
 /// onto `Vec::insert`/`Vec::remove` at the target position, so there's no
 /// separate ordering value to keep in sync.
@@ -183,7 +192,7 @@ pub struct Tranche {
 
 /// One entry of `create_product`'s `tranches` input. Carries an explicit
 /// `priority` (0 = highest) used once, at creation time, to sort the incoming
-/// set into `ProductDetails::tranches`' final order — `priority` itself is
+/// set into the owning product's `tranches`' final order — `priority` itself is
 /// never persisted (see `Tranche`'s doc comment for why position alone
 /// suffices after that). Sorting by `priority` must yield all `Senior`
 /// tranches before all `Junior` ones — `create_product` reverts otherwise, so
@@ -272,8 +281,9 @@ pub struct AdapterInfo<AccountId> {
 
 /// A single MultichainAdapter routing entry: its top-level allocation weight,
 /// plus the individual Adapters it internally manages/routes to (2026-07-27:
-/// nested here rather than living in a separate flat `ProductDetails::adapters`
-/// map — a MultichainAdapter's internal split across the protocols it manages
+/// nested here rather than living in a separate flat
+/// `MultichainProductDetails::adapters` map — a MultichainAdapter's internal
+/// split across the protocols it manages
 /// is a parent-child relationship, not two independent registries).
 /// `weight_bps` is basis points (10_000 = 100%) — across one product's full
 /// `multichain_adapters` list, these must always sum to exactly 10_000. See
@@ -342,7 +352,40 @@ pub struct ValuationInfo {
 }
 
 // ---------------------------------------------------------------------------
-// ProductDetails
+// SettlementMode
+// ---------------------------------------------------------------------------
+
+/// How a single-chain product settles requests — see `SingleChainProductDetails`'s
+/// doc comment for why this doesn't exist for multichain products (they're
+/// always `Async`, implicitly, via `MultichainProductDetails::valuation`'s
+/// settlement fields — a cross-chain leg always takes more than one block, so
+/// there's structurally no such thing as multichain `Sync`).
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub enum SettlementMode {
+	/// Request and settlement happen atomically, in the same transaction —
+	/// there's no settlement cycle at all. Only structurally possible for a
+	/// single-chain product: with every contract (Vault, TrancheManager,
+	/// Valuation, Adapters, Ledger) on one chain and no bridging leg to wait
+	/// on, a deposit can be applied and settled in one call. A single-chain
+	/// product need not use this — it may still opt into `Async` if its
+	/// underlying yield sources need a batching cycle.
+	Sync,
+	/// Requests accumulate and settle on a fixed cycle. Same three fields and
+	/// semantics as the ones `ValuationInfo` carries for multichain products
+	/// (see those fields' doc comments) — duplicated here per-variant, rather
+	/// than shared, so `Sync` mode isn't forced to fake values for fields
+	/// that don't apply to it at all.
+	Async {
+		settlement_start_timestamp: u64,
+		settlement_length_secs: u64,
+		settlement_offset_secs: u64,
+	},
+}
+
+// ---------------------------------------------------------------------------
+// MultichainProductDetails
 // ---------------------------------------------------------------------------
 
 /// Generic over `AccountId` (via `SourceType`, see its doc comment) — unlike the
@@ -352,10 +395,15 @@ pub struct ValuationInfo {
 /// own `ProductAdmins` storage, since there's exactly one ProductAdmin per
 /// product and no ambiguity about where it belongs, unlike `borrower` which
 /// only makes sense attached to a specific adapter.
+///
+/// The hub-spoke multichain model: `valuation` (and its Hub-chain Valuation
+/// contract) is the single source of truth other chains' vaults ultimately
+/// settle against via cross-chain bridging — see `SingleChainProductDetails`
+/// for the alternative, entirely-single-chain model.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct ProductDetails<AccountId> {
+pub struct MultichainProductDetails<AccountId> {
 	pub valuation: ValuationInfo,
 	/// Ordered by waterfall priority — index 0 is highest priority. See
 	/// `Tranche`'s doc comment for why there's no separate `priority` field.
@@ -376,6 +424,99 @@ pub struct ProductDetails<AccountId> {
 	/// per product — two products sharing a chain each bind their own
 	/// TrancheManager instance there.
 	pub multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
+}
+
+// ---------------------------------------------------------------------------
+// SingleChainValuationInfo
+// ---------------------------------------------------------------------------
+
+/// A single-chain product's Valuation binding + settlement mode — mirrors
+/// `ValuationInfo`'s role for `MultichainProductDetails`, as its own type
+/// rather than reusing `ValuationInfo` directly: `ValuationInfo`'s three flat
+/// settlement fields are already live on-chain via `create_product`
+/// (deployed), so changing its shape to carry `SettlementMode` instead would
+/// break that already-shipped interface just to share code with this new,
+/// unrelated path. A parallel type costs nothing and touches none of that.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct SingleChainValuationInfo {
+	/// The product's denomination asset, on the product's `chain_id`. Same
+	/// role as `ValuationInfo::base_asset`.
+	pub base_asset: H160,
+	/// The Valuation contract address, on the product's `chain_id` — NOT
+	/// necessarily the Hub chain, unlike `ValuationInfo::valuation_address`.
+	pub valuation_address: H160,
+	pub settlement_mode: SettlementMode,
+}
+
+// ---------------------------------------------------------------------------
+// SingleChainProductDetails
+// ---------------------------------------------------------------------------
+
+/// A product whose entire stack — Vault(s), TrancheManager, Valuation,
+/// Adapters, and a Ledger contract — lives on one EVM chain, which need not
+/// be the Hub. No hub-spoke routing, no cross-chain bridging: `tranches`,
+/// `tranche_manager`, and `adapters` all implicitly live on `chain_id`
+/// (enforced at `create_single_chain_product`), unlike `MultichainProductDetails`
+/// where each of those can span a different chain.
+///
+/// No `pallet-tranche-investments` interaction: since `valuation` isn't
+/// necessarily Hub-deployed, this pallet's usual Hub-side settlement
+/// recording path doesn't apply. Instead, a `ledger` contract on `chain_id`
+/// mirrors `pallet-tranche-investments`' interface and plays that role
+/// locally — this pallet only stores its address, it does not talk to it.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct SingleChainProductDetails<AccountId> {
+	pub valuation: SingleChainValuationInfo,
+	/// The single EVM chain every contract in this product lives on.
+	pub chain_id: u64,
+	/// This product's waterfall, ordered by priority (index 0 = highest) —
+	/// same flexible shape as `MultichainProductDetails::tranches` (any mix
+	/// of Senior/Junior counts, as long as every Senior precedes every
+	/// Junior; see `Tranche`'s doc comment), except every entry's
+	/// `vault.chain_id` must equal `chain_id` (enforced at
+	/// `create_single_chain_product`).
+	pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+	/// The single TrancheManager contract address, on `chain_id`. Unlike
+	/// `MultichainProductDetails::multichain_tranche_managers`, there's only
+	/// ever one — no per-chain table, since there's only one chain.
+	pub tranche_manager: H160,
+	/// Flat individual-Adapter registry — unlike
+	/// `MultichainProductDetails::multichain_adapters`, there's no
+	/// MultichainAdapter routing layer above these (nothing to route between,
+	/// with only one chain), so this is a single, ungrouped level, keyed by
+	/// each adapter's own address the same way `MultichainAdapterInfo::adapters`
+	/// is. `weight_bps` across the whole map must sum to exactly 10_000.
+	pub adapters: BoundedBTreeMap<
+		H160,
+		AdapterInfo<AccountId>,
+		ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
+	>,
+	/// The Ledger contract address, on `chain_id` — mirrors
+	/// `pallet-tranche-investments`' interface locally for this product. See
+	/// this struct's doc comment.
+	pub ledger: H160,
+}
+
+// ---------------------------------------------------------------------------
+// ProductDetails
+// ---------------------------------------------------------------------------
+
+/// Every registered product, whichever model it follows. One flat `Products`
+/// storage map / `ProductId` namespace covers both variants — `product_id`
+/// must stay globally unique regardless of model, since e.g.
+/// pallet-tranche-tx-registry keys everything by `product_id` alone. Callers
+/// (extrinsics, precompile view functions) match on the variant they expect
+/// and reject the other with `Error::WrongProductType`.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub enum ProductDetails<AccountId> {
+	Multichain(MultichainProductDetails<AccountId>),
+	SingleChain(SingleChainProductDetails<AccountId>),
 }
 
 // ---------------------------------------------------------------------------
@@ -415,7 +556,7 @@ pub trait VaultInspect {
 /// question — same rationale as `VaultInspect`.
 pub trait AdapterInspect {
 	/// Returns `true` if `key` is registered as one of `product_id`'s
-	/// top-level MultichainAdapters (see `ProductDetails::multichain_adapters`).
+	/// top-level MultichainAdapters (see `MultichainProductDetails::multichain_adapters`).
 	fn multichain_adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool;
 	/// Returns `true` if `key` is registered as one of `product_id`'s nested
 	/// individual Adapters (see `MultichainAdapterInfo::adapters`), under any

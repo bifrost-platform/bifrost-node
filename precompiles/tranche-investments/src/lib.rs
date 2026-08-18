@@ -276,6 +276,7 @@ where
 	fn get_settlement_id(handle: &mut impl PrecompileHandle, product_id: U256) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		Ok(pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
 			.unwrap_or_default())
 	}
@@ -297,6 +298,7 @@ where
 		limit: U256,
 	) -> EvmResult<Vec<H256>> {
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let offset = to_u64(offset)?;
 		let limit = to_u64(limit)?;
 
@@ -341,6 +343,7 @@ where
 	) -> EvmResult<(Address, u64, Address, U256, U256, u8, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
 		if let Some(requested) =
 			pallet_tranche_investments::RequestedInvestments::<Runtime>::get(product_id, request_id)
@@ -387,6 +390,7 @@ where
 	) -> EvmResult<(U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let (chain_id, vault_address) = tranche;
 		let vault = VaultId { chain_id, vault_address: vault_address.0 };
 
@@ -415,6 +419,7 @@ where
 	) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let Some(last_id) =
 			pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
 		else {
@@ -440,6 +445,20 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
 
+		// Checked first, before any pallet-tranche-investments storage reads below —
+		// a single-chain product structurally can never have anything recorded there
+		// (see `SingleChainProductDetails`'s doc comment), so there's no point
+		// reading further only to hit a less specific "not found" error.
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			pallet_tranche_system::ProductDetails::Multichain(product) => product,
+			pallet_tranche_system::ProductDetails::SingleChain(_) => {
+				return Err(revert("product is a single-chain product; not tracked here"))
+			},
+		};
+
 		let last_id = pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let settlement =
@@ -448,9 +467,6 @@ where
 		let product_nav =
 			pallet_tranche_investments::ProductNavs::<Runtime>::get(product_id, last_id)
 				.ok_or_else(|| revert("product has no recorded settlement"))?;
-
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
 
 		let mut share_prices = Vec::with_capacity(product.tranches.len());
 		let mut tranche_navs = Vec::with_capacity(product.tranches.len());
@@ -497,6 +513,7 @@ where
 	) -> EvmResult<(Vec<EvmTrancheSettle>, U256, U256, U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
 		let settlement =
 			pallet_tranche_investments::Settlements::<Runtime>::get(product_id, settlement_id)
@@ -551,6 +568,7 @@ where
 	) -> EvmResult<Vec<EvmAdapterValuation>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
 		let valuations = pallet_tranche_investments::AdapterValuations::<Runtime>::get(
 			product_id,
@@ -576,6 +594,7 @@ where
 	) -> EvmResult<(U256, U256, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_id = to_product_id(product_id)?;
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let approved =
 			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
 				.ok_or_else(|| revert("approval not found"))?;
@@ -597,6 +616,29 @@ fn to_product_id(product_id: U256) -> EvmResult<ProductId> {
 	Ok(product_id.as_u64())
 }
 
+/// Reverts if `product_id` is a registered single-chain product — this whole
+/// precompile only ever tracks Multichain products (a single-chain product's
+/// equivalent state lives in its own mirrored Ledger contract instead, see
+/// `SingleChainProductDetails`'s doc comment). A no-op if `product_id`
+/// doesn't exist at all, or is a Multichain product — each view function's
+/// own "not found"/default-value handling further down is unaffected by this
+/// check either way. Charges gas for the `Products` read it performs.
+fn ensure_not_single_chain_product<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+) -> EvmResult
+where
+	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
+{
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	if let Some(pallet_tranche_system::ProductDetails::SingleChain(_)) =
+		pallet_tranche_system::Products::<Runtime>::get(product_id)
+	{
+		return Err(revert("product is a single-chain product; not tracked here"));
+	}
+	Ok(())
+}
+
 /// Reads `pallet-tranche-system`'s `Products` storage directly to confirm
 /// `caller` equals `product_id`'s registered Valuation contract address.
 fn ensure_caller_is_valuation<Runtime>(product_id: ProductId, caller: H160) -> EvmResult
@@ -605,6 +647,15 @@ where
 {
 	let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
 		.ok_or_else(|| revert("product not found"))?;
+	// Single-chain products never interact with pallet-tranche-investments (no
+	// Hub-deployed Valuation to record against) — see
+	// `SingleChainProductDetails`'s doc comment.
+	let product = match product {
+		pallet_tranche_system::ProductDetails::Multichain(product) => product,
+		pallet_tranche_system::ProductDetails::SingleChain(_) => {
+			return Err(revert("product is a single-chain product; not tracked here"))
+		},
+	};
 	if product.valuation.valuation_address != caller {
 		return Err(revert("caller is not product_id's registered Valuation contract"));
 	}

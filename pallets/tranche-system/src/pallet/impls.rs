@@ -2,6 +2,7 @@ use crate::{AdapterKey, MultichainAdapterInfo, ProductId, Tranche, TrancheType};
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
+use sp_core::H160;
 use sp_std::collections::btree_set::BTreeSet;
 
 impl<T: Config> Pallet<T> {
@@ -85,6 +86,25 @@ impl<T: Config> Pallet<T> {
 					ensure!(!seen_junior, Error::<T>::SeniorMustPrecedeJunior);
 				},
 			}
+		}
+		Ok(())
+	}
+
+	/// `create_single_chain_product`-only: checks none of the incoming flat
+	/// Adapter addresses are already registered (on `chain_id`) to an
+	/// existing product — single-chain adapters share the same `AdapterIndex`
+	/// reverse-index as nested multichain ones (see `AdapterKey`'s doc
+	/// comment), so an address already used by a multichain product's nested
+	/// Adapter on the same chain collides here too. Intra-call duplicates are
+	/// impossible to begin with — `adapters` is a `BoundedBTreeMap`, keyed by
+	/// address.
+	pub(crate) fn ensure_single_chain_adapters_are_unregistered<'a>(
+		chain_id: u64,
+		addresses: impl Iterator<Item = &'a H160>,
+	) -> DispatchResult {
+		for address in addresses {
+			let key = AdapterKey { address: *address, chain_id };
+			ensure!(!AdapterIndex::<T>::contains_key(&key), Error::<T>::AdapterAlreadyRegistered);
 		}
 		Ok(())
 	}
