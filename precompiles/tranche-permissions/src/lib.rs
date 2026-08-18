@@ -22,9 +22,9 @@ pub(crate) const SELECTOR_LOG_PERMISSION_GRANTED: [u8; 32] =
 pub(crate) const SELECTOR_LOG_PERMISSION_REVOKED: [u8; 32] =
 	keccak256!("PermissionRevoked(uint64,uint8,address,uint64,address)");
 
-/// `Orchestrator.sendWhitelist(uint64,uint256,address,address,uint8)` selector
-/// (`cast sig "sendWhitelist(uint64,uint256,address,address,uint8)"`).
-const ORCHESTRATOR_SEND_WHITELIST_SELECTOR: [u8; 4] = [0xc8, 0x06, 0x2a, 0x4a];
+/// `Orchestrator.sendWhitelist(uint64,uint64,address,address,uint8)` selector
+/// (`cast sig "sendWhitelist(uint64,uint64,address,address,uint8)"`).
+const ORCHESTRATOR_SEND_WHITELIST_SELECTOR: [u8; 4] = [0xea, 0x90, 0xaf, 0x2c];
 
 /// Gas limit for the `Orchestrator.sendWhitelist` subcall.
 const ORCHESTRATOR_CALL_GAS_LIMIT: u64 = 1_000_000;
@@ -314,9 +314,12 @@ where
 	}
 }
 
-/// ABI-encodes `Orchestrator.sendWhitelist(uint64,uint256,address,address,uint8)`'s
+/// ABI-encodes `Orchestrator.sendWhitelist(uint64,uint64,address,address,uint8)`'s
 /// calldata — five statically-sized parameters, so a flat selector + five
-/// 32-byte left-padded slots, no dynamic offsets needed.
+/// 32-byte left-padded slots, no dynamic offsets needed. `uint64` and `uint256`
+/// encode an in-range value to the same 32-byte word, so only the selector
+/// (derived from the signature string) actually changes here — the
+/// `product_id` slot's bytes are unaffected.
 fn encode_send_whitelist(
 	chain_id: u64,
 	product_id: pallet_tranche_system::ProductId,
