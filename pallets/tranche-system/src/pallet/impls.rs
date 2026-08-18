@@ -109,6 +109,36 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	/// `set_adapters`-only: deep-replaces `AdapterIndex` entries for one flat
+	/// Adapter address set on `chain_id` — drops every `old_address`'s entry
+	/// first (so re-registering the same address, e.g. just to change its
+	/// weightBps, isn't mistaken for a collision below), then checks every
+	/// `new_address` is free, then writes them all to `product_id`. Shared by
+	/// `set_adapters`'s Multichain branch (one parent's nested set, `chain_id`
+	/// = that parent's own) and SingleChain branch (the product's whole flat
+	/// set, `chain_id` = the product's own).
+	pub(crate) fn replace_adapter_index<'a>(
+		product_id: ProductId,
+		chain_id: u64,
+		old_addresses: impl Iterator<Item = &'a H160>,
+		new_addresses: impl Iterator<Item = &'a H160> + Clone,
+	) -> DispatchResult {
+		for old_address in old_addresses {
+			AdapterIndex::<T>::remove(&AdapterKey { address: *old_address, chain_id });
+		}
+		for address in new_addresses.clone() {
+			let new_key = AdapterKey { address: *address, chain_id };
+			ensure!(
+				!AdapterIndex::<T>::contains_key(&new_key),
+				Error::<T>::AdapterAlreadyRegistered
+			);
+		}
+		for address in new_addresses {
+			AdapterIndex::<T>::insert(&AdapterKey { address: *address, chain_id }, product_id);
+		}
+		Ok(())
+	}
+
 	/// Writes `MultichainAdapterIndex`/`AdapterIndex` reverse-index entries for
 	/// every MultichainAdapter (and its nested Adapters) in the given set.
 	/// Callers must have already validated uniqueness (see
