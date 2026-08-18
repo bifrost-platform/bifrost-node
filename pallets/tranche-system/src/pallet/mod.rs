@@ -496,15 +496,18 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Add, remove, or update a tranche on an existing product, identified
-		/// by its vault. Origin must be `ProductAdminOrigin` — same
-		/// precompile-only gating as `create_product`.
+		/// Add, remove, or update a tranche on an existing product — Multichain or
+		/// single-chain alike, identified by its vault. Origin must be
+		/// `ProductAdminOrigin` — same precompile-only gating as `create_product`.
 		///
 		/// Field usage differs by `action`, mirroring interface.sol's
 		/// `set_tranche`. Every branch re-validates, on the resulting full
 		/// tranche list, that all `Senior` tranches still precede all `Junior`
 		/// ones (same invariant `create_product` establishes) — reverts if the
-		/// requested change would break it.
+		/// requested change would break it. For a single-chain product, `Add`/
+		/// `Update` additionally revert unless `vault.chain_id` equals the
+		/// product's own `chain_id` (same constraint
+		/// `create_single_chain_product` enforces at creation time).
 		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
 		///   any product). `tranche_type`, `asset`, `shares`, and `priority` are used. If
 		///   `priority` is already occupied, the existing tranche at that slot (and everything
@@ -535,12 +538,23 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				let product = match product {
-					ProductDetails::Multichain(product) => product,
-					ProductDetails::SingleChain(_) => {
-						return Err(Error::<T>::WrongProductType.into())
+				let (tranches, single_chain_id) = match product {
+					ProductDetails::Multichain(product) => (&mut product.tranches, None),
+					ProductDetails::SingleChain(product) => {
+						(&mut product.tranches, Some(product.chain_id))
 					},
 				};
+				// A single-chain product has exactly one chain — every tranche's
+				// vault must live on it, same constraint `create_single_chain_product`
+				// enforces at creation time.
+				if let Some(chain_id) = single_chain_id {
+					if matches!(action, CrudAction::Add | CrudAction::Update) {
+						ensure!(
+							vault.chain_id == chain_id,
+							Error::<T>::SingleChainTranchesMustShareChain
+						);
+					}
+				}
 
 				match action {
 					CrudAction::Add => {
@@ -549,9 +563,8 @@ pub mod pallet {
 							Error::<T>::VaultAlreadyRegistered
 						);
 						let idx = priority as usize;
-						ensure!(idx <= product.tranches.len(), Error::<T>::InvalidPriority);
-						product
-							.tranches
+						ensure!(idx <= tranches.len(), Error::<T>::InvalidPriority);
+						tranches
 							.try_insert(
 								idx,
 								Tranche {
@@ -562,37 +575,34 @@ pub mod pallet {
 								},
 							)
 							.map_err(|_| Error::<T>::TooManyTranches)?;
-						Self::ensure_senior_precedes_junior(&product.tranches)?;
+						Self::ensure_senior_precedes_junior(tranches)?;
 						Vaults::<T>::insert(&vault, product_id);
 					},
 					CrudAction::Remove => {
-						let idx = product
-							.tranches
+						let idx = tranches
 							.iter()
 							.position(|t| t.vault == vault)
 							.ok_or(Error::<T>::VaultNotFound)?;
-						product.tranches.remove(idx);
-						Self::ensure_senior_precedes_junior(&product.tranches)?;
+						tranches.remove(idx);
+						Self::ensure_senior_precedes_junior(tranches)?;
 						Vaults::<T>::remove(&vault);
 					},
 					CrudAction::Update => {
-						let idx = product
-							.tranches
+						let idx = tranches
 							.iter()
 							.position(|t| t.vault == vault)
 							.ok_or(Error::<T>::VaultNotFound)?;
 						let type_matches = matches!(
-							(&product.tranches[idx].tranche_type, &tranche_type),
+							(&tranches[idx].tranche_type, &tranche_type),
 							(TrancheType::Junior, TrancheType::Junior)
 								| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
 						);
 						ensure!(type_matches, Error::<T>::TrancheTypeImmutable);
 
-						product.tranches.remove(idx);
+						tranches.remove(idx);
 						let new_idx = priority as usize;
-						ensure!(new_idx <= product.tranches.len(), Error::<T>::InvalidPriority);
-						product
-							.tranches
+						ensure!(new_idx <= tranches.len(), Error::<T>::InvalidPriority);
+						tranches
 							.try_insert(
 								new_idx,
 								Tranche {
@@ -603,7 +613,7 @@ pub mod pallet {
 								},
 							)
 							.map_err(|_| Error::<T>::TooManyTranches)?;
-						Self::ensure_senior_precedes_junior(&product.tranches)?;
+						Self::ensure_senior_precedes_junior(tranches)?;
 					},
 				}
 				Ok(())
@@ -621,10 +631,17 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Replace, atomically, the entire set of individual Adapters nested
-		/// under one MultichainAdapter (identified by `parent_adapter_address`,
-		/// `parent_chain_id`). Origin must be `ProductAdminOrigin` — same
-		/// precompile-only gating as `create_product`.
+		/// Replace, atomically, a product's entire flat individual-Adapter set —
+		/// Multichain or single-chain alike. Origin must be `ProductAdminOrigin`
+		/// — same precompile-only gating as `create_product`.
+		///
+		/// For a Multichain product, this replaces one MultichainAdapter's
+		/// nested `adapters` (identified by `parent_adapter_address`,
+		/// `parent_chain_id` — reverts with `MultichainAdapterNotFound` if no
+		/// such parent exists). For a single-chain product, `parent_adapter_address`/
+		/// `parent_chain_id` are ignored (there's no MultichainAdapter parent
+		/// concept at all) — this replaces the product's whole flat `adapters`
+		/// map instead.
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_adapters())]
 		pub fn set_adapters(
@@ -644,42 +661,38 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				let product = match product {
-					ProductDetails::Multichain(product) => product,
-					ProductDetails::SingleChain(_) => {
-						return Err(Error::<T>::WrongProductType.into())
+				match product {
+					ProductDetails::Multichain(product) => {
+						let parent_key = AdapterKey {
+							address: parent_adapter_address,
+							chain_id: parent_chain_id,
+						};
+						let parent = product
+							.multichain_adapters
+							.get_mut(&parent_key)
+							.ok_or(Error::<T>::MultichainAdapterNotFound)?;
+						Self::replace_adapter_index(
+							product_id,
+							parent_chain_id,
+							parent.adapters.keys(),
+							adapters.keys(),
+						)?;
+						parent.adapters = adapters;
 					},
-				};
-				let parent_key =
-					AdapterKey { address: parent_adapter_address, chain_id: parent_chain_id };
-				let parent = product
-					.multichain_adapters
-					.get_mut(&parent_key)
-					.ok_or(Error::<T>::MultichainAdapterNotFound)?;
-
-				// Deep replace: drop this parent's current reverse-index entries
-				// first, so re-registering the same address under the same
-				// parent (e.g. just to change its weightBps) isn't mistaken for
-				// a collision below.
-				for old_address in parent.adapters.keys() {
-					AdapterIndex::<T>::remove(&AdapterKey {
-						address: *old_address,
-						chain_id: parent_chain_id,
-					});
+					ProductDetails::SingleChain(product) => {
+						// `parent_adapter_address`/`parent_chain_id` are ignored here —
+						// a single-chain product has no MultichainAdapter parent
+						// concept at all, so this replaces the product's whole flat
+						// `adapters` map instead of one parent's nested set.
+						Self::replace_adapter_index(
+							product_id,
+							product.chain_id,
+							product.adapters.keys(),
+							adapters.keys(),
+						)?;
+						product.adapters = adapters;
+					},
 				}
-				for address in adapters.keys() {
-					let new_key = AdapterKey { address: *address, chain_id: parent_chain_id };
-					ensure!(
-						!AdapterIndex::<T>::contains_key(&new_key),
-						Error::<T>::AdapterAlreadyRegistered
-					);
-				}
-				for address in adapters.keys() {
-					let new_key = AdapterKey { address: *address, chain_id: parent_chain_id };
-					AdapterIndex::<T>::insert(&new_key, product_id);
-				}
-
-				parent.adapters = adapters;
 				Ok(())
 			})?;
 

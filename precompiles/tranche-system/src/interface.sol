@@ -434,9 +434,11 @@ interface TrancheSystem {
 
     /**
      * @notice Add, remove, or update a tranche on an existing product, identified
-     *         by its vault (chain_id, vault_address).
-     * @dev Only applies to Multichain products — reverts if `product_id` is a
-     *      single-chain product (its tranches are fixed at create_single_chain_product time).
+     *         by its vault (chain_id, vault_address). Works for both Multichain and
+     *         single-chain products.
+     * @dev For a single-chain product, Add/Update additionally revert unless
+     *      `tranche.vault`'s `chain_id` equals the product's own `chain_id` (same
+     *      constraint create_single_chain_product enforces at creation time).
      *      Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
@@ -477,35 +479,38 @@ interface TrancheSystem {
     ) external;
 
     /**
-     * @notice Replace, atomically, the entire set of individual yield-source
-     *         Adapters nested under one of an existing product's MultichainAdapter
-     *         entries (identified by `parent_adapter_address`, `parent_chain_id`).
-     * @dev Only applies to Multichain products — reverts if `product_id` is a
-     *      single-chain product (it has no MultichainAdapter routing layer at all).
+     * @notice Replace, atomically, a product's entire flat individual-Adapter set —
+     *         works for both Multichain and single-chain products.
+     * @dev For a Multichain product, this replaces one MultichainAdapter's nested
+     *      `adapters` (identified by `parent_adapter_address`, `parent_chain_id` —
+     *      reverts if no such parent exists for `product_id`). For a single-chain
+     *      product, `parent_adapter_address`/`parent_chain_id` are ignored (there's
+     *      no MultichainAdapter parent concept at all) — this replaces the
+     *      product's whole flat `adapters` map instead.
      *      Caller must hold the ProductAdmin role for `product_id` — enforced by the
      *      pallet itself, not just this precompile: it only accepts an origin this
      *      precompile constructs after checking ProductAdmin, so there is no signed-origin
      *      path that bypasses this check.
      *      Mirrors `set_multichain_adapters`'s full-array-replace shape, scoped to
-     *      one parent's nested `adapters` instead of the whole table: callers
-     *      submit the full intended end-state list every time, not deltas — the
-     *      same rationale applies, now that adapter-level `weightBps` also carries
-     *      a hard 100% sum invariant (see below), a single-entity add/remove can't
-     *      preserve it without either silently rescaling every other entry or
-     *      leaving the sum temporarily wrong between calls.
-     *      Reverts if no MultichainAdapter matching (`parent_adapter_address`,
-     *      `parent_chain_id`) exists for `product_id`, unless
-     *      `sum(adapters[i].weightBps) == 10_000`, if `adapters` contains a
-     *      duplicate `source_address`, or if a `source_address` is already
-     *      registered under a *different* parent (an Adapter belongs to at most
-     *      one MultichainAdapter globally, see notes above — re-registering the
-     *      same `source_address` under *this* parent, e.g. just to change its
-     *      `weightBps`, is fine).
+     *      one parent's nested `adapters` (or, for single-chain, the whole flat set)
+     *      instead of the whole routing table: callers submit the full intended
+     *      end-state list every time, not deltas — the same rationale applies, now
+     *      that adapter-level `weightBps` also carries a hard 100% sum invariant
+     *      (see below), a single-entity add/remove can't preserve it without either
+     *      silently rescaling every other entry or leaving the sum temporarily
+     *      wrong between calls.
+     *      Reverts unless `sum(adapters[i].weightBps) == 10_000`, if `adapters`
+     *      contains a duplicate `source_address`, or if a `source_address` is
+     *      already registered elsewhere (an Adapter address belongs to at most one
+     *      such set globally — re-registering the same `source_address` in *this*
+     *      call's own previous set, e.g. just to change its `weightBps`, is fine).
      *      Emits AdaptersSet on success.
      * @param product_id             The product whose adapters are being replaced
-     * @param parent_adapter_address The parent MultichainAdapter's contract address
-     * @param parent_chain_id        The parent MultichainAdapter's chain ID
-     * @param adapters               The full intended end-state list of nested adapters
+     * @param parent_adapter_address Multichain only: the parent MultichainAdapter's
+     *                               contract address (ignored for single-chain)
+     * @param parent_chain_id        Multichain only: the parent MultichainAdapter's
+     *                               chain ID (ignored for single-chain)
+     * @param adapters               The full intended end-state list of adapters
      */
     function set_adapters(
         uint256 product_id,

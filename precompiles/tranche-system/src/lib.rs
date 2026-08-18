@@ -338,8 +338,10 @@ where
 		Ok(())
 	}
 
-	/// Replace, atomically, one MultichainAdapter's nested Adapters. See
-	/// `pallet_tranche_system::set_adapters`'s doc comment for full semantics.
+	/// Replace, atomically, a product's entire flat individual-Adapter set —
+	/// Multichain (one parent's nested Adapters) or single-chain (the whole flat
+	/// set) alike. See `pallet_tranche_system::set_adapters`'s doc comment for
+	/// full semantics.
 	///
 	/// @param product_id             The product whose adapters are being replaced
 	/// @param parent_adapter_address The parent MultichainAdapter's contract address
