@@ -80,14 +80,14 @@ interface TranchePermissions {
     }
 
     event PermissionGranted(
-        uint256 product_id,
+        uint64 product_id,
         Role role,
         address who,
         uint64 vault_chain_id,
         address vault_address
     );
     event PermissionRevoked(
-        uint256 product_id,
+        uint64 product_id,
         Role role,
         address who,
         uint64 vault_chain_id,
@@ -112,7 +112,7 @@ interface TranchePermissions {
      * @param vault      TrancheInvestor-only: identifies which tranche the whitelist applies to
      */
     function grant_permission(
-        uint256 product_id,
+        uint64 product_id,
         Role role,
         address who,
         VaultInput calldata vault
@@ -132,7 +132,7 @@ interface TranchePermissions {
      * @param vault      TrancheInvestor-only: identifies which tranche the whitelist applies to
      */
     function revoke_permission(
-        uint256 product_id,
+        uint64 product_id,
         Role role,
         address who,
         VaultInput calldata vault
@@ -148,7 +148,7 @@ interface TranchePermissions {
      * @param who        EVM address to check
      */
     function is_tranche_investor(
-        uint256 product_id,
+        uint64 product_id,
         VaultInput calldata vault,
         address who
     ) external view returns (bool);
@@ -163,7 +163,7 @@ interface TranchePermissions {
      * @param who        EVM address to check
      */
     function has_role(
-        uint256 product_id,
+        uint64 product_id,
         Role role,
         address who
     ) external view returns (bool);

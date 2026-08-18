@@ -208,7 +208,7 @@ interface TrancheTxRegistry {
     /// @param product_id Product the request belongs to
     /// @param request_id The request itself
     struct InvestorRequest {
-        uint256 product_id;
+        uint64 product_id;
         bytes32 request_id;
     }
 
@@ -366,7 +366,7 @@ interface TrancheTxRegistry {
     ///      Deliberately no `settlement_id` field here — see record_request_tx's dev notes
     ///      for why.
     event RequestTxRecorded(
-        uint256 indexed product_id,
+        uint64 indexed product_id,
         bytes32 indexed request_id,
         address indexed investor,
         uint64 vault_chain_id,
@@ -385,7 +385,7 @@ interface TrancheTxRegistry {
     ///      only unique within `product_id`'s own namespace (each product's Valuation
     ///      Contract generates its own sequence), never globally.
     event SettlementTxRecorded(
-        uint256 indexed product_id,
+        uint64 indexed product_id,
         uint256 indexed settlement_id,
         uint64 indexed spoke_chain_id,
         SettlementStep step,
@@ -395,7 +395,7 @@ interface TrancheTxRegistry {
     );
 
     event ReceiveTxRecorded(
-        uint256 indexed product_id,
+        uint64 indexed product_id,
         address indexed investor,
         VaultInput vault,
         address receiver,
@@ -485,7 +485,7 @@ interface TrancheTxRegistry {
      * @param attestation            The attested off-chain tx
      */
     function record_request_tx(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id,
         address investor,
         uint64 vault_chain_id,
@@ -545,7 +545,7 @@ interface TrancheTxRegistry {
      * @param attestation     The attested off-chain tx
      */
     function record_settlement_tx(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id,
         uint64 spoke_chain_id,
         uint64[] calldata collect_response_chain_ids,
@@ -584,7 +584,7 @@ interface TrancheTxRegistry {
      * @param attestation The attested off-chain receive tx
      */
     function record_receive_tx(
-        uint256 product_id,
+        uint64 product_id,
         VaultInput calldata vault,
         address investor,
         address receiver,
@@ -658,7 +658,7 @@ interface TrancheTxRegistry {
      */
     function get_investor_receive_history(
         address investor,
-        uint256 product_id,
+        uint64 product_id,
         uint256 offset,
         uint256 limit
     )
@@ -787,7 +787,7 @@ interface TrancheTxRegistry {
      * @return spoke_chains Per-chain ordered step history, see above
      */
     function get_settlement(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id
     )
         external
@@ -835,7 +835,7 @@ interface TrancheTxRegistry {
      */
     function get_investor_request_history(
         address investor,
-        uint256 product_id,
+        uint64 product_id,
         uint256 offset,
         uint256 limit
     ) external view returns (bytes32[] memory request_ids, uint256 total);
@@ -927,7 +927,7 @@ interface TrancheTxRegistry {
      *                        isn't tracked here — see record_receive_tx)
      */
     function get_request(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id
     )
         external

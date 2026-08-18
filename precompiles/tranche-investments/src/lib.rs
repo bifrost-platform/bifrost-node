@@ -18,14 +18,14 @@ use sp_std::{marker::PhantomData, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_INVESTMENT_REQUESTED: [u8; 32] =
-	keccak256!("InvestmentRequested(uint256,bytes32,uint256,uint64,address,address,uint256,uint8)");
+	keccak256!("InvestmentRequested(uint64,bytes32,uint256,uint64,address,address,uint256,uint8)");
 pub(crate) const SELECTOR_LOG_INVESTMENT_APPROVED: [u8; 32] =
-	keccak256!("InvestmentApproved(uint256,bytes32,uint256,(address,uint64,uint256)[],uint256)");
+	keccak256!("InvestmentApproved(uint64,bytes32,uint256,(address,uint64,uint256)[],uint256)");
 pub(crate) const SELECTOR_LOG_ADAPTER_VALUATIONS_RECORDED: [u8; 32] = keccak256!(
-	"AdapterValuationsRecorded(uint256,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
+	"AdapterValuationsRecorded(uint64,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
 );
 pub(crate) const SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED: [u8; 32] =
-	keccak256!("TrancheSettlementRecorded(uint256,uint256,uint256,uint256)");
+	keccak256!("TrancheSettlementRecorded(uint64,uint256,uint256,uint256)");
 
 // ---------------------------------------------------------------------------
 // interface.sol struct <-> tuple mappings
@@ -75,11 +75,11 @@ where
 	///
 	/// @param order_type 0 = redeem, 1 = deposit
 	#[precompile::public(
-		"record_investment_request(uint256,bytes32,uint256,uint64,address,address,uint256,uint8)"
+		"record_investment_request(uint64,bytes32,uint256,uint64,address,address,uint256,uint8)"
 	)]
 	fn record_investment_request(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		request_id: H256,
 		settlement_id: U256,
 		vault_chain_id: u64,
@@ -89,7 +89,6 @@ where
 		order_type: u8,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		let product_id = to_product_id(product_id)?;
 		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
 		let decoded_order_type = decode_order_type(order_type)?;
 
@@ -114,7 +113,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_INVESTMENT_REQUESTED,
 			solidity::encode_event_data((
-				U256::from(product_id),
+				product_id,
 				request_id,
 				settlement_id,
 				vault_chain_id,
@@ -133,18 +132,17 @@ where
 	/// Record a pending request's full approval. See
 	/// `pallet_tranche_investments::record_investment_approval`'s doc comment.
 	#[precompile::public(
-		"record_investment_approval(uint256,bytes32,uint256,(address,uint64,uint256)[],uint256)"
+		"record_investment_approval(uint64,bytes32,uint256,(address,uint64,uint256)[],uint256)"
 	)]
 	fn record_investment_approval(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		request_id: H256,
 		settlement_id: U256,
 		allocations: Vec<EvmAllocation>,
 		receivable_amount: U256,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		let product_id = to_product_id(product_id)?;
 		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
 		let bounded_allocations = decode_allocations(&allocations)?;
 
@@ -166,7 +164,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_INVESTMENT_APPROVED,
 			solidity::encode_event_data((
-				U256::from(product_id),
+				product_id,
 				request_id,
 				settlement_id,
 				allocations,
@@ -182,16 +180,15 @@ where
 	/// Record the finalized per-Adapter NAV breakdown for a settlement. See
 	/// `pallet_tranche_investments::record_adapter_valuations`'s doc comment.
 	#[precompile::public(
-		"record_adapter_valuations(uint256,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
+		"record_adapter_valuations(uint64,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
 	)]
 	fn record_adapter_valuations(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		settlement_id: U256,
 		valuations: Vec<EvmAdapterValuation>,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		let product_id = to_product_id(product_id)?;
 		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
 		let bounded_valuations = decode_adapter_valuations(&valuations)?;
 
@@ -210,7 +207,7 @@ where
 		let event = log1(
 			handle.context().address,
 			SELECTOR_LOG_ADAPTER_VALUATIONS_RECORDED,
-			solidity::encode_event_data((U256::from(product_id), settlement_id, valuations)),
+			solidity::encode_event_data((product_id, settlement_id, valuations)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
@@ -222,18 +219,17 @@ where
 	/// product's finalized aggregate NAV. See
 	/// `pallet_tranche_investments::record_settlement`'s doc comment.
 	#[precompile::public(
-		"record_settlement(uint256,uint256,(uint64,address,uint256,uint256,uint256,uint256)[],uint256,uint256)"
+		"record_settlement(uint64,uint256,(uint64,address,uint256,uint256,uint256,uint256)[],uint256,uint256)"
 	)]
 	fn record_settlement(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		settlement_id: U256,
 		tranches: Vec<EvmTrancheSettle>,
 		pending_deposit_assets: U256,
 		product_nav: U256,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		let product_id = to_product_id(product_id)?;
 		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
 		let bounded_tranches = decode_tranche_settles(&tranches)?;
 
@@ -255,7 +251,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED,
 			solidity::encode_event_data((
-				U256::from(product_id),
+				product_id,
 				settlement_id,
 				pending_deposit_assets,
 				product_nav,
@@ -271,11 +267,13 @@ where
 	/// `record_settlement`. Zero if the product has never settled yet.
 	///
 	/// @param product_id The product to look up
-	#[precompile::public("get_settlement_id(uint256)")]
+	#[precompile::public("get_settlement_id(uint64)")]
 	#[precompile::view]
-	fn get_settlement_id(handle: &mut impl PrecompileHandle, product_id: U256) -> EvmResult<U256> {
+	fn get_settlement_id(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		Ok(pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
 			.unwrap_or_default())
@@ -288,16 +286,15 @@ where
 	/// @param settlement_id Only requests recorded against this settlement cycle are returned
 	/// @param offset        Number of matching entries to skip
 	/// @param limit         Maximum number of entries to return
-	#[precompile::public("get_pending_requests(uint256,uint256,uint256,uint256)")]
+	#[precompile::public("get_pending_requests(uint64,uint256,uint256,uint256)")]
 	#[precompile::view]
 	fn get_pending_requests(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		settlement_id: U256,
 		offset: U256,
 		limit: U256,
 	) -> EvmResult<Vec<H256>> {
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let offset = to_u64(offset)?;
 		let limit = to_u64(limit)?;
@@ -334,15 +331,14 @@ where
 	/// @param request_id The request to look up
 	/// @return investor, vault_chain_id, vault, amount, settlement_id, order_type, status
 	/// (status: 0 = pending, 1 = approved)
-	#[precompile::public("get_request(uint256,bytes32)")]
+	#[precompile::public("get_request(uint64,bytes32)")]
 	#[precompile::view]
 	fn get_request(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		request_id: H256,
 	) -> EvmResult<(Address, u64, Address, U256, U256, u8, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
 		if let Some(requested) =
@@ -381,15 +377,14 @@ where
 	/// @param product_id The product the tranche belongs to
 	/// @param tranche    The tranche's identifying vault (chain_id, vault_address)
 	/// @return units_outstanding, principal
-	#[precompile::public("get_tranche_state(uint256,(uint64,address))")]
+	#[precompile::public("get_tranche_state(uint64,(uint64,address))")]
 	#[precompile::view]
 	fn get_tranche_state(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		tranche: EvmVaultInput,
 	) -> EvmResult<(U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let (chain_id, vault_address) = tranche;
 		let vault = VaultId { chain_id, vault_address: vault_address.0 };
@@ -411,14 +406,13 @@ where
 	/// most recently recorded settlement. Zero if the product has never settled.
 	///
 	/// @param product_id The product to look up
-	#[precompile::public("get_pending_deposit_assets(uint256)")]
+	#[precompile::public("get_pending_deposit_assets(uint64)")]
 	#[precompile::view]
 	fn get_pending_deposit_assets(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 	) -> EvmResult<U256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let Some(last_id) =
 			pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
@@ -436,14 +430,13 @@ where
 	/// product's finalized aggregate NAV.
 	///
 	/// @param product_id The product to look up
-	#[precompile::public("get_last_settlement(uint256)")]
+	#[precompile::public("get_last_settlement(uint64)")]
 	#[precompile::view]
 	fn get_last_settlement(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 	) -> EvmResult<(U256, Vec<U256>, Vec<U256>, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 
 		// Checked first, before any pallet-tranche-investments storage reads below —
 		// a single-chain product structurally can never have anything recorded there
@@ -504,15 +497,14 @@ where
 	/// @return recorded_at This chain's own block number when this settlement was recorded
 	/// @return timestamp This chain's `pallet_timestamp` value (ms since Unix epoch) at the
 	/// same moment as `recorded_at`
-	#[precompile::public("get_settlement_state(uint256,uint256)")]
+	#[precompile::public("get_settlement_state(uint64,uint256)")]
 	#[precompile::view]
 	fn get_settlement_state(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		settlement_id: U256,
 	) -> EvmResult<(Vec<EvmTrancheSettle>, U256, U256, U256, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
 		let settlement =
@@ -559,15 +551,14 @@ where
 	/// @param product_id    The product the settlement belongs to
 	/// @param settlement_id The settlement to look up
 	/// @return valuations Per-Adapter NAV breakdown, one entry per Adapter
-	#[precompile::public("get_adapter_valuations(uint256,uint256)")]
+	#[precompile::public("get_adapter_valuations(uint64,uint256)")]
 	#[precompile::view]
 	fn get_adapter_valuations(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		settlement_id: U256,
 	) -> EvmResult<Vec<EvmAdapterValuation>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
 		let valuations = pallet_tranche_investments::AdapterValuations::<Runtime>::get(
@@ -585,15 +576,14 @@ where
 	/// @param request_id The request to look up
 	/// @return settlement_id, receivable_amount, status (always 1 = approved; reverts if
 	/// no approval is recorded for `request_id`)
-	#[precompile::public("get_approval(uint256,bytes32)")]
+	#[precompile::public("get_approval(uint64,bytes32)")]
 	#[precompile::view]
 	fn get_approval(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		request_id: H256,
 	) -> EvmResult<(U256, U256, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let approved =
 			pallet_tranche_investments::ApprovedInvestments::<Runtime>::get(product_id, request_id)
@@ -605,16 +595,6 @@ where
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// `pallet_tranche_system::ProductId` is `u64`; `interface.sol` carries it as
-/// `uint256`. Reverts rather than silently truncating if the caller passes a
-/// value that doesn't fit.
-fn to_product_id(product_id: U256) -> EvmResult<ProductId> {
-	if product_id > U256::from(u64::MAX) {
-		return Err(revert("product_id exceeds u64::MAX"));
-	}
-	Ok(product_id.as_u64())
-}
 
 /// Reverts if `product_id` is a registered single-chain product — this whole
 /// precompile only ever tracks Multichain products (a single-chain product's

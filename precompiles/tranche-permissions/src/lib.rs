@@ -7,7 +7,7 @@ use alloc::format;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::{AddressMapping, Context, ExitReason};
 use pallet_tranche_permissions::{Call as TranchePermissionsCall, Role};
-use pallet_tranche_system::VaultId;
+use pallet_tranche_system::{ProductId, VaultId};
 use precompile_utils::prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::traits::Dispatchable;
@@ -18,9 +18,9 @@ use sp_std::marker::PhantomData;
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_PERMISSION_GRANTED: [u8; 32] =
-	keccak256!("PermissionGranted(uint256,uint8,address,uint64,address)");
+	keccak256!("PermissionGranted(uint64,uint8,address,uint64,address)");
 pub(crate) const SELECTOR_LOG_PERMISSION_REVOKED: [u8; 32] =
-	keccak256!("PermissionRevoked(uint256,uint8,address,uint64,address)");
+	keccak256!("PermissionRevoked(uint64,uint8,address,uint64,address)");
 
 /// `Orchestrator.sendWhitelist(uint64,uint256,address,address,uint8)` selector
 /// (`cast sig "sendWhitelist(uint64,uint256,address,address,uint8)"`).
@@ -70,17 +70,16 @@ where
 	/// @param role       0 = ProductAdmin, 1 = OracleFeeder, 2 = TrancheInvestor
 	/// @param who        EVM address receiving the role
 	/// @param vault      TrancheInvestor-only: (chain_id, vault_address) identifying the tranche
-	#[precompile::public("grant_permission(uint256,uint8,address,(uint64,address))")]
+	#[precompile::public("grant_permission(uint64,uint8,address,(uint64,address))")]
 	fn grant_permission(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		role: u8,
 		who: Address,
 		vault: EvmVaultInput,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		let product_id = to_product_id(product_id)?;
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
 		let propagate_vault = match &decoded_role {
@@ -104,7 +103,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_PERMISSION_GRANTED,
 			solidity::encode_event_data((
-				U256::from(product_id),
+				product_id,
 				role,
 				who,
 				vault_chain_id,
@@ -128,17 +127,16 @@ where
 	/// @param role       0 = ProductAdmin, 1 = OracleFeeder, 2 = TrancheInvestor
 	/// @param who        EVM address losing the role
 	/// @param vault      TrancheInvestor-only: (chain_id, vault_address) identifying the tranche
-	#[precompile::public("revoke_permission(uint256,uint8,address,(uint64,address))")]
+	#[precompile::public("revoke_permission(uint64,uint8,address,(uint64,address))")]
 	fn revoke_permission(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		role: u8,
 		who: Address,
 		vault: EvmVaultInput,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		let product_id = to_product_id(product_id)?;
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
 		let propagate_vault = match &decoded_role {
@@ -162,7 +160,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_PERMISSION_REVOKED,
 			solidity::encode_event_data((
-				U256::from(product_id),
+				product_id,
 				role,
 				who,
 				vault_chain_id,
@@ -191,16 +189,15 @@ where
 	/// @param vault      (chain_id, vault_address) identifying the tranche whose whitelist
 	/// is being checked
 	/// @param who        EVM address to check
-	#[precompile::public("is_tranche_investor(uint256,(uint64,address),address)")]
+	#[precompile::public("is_tranche_investor(uint64,(uint64,address),address)")]
 	#[precompile::view]
 	fn is_tranche_investor(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		_product_id: ProductId,
 		vault: EvmVaultInput,
 		who: Address,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let _ = to_product_id(product_id)?;
 		let (vault_chain_id, vault_address) = vault;
 		let vault = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
@@ -217,16 +214,15 @@ where
 	/// @param product_id The product to check
 	/// @param role       0 = ProductAdmin, 1 = OracleFeeder (2 = TrancheInvestor reverts)
 	/// @param who        EVM address to check
-	#[precompile::public("has_role(uint256,uint8,address)")]
+	#[precompile::public("has_role(uint64,uint8,address)")]
 	#[precompile::view]
 	fn has_role(
 		handle: &mut impl PrecompileHandle,
-		product_id: U256,
+		product_id: ProductId,
 		role: u8,
 		who: Address,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product_id = to_product_id(product_id)?;
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		match role {
 			0 => Ok(pallet_tranche_permissions::ProductAdmins::<Runtime>::get(product_id).as_ref()
@@ -244,16 +240,6 @@ where
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// `pallet_tranche_system::ProductId` is `u64`; `interface.sol` carries it as
-/// `uint256`. Reverts rather than silently truncating if the caller passes a
-/// value that doesn't fit.
-fn to_product_id(product_id: U256) -> EvmResult<pallet_tranche_system::ProductId> {
-	if product_id > U256::from(u64::MAX) {
-		return Err(revert("product_id exceeds u64::MAX"));
-	}
-	Ok(product_id.as_u64())
-}
 
 /// Decodes the raw `role` discriminant + `vault` tuple into a `Role`, plus the
 /// `(chain_id, vault_address)` pair to echo back in the emitted event —
