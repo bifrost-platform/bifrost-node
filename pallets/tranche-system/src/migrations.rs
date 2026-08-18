@@ -1,6 +1,6 @@
 use crate::{
-	AdapterKey, Config, MultichainAdapterInfo, Pallet, ProductDetails, ProductId, Tranche,
-	ValuationInfo, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
+	AdapterKey, Config, MultichainAdapterInfo, MultichainProductDetails, Pallet, ProductDetails,
+	ProductId, Tranche, ValuationInfo, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
 };
 
 use frame_support::{
@@ -25,19 +25,27 @@ macro_rules! log {
 	};
 }
 
-/// v0 -> v1: `ProductDetails` gained a `multichain_tranche_managers: BoundedBTreeMap<u64,
-/// H160, ConstU32<MAX_TRANCHE_MANAGERS>>` field — one TrancheManager contract address per
-/// chain a product's vaults span, Hub included (see `ProductDetails::
-/// multichain_tranche_managers`'s doc comment).
+/// v0 -> v1: two shape changes land together here since neither has been released to a live
+/// chain yet (this migration itself hasn't shipped) — no reason to split them into separate
+/// versioned layers just to keep them chronologically distinct in the source history.
 ///
-/// For every product that already existed before this upgrade, the real TrancheManager
-/// addresses aren't recoverable from on-chain state, so this migration backfills one entry
-/// per distinct chain the product already has a tranche vault on — derived from `tranches`,
-/// which IS already known — each pointed at the zero address as an explicit placeholder,
-/// not a real binding. `set_multichain_tranche_managers` must be called afterward, per
-/// product, to fill in the genuine addresses; until then, any flow reading this table sees
-/// zero addresses rather than an empty (and therefore ambiguous — "not backfilled yet" vs.
-/// "genuinely has no vaults") table.
+/// 1. What was flat `ProductDetails` gained a `multichain_tranche_managers: BoundedBTreeMap<u64,
+///    H160, ConstU32<MAX_TRANCHE_MANAGERS>>` field — one TrancheManager contract address per
+///    chain a product's vaults span, Hub included (see `MultichainProductDetails::
+///    multichain_tranche_managers`'s doc comment).
+///
+///    For every product that already existed before this upgrade, the real TrancheManager
+///    addresses aren't recoverable from on-chain state, so this migration backfills one entry
+///    per distinct chain the product already has a tranche vault on — derived from `tranches`,
+///    which IS already known — each pointed at the zero address as an explicit placeholder,
+///    not a real binding. `set_multichain_tranche_managers` must be called afterward, per
+///    product, to fill in the genuine addresses; until then, any flow reading this table sees
+///    zero addresses rather than an empty (and therefore ambiguous — "not backfilled yet" vs.
+///    "genuinely has no vaults") table.
+///
+/// 2. `ProductDetails` itself became an enum (`Multichain`/`SingleChain`, see its doc comment)
+///    to make room for single-chain products — every existing product is, by construction, a
+///    `Multichain` one, so this migration just wraps each entry rather than deriving anything.
 pub mod v1 {
 	use super::*;
 
@@ -107,19 +115,19 @@ pub mod v1 {
 
 				crate::Products::<T>::insert(
 					product_id,
-					ProductDetails {
+					ProductDetails::Multichain(MultichainProductDetails {
 						valuation: old.valuation,
 						tranches: old.tranches,
 						multichain_adapters: old.multichain_adapters,
 						multichain_tranche_managers,
-					},
+					}),
 				);
 			}
 			weight = weight.saturating_add(T::DbWeight::get().writes(products_count as u64));
 
 			log!(
 				info,
-				"tranche-system v0->v1: backfilled multichain_tranche_managers (zero address per distinct tranche chain, must be replaced via set_multichain_tranche_managers) for {} products ✅",
+				"tranche-system v0->v1: backfilled multichain_tranche_managers (zero address per distinct tranche chain, must be replaced via set_multichain_tranche_managers) and wrapped in ProductDetails::Multichain for {} products ✅",
 				products_count,
 			);
 

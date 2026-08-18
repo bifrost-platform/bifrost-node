@@ -2,9 +2,11 @@ mod impls;
 
 use crate::{
 	migrations, AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo,
-	ProductDetails, ProductId, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	VaultInspect, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_MULTICHAIN_ADAPTERS,
-	MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
+	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
+	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
+	VaultInspect, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
+	MAX_TRANCHE_MANAGERS,
 };
 
 use frame_support::{
@@ -123,6 +125,15 @@ pub mod pallet {
 		/// `settlement_start_timestamp` must be strictly after the current
 		/// block time.
 		SettlementStartMustBeInFuture,
+		/// This extrinsic only applies to one `ProductDetails` variant
+		/// (`Multichain` or `SingleChain`) — `product_id` refers to a product
+		/// of the other kind.
+		WrongProductType,
+		/// `create_single_chain_product`'s `tranches` each carry their own
+		/// `vault.chain_id`, but a single-chain product has exactly one chain
+		/// — every tranche's `vault.chain_id` must equal the product's
+		/// declared `chain_id`.
+		SingleChainTranchesMustShareChain,
 	}
 
 	// -----------------------------------------------------------------------
@@ -138,6 +149,26 @@ pub mod pallet {
 			product_admin: T::AccountId,
 			base_asset: H160,
 			valuation_address: H160,
+			settlement_start_timestamp: u64,
+			settlement_length_secs: u64,
+			settlement_offset_secs: u64,
+		},
+		/// A new single-chain product was created (see
+		/// `SingleChainProductDetails`). `is_sync` discriminates
+		/// `settlement_mode`: when `true`, `settlement_start_timestamp`/
+		/// `settlement_length_secs`/`settlement_offset_secs` are all `0` and
+		/// not meaningful (there is no settlement cycle) — when `false`, they
+		/// carry the same semantics as `ProductCreated`'s fields of the same
+		/// name.
+		SingleChainProductCreated {
+			product_id: ProductId,
+			product_admin: T::AccountId,
+			chain_id: u64,
+			base_asset: H160,
+			valuation_address: H160,
+			tranche_manager: H160,
+			ledger: H160,
+			is_sync: bool,
 			settlement_start_timestamp: u64,
 			settlement_length_secs: u64,
 			settlement_offset_secs: u64,
@@ -318,12 +349,148 @@ pub mod pallet {
 
 			Products::<T>::insert(
 				product_id,
-				ProductDetails {
+				ProductDetails::Multichain(MultichainProductDetails {
 					valuation,
 					tranches,
 					multichain_adapters,
 					multichain_tranche_managers,
-				},
+				}),
+			);
+
+			Ok(())
+		}
+
+		/// Create a new single-chain product: every contract (Vault(s),
+		/// TrancheManager, Valuation, Adapters, Ledger) lives on one EVM
+		/// chain (`chain_id`, not necessarily the Hub) — see
+		/// `SingleChainProductDetails`'s doc comment for the model this
+		/// differs from `create_product`'s hub-spoke one in.
+		///
+		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
+		/// as `create_product`.
+		///
+		/// `tranches` uses the same `priority`-sort-and-validate rules as
+		/// `create_product` (see `TrancheInput`'s doc comment), plus one
+		/// extra check: every entry's `vault.chain_id` must equal `chain_id`
+		/// (reverts with `SingleChainTranchesMustShareChain` otherwise).
+		/// `adapters`' `weight_bps` must sum to exactly 10_000, same
+		/// invariant as one `MultichainAdapterInfo`'s nested `adapters`.
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product())]
+		pub fn create_single_chain_product(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			chain_id: u64,
+			valuation: SingleChainValuationInfo,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
+			tranche_manager: H160,
+			adapters: BoundedBTreeMap<
+				H160,
+				AdapterInfo<T::AccountId>,
+				ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
+			>,
+			ledger: H160,
+		) -> DispatchResult {
+			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
+
+			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
+			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
+			if let SettlementMode::Async {
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			} = &valuation.settlement_mode
+			{
+				ensure!(
+					*settlement_offset_secs < *settlement_length_secs,
+					Error::<T>::SettlementOffsetMustBeShorterThanLength
+				);
+				let now_secs = <pallet_timestamp::Pallet<T>>::get() / 1000;
+				ensure!(
+					*settlement_start_timestamp > now_secs,
+					Error::<T>::SettlementStartMustBeInFuture
+				);
+			}
+
+			Self::ensure_weights_sum_to_10000(adapters.values().map(|a| a.weight_bps))?;
+
+			let mut sorted: Vec<TrancheInput> = tranches.into_inner();
+			sorted.sort_by_key(|input| input.priority);
+			for pair in sorted.windows(2) {
+				ensure!(pair[0].priority != pair[1].priority, Error::<T>::DuplicatePriority);
+			}
+			for input in sorted.iter() {
+				ensure!(
+					input.vault.chain_id == chain_id,
+					Error::<T>::SingleChainTranchesMustShareChain
+				);
+			}
+			let ordered: Vec<Tranche> = sorted
+				.into_iter()
+				.map(|input| Tranche {
+					tranche_type: input.tranche_type,
+					vault: input.vault,
+					asset: input.asset,
+					shares: input.shares,
+				})
+				.collect();
+			Self::ensure_senior_precedes_junior(&ordered)?;
+			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>> =
+				BoundedVec::try_from(ordered).map_err(|_| Error::<T>::TooManyTranches)?;
+
+			Self::ensure_tranches_are_unregistered(tranches.iter())?;
+			Self::ensure_single_chain_adapters_are_unregistered(chain_id, adapters.keys())?;
+
+			for tranche in tranches.iter() {
+				Vaults::<T>::insert(&tranche.vault, product_id);
+			}
+			for address in adapters.keys() {
+				AdapterIndex::<T>::insert(&AdapterKey { address: *address, chain_id }, product_id);
+			}
+
+			let (
+				is_sync,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			) = match &valuation.settlement_mode {
+				SettlementMode::Sync => (true, 0, 0, 0),
+				SettlementMode::Async {
+					settlement_start_timestamp,
+					settlement_length_secs,
+					settlement_offset_secs,
+				} => (
+					false,
+					*settlement_start_timestamp,
+					*settlement_length_secs,
+					*settlement_offset_secs,
+				),
+			};
+
+			Self::deposit_event(Event::SingleChainProductCreated {
+				product_id,
+				product_admin,
+				chain_id,
+				base_asset: valuation.base_asset,
+				valuation_address: valuation.valuation_address,
+				tranche_manager,
+				ledger,
+				is_sync,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			});
+
+			Products::<T>::insert(
+				product_id,
+				ProductDetails::SingleChain(SingleChainProductDetails {
+					valuation,
+					chain_id,
+					tranches,
+					tranche_manager,
+					adapters,
+					ledger,
+				}),
 			);
 
 			Ok(())
@@ -368,6 +535,12 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+				let product = match product {
+					ProductDetails::Multichain(product) => product,
+					ProductDetails::SingleChain(_) => {
+						return Err(Error::<T>::WrongProductType.into())
+					},
+				};
 
 				match action {
 					CrudAction::Add => {
@@ -471,6 +644,12 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+				let product = match product {
+					ProductDetails::Multichain(product) => product,
+					ProductDetails::SingleChain(_) => {
+						return Err(Error::<T>::WrongProductType.into())
+					},
+				};
 				let parent_key =
 					AdapterKey { address: parent_adapter_address, chain_id: parent_chain_id };
 				let parent = product
@@ -538,6 +717,12 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+				let product = match product {
+					ProductDetails::Multichain(product) => product,
+					ProductDetails::SingleChain(_) => {
+						return Err(Error::<T>::WrongProductType.into())
+					},
+				};
 
 				// Deep replace: drop every old entry's reverse-index rows first
 				// (top-level and nested), same reasoning as `set_adapters`.
@@ -589,6 +774,12 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+				let product = match product {
+					ProductDetails::Multichain(product) => product,
+					ProductDetails::SingleChain(_) => {
+						return Err(Error::<T>::WrongProductType.into())
+					},
+				};
 				product.multichain_tranche_managers = multichain_tranche_managers;
 				Ok(())
 			})?;
@@ -607,8 +798,11 @@ impl<T: pallet::Config> VaultInspect for pallet::Pallet<T> {
 	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
 		let product = pallet::Products::<T>::get(product_id);
 		chain_ids.iter().all(|chain_id| {
-			product.as_ref().is_some_and(|product| {
-				product.tranches.iter().any(|tranche| tranche.vault.chain_id == *chain_id)
+			product.as_ref().is_some_and(|product| match product {
+				ProductDetails::Multichain(product) => {
+					product.tranches.iter().any(|tranche| tranche.vault.chain_id == *chain_id)
+				},
+				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
 			})
 		})
 	}
@@ -630,8 +824,15 @@ impl<T: pallet::Config> AdapterInspect for pallet::Pallet<T> {
 	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
 		let product = pallet::Products::<T>::get(product_id);
 		chain_ids.iter().all(|chain_id| {
-			product.as_ref().is_some_and(|product| {
-				product.multichain_adapters.keys().any(|key| key.chain_id == *chain_id)
+			product.as_ref().is_some_and(|product| match product {
+				ProductDetails::Multichain(product) => {
+					product.multichain_adapters.keys().any(|key| key.chain_id == *chain_id)
+				},
+				// `adapters` can never be empty for an existing single-chain
+				// product — `create_single_chain_product` requires its
+				// weights to sum to exactly 10_000, impossible for an empty
+				// map, and there's no mutator that could empty it afterward.
+				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
 			})
 		})
 	}
