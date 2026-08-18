@@ -86,7 +86,7 @@ interface Investments {
     }
 
     event InvestmentRequested(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id,
         uint256 settlement_id,
         uint64 vault_chain_id,
@@ -96,19 +96,19 @@ interface Investments {
         uint8 order_type
     );
     event InvestmentApproved(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id,
         uint256 settlement_id,
         Allocation[] allocations,
         uint256 receivable_amount
     );
     event AdapterValuationsRecorded(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id,
         AdapterValuation[] valuations
     );
     event TrancheSettlementRecorded(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id,
         uint256 pending_deposit_assets,
         uint256 product_nav
@@ -134,7 +134,7 @@ interface Investments {
      * @param order_type       0 = redeem, 1 = deposit
      */
     function record_investment_request(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id,
         uint256 settlement_id,
         uint64 vault_chain_id,
@@ -170,7 +170,7 @@ interface Investments {
      * @param receivable_amount Finalized receivable amount for the investor — shares (deposit) or assets (redeem), per the request's order_type
      */
     function record_investment_approval(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id,
         uint256 settlement_id,
         Allocation[] calldata allocations,
@@ -194,7 +194,7 @@ interface Investments {
      * @param valuations     Per-Adapter NAV breakdown for this settlement, one entry per Adapter
      */
     function record_adapter_valuations(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id,
         AdapterValuation[] calldata valuations
     ) external;
@@ -227,7 +227,7 @@ interface Investments {
      *                                (sum, not per-source)
      */
     function record_settlement(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id,
         TrancheSettle[] calldata tranches,
         uint256 pending_deposit_assets,
@@ -247,7 +247,7 @@ interface Investments {
      * @param product_id The product to look up
      */
     function get_settlement_id(
-        uint256 product_id
+        uint64 product_id
     ) external view returns (uint256);
 
     /**
@@ -263,7 +263,7 @@ interface Investments {
      * @param limit         Maximum number of entries to return
      */
     function get_pending_requests(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id,
         uint256 offset,
         uint256 limit
@@ -285,7 +285,7 @@ interface Investments {
      * @return status             0 = pending, 1 = approved
      */
     function get_request(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id
     )
         external
@@ -311,7 +311,7 @@ interface Investments {
      * @return principal         Senior-tranche principal claim (zero for Junior)
      */
     function get_tranche_state(
-        uint256 product_id,
+        uint64 product_id,
         VaultInput calldata tranche
     ) external view returns (uint256 units_outstanding, uint256 principal);
 
@@ -324,7 +324,7 @@ interface Investments {
      * @param product_id The product to look up
      */
     function get_pending_deposit_assets(
-        uint256 product_id
+        uint64 product_id
     ) external view returns (uint256);
 
     /**
@@ -340,7 +340,7 @@ interface Investments {
      * @param product_id The product to look up
      */
     function get_last_settlement(
-        uint256 product_id
+        uint64 product_id
     )
         external
         view
@@ -376,7 +376,7 @@ interface Investments {
      *                    same moment as recorded_at
      */
     function get_settlement_state(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id
     )
         external
@@ -401,7 +401,7 @@ interface Investments {
      * @return valuations Per-Adapter NAV breakdown, one entry per Adapter
      */
     function get_adapter_valuations(
-        uint256 product_id,
+        uint64 product_id,
         uint256 settlement_id
     ) external view returns (AdapterValuation[] memory valuations);
 
@@ -416,7 +416,7 @@ interface Investments {
      *                            get_request's 0/1 pair only exists there, not here
      */
     function get_approval(
-        uint256 product_id,
+        uint64 product_id,
         bytes32 request_id
     )
         external

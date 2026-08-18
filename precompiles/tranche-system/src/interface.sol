@@ -298,7 +298,7 @@ interface TrancheSystem {
     ///      for `product_id` by the precompile before dispatch. Included here only
     ///      for indexers/observability.
     event ProductCreated(
-        uint256 product_id,
+        uint64 product_id,
         address product_admin,
         address base_asset,
         address valuation_address,
@@ -307,7 +307,7 @@ interface TrancheSystem {
         uint64 settlement_offset_secs
     );
     event TrancheSet(
-        uint256 product_id,
+        uint64 product_id,
         CrudAction action,
         TrancheType tranche_type,
         uint256 apr,
@@ -318,23 +318,23 @@ interface TrancheSystem {
         uint8 priority
     );
     event AdaptersSet(
-        uint256 product_id,
+        uint64 product_id,
         address parent_adapter_address,
         uint64 parent_chain_id,
         AdapterInput[] adapters
     );
     event MultichainAdaptersSet(
-        uint256 product_id,
+        uint64 product_id,
         MultichainAdapterInput[] multichain_adapters
     );
     event MultichainTrancheManagersSet(
-        uint256 product_id,
+        uint64 product_id,
         MultichainTrancheManagerInput[] multichain_tranche_managers
     );
     /// @dev `product_admin` is not a function input on create_single_chain_product, same
     ///      reasoning as ProductCreated's `product_admin` above.
     event SingleChainProductCreated(
-        uint256 product_id,
+        uint64 product_id,
         address product_admin,
         uint64 chain_id,
         address base_asset,
@@ -387,7 +387,7 @@ interface TrancheSystem {
      *                                     included, see MultichainTrancheManagerInput
      */
     function create_product(
-        uint256 product_id,
+        uint64 product_id,
         ValuationInput calldata valuation,
         TrancheInput[] calldata tranches,
         MultichainAdapterInput[] calldata multichain_adapters,
@@ -423,7 +423,7 @@ interface TrancheSystem {
      *                          pallet-tranche-investments' interface locally for this product
      */
     function create_single_chain_product(
-        uint256 product_id,
+        uint64 product_id,
         uint64 chain_id,
         SingleChainValuationInput calldata valuation,
         TrancheInput[] calldata tranches,
@@ -473,7 +473,7 @@ interface TrancheSystem {
      * @param tranche    The tranche data; see field usage per `action` above
      */
     function set_tranche(
-        uint256 product_id,
+        uint64 product_id,
         CrudAction action,
         TrancheInput calldata tranche
     ) external;
@@ -513,7 +513,7 @@ interface TrancheSystem {
      * @param adapters               The full intended end-state list of adapters
      */
     function set_adapters(
-        uint256 product_id,
+        uint64 product_id,
         address parent_adapter_address,
         uint64 parent_chain_id,
         AdapterInput[] calldata adapters
@@ -552,7 +552,7 @@ interface TrancheSystem {
      * @param multichain_adapters The full intended end-state list of routing entries
      */
     function set_multichain_adapters(
-        uint256 product_id,
+        uint64 product_id,
         MultichainAdapterInput[] calldata multichain_adapters
     ) external;
 
@@ -575,7 +575,7 @@ interface TrancheSystem {
      *                                     bindings
      */
     function set_multichain_tranche_managers(
-        uint256 product_id,
+        uint64 product_id,
         MultichainTrancheManagerInput[] calldata multichain_tranche_managers
     ) external;
 
@@ -588,7 +588,7 @@ interface TrancheSystem {
      * @param product_id The product to look up
      */
     function get_product(
-        uint256 product_id
+        uint64 product_id
     )
         external
         view
@@ -610,7 +610,7 @@ interface TrancheSystem {
      * @param product_id The product to look up
      */
     function get_tranches(
-        uint256 product_id
+        uint64 product_id
     ) external view returns (TrancheInput[] memory tranches);
 
     /**
@@ -621,7 +621,7 @@ interface TrancheSystem {
      * @param product_id The product to look up
      */
     function get_multichain_adapters(
-        uint256 product_id
+        uint64 product_id
     )
         external
         view
@@ -646,7 +646,7 @@ interface TrancheSystem {
      * @param product_id The product to look up
      */
     function get_adapters(
-        uint256 product_id
+        uint64 product_id
     ) external view returns (AdaptersByChain[] memory adapters_by_chain);
 
     /**
@@ -657,7 +657,7 @@ interface TrancheSystem {
      * @param product_id The product to look up
      */
     function get_multichain_tranche_managers(
-        uint256 product_id
+        uint64 product_id
     )
         external
         view
@@ -673,7 +673,7 @@ interface TrancheSystem {
      * @return tranche_manager The TrancheManager contract address, on the product's chain_id
      */
     function get_tranche_manager(
-        uint256 product_id
+        uint64 product_id
     ) external view returns (address tranche_manager);
 
     /**
@@ -685,7 +685,7 @@ interface TrancheSystem {
      * @return ledger The Ledger contract address, on the product's chain_id
      */
     function get_ledger(
-        uint256 product_id
+        uint64 product_id
     ) external view returns (address ledger);
 
     /**
