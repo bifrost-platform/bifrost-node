@@ -1,4 +1,7 @@
-use crate::{AdapterKey, MultichainAdapterInfo, ProductId, Tranche, TrancheType};
+use crate::{
+	AdapterInspect, AdapterKey, MultichainAdapterInfo, ProductDetails, ProductId, ProductInspect,
+	Tranche, TrancheType, VaultId, VaultInspect,
+};
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
@@ -155,6 +158,63 @@ impl<T: Config> Pallet<T> {
 				let adapter_key = AdapterKey { address: *address, chain_id: key.chain_id };
 				AdapterIndex::<T>::insert(&adapter_key, product_id);
 			}
+		}
+	}
+}
+
+impl<T: Config> VaultInspect for Pallet<T> {
+	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool {
+		Vaults::<T>::get(vault) == Some(product_id)
+	}
+
+	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
+		let product = Products::<T>::get(product_id);
+		chain_ids.iter().all(|chain_id| {
+			product.as_ref().is_some_and(|product| match product {
+				ProductDetails::Multichain(product) => {
+					product.tranches.iter().any(|tranche| tranche.vault.chain_id == *chain_id)
+				},
+				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
+			})
+		})
+	}
+
+	fn product_id_for_vault(vault: &VaultId) -> Option<ProductId> {
+		Vaults::<T>::get(vault)
+	}
+}
+
+impl<T: Config> AdapterInspect for Pallet<T> {
+	fn multichain_adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
+		MultichainAdapterIndex::<T>::get(key) == Some(product_id)
+	}
+
+	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
+		AdapterIndex::<T>::get(key) == Some(product_id)
+	}
+
+	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
+		let product = Products::<T>::get(product_id);
+		chain_ids.iter().all(|chain_id| {
+			product.as_ref().is_some_and(|product| match product {
+				ProductDetails::Multichain(product) => {
+					product.multichain_adapters.keys().any(|key| key.chain_id == *chain_id)
+				},
+				// `adapters` can never be empty for an existing single-chain
+				// product — `create_single_chain_product` requires its
+				// weights to sum to exactly 10_000, impossible for an empty
+				// map, and there's no mutator that could empty it afterward.
+				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
+			})
+		})
+	}
+}
+
+impl<T: Config> ProductInspect for Pallet<T> {
+	fn single_chain_id(product_id: ProductId) -> Option<u64> {
+		match Products::<T>::get(product_id)? {
+			ProductDetails::Multichain(_) => None,
+			ProductDetails::SingleChain(product) => Some(product.chain_id),
 		}
 	}
 }

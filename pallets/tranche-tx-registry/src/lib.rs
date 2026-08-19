@@ -142,7 +142,7 @@ pub struct TxRecord<BlockNumber> {
 ///   settlement's `collect_response_chain_ids` has reported NAV (see
 ///   `docs/tranche-tx-registry/settlement-flow.md`'s 1.5) — i.e. at essentially the
 ///   same moment the settlement's own Hub-vault completion condition
-///   (`try_close_hub_vault_requests`) becomes true, via a separate,
+///   (`try_close_local_requests`) becomes true, via a separate,
 ///   independently-ordered `record_settlement_tx` call. Recording
 ///   `SettlementApproved` both writes `RequestEntry::settlement_id`/`approved_tx` and
 ///   links `request_id` into `SettlementRequests` — see that storage's doc comment
@@ -538,12 +538,12 @@ pub type WhitelistNonce = U256;
 /// generic Bridge-phase Socket evidence in between, same as every other
 /// pipeline's Bridge phase (nothing more specific to name it after).
 ///
-/// Same Hub-vault/Spoke-vault branching as `RequestStep`: a whitelist action
-/// always originates on Hub (a ProductAdmin's grant_permission/
-/// revoke_permission call, routed through Orchestrator), but TrancheManager
-/// (the contract that actually applies the grant/revoke) can live on Hub too
-/// — a product with a Hub-deployed vault binds a Hub-chain TrancheManager
-/// entry the same as any Spoke chain (see `pallet_tranche_system::
+/// Same Hub-vault/Spoke-vault branching as `RequestStep` for a `Multichain`
+/// product: a whitelist action always originates on Hub (a ProductAdmin's
+/// grant_permission/revoke_permission call, routed through Orchestrator), but
+/// TrancheManager (the contract that actually applies the grant/revoke) can
+/// live on Hub too — a product with a Hub-deployed vault binds a Hub-chain
+/// TrancheManager entry the same as any Spoke chain (see `pallet_tranche_system::
 /// ProductDetails::multichain_tranche_managers`'s doc comment). So:
 /// - Hub-vault action: `WhitelistApplied` follows `WhitelistRequested`
 ///   directly (no Bridge leg — `BridgeExecuted` reverts with
@@ -552,11 +552,20 @@ pub type WhitelistNonce = U256;
 /// - Spoke-vault action: all three steps, in order — `WhitelistApplied` only
 ///   reachable once `BridgeExecuted` has landed.
 ///
+/// A `SingleChain` product's action skips `WhitelistRequested`/`BridgeExecuted`
+/// entirely — there's no Orchestrator at all for that model, so TrancheManager
+/// manages `nonce` itself and applies the grant/revoke in one local step,
+/// emitting only `WhitelistApplied`. `record_whitelist_tx` lets `WhitelistApplied`
+/// self-open the `WhitelistEntries` entry in this case (see that arm's dev
+/// notes in `Pallet::record_whitelist_tx`) — the only step in this pallet,
+/// alongside `RequestStep::Requested`, that can open a fresh entry from
+/// nothing.
+///
 /// `None` is a read-only sentinel, never valid `record_whitelist_tx` input
 /// (rejected with `Error::InvalidWhitelistStep`) — same rationale as
 /// `RequestStep::None`: never actually returned by a read either, since a
-/// whitelist action can't be looked up before `WhitelistRequested` opens its
-/// entry.
+/// whitelist action can't be looked up before some step has opened its entry
+/// (`WhitelistRequested` for `Multichain`, `WhitelistApplied` for `SingleChain`).
 #[derive(
 	Clone,
 	Copy,
@@ -598,11 +607,13 @@ pub enum WhitelistStep {
 	MaxEncodedLen,
 )]
 pub struct WhitelistEntry<BlockNumber> {
-	/// Resolved from `vault` via `T::Vaults::product_id_for_vault` at
-	/// `WhitelistRequested` time — not itself part of the storage key (see
-	/// struct-level doc comment), but duplicated here so a value read out of
-	/// storage carries enough context to act on independent of the key it
-	/// was fetched with, same rationale as `RequestEntry::product_id`.
+	/// Resolved from `vault` via `T::Vaults::product_id_for_vault` when the
+	/// entry is opened (`WhitelistRequested` for a `Multichain` product,
+	/// `WhitelistApplied` for a `SingleChain` product) — not itself part of
+	/// the storage key (see struct-level doc comment), but duplicated here so
+	/// a value read out of storage carries enough context to act on
+	/// independent of the key it was fetched with, same rationale as
+	/// `RequestEntry::product_id`.
 	pub product_id: ProductId,
 	/// The tranche vault this whitelist action targets — same value as this
 	/// entry's own storage key.
@@ -611,14 +622,20 @@ pub struct WhitelistEntry<BlockNumber> {
 	/// this entry's own storage key.
 	pub who: H160,
 	/// `true` = grant, `false` = revoke. Fixed for the lifetime of this
-	/// entry — every step after `WhitelistRequested` must resupply the same
-	/// value (checked, not just trusted) since Solidity has no `Option<bool>`
-	/// to sentinel-gate it the way `RequestOpening`-style fields are gated.
+	/// entry — every step after the one that opened it must resupply the
+	/// same value (checked, not just trusted) since Solidity has no
+	/// `Option<bool>` to sentinel-gate it the way `RequestOpening`-style
+	/// fields are gated.
 	pub grant: bool,
-	/// Evidence for `WhitelistStep::WhitelistRequested`.
+	/// Evidence for `WhitelistStep::WhitelistRequested`. `None` forever for a
+	/// `SingleChain` product's action — it has no Orchestrator-driven Trigger
+	/// step at all (see `WhitelistStep`'s doc comment); `WhitelistApplied`
+	/// opens the entry directly instead.
 	pub request_tx: Option<TxRecord<BlockNumber>>,
 	/// Evidence for `WhitelistStep::BridgeExecuted`. `None` forever if `vault`
-	/// is on Hub (no Bridge leg — see `WhitelistStep`'s doc comment).
+	/// is on its product's own local chain (no Bridge leg — see
+	/// `WhitelistStep`'s doc comment) — always the case for a `SingleChain`
+	/// product.
 	pub bridge_tx: Option<TxRecord<BlockNumber>>,
 	/// Evidence for `WhitelistStep::WhitelistApplied`.
 	pub applied_tx: Option<TxRecord<BlockNumber>>,

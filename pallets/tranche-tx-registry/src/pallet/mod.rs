@@ -5,7 +5,7 @@ use crate::{
 	RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId, SettlementStep,
 	TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_SPOKE_CHAINS,
 };
-use pallet_tranche_system::{AdapterInspect, VaultId, VaultInspect};
+use pallet_tranche_system::{AdapterInspect, ProductInspect, VaultId, VaultInspect};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -34,10 +34,14 @@ pub mod pallet {
 
 	#[pallet::config]
 	/// `pallet_evm::Config` supplies `<Self as pallet_evm::Config>::ChainId`, this chain's
-	/// own EVM chain ID — needed by `record_request_tx` to tell a Hub-vault request (no
+	/// own EVM chain ID — `Pallet::local_chain_id`'s fallback for a `Multichain` product
+	/// (`Config::Products` returns `None` for it), used to tell a Hub-vault request (no
 	/// Inbound leg — `RequestQueued` follows `Requested` immediately) apart from a
 	/// Spoke-vault one (Inbound leg required — `RequestQueued` only reachable once
-	/// `RequestBridgeExecuted` has landed) — see `RequestStep`'s doc comment.
+	/// `RequestBridgeExecuted` has landed) — see `RequestStep`'s doc comment. A
+	/// `SingleChain` product uses its own registered chain instead (`Config::Products`
+	/// returns `Some`), which plays the identical "no bridge needed" role for that
+	/// product alone.
 	pub trait Config: frame_system::Config + pallet_evm::Config {
 		/// Only accepted origin for all `record_*` extrinsics. Wire as
 		/// `type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>` in
@@ -55,6 +59,13 @@ pub mod pallet {
 		/// declared `collect_response_chain_ids`, each have a registered
 		/// MultichainAdapter, before recording against them.
 		type Adapters: AdapterInspect;
+		/// Single-chain-product inspector — implemented by pallet-tranche-system. Used to
+		/// compute a per-product "local chain" (see `Pallet::local_chain_id`) everywhere
+		/// this pallet used to hardcode the literal Hub chain ID to decide "does this
+		/// vault/chain need a bridge leg" — a `SingleChain` product's whole stack can be
+		/// colocated on any chain, not necessarily Hub, so that decision can no longer be
+		/// answered by a single runtime-wide constant alone.
+		type Products: ProductInspect;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -97,8 +108,10 @@ pub mod pallet {
 		/// self-declaring a not-yet-seen chain (see `Pallet::ensure_adapter_chain_declared`).
 		TooManyAdapterChains,
 		/// `step == RequestStep::RequestBridgeExecuted` was recorded for a request whose
-		/// vault is on Hub — a Hub-vault request has no Inbound leg at all (there's
-		/// nothing to bridge when the vault is already on Hub).
+		/// vault is on its product's own local chain (`Pallet::local_chain_id`) — such a
+		/// request has no Inbound leg at all (there's nothing to bridge when the vault is
+		/// already colocated with Valuation — Hub for a `Multichain` product's Hub-vault
+		/// request, or the product's own chain for a `SingleChain` product).
 		UnexpectedInboundLeg,
 		/// The step being recorded skips over an earlier, not-yet-recorded step.
 		RequestStepOutOfOrder,
@@ -152,8 +165,16 @@ pub mod pallet {
 		/// `step == WhitelistStep::WhitelistRequested` was recorded for a
 		/// `(who, vault, nonce)` that already has an entry.
 		WhitelistAlreadyTriggered,
-		/// No entry exists yet for this `(who, vault, nonce)` — `record_whitelist_tx`
-		/// must be called with `step == WhitelistStep::WhitelistRequested` first.
+		/// No entry exists yet for this `(who, vault, nonce)`, and it doesn't
+		/// qualify to self-open one either. For a `Multichain` product,
+		/// `record_whitelist_tx` must be called with
+		/// `step == WhitelistStep::WhitelistRequested` first — this is the
+		/// only way to reach this error there. For a `SingleChain` product,
+		/// `step == WhitelistStep::WhitelistApplied` can self-open the entry
+		/// instead (see that arm's dev notes); this error there specifically
+		/// means `vault` resolved to a registered `Multichain` product, which
+		/// doesn't qualify (`VaultNotRegistered` covers the case where `vault`
+		/// isn't registered to any product at all).
 		WhitelistNotTriggered,
 		/// `grant` doesn't match the value this entry was opened with — every step
 		/// after `WhitelistRequested` must resupply the same `grant` it was
@@ -161,9 +182,12 @@ pub mod pallet {
 		/// is checked rather than just trusted).
 		UnexpectedWhitelistGrant,
 		/// `step == WhitelistStep::BridgeExecuted` was recorded for a whitelist
-		/// action whose vault is on Hub — a Hub-vault action has no Bridge leg at
-		/// all (there's nothing to bridge when TrancheManager already applies the
-		/// grant/revoke locally on Hub).
+		/// action whose vault is on its product's own local chain
+		/// (`Pallet::local_chain_id`) — such an action has no Bridge leg at all
+		/// (there's nothing to bridge when TrancheManager already applies the
+		/// grant/revoke locally — Hub for a `Multichain` product's Hub-vault action,
+		/// or the product's own chain for a `SingleChain` product, which has no
+		/// Orchestrator-driven trigger at all — see `record_whitelist_tx`'s dev notes).
 		UnexpectedWhitelistBridgeLeg,
 		/// The step being recorded skips over an earlier, not-yet-recorded step.
 		WhitelistStepOutOfOrder,
@@ -324,11 +348,14 @@ pub mod pallet {
 	/// their `RequestEntries` entry is opened (`RequestStep::Requested`), removed
 	/// automatically by `record_settlement_tx` for a Spoke-vault request's own
 	/// origin chain when it records that chain's `SettleApplied` leg (via
-	/// `close_active_requests`), or for every Hub-vault request approved into the
-	/// settlement, all at once, the moment `SettlementCollectResponseChains` has
-	/// been fully responded to (every chain has reached `NavReceived` —
-	/// vacuously true, and checked immediately, if that set was declared empty
-	/// at Trigger time — see `try_close_hub_vault_requests`): at that point it
+	/// `close_active_requests`), or for every request colocated with its
+	/// product's own local chain (`Pallet::local_chain_id` — a Hub-vault request
+	/// in a `Multichain` product, or *any* request in a `SingleChain` product)
+	/// approved into the settlement, all at once, the moment
+	/// `SettlementCollectResponseChains` has been fully responded to (every chain
+	/// has reached `NavReceived` — vacuously true, and checked immediately, if
+	/// that set was declared empty at Trigger time — see
+	/// `try_close_local_requests`): at that point it
 	/// reads `SettlementRequests::<T>::get(product_id, settlement_id)` for every
 	/// request_id approved into that settlement, and removes the ones whose own
 	/// origin chain (`RequestEntry::vault::chain_id`) matches the leg just
@@ -380,7 +407,7 @@ pub mod pallet {
 	/// Every `request_id` approved into a given `(product_id, settlement_id)`,
 	/// in the order `RequestStep::SettlementApproved` recorded them — this
 	/// pallet's own copy of the request<->settlement linkage, read by
-	/// `close_active_requests`/`try_close_hub_vault_requests`/
+	/// `close_active_requests`/`try_close_local_requests`/
 	/// `try_close_request` to know which `InvestorActiveRequests` entries to
 	/// drop once a settlement (or one of its legs) completes. Originally this
 	/// linkage was queried cross-pallet from pallet-tranche-investments (via
@@ -633,7 +660,7 @@ pub mod pallet {
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
-			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
+			let local_chain_id = Self::local_chain_id(product_id);
 
 			match step {
 				RequestStep::Requested => {
@@ -685,7 +712,10 @@ pub mod pallet {
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
-					ensure!(entry.vault.chain_id != hub_chain_id, Error::<T>::UnexpectedInboundLeg);
+					ensure!(
+						entry.vault.chain_id != local_chain_id,
+						Error::<T>::UnexpectedInboundLeg
+					);
 					ensure!(entry.bridge_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
 					entry.bridge_tx = Some(tx);
 					RequestEntries::<T>::insert(product_id, request_id, entry);
@@ -695,13 +725,19 @@ pub mod pallet {
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
-					if entry.vault.chain_id != hub_chain_id {
+					if entry.vault.chain_id != local_chain_id {
 						// Spoke-vault — only reachable once the Inbound leg's own Bridge
 						// phase has landed.
 						ensure!(entry.bridge_tx.is_some(), Error::<T>::RequestStepOutOfOrder);
 					}
-					// Hub-vault has no Inbound leg to wait on — RequestQueued can follow
-					// Requested immediately (typically the same tx, always a separate call).
+					// A vault colocated with its own product's Valuation Contract — Hub
+					// itself for a Multichain product, or a SingleChain product's own
+					// chain — has no Inbound leg to wait on. RequestQueued can follow
+					// Requested immediately (typically the same tx, always a separate
+					// call) — though a SingleChain product's recorder never has a
+					// genuine `DepositQueued`/`RedeemQueued` event to observe in the
+					// first place, so it never calls this step at all (see
+					// `RequestStep`'s doc comment).
 					ensure!(entry.queued_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
 					// The request's arrival at the Valuation Contract — this is where the
 					// Adapter decision first becomes knowable, Hub-vault or Spoke-vault alike.
@@ -783,7 +819,7 @@ pub mod pallet {
 						requests.push(request_id);
 					});
 					// Opportunistically self-close: this can race with the settlement-side
-					// completion trigger (`try_close_hub_vault_requests`/
+					// completion trigger (`try_close_local_requests`/
 					// `close_active_requests`) — see `RequestStep::SettlementApproved`'s doc
 					// comment.
 					Self::try_close_request(product_id, settlement_id, request_id);
@@ -831,13 +867,17 @@ pub mod pallet {
 		/// `ActiveRequestClosed`): `step == SettlementStep::SettleApplied`
 		/// closes every Spoke-vault request approved into this settlement whose own
 		/// origin chain is `spoke_chain_id`. `step == SettlementStep::Triggered` and
-		/// `step == SettlementStep::NavReceived` both additionally try to
-		/// close every *Hub*-vault request approved into this settlement, via
-		/// `try_close_hub_vault_requests` — a Hub-vault request has no Finalize leg
-		/// of its own to trigger on (see `SettlementStep`'s doc comment), so this
-		/// runs instead every time `collect_response_chain_ids` might have just
-		/// become fully responded (including vacuously, right at Trigger, if it was
-		/// declared empty).
+		/// `step == SettlementStep::NavReceived` both additionally try to close every
+		/// request colocated with its product's own local chain
+		/// (`Pallet::local_chain_id` — a Hub-vault request in a `Multichain` product,
+		/// or *any* request in a `SingleChain` product) approved into this
+		/// settlement, via `try_close_local_requests` — such a request has no
+		/// Finalize leg of its own to trigger on (see `SettlementStep`'s doc
+		/// comment), so this runs instead every time `collect_response_chain_ids`
+		/// might have just become fully responded (including vacuously, right at
+		/// Trigger, if it was declared empty — always the case for a `SingleChain`
+		/// product's own settlement, since its Adapters are colocated too and never
+		/// need a Collect/Response leg).
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx())]
 		pub fn record_settlement_tx(
@@ -886,12 +926,13 @@ pub mod pallet {
 				);
 				SettlementFinalizeChains::<T>::insert(product_id, settlement_id, finalize_chains);
 
-				// Closes every Hub-vault request approved into this settlement if
-				// `collect_response_chains` is already fully responded — vacuously true
-				// right away when it's empty (no Adapter anywhere off-Hub, or a fully local
-				// settlement), same as a leg-by-leg `NavReceived` reaching this
-				// state later would.
-				Self::try_close_hub_vault_requests(product_id, settlement_id);
+				// Closes every request colocated with this product's own local chain
+				// approved into this settlement if `collect_response_chains` is already
+				// fully responded — vacuously true right away when it's empty (no Adapter
+				// anywhere off the local chain, or a fully local settlement — always the
+				// case for a `SingleChain` product), same as a leg-by-leg `NavReceived`
+				// reaching this state later would.
+				Self::try_close_local_requests(product_id, settlement_id);
 			} else {
 				ensure!(
 					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
@@ -981,7 +1022,7 @@ pub mod pallet {
 				if step == SettlementStep::SettleApplied {
 					Self::close_active_requests(product_id, settlement_id, Some(spoke_chain_id));
 				} else if step == SettlementStep::NavReceived {
-					Self::try_close_hub_vault_requests(product_id, settlement_id);
+					Self::try_close_local_requests(product_id, settlement_id);
 				}
 			}
 
@@ -1059,15 +1100,25 @@ pub mod pallet {
 		/// `grant` must be resupplied at every step (Solidity has no
 		/// `Option<bool>` to sentinel-gate it the way `RequestOpening`-style
 		/// fields are gated) and is checked against the value the entry was
-		/// opened with at `WhitelistRequested` — reverts on mismatch.
-		/// `product_id` is not a parameter — resolved internally via
-		/// `T::Vaults::product_id_for_vault(&vault)` at `WhitelistRequested`
-		/// time, since none of this pipeline's chain-observed evidence carries
-		/// it directly the way `DepositRequested`/`DepositReceived` do.
+		/// opened with — reverts on mismatch. `product_id` is not a
+		/// parameter — resolved internally via `T::Vaults::product_id_for_vault(&vault)`
+		/// when the entry is opened, since none of this pipeline's
+		/// chain-observed evidence carries it directly the way
+		/// `DepositRequested`/`DepositReceived` do.
 		///
 		/// `step == BridgeExecuted` reverts (`Error::UnexpectedWhitelistBridgeLeg`)
-		/// if `vault` is on Hub — see `WhitelistStep`'s doc comment for why a
-		/// Hub-vault action has no Bridge leg at all.
+		/// if `vault` is on its product's own local chain (`Pallet::local_chain_id`)
+		/// — see `WhitelistStep`'s doc comment for why such an action has no Bridge
+		/// leg at all.
+		///
+		/// A `Multichain` product's action still requires `WhitelistStep::WhitelistRequested`
+		/// to open the entry first (Hub-vault or Spoke-vault alike) — `WhitelistApplied`/
+		/// `BridgeExecuted` both revert with `Error::WhitelistNotTriggered` otherwise. A
+		/// `SingleChain` product's action has no Orchestrator-driven `WhitelistRequested`
+		/// at all — its TrancheManager manages `nonce` itself and applies the grant/revoke
+		/// in one local step — so `WhitelistApplied` self-opens the entry instead when
+		/// none exists yet and `vault` resolves to a registered `SingleChain` product (see
+		/// that arm's dev notes).
 		#[pallet::call_index(4)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_whitelist_tx())]
 		pub fn record_whitelist_tx(
@@ -1082,7 +1133,6 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
-			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
@@ -1122,7 +1172,7 @@ pub mod pallet {
 						.ok_or(Error::<T>::WhitelistNotTriggered)?;
 					ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
 					ensure!(
-						entry.vault.chain_id != hub_chain_id,
+						entry.vault.chain_id != Self::local_chain_id(entry.product_id),
 						Error::<T>::UnexpectedWhitelistBridgeLeg
 					);
 					ensure!(entry.bridge_tx.is_none(), Error::<T>::WhitelistStepAlreadyRecorded);
@@ -1131,18 +1181,58 @@ pub mod pallet {
 					WhitelistEntries::<T>::insert(key, entry);
 					product_id
 				},
-				WhitelistStep::WhitelistApplied => {
-					let mut entry = WhitelistEntries::<T>::get(key.clone())
-						.ok_or(Error::<T>::WhitelistNotTriggered)?;
-					ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
-					if entry.vault.chain_id != hub_chain_id {
-						ensure!(entry.bridge_tx.is_some(), Error::<T>::WhitelistStepOutOfOrder);
-					}
-					ensure!(entry.applied_tx.is_none(), Error::<T>::WhitelistStepAlreadyRecorded);
-					entry.applied_tx = Some(tx);
-					let product_id = entry.product_id;
-					WhitelistEntries::<T>::insert(key, entry);
-					product_id
+				WhitelistStep::WhitelistApplied => match WhitelistEntries::<T>::get(key.clone()) {
+					Some(mut entry) => {
+						ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
+						if entry.vault.chain_id != Self::local_chain_id(entry.product_id) {
+							ensure!(entry.bridge_tx.is_some(), Error::<T>::WhitelistStepOutOfOrder);
+						}
+						ensure!(
+							entry.applied_tx.is_none(),
+							Error::<T>::WhitelistStepAlreadyRecorded
+						);
+						entry.applied_tx = Some(tx);
+						let product_id = entry.product_id;
+						WhitelistEntries::<T>::insert(key, entry);
+						product_id
+					},
+					// Self-open: a `SingleChain` product's TrancheManager manages
+					// `nonce` itself and applies the grant/revoke in one local step
+					// — there's no Orchestrator-driven `WhitelistRequested` to have
+					// opened this entry beforehand, unlike a `Multichain` product's
+					// Hub-vault/Spoke-vault action. Only valid if `vault` actually
+					// belongs to a `SingleChain` product — a `Multichain` product's
+					// vault reaching here via `WhitelistApplied` with no prior
+					// `WhitelistRequested` is a genuine ordering error, not a
+					// self-open case.
+					None => {
+						let product_id = T::Vaults::product_id_for_vault(&vault)
+							.ok_or(Error::<T>::VaultNotRegistered)?;
+						ensure!(
+							T::Products::single_chain_id(product_id).is_some(),
+							Error::<T>::WhitelistNotTriggered
+						);
+						WhitelistEntries::<T>::insert(
+							key,
+							WhitelistEntry {
+								product_id,
+								vault: vault.clone(),
+								who,
+								grant,
+								request_tx: None,
+								bridge_tx: None,
+								applied_tx: Some(tx),
+							},
+						);
+						let is_newer = match LatestWhitelistNonce::<T>::get(who, vault.clone()) {
+							Some(latest) => nonce > latest,
+							None => true,
+						};
+						if is_newer {
+							LatestWhitelistNonce::<T>::insert(who, vault.clone(), nonce);
+						}
+						product_id
+					},
 				},
 				WhitelistStep::None => {
 					return Err(Error::<T>::InvalidWhitelistStep.into());
