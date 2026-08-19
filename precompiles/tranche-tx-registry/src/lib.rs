@@ -4,7 +4,7 @@
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::AddressMapping;
-use pallet_tranche_system::{ProductId, VaultId};
+use pallet_tranche_system::{ProductId, ProductInspect, VaultId};
 use pallet_tranche_tx_registry::{
 	Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening, RequestStep, SettlementStep,
 	TxRecord, WhitelistStep, MAX_SPOKE_CHAINS,
@@ -347,7 +347,8 @@ where
 	/// @param who    The account whose whitelist status is being changed
 	/// @param grant  true = grant, false = revoke — fixed for this action, resupplied at
 	/// every step
-	/// @param nonce  Orchestrator-generated correlator for this action
+	/// @param nonce  Correlator for this action — Orchestrator-generated for a Multichain
+	/// product, TrancheManager-generated for a SingleChain product (no Orchestrator there)
 	/// @param step   0 = None (invalid), 1 = WhitelistRequested, 2 = BridgeExecuted,
 	/// 3 = WhitelistApplied
 	#[precompile::public(
@@ -733,22 +734,31 @@ where
 	}
 
 	/// Read a whitelist grant/revoke action's full state in one call. Reverts if
-	/// `record_whitelist_tx` has never been called with `step == WhitelistRequested`
-	/// for this `(vault, who, nonce)`.
+	/// `record_whitelist_tx` has never opened an entry for this `(vault, who, nonce)`
+	/// — via `WhitelistRequested` (Multichain) or self-opened via `WhitelistApplied`
+	/// (SingleChain, see that arm's dev notes in the pallet).
 	///
-	/// `steps[0]` is always `(WhitelistRequested, request_tx)` and `steps`' last
-	/// entry is always `(WhitelistApplied, applied_tx)` — same Hub-vault/
-	/// Spoke-vault branching as `get_request`'s `request_steps`: for a Hub-vault
-	/// action (`vault.chain_id` equals this chain's own EVM chain ID), that's the
-	/// array's only two entries (length 2, no Bridge leg); for a Spoke-vault one,
-	/// a `BridgeExecuted` entry sits between them (length 3). `status` is the
-	/// last step whose evidence has actually landed.
+	/// For a Multichain product's action: `steps[0]` is always
+	/// `(WhitelistRequested, request_tx)` and `steps`' last entry is always
+	/// `(WhitelistApplied, applied_tx)` — same Hub-vault/Spoke-vault branching as
+	/// `get_request`'s `request_steps`: for a Hub-vault action (`vault.chain_id`
+	/// equals this chain's own EVM chain ID), that's the array's only two entries
+	/// (length 2, no Bridge leg); for a Spoke-vault one, a `BridgeExecuted` entry
+	/// sits between them (length 3).
+	/// For a SingleChain product's action: `WhitelistRequested` never appears at
+	/// all — there's no Orchestrator-driven Trigger for that model — so `steps` is
+	/// just `[WhitelistApplied]` (length 1). Check `steps.length` (1 vs 2 vs 3) to
+	/// tell which case this action is, same "absent means not applicable"
+	/// convention `get_request`'s `request_steps` uses.
+	/// `status` is the last step whose evidence has actually landed.
 	///
 	/// @param vault The tranche vault this whitelist action targeted
 	/// @param who   The account whose whitelist status was being changed
-	/// @param nonce The Orchestrator-generated correlator identifying this action
+	/// @param nonce Correlator for this action — Orchestrator-generated (Multichain)
+	/// or TrancheManager-generated (SingleChain)
 	/// @return grant  true = grant, false = revoke
-	/// @return steps  Ordered step history — length 2 (Hub-vault) or 3 (Spoke-vault)
+	/// @return steps  Ordered step history — length 1 (SingleChain), 2 (Hub-vault), or
+	/// 3 (Spoke-vault)
 	/// @return status The furthest step reached so far
 	#[precompile::public("get_whitelist((uint64,address),address,uint256)")]
 	#[precompile::view]
@@ -766,8 +776,18 @@ where
 			pallet_tranche_tx_registry::WhitelistEntries::<Runtime>::get((who.0, vault_id, nonce))
 				.ok_or_else(|| revert("whitelist action not found"))?;
 
-		let hub_chain_id = <Runtime as pallet_evm::Config>::ChainId::get();
-		let has_bridge_leg = entry.vault.chain_id != hub_chain_id;
+		// A SingleChain product's action has no Orchestrator-driven `WhitelistRequested`
+		// at all — `WhitelistApplied` self-opened this entry directly, so `request_tx`
+		// is permanently `None` here, not merely pending. Omit `WhitelistRequested`
+		// from `steps` entirely for it, same "absent means not applicable" convention
+		// `get_request`'s `request_steps` uses for a colocated request's omitted
+		// `RequestQueued`.
+		let single_chain_id =
+			pallet_tranche_system::Pallet::<Runtime>::single_chain_id(entry.product_id);
+		let is_single_chain = single_chain_id.is_some();
+		let local_chain_id =
+			single_chain_id.unwrap_or_else(<Runtime as pallet_evm::Config>::ChainId::get);
+		let has_bridge_leg = entry.vault.chain_id != local_chain_id;
 		let status = if entry.applied_tx.is_some() {
 			WhitelistStep::WhitelistApplied
 		} else if entry.bridge_tx.is_some() {
@@ -775,10 +795,13 @@ where
 		} else {
 			WhitelistStep::WhitelistRequested
 		};
-		let mut steps = vec![(
-			encode_whitelist_step(WhitelistStep::WhitelistRequested),
-			encode_tx_record(entry.request_tx),
-		)];
+		let mut steps = Vec::new();
+		if !is_single_chain {
+			steps.push((
+				encode_whitelist_step(WhitelistStep::WhitelistRequested),
+				encode_tx_record(entry.request_tx),
+			));
+		}
 		if has_bridge_leg {
 			steps.push((
 				encode_whitelist_step(WhitelistStep::BridgeExecuted),
@@ -802,23 +825,30 @@ where
 	/// this `request_id`.
 	///
 	/// `request_steps[0]` is always `(Requested, request_tx)` — every request that
-	/// exists has one, unconditionally. `request_steps`' last entry is always
-	/// `(RequestQueued, queued_tx)` — every request reaches this step, Hub-vault or
-	/// Spoke-vault alike. For a Hub-vault request (no Inbound leg applies at all —
-	/// `info.vault.chain_id` equals this chain's own EVM chain ID), that's the
-	/// array's only other entry (length 2); for a Spoke-vault one, an
-	/// `RequestBridgeExecuted` entry sits between them (length 3). Same "absent
-	/// means not applicable, present-but-zeroed means pending" convention as
-	/// `get_settlement`'s `spoke_chains[i].steps` — check `request_steps.length` (2
-	/// vs 3) to tell whether this request has an Inbound leg at all, and each
-	/// present entry's own `tx.recorded_at` to tell whether it's landed yet.
+	/// exists has one, unconditionally. For a `Multichain` product, `request_steps`'
+	/// last entry is always `(RequestQueued, queued_tx)` — every such request
+	/// reaches this step, Hub-vault or Spoke-vault alike. For a Hub-vault request
+	/// (no Inbound leg applies at all — `info.vault.chain_id` equals this chain's
+	/// own EVM chain ID), that's the array's only other entry (length 2); for a
+	/// Spoke-vault one, a `RequestBridgeExecuted` entry sits between them (length
+	/// 3). For a `SingleChain` product's request, `RequestQueued` never appears at
+	/// all — there's no `DepositQueued`/`RedeemQueued`-equivalent event for that
+	/// model (see `RequestStep`'s doc comment) — so `request_steps` is just
+	/// `[Requested]` (length 1). Same "absent means not applicable, present-but-
+	/// zeroed means pending" convention as `get_settlement`'s
+	/// `spoke_chains[i].steps` — check `request_steps.length` (1 vs 2 vs 3) to tell
+	/// which case this request is, and each present entry's own `tx.recorded_at`
+	/// to tell whether it's landed yet.
 	/// `adapter_legs[i].steps` is `[AdapterBridgeExecuted, AdapterApplied]` (length
 	/// 2) for a genuinely remote chain, but just `[AdapterApplied]` (length 1) for
-	/// a chain that's the same as the origin vault's own chain, or Hub — same
-	/// "absent means not applicable" convention as `request_steps` above, since
-	/// such a chain never gets a Bridge phase at all (fulfilled synchronously — see
+	/// a chain that's the same as the origin vault's own chain, or this product's
+	/// own local chain — same "absent means not applicable" convention as
+	/// `request_steps` above, since such a chain never gets a Bridge phase at all
+	/// (fulfilled synchronously — see
 	/// `pallet_tranche_tx_registry::record_request_tx`'s dev notes), not merely
-	/// pending one. Check `adapter_legs[i].steps.length` (1 vs 2) the same way
+	/// pending one. `adapter_legs` itself is always empty for a `SingleChain`
+	/// product — its Adapters are colocated too, so there's no leg to track at
+	/// all. Check `adapter_legs[i].steps.length` (1 vs 2) the same way
 	/// `request_steps.length` is checked, rather than assuming a fixed shape.
 	/// `RequestAdapterChains`' own order (and so `adapter_legs`' order) is normally
 	/// the order declared at `RequestQueued`, but a self-fulfilling chain (recorded
@@ -826,12 +856,15 @@ where
 	/// touched instead.
 	///
 	/// `status` only ever takes `Requested` (`RequestQueued` not yet reached, or
-	/// some Adapter leg still has an unfinished step) or `RequestCompleted`
-	/// (`RequestQueued` reached, and every declared Adapter chain's last step
-	/// landed, or none were declared at all — immediate for a fully local
-	/// request). This is deliberately unrelated to `settlement_id`/`settled`
-	/// below — see `RequestStep`'s doc comment for why `RequestCompleted` was
-	/// renamed from `Completed` to disambiguate the two.
+	/// some Adapter leg still has an unfinished step — never true for a
+	/// `SingleChain` product, which has neither) or `RequestCompleted`
+	/// (`RequestQueued` reached and every declared Adapter chain's last step
+	/// landed, or none were declared at all — immediate for a `Multichain`
+	/// product's fully local request, and *always* immediate for a `SingleChain`
+	/// product's request, right from `Requested`, since neither `RequestQueued`
+	/// nor any Adapter leg ever applies to it). This is deliberately unrelated to
+	/// `settlement_id`/`settled` below — see `RequestStep`'s doc comment for why
+	/// `RequestCompleted` was renamed from `Completed` to disambiguate the two.
 	///
 	/// `settlement_id`/`settled` are resolved from `entry.settlement_id`/
 	/// `entry.approved_tx`, written by `record_request_tx`'s
@@ -843,7 +876,7 @@ where
 	/// Finalize leg of its own to wait on), true once every one of the linked
 	/// settlement's `collect_response_chain_ids` reaches `NavReceived` (vacuously
 	/// true, and immediate, if that set was declared empty) — same criterion
-	/// `Pallet::try_close_request`/`try_close_hub_vault_requests` use pallet-side.
+	/// `Pallet::try_close_request`/`try_close_local_requests` use pallet-side.
 	/// `settled` is always false while `settlement_id == 0`, and is entirely
 	/// independent of `status`/`adapter_legs` — a request's own delivery to the Hub
 	/// and its linked settlement's delivery of results back out are two separate
@@ -878,13 +911,24 @@ where
 			encode_request_order_type(entry.order_type),
 		);
 
-		// A Hub-vault request has no Inbound leg at all (nothing to bridge when the
-		// vault is already on Hub) — `has_inbound_leg` still matters below for the
-		// `settled` computation, which asks a different question (Finalize leg vs.
-		// Collect/Response completion) than `request_steps`/`queued_done` do.
-		let hub_chain_id = <Runtime as pallet_evm::Config>::ChainId::get();
-		let has_inbound_leg = entry.vault.chain_id != hub_chain_id;
-		let queued_done = entry.queued_tx.is_some();
+		// A request colocated with its product's own local chain — Hub for a
+		// `Multichain` product's Hub-vault request, or a `SingleChain` product's own
+		// chain — has no Inbound leg at all (nothing to bridge when the vault is
+		// already colocated with Valuation). `has_inbound_leg` still matters below
+		// for the `settled` computation, which asks a different question (Finalize
+		// leg vs. Collect/Response completion) than `request_steps`/`queued_done` do.
+		let single_chain_id = pallet_tranche_system::Pallet::<Runtime>::single_chain_id(product_id);
+		let local_chain_id =
+			single_chain_id.unwrap_or_else(<Runtime as pallet_evm::Config>::ChainId::get);
+		let has_inbound_leg = entry.vault.chain_id != local_chain_id;
+		// A `SingleChain` product's recorder never has a genuine `DepositQueued`/
+		// `RedeemQueued` event to observe (no such event exists for that model — see
+		// `RequestStep`'s doc comment), so `RequestQueued` is permanently
+		// inapplicable for it, not merely pending — omit it entirely (same "absent
+		// means not applicable" convention `has_inbound_leg` already uses above) and
+		// treat completion as needing only the `Requested` step.
+		let is_single_chain = single_chain_id.is_some();
+		let queued_done = is_single_chain || entry.queued_tx.is_some();
 		let mut request_steps =
 			vec![(encode_request_step(RequestStep::Requested), encode_tx_record(entry.request_tx))];
 		if has_inbound_leg {
@@ -893,10 +937,12 @@ where
 				encode_tx_record(entry.bridge_tx),
 			));
 		}
-		request_steps.push((
-			encode_request_step(RequestStep::RequestQueued),
-			encode_tx_record(entry.queued_tx),
-		));
+		if !is_single_chain {
+			request_steps.push((
+				encode_request_step(RequestStep::RequestQueued),
+				encode_tx_record(entry.queued_tx),
+			));
+		}
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let adapter_chain_ids = pallet_tranche_tx_registry::RequestAdapterChains::<Runtime>::get(
@@ -914,14 +960,15 @@ where
 			if leg.applied_tx.is_none() {
 				all_adapter_done = false;
 			}
-			// A chain that's the same as the origin vault's own chain, or Hub, never
-			// gets a Bridge phase at all (fulfilled synchronously — see
-			// `pallet_tranche_tx_registry::record_request_tx`'s dev notes), so
-			// `AdapterBridgeExecuted` is permanently inapplicable for it, not merely
-			// pending — omit it entirely rather than showing a zeroed entry, same
-			// "absent means not applicable" convention `request_steps` uses for a
-			// Hub-vault request's Inbound leg above.
-			let is_self_fulfilling = *chain_id == entry.vault.chain_id || *chain_id == hub_chain_id;
+			// A chain that's the same as the origin vault's own chain, or this
+			// product's own local chain, never gets a Bridge phase at all (fulfilled
+			// synchronously — see `pallet_tranche_tx_registry::record_request_tx`'s
+			// dev notes), so `AdapterBridgeExecuted` is permanently inapplicable for
+			// it, not merely pending — omit it entirely rather than showing a zeroed
+			// entry, same "absent means not applicable" convention `request_steps`
+			// uses for a colocated request's Inbound leg above.
+			let is_self_fulfilling =
+				*chain_id == entry.vault.chain_id || *chain_id == local_chain_id;
 			let steps = if is_self_fulfilling {
 				vec![(
 					encode_request_step(RequestStep::AdapterApplied),
@@ -962,7 +1009,7 @@ where
 		// `inbound_done` above) — it's settled once every one of
 		// `SettlementCollectResponseChains` has reached `NavReceived`
 		// (vacuously true, including if that set is empty), same criterion
-		// `try_close_hub_vault_requests` uses pallet-side. A Spoke-vault request
+		// `try_close_local_requests` uses pallet-side. A Spoke-vault request
 		// instead waits on its own chain's `SettleApplied`, via
 		// `SettlementFinalizeChains`.
 		let settled =

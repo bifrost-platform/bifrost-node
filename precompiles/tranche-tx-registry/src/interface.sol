@@ -365,8 +365,8 @@ interface TrancheTxRegistry {
     ///      `BridgeExecuted` is the generic Bridge-phase Socket evidence in between,
     ///      same as every other pipeline's Bridge phase.
     ///
-    ///      Same Hub-vault/Spoke-vault branching as RequestStep: a whitelist action
-    ///      always originates on Hub (a ProductAdmin's grant_permission/
+    ///      Same Hub-vault/Spoke-vault branching as RequestStep for a Multichain product:
+    ///      a whitelist action always originates on Hub (a ProductAdmin's grant_permission/
     ///      revoke_permission call, routed through Orchestrator), but TrancheManager
     ///      (the contract that actually applies the grant/revoke) can live on Hub too
     ///      — a product with a Hub-deployed vault binds a Hub-chain TrancheManager
@@ -374,6 +374,12 @@ interface TrancheTxRegistry {
     ///      `WhitelistApplied` follows `WhitelistRequested` directly (no Bridge leg
     ///      — `BridgeExecuted` reverts if attempted); for a Spoke-vault action, all
     ///      three steps are needed, in order.
+    ///
+    ///      A SingleChain product's action skips WhitelistRequested/BridgeExecuted
+    ///      entirely — there's no Orchestrator at all for that model, so TrancheManager
+    ///      manages the nonce itself and applies the grant/revoke in one local step,
+    ///      emitting only WhitelistApplied. record_whitelist_tx lets WhitelistApplied
+    ///      self-open the registry entry in this case (see that function's dev notes).
     ///
     ///      `None` is a read-only sentinel, never valid record_whitelist_tx input.
     enum WhitelistStep {
@@ -636,28 +642,35 @@ interface TrancheTxRegistry {
      *      Unlike every other record_*_tx function here, this one takes no `product_id`
      *      parameter — none of this pipeline's chain-observed evidence (vault, who, grant,
      *      nonce) carries it directly the way DepositRequested/DepositReceived do, so the
-     *      pallet resolves it internally from `vault` instead, at the WhitelistRequested
-     *      step (reverts if `vault` isn't registered to any product).
+     *      pallet resolves it internally from `vault` instead, when the entry is opened
+     *      (reverts if `vault` isn't registered to any product).
      *      `grant` must be resupplied identically at every step (Solidity has no
      *      `Option<bool>` to leave it sentinel-gated the way e.g. record_request_tx's
      *      investor/amount fields are) — reverts if it doesn't match the value this
-     *      action was opened with at WhitelistRequested.
-     *      `nonce` is the Orchestrator-generated correlator that ties this action's tx
-     *      together — present from WhitelistRequested onward, threaded through the CCCP
-     *      bridge message's own variants payload unchanged, and echoed back verbatim by
-     *      WhitelistApplied.
-     *      `step == WhitelistRequested` must not be called twice for the same
-     *      (vault, who, nonce). `step == BridgeExecuted` reverts if `vault` is on Hub —
-     *      a Hub-vault action has no Bridge leg at all (TrancheManager applies the
-     *      grant/revoke locally on Hub, same branching as record_request_tx's
-     *      RequestBridgeExecuted); for a Spoke-vault action, WhitelistApplied is only
-     *      reachable once BridgeExecuted has landed.
+     *      action was opened with.
+     *      `nonce` is the correlator that ties this action's tx together — for a
+     *      Multichain product, Orchestrator-generated, present from WhitelistRequested
+     *      onward, threaded through the CCCP bridge message's own variants payload
+     *      unchanged, and echoed back verbatim by WhitelistApplied; for a SingleChain
+     *      product (no Orchestrator at all), TrancheManager-generated and only ever seen
+     *      on WhitelistApplied itself.
+     *      For a Multichain product: `step == WhitelistRequested` must not be called
+     *      twice for the same (vault, who, nonce). `step == BridgeExecuted` reverts if
+     *      `vault` is on its product's own local chain — such an action has no Bridge leg
+     *      at all (TrancheManager applies the grant/revoke locally, same branching as
+     *      record_request_tx's RequestBridgeExecuted); for a Spoke-vault action,
+     *      WhitelistApplied is only reachable once BridgeExecuted has landed.
+     *      For a SingleChain product: there is no WhitelistRequested/BridgeExecuted at
+     *      all — `step == WhitelistApplied` opens the entry itself, the first time it's
+     *      seen for a given (vault, who, nonce), since `vault` resolves to a registered
+     *      SingleChain product.
      *      Emits WhitelistTxRecorded.
      * @param vault        The tranche vault this whitelist action targets
      * @param who          The account whose whitelist status is being changed
      * @param grant        true = grant, false = revoke — fixed for this action, resupplied
      *                     at every step
-     * @param nonce        Orchestrator-generated correlator for this action
+     * @param nonce        Correlator for this action — Orchestrator-generated (Multichain)
+     *                     or TrancheManager-generated (SingleChain)
      * @param step         Which pipeline step this attestation is for
      * @param attestation  The attested off-chain tx
      */
@@ -751,25 +764,33 @@ interface TrancheTxRegistry {
 
     /**
      * @notice Read a whitelist grant/revoke action's full state in one call.
-     * @dev Reverts if record_whitelist_tx has never been called with
-     *      step == WhitelistRequested for this (vault, who, nonce) — same convention as
-     *      get_request, not get_settlement's more lenient zeroed-response-for-not-yet-triggered
-     *      behavior, since there's no meaningful "not yet" state to report: a whitelist
-     *      action doesn't exist at all until it's been triggered.
-     *      `steps[0]` is always `(WhitelistRequested, request_tx)` and `steps`' last
-     *      entry is always `(WhitelistApplied, applied_tx)` — same Hub-vault/
-     *      Spoke-vault branching as get_request's request_steps: for a Hub-vault action
-     *      (`vault.chain_id` equals this chain's own EVM chain ID), that's the array's
-     *      only two entries (length 2, no Bridge leg); for a Spoke-vault one, a
-     *      `BridgeExecuted` entry sits between them (length 3).
+     * @dev Reverts if record_whitelist_tx has never opened an entry for this
+     *      (vault, who, nonce) — via WhitelistRequested (Multichain) or self-opened via
+     *      WhitelistApplied (SingleChain, see that function's dev notes) — same
+     *      convention as get_request, not get_settlement's more lenient
+     *      zeroed-response-for-not-yet-triggered behavior, since there's no meaningful
+     *      "not yet" state to report: a whitelist action doesn't exist at all until
+     *      some step has opened it.
+     *      For a Multichain product's action: `steps[0]` is always
+     *      `(WhitelistRequested, request_tx)` and `steps`' last entry is always
+     *      `(WhitelistApplied, applied_tx)` — same Hub-vault/Spoke-vault branching as
+     *      get_request's request_steps: for a Hub-vault action (`vault.chain_id` equals
+     *      this chain's own EVM chain ID), that's the array's only two entries (length
+     *      2, no Bridge leg); for a Spoke-vault one, a `BridgeExecuted` entry sits
+     *      between them (length 3).
+     *      For a SingleChain product's action: WhitelistRequested never appears at all
+     *      — there's no Orchestrator-driven Trigger for that model — so `steps` is just
+     *      `[WhitelistApplied]` (length 1). Check `steps.length` (1 vs 2 vs 3) to tell
+     *      which case this action is.
      *      `status` is the last step whose evidence has actually landed
-     *      (`tx.recorded_at != 0`) — always at least WhitelistRequested, since that's
-     *      what "this call didn't revert" already means.
+     *      (`tx.recorded_at != 0`).
      * @param vault The tranche vault this whitelist action targeted
      * @param who   The account whose whitelist status was being changed
-     * @param nonce The Orchestrator-generated correlator identifying this action
+     * @param nonce Correlator for this action — Orchestrator-generated (Multichain) or
+     *              TrancheManager-generated (SingleChain)
      * @return grant  true = grant, false = revoke
-     * @return steps  Ordered step history — length 2 (Hub-vault) or 3 (Spoke-vault)
+     * @return steps  Ordered step history — length 1 (SingleChain), 2 (Hub-vault), or 3
+     *                (Spoke-vault)
      * @return status The furthest step reached so far
      */
     function get_whitelist(
@@ -883,31 +904,39 @@ interface TrancheTxRegistry {
      * @dev Reverts if record_request_tx has never been called with step == Requested for
      *      this request_id.
      *      `request_steps[0]` is always `(Requested, request_tx)` — every request that
-     *      exists has one, unconditionally. `request_steps`' last entry is always
-     *      `(RequestQueued, queued_tx)` — every request reaches this step, Hub-vault or
-     *      Spoke-vault alike. For a Hub-vault request (no Inbound leg applies at all —
-     *      `info.vault.chain_id` equals this chain's own EVM chain ID), that's the array's
-     *      only other entry (length 2); for a Spoke-vault one, a `RequestBridgeExecuted`
-     *      entry sits between them (length 3). Same "absent means not applicable,
-     *      present-but-zeroed means pending" convention as get_settlement's `steps` arrays,
-     *      so check `request_steps.length` (2 vs 3) to tell whether this request has an
-     *      Inbound leg at all, and each present entry's own `tx.recorded_at` to tell whether
-     *      it's landed yet. `adapter_legs[i].steps` is `[AdapterBridgeExecuted,
-     *      AdapterApplied]` (length 2) for a genuinely remote chain, but just
-     *      `[AdapterApplied]` (length 1) for a chain that's the same as the origin
-     *      vault's own chain, or Hub — same "absent means not applicable" convention
-     *      as request_steps above, since such a chain never gets a Bridge phase at
-     *      all (fulfilled synchronously — see record_request_tx's dev notes), not
-     *      merely a pending one; check `adapter_legs[i].steps.length` (1 vs 2) the
-     *      same way request_steps.length is checked. `RequestAdapterChains`' own
+     *      exists has one, unconditionally. For a Multichain product, `request_steps`'
+     *      last entry is always `(RequestQueued, queued_tx)` — every such request reaches
+     *      this step, Hub-vault or Spoke-vault alike. For a Hub-vault request (no Inbound
+     *      leg applies at all — `info.vault.chain_id` equals this chain's own EVM chain
+     *      ID), that's the array's only other entry (length 2); for a Spoke-vault one, a
+     *      `RequestBridgeExecuted` entry sits between them (length 3). For a SingleChain
+     *      product's request, `RequestQueued` never appears at all — there's no
+     *      DepositQueued/RedeemQueued-equivalent event for that model (see RequestStep's
+     *      dev notes) — so `request_steps` is just `[Requested]` (length 1). Same "absent
+     *      means not applicable, present-but-zeroed means pending" convention as
+     *      get_settlement's `steps` arrays, so check `request_steps.length` (1 vs 2 vs 3)
+     *      to tell which case this request is, and each present entry's own
+     *      `tx.recorded_at` to tell whether it's landed yet. `adapter_legs[i].steps` is
+     *      `[AdapterBridgeExecuted, AdapterApplied]` (length 2) for a genuinely remote
+     *      chain, but just `[AdapterApplied]` (length 1) for a chain that's the same as
+     *      the origin vault's own chain, or this product's own local chain — same "absent
+     *      means not applicable" convention as request_steps above, since such a chain
+     *      never gets a Bridge phase at all (fulfilled synchronously — see
+     *      record_request_tx's dev notes), not merely a pending one. `adapter_legs` itself
+     *      is always empty for a SingleChain product — its Adapters are colocated too, so
+     *      there's no leg to track at all. Check `adapter_legs[i].steps.length` (1 vs 2)
+     *      the same way request_steps.length is checked. `RequestAdapterChains`' own
      *      order (and so `adapter_legs`' order) is normally the order declared at
      *      RequestQueued, but a self-fulfilling chain (recorded before RequestQueued
      *      ever ran) appears in whatever order it was first touched instead;
      *      `adapter_legs` itself is empty if none were declared, yet or ever.
      *      `status` only ever takes `Requested` (`RequestQueued` not yet reached, or some
-     *      Adapter leg still has an unfinished step) or `RequestCompleted` (`RequestQueued`
-     *      reached, and every declared Adapter chain's last step landed, or none were
-     *      declared at all — immediate for a fully local request). This is deliberately
+     *      Adapter leg still has an unfinished step — never true for a SingleChain
+     *      product, which has neither) or `RequestCompleted` (`RequestQueued` reached and
+     *      every declared Adapter chain's last step landed, or none were declared at all —
+     *      immediate for a Multichain product's fully local request, and always immediate
+     *      for a SingleChain product's request, right from `Requested`, since neither
+     *      RequestQueued nor any Adapter leg ever applies to it). This is deliberately
      *      unrelated to `settlement_id`/`settled` below — see RequestStep's dev notes for
      *      why `RequestCompleted` was renamed from `Completed` to disambiguate the two.
      *      `settlement_id`/`settled` are resolved entirely from this pallet's own registry

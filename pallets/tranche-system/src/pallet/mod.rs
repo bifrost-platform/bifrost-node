@@ -1,12 +1,11 @@
 mod impls;
 
 use crate::{
-	migrations, AdapterInfo, AdapterInspect, AdapterKey, CrudAction, MultichainAdapterInfo,
+	migrations, AdapterInfo, AdapterKey, CrudAction, MultichainAdapterInfo,
 	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
 	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	VaultInspect, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
-	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
-	MAX_TRANCHE_MANAGERS,
+	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
 };
 
 use frame_support::{
@@ -807,53 +806,5 @@ pub mod pallet {
 			Self::deposit_event(Event::MultichainTrancheManagersSet { product_id });
 			Ok(())
 		}
-	}
-}
-
-impl<T: pallet::Config> VaultInspect for pallet::Pallet<T> {
-	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool {
-		pallet::Vaults::<T>::get(vault) == Some(product_id)
-	}
-
-	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
-		let product = pallet::Products::<T>::get(product_id);
-		chain_ids.iter().all(|chain_id| {
-			product.as_ref().is_some_and(|product| match product {
-				ProductDetails::Multichain(product) => {
-					product.tranches.iter().any(|tranche| tranche.vault.chain_id == *chain_id)
-				},
-				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
-			})
-		})
-	}
-
-	fn product_id_for_vault(vault: &VaultId) -> Option<ProductId> {
-		pallet::Vaults::<T>::get(vault)
-	}
-}
-
-impl<T: pallet::Config> AdapterInspect for pallet::Pallet<T> {
-	fn multichain_adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
-		pallet::MultichainAdapterIndex::<T>::get(key) == Some(product_id)
-	}
-
-	fn adapter_belongs_to_product(product_id: ProductId, key: &AdapterKey) -> bool {
-		pallet::AdapterIndex::<T>::get(key) == Some(product_id)
-	}
-
-	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
-		let product = pallet::Products::<T>::get(product_id);
-		chain_ids.iter().all(|chain_id| {
-			product.as_ref().is_some_and(|product| match product {
-				ProductDetails::Multichain(product) => {
-					product.multichain_adapters.keys().any(|key| key.chain_id == *chain_id)
-				},
-				// `adapters` can never be empty for an existing single-chain
-				// product — `create_single_chain_product` requires its
-				// weights to sum to exactly 10_000, impossible for an empty
-				// map, and there's no mutator that could empty it afterward.
-				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
-			})
-		})
 	}
 }

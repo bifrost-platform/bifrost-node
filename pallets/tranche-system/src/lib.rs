@@ -576,6 +576,27 @@ pub trait AdapterInspect {
 	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
 }
 
+/// Implemented by pallet-tranche-system itself (it owns `Products`). Consumed by
+/// pallet-tranche-tx-registry to tell a `SingleChain` product apart from a
+/// `Multichain` one — the two models need different "does this chain need a
+/// bridge leg" logic. A `Multichain` product's Hub-vault requests are bridge-free
+/// because they're colocated with the Hub Valuation Contract (a single, fixed
+/// chain, global across every multichain product); a `SingleChain` product's
+/// requests are bridge-free for the same underlying reason — everything
+/// (Vault, TrancheManager, Valuation, Adapters) is colocated — except the chain
+/// they're colocated on is that *specific product's own* `chain_id`, not
+/// necessarily Hub. `pallet-tranche-tx-registry` uses this to compute a
+/// per-product "local chain" (`single_chain_id(product_id)`, falling back to
+/// this chain's own Hub `ChainId` if `None`) everywhere it used to hardcode the
+/// literal Hub chain ID, rather than adding a second, parallel set of
+/// single-chain-only branches.
+pub trait ProductInspect {
+	/// `Some(chain_id)` if `product_id` is a `SingleChain` product — the one
+	/// chain its entire stack lives on. `None` if it's `Multichain` (there's no
+	/// single answer to "which chain" for that model).
+	fn single_chain_id(product_id: ProductId) -> Option<u64>;
+}
+
 // ---------------------------------------------------------------------------
 // ProductAdmin origin
 // ---------------------------------------------------------------------------

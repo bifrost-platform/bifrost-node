@@ -1,5 +1,5 @@
 use crate::{ChainId, ProductId, RequestId, SettlementId};
-use pallet_tranche_system::AdapterInspect;
+use pallet_tranche_system::{AdapterInspect, ProductInspect};
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
@@ -38,6 +38,19 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	/// The chain `product_id`'s own request/settlement/whitelist pipeline needs no
+	/// bridge leg for — this Hub chain's own `ChainId` for a `Multichain` product
+	/// (`T::Products::single_chain_id` returns `None` for it), or that product's
+	/// own single chain for a `SingleChain` product (see `ProductInspect`'s doc
+	/// comment for why the two models share this same "colocated with Valuation,
+	/// no bridge needed" reasoning despite the chain itself differing). Used
+	/// everywhere this pallet used to hardcode the literal Hub chain ID to decide
+	/// "does this vault/chain need a bridge leg."
+	pub(crate) fn local_chain_id(product_id: ProductId) -> ChainId {
+		T::Products::single_chain_id(product_id)
+			.unwrap_or_else(<T as pallet_evm::Config>::ChainId::get)
+	}
+
 	/// Removes `(product_id, request_id)` from `investor`'s
 	/// `InvestorActiveRequests` list and emits `ActiveRequestClosed`, if it's
 	/// still there — a no-op otherwise (already closed by an earlier call).
@@ -55,14 +68,15 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// Shared by `record_settlement_tx`'s `SettleApplied` leg arm (called
-	/// with `chain_id = Some(spoke_chain_id)`) and `try_close_hub_vault_requests`
-	/// (called with `chain_id = Some(hub_chain_id)`): closes out
+	/// with `chain_id = Some(spoke_chain_id)`) and `try_close_local_requests`
+	/// (called with `chain_id = Some(local_chain_id)`): closes out
 	/// `InvestorActiveRequests` for every request approved into `settlement_id`
 	/// whose own origin chain is `chain_id` — see `InvestorActiveRequests`'s
 	/// storage doc comment for the full mechanism. `chain_id = None` closes every
 	/// request approved into `settlement_id` unconditionally; no current caller
-	/// uses this (every real chain, including Hub, is always known at the call
-	/// site), kept only because it costs nothing to leave the filter optional.
+	/// uses this (every real chain, including each product's own local chain, is
+	/// always known at the call site), kept only because it costs nothing to
+	/// leave the filter optional.
 	/// Reads `SettlementRequests` — this pallet's own event-sourced copy of the
 	/// request<->settlement linkage, written by `record_request_tx`'s
 	/// `RequestStep::SettlementApproved` arm (see that storage's own doc comment
@@ -86,29 +100,33 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// A Hub-vault request's settlement completes once every one of
-	/// `SettlementCollectResponseChains` has reached `NavReceived` —
-	/// NAV must be fully known before the Hub vault's own payout/allocation can
-	/// be computed, which then happens synchronously with no Finalize leg of its
+	/// A request whose vault is colocated with its product's own Valuation
+	/// Contract — a Hub-vault request in a `Multichain` product, or *any*
+	/// request in a `SingleChain` product (see `local_chain_id`'s doc comment) —
+	/// has its settlement complete once every one of
+	/// `SettlementCollectResponseChains` has reached `NavReceived` — NAV must be
+	/// fully known before the colocated vault's own payout/allocation can be
+	/// computed, which then happens synchronously with no Finalize leg of its
 	/// own (see `SettlementStep`'s doc comment). Vacuously true the moment
 	/// `collect_response_chain_ids` is declared empty at Trigger (no Adapter
-	/// anywhere off-Hub), so this is safe to call unconditionally right after
-	/// writing that storage, as well as after every `NavReceived`
-	/// — closes `InvestorActiveRequests` for every Hub-vault request approved
-	/// into `settlement_id` once true, via `close_active_requests(chain_id =
-	/// Some(hub_chain_id))`. A no-op (does nothing, cheaply) if the condition
-	/// isn't met yet.
-	pub(crate) fn try_close_hub_vault_requests(product_id: ProductId, settlement_id: SettlementId) {
-		if Self::hub_vault_settlement_complete(product_id, settlement_id) {
-			let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
-			Self::close_active_requests(product_id, settlement_id, Some(hub_chain_id));
+	/// anywhere off this local chain — always the case for a `SingleChain`
+	/// product, since its Adapters are colocated too), so this is safe to call
+	/// unconditionally right after writing that storage, as well as after every
+	/// `NavReceived` — closes `InvestorActiveRequests` for every such request
+	/// approved into `settlement_id` once true, via
+	/// `close_active_requests(chain_id = Some(local_chain_id))`. A no-op (does
+	/// nothing, cheaply) if the condition isn't met yet.
+	pub(crate) fn try_close_local_requests(product_id: ProductId, settlement_id: SettlementId) {
+		if Self::local_settlement_complete(product_id, settlement_id) {
+			let local_chain_id = Self::local_chain_id(product_id);
+			Self::close_active_requests(product_id, settlement_id, Some(local_chain_id));
 		}
 	}
 
-	/// The condition `try_close_hub_vault_requests` waits on, factored out so
-	/// `try_close_request` can check it for a single Hub-vault request without
-	/// re-running `close_active_requests`' settlement-wide scan.
-	fn hub_vault_settlement_complete(product_id: ProductId, settlement_id: SettlementId) -> bool {
+	/// The condition `try_close_local_requests` waits on, factored out so
+	/// `try_close_request` can check it for a single request without re-running
+	/// `close_active_requests`' settlement-wide scan.
+	fn local_settlement_complete(product_id: ProductId, settlement_id: SettlementId) -> bool {
 		let collect_response_chains =
 			SettlementCollectResponseChains::<T>::get(product_id, settlement_id)
 				.unwrap_or_default();
@@ -124,7 +142,7 @@ impl<T: Config> Pallet<T> {
 	/// request out of `InvestorActiveRequests` immediately if its settlement's
 	/// completion condition has *already* landed by the time `SettlementApproved`
 	/// is recorded. This exists because `SettlementApproved` races with the
-	/// settlement-side completion trigger (`try_close_hub_vault_requests`/
+	/// settlement-side completion trigger (`try_close_local_requests`/
 	/// `close_active_requests` at `SettleApplied`) — both can fire at essentially
 	/// the same moment (see `RequestStep::SettlementApproved`'s doc comment), via
 	/// separate, independently-ordered `record_request_tx`/`record_settlement_tx`
@@ -143,9 +161,8 @@ impl<T: Config> Pallet<T> {
 		let Some(request_entry) = RequestEntries::<T>::get(product_id, request_id) else {
 			return;
 		};
-		let hub_chain_id = <T as pallet_evm::Config>::ChainId::get();
-		let complete = if request_entry.vault.chain_id == hub_chain_id {
-			Self::hub_vault_settlement_complete(product_id, settlement_id)
+		let complete = if request_entry.vault.chain_id == Self::local_chain_id(product_id) {
+			Self::local_settlement_complete(product_id, settlement_id)
 		} else {
 			SettlementChainEntries::<T>::get((
 				product_id,
