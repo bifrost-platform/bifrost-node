@@ -1,13 +1,48 @@
-use crate::{ChainId, ProductId, RequestId, SettlementId};
+use crate::{
+	BridgeAttempt, BridgeAttempts, BridgeStatus, ChainId, ProductId, RequestId, SettlementId,
+	TxRecord,
+};
 use pallet_tranche_system::{AdapterInspect, ProductInspect};
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
+use frame_system::pallet_prelude::BlockNumberFor;
 use sp_core::H160;
 
 // Private, non-extrinsic helpers — kept in their own `impl` block, separate from
 // `#[pallet::call]`, so they don't become part of the `Call` enum.
 impl<T: Config> Pallet<T> {
+	/// `true` iff some attempt in `attempts` resolved `Executed` — the "did
+	/// this leg actually complete" question every downstream gate
+	/// (`RequestQueued`, `NavReported`, `NavReceived`, `SettleApplied`,
+	/// `WhitelistApplied`) asks, per `BridgeAttempts`'s doc comment. NOT the
+	/// same as `!attempts.is_empty()` — a list full of `Rejected` attempts
+	/// still answers `false` here (awaiting retry).
+	pub(crate) fn bridge_succeeded(attempts: &BridgeAttempts<BlockNumberFor<T>>) -> bool {
+		attempts.iter().any(|attempt| attempt.status == BridgeStatus::Executed)
+	}
+
+	/// Appends one observed attempt to a leg's attempt list — shared by every
+	/// Bridge-phase arm across `record_request_tx`/`record_settlement_tx`/
+	/// `record_whitelist_tx`. Rejects with `Error::BridgeLegAlreadySucceeded`
+	/// if the leg already has an `Executed` attempt (nothing left to retry —
+	/// see `BridgeAttempt`'s doc comment on the "at most one `Executed` ever"
+	/// invariant), and with `Error::TooManyBridgeAttempts` if the list is
+	/// already at `MAX_BRIDGE_ATTEMPTS`. Unlike the old `Option`-overwrite
+	/// shape this replaces, a `Rejected` attempt is never itself an error —
+	/// only a second attempt after a success is.
+	pub(crate) fn push_bridge_attempt(
+		attempts: &mut BridgeAttempts<BlockNumberFor<T>>,
+		status: BridgeStatus,
+		tx: TxRecord<BlockNumberFor<T>>,
+	) -> DispatchResult {
+		ensure!(!Self::bridge_succeeded(attempts), Error::<T>::BridgeLegAlreadySucceeded);
+		attempts
+			.try_push(BridgeAttempt { status, tx })
+			.map_err(|_| Error::<T>::TooManyBridgeAttempts)?;
+		Ok(())
+	}
+
 	/// Self-declares `chain_id` into `RequestAdapterChains` if it isn't already
 	/// there — shared by `record_request_tx`'s `AdapterBridgeExecuted`/
 	/// `AdapterApplied` arms. Adapter-leg evidence for a chain can arrive before

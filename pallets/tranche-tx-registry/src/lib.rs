@@ -10,8 +10,8 @@ pub use weights::WeightInfo;
 use pallet_tranche_system::{ProductId, VaultId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{H160, H256, U256};
-use sp_runtime::RuntimeDebug;
+use sp_core::{ConstU32, H160, H256, U256};
+use sp_runtime::{BoundedVec, RuntimeDebug};
 use sp_std::marker::PhantomData;
 
 // ---------------------------------------------------------------------------
@@ -79,6 +79,99 @@ pub struct TxRecord<BlockNumber> {
 	/// This chain's own block number when the attestation was accepted.
 	pub recorded_at: BlockNumber,
 }
+
+// ---------------------------------------------------------------------------
+// Bridge attempts (retry tracking)
+// ---------------------------------------------------------------------------
+
+/// Maximum number of Bridge-phase attempts (one `SocketMessage` resolution —
+/// `Executed` or `Rejected` — per attempt) this pallet will record for a
+/// single Bridge leg before refusing further ones with
+/// `Error::TooManyBridgeAttempts`. CCCP-v2 can roll a Bridge message back
+/// (`Rejected`) — when that happens, the refunded contract
+/// (`MultichainTrancheManager` for an Inbound/Response leg's refund, since
+/// those originate on a Spoke chain; `OrchestratorHub` for an
+/// Adapter/Collect/Finalize/Whitelist leg's refund, since those originate on
+/// Hub) is expected to expose its own `retry()` entrypoint that resubmits the
+/// same Bridge message — this pallet doesn't drive that retry itself, it only
+/// records whatever attempts a recorder observed, in order. Sized generously
+/// (well above what any real retry policy should ever need) since this bounds
+/// on-chain storage growth, not the actual number of retries a bot is allowed
+/// to make.
+pub const MAX_BRIDGE_ATTEMPTS: u32 = 10;
+
+/// A Bridge-phase message's terminal outcome, per CCCP-v2's `SocketMessage`.
+/// Mirrors interface.sol's `BridgeStatus` — declared `Rejected` (0) before
+/// `Executed` (1) so the ABI-encoded wire value (Solidity enums encode as
+/// their declaration-order discriminant, same as this SCALE-encoded one) reads
+/// `0 = Rejected, 1 = Executed` on the precompile boundary.
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub enum BridgeStatus {
+	/// The Bridge message was rolled back — the leg never reached its
+	/// destination, and the refunded contract (see `MAX_BRIDGE_ATTEMPTS`'s
+	/// doc comment) is expected to `retry()` it. Any step gated on this leg
+	/// (e.g. `RequestStep::RequestQueued` gated on the Inbound leg) stays
+	/// unreachable until some later attempt for the same leg resolves
+	/// `Executed`.
+	Rejected,
+	/// The Bridge message was relayed and successfully executed at its
+	/// destination — the leg's Hooks phase (if any) is now reachable.
+	Executed,
+}
+
+/// One Bridge-phase attempt for a leg — `record_*_tx` appends one of these
+/// each time the recorder observes a `SocketMessage` resolve for that leg,
+/// `Executed` or `Rejected` alike, rather than overwriting a single evidence
+/// slot. Mirrors interface.sol's `BridgeAttempt`.
+///
+/// A leg's "did this actually complete" question (what every downstream gate
+/// — `RequestQueued`, `NavReported`, `NavReceived`, `SettleApplied`,
+/// `WhitelistApplied` — checks) is answered by "does *any* attempt in this
+/// leg's list have `status == Executed`", not by "is the list non-empty" —
+/// see each of those steps' own dev notes. At most one `Executed` attempt can
+/// ever exist for a given leg: once one lands, `record_*_tx` refuses to
+/// record further attempts for that leg (nothing left to retry).
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub struct BridgeAttempt<BlockNumber> {
+	pub status: BridgeStatus,
+	pub tx: TxRecord<BlockNumber>,
+}
+
+/// Shorthand for a leg's full attempt list — every Bridge-phase evidence
+/// field in this pallet (`RequestEntry::bridge_attempts`,
+/// `RequestChainEntry::bridge_attempts`,
+/// `SettlementChainEntry::{collect,response,finalize}_bridge_attempts`,
+/// `WhitelistEntry::bridge_attempts`) uses this same shape. An empty list
+/// means "no attempt observed yet" (the pre-existing `None`-equivalent
+/// sentinel); a non-empty list with no `Executed` entry means "attempted,
+/// currently rejected, awaiting retry" — read-side callers (`get_request`/
+/// `get_settlement`/`get_whitelist`) distinguish the two only by inspecting
+/// the list itself, since this pallet doesn't track a separate "awaiting
+/// retry" flag (see this pallet's `docs/tranche-tx-registry/CHANGELOG.md`
+/// entry on why that's left to the frontend to render).
+pub type BridgeAttempts<BlockNumber> =
+	BoundedVec<BridgeAttempt<BlockNumber>, ConstU32<MAX_BRIDGE_ATTEMPTS>>;
 
 // ---------------------------------------------------------------------------
 // Request pipeline
@@ -270,12 +363,12 @@ pub struct RequestOpening {
 /// (its `product_id`/`request_id` are this entry's own storage keys instead
 /// of fields).
 ///
-/// Holds the Inbound leg's Bridge evidence (`bridge_tx`) directly rather than
-/// per-chain, unlike the Adapter legs (`RequestChainEntries`) — a request
+/// Holds the Inbound leg's Bridge evidence (`bridge_attempts`) directly rather
+/// than per-chain, unlike the Adapter legs (`RequestChainEntries`) — a request
 /// only ever has one vault, so at most one Inbound leg, always for that
-/// vault's own chain. `bridge_tx` stays `None` forever for a Hub-vault
+/// vault's own chain. `bridge_attempts` stays empty forever for a Hub-vault
 /// request (no Inbound leg applies — see `RequestStep`'s doc comment); unlike
-/// `bridge_tx`, `queued_tx` is populated for **every** request regardless of
+/// `bridge_attempts`, `queued_tx` is populated for **every** request regardless of
 /// Hub or Spoke, since `RequestStep::RequestQueued` applies to both.
 ///
 /// `settlement_id`/`approved_tx` were originally left out entirely (this
@@ -308,9 +401,11 @@ pub struct RequestEntry<BlockNumber> {
 	pub order_type: OrderType,
 	/// Evidence for the `Requested` step itself.
 	pub request_tx: Option<TxRecord<BlockNumber>>,
-	/// Inbound leg, Bridge phase (Spoke -> Hub). `None` forever if the vault is
-	/// on Hub (no Inbound leg needed).
-	pub bridge_tx: Option<TxRecord<BlockNumber>>,
+	/// Inbound leg, Bridge phase (Spoke -> Hub) — every attempt observed, in
+	/// order (see `BridgeAttempts`'s doc comment for the "which one counts as
+	/// done" convention). Empty forever if the vault is on Hub (no Inbound leg
+	/// needed).
+	pub bridge_attempts: BridgeAttempts<BlockNumber>,
 	/// Evidence for `RequestStep::RequestQueued` — the moment this request's
 	/// capital is confirmed at the Hub Valuation Contract and
 	/// `adapter_chain_ids` becomes known. Populated for every request, Hub or
@@ -347,7 +442,11 @@ pub struct RequestEntry<BlockNumber> {
 	Default,
 )]
 pub struct RequestChainEntry<BlockNumber> {
-	pub bridge_tx: Option<TxRecord<BlockNumber>>,
+	/// Every attempt observed for this chain's Adapter leg, Bridge phase, in
+	/// order (see `BridgeAttempts`'s doc comment for the "which one counts as
+	/// done" convention). Empty forever for a self-fulfilling chain (origin
+	/// vault's own chain, or Hub) — no Bridge phase at all.
+	pub bridge_attempts: BridgeAttempts<BlockNumber>,
 	/// Evidence for `RequestStep::AdapterApplied` — the MultichainAdapter has
 	/// been notified and acted on this leg (`Supplied` for a deposit,
 	/// `WithdrawRequested` for a redeem).
@@ -431,11 +530,18 @@ pub enum SettlementStep {
 	Default,
 )]
 pub struct SettlementChainEntry<BlockNumber> {
-	pub collect_bridge_tx: Option<TxRecord<BlockNumber>>,
+	/// Every attempt observed for this chain's Collect leg, Bridge phase, in
+	/// order (see `BridgeAttempts`'s doc comment for the "which one counts as
+	/// done" convention).
+	pub collect_bridge_attempts: BridgeAttempts<BlockNumber>,
 	pub nav_reported_tx: Option<TxRecord<BlockNumber>>,
-	pub response_bridge_tx: Option<TxRecord<BlockNumber>>,
+	/// Every attempt observed for this chain's Response leg, Bridge phase, in
+	/// order — same convention as `collect_bridge_attempts`.
+	pub response_bridge_attempts: BridgeAttempts<BlockNumber>,
 	pub nav_received_tx: Option<TxRecord<BlockNumber>>,
-	pub finalize_bridge_tx: Option<TxRecord<BlockNumber>>,
+	/// Every attempt observed for this chain's Finalize leg, Bridge phase, in
+	/// order — same convention as `collect_bridge_attempts`.
+	pub finalize_bridge_attempts: BridgeAttempts<BlockNumber>,
 	pub settle_applied_tx: Option<TxRecord<BlockNumber>>,
 }
 
@@ -632,11 +738,12 @@ pub struct WhitelistEntry<BlockNumber> {
 	/// step at all (see `WhitelistStep`'s doc comment); `WhitelistApplied`
 	/// opens the entry directly instead.
 	pub request_tx: Option<TxRecord<BlockNumber>>,
-	/// Evidence for `WhitelistStep::BridgeExecuted`. `None` forever if `vault`
-	/// is on its product's own local chain (no Bridge leg — see
-	/// `WhitelistStep`'s doc comment) — always the case for a `SingleChain`
-	/// product.
-	pub bridge_tx: Option<TxRecord<BlockNumber>>,
+	/// Every attempt observed for `WhitelistStep::BridgeExecuted`, in order
+	/// (see `BridgeAttempts`'s doc comment for the "which one counts as done"
+	/// convention). Empty forever if `vault` is on its product's own local
+	/// chain (no Bridge leg — see `WhitelistStep`'s doc comment) — always the
+	/// case for a `SingleChain` product.
+	pub bridge_attempts: BridgeAttempts<BlockNumber>,
 	/// Evidence for `WhitelistStep::WhitelistApplied`.
 	pub applied_tx: Option<TxRecord<BlockNumber>>,
 }
