@@ -27,7 +27,9 @@ pragma solidity >=0.8.0;
  *    phase is what RequestQueued represents) delivering the request itself to the Hub
  *    Valuation Contract, and zero or more Adapter legs (one per actually-weighted
  *    MultichainAdapter chain) pushing capital out to each. Each leg is its own
- *    bridge_tx/applied_tx (or bridge_tx/queued_tx) pair — except when an Adapter leg's chain is
+ *    Bridge-attempt-history/applied_tx (or Bridge-attempt-history/queued_tx) pair — see
+ *    BridgeAttempt's own dev notes for why the Bridge half is a full attempt history rather
+ *    than a single tx — except when an Adapter leg's chain is
  *    the same chain as the origin vault, or Hub itself: that chain's allocation is fulfilled
  *    synchronously (no Bridge phase at all — the Adapter Contract call is local), so only
  *    applied_tx is ever set for it. `adapter_chain_ids` — which chains need an Adapter leg —
@@ -389,12 +391,85 @@ interface TrancheTxRegistry {
         WhitelistApplied
     }
 
+    /// @dev A Bridge-phase message's terminal outcome, per CCCP-v2's SocketMessage.
+    ///      Declared `Rejected` (0) before `Executed` (1) — the wire value is
+    ///      `0 = Rejected, 1 = Executed`. `Rejected` means the Bridge message was
+    ///      rolled back — the refunded contract (MultichainTrancheManager for an
+    ///      Inbound/Response leg's refund, OrchestratorHub for an
+    ///      Adapter/Collect/Finalize/Whitelist leg's refund) is expected to retry()
+    ///      it; any step gated on this leg stays unreachable until some later attempt
+    ///      resolves `Executed`. `Executed` means the leg's own Hooks phase (if any)
+    ///      is now reachable. Used both as a record_request_tx/record_settlement_tx/
+    ///      record_whitelist_tx input (only meaningful for that extrinsic's
+    ///      Bridge-phase steps, where it MUST be 0 otherwise — see each function's own
+    ///      dev notes) and inside BridgeAttempt on the read side (always meaningful
+    ///      there).
+    enum BridgeStatus {
+        Rejected,
+        Executed
+    }
+
+    /// @dev One observed Bridge-phase attempt for a leg — a leg's full attempt
+    ///      history (get_request/get_settlement/get_whitelist's new
+    ///      *_bridge_attempts return values) is an ordered array of these, one per
+    ///      SocketMessage resolution the recorder observed, `Executed` or `Rejected`
+    ///      alike. At most one `Executed` attempt can ever exist per leg — once one
+    ///      lands, no further attempt is ever recorded for it (nothing left to
+    ///      retry). Distinct from the pre-existing *_steps/*_tx return values, which
+    ///      only ever show the single attempt that succeeded (if any), zeroed
+    ///      otherwise, regardless of how many `Rejected` attempts preceded it — see
+    ///      this interface's top-level dev notes on the two views' relationship.
+    /// @param status `Executed` or `Rejected`
+    /// @param tx     Evidence for this specific attempt
+    struct BridgeAttempt {
+        BridgeStatus status;
+        TxRecord tx;
+    }
+
+    /// @dev One chain's full Bridge-phase attempt history for a single-leg pipeline
+    ///      (a request's Adapter leg) — parallel to AdapterLeg's own per-chain shape,
+    ///      but carrying every attempt observed for that leg rather than just the one
+    ///      (if any) that landed in AdapterLeg.steps. Empty `attempts` means either no
+    ///      attempt has been observed yet, or this chain self-fulfills synchronously
+    ///      (no Bridge phase at all — see AdapterLeg's own dev notes); the two cases
+    ///      aren't distinguishable from this struct alone, same as `AdapterLeg.steps`
+    ///      already can't distinguish "empty because self-fulfilling" without
+    ///      cross-referencing which chain it is.
+    /// @param chain_id  The chain this leg is for
+    /// @param attempts  Every attempt observed for this chain's Adapter leg, in order
+    struct ChainBridgeAttempts {
+        uint64 chain_id;
+        BridgeAttempt[] attempts;
+    }
+
+    /// @dev One chain's full Bridge-phase attempt history across all three settlement
+    ///      leg kinds — parallel to SettlementChainSteps's own per-chain shape, but
+    ///      exposing every attempt observed for each Bridge phase (Collect/Response/
+    ///      Finalize) rather than just the one (if any) that succeeded. A chain
+    ///      without a given leg kind at all (e.g. a Collect/Response-only chain has no
+    ///      Finalize leg) simply has an empty array for it — same "empty means either
+    ///      not-yet-attempted or not-applicable" caveat as ChainBridgeAttempts.
+    /// @param spoke_chain_id     The chain these attempt histories are for
+    /// @param collect_attempts   Every attempt observed for this chain's Collect leg
+    /// @param response_attempts  Every attempt observed for this chain's Response leg
+    /// @param finalize_attempts  Every attempt observed for this chain's Finalize leg
+    struct SettlementChainBridgeAttempts {
+        uint64 spoke_chain_id;
+        BridgeAttempt[] collect_attempts;
+        BridgeAttempt[] response_attempts;
+        BridgeAttempt[] finalize_attempts;
+    }
+
     /// @dev `investor`/`vault_chain_id`/`vault_address`/`amount`/`order_type` are only
     ///      meaningful when `step == Requested` (zero/empty otherwise) — same sentinel
     ///      convention as record_request_tx's own parameters. `adapter_chain_ids` is
     ///      meaningful (and may be empty) exclusively when `step == RequestQueued`, empty
     ///      otherwise. `settlement_id` is meaningful (and non-zero) exclusively when
-    ///      `step == SettlementApproved`, zero otherwise.
+    ///      `step == SettlementApproved`, zero otherwise. `bridge_status` is meaningful
+    ///      exclusively when `step` is `RequestBridgeExecuted` or `AdapterBridgeExecuted`
+    ///      (the two Bridge-phase steps) — MUST be 0 (ignored) otherwise, same
+    ///      "reuses a real enum value as its own N/A sentinel, disambiguated only by
+    ///      `step`" convention `order_type` already uses.
     event RequestTxRecorded(
         uint64 indexed product_id,
         bytes32 indexed request_id,
@@ -406,7 +481,8 @@ interface TrancheTxRegistry {
         RequestStep step,
         uint64[] adapter_chain_ids,
         TxAttestation attestation,
-        uint256 settlement_id
+        uint256 settlement_id,
+        BridgeStatus bridge_status
     );
 
     /// @dev `spoke_chain_id` is 0 only when `step == Triggered` (`collect_response_chain_ids`/
@@ -414,7 +490,11 @@ interface TrancheTxRegistry {
     ///      otherwise `spoke_chain_id` identifies the chain and both arrays are empty — same
     ///      sentinel convention as record_settlement_tx's own parameters. `settlement_id` is
     ///      only unique within `product_id`'s own namespace (each product's Valuation
-    ///      Contract generates its own sequence), never globally.
+    ///      Contract generates its own sequence), never globally. `bridge_status` is
+    ///      meaningful exclusively when `step` is `CollectBridgeExecuted`/
+    ///      `ResponseBridgeExecuted`/`FinalizeBridgeExecuted` (the three Bridge-phase leg
+    ///      steps) — MUST be 0 (ignored) otherwise, same convention as
+    ///      RequestTxRecorded's own `bridge_status`.
     event SettlementTxRecorded(
         uint64 indexed product_id,
         uint256 indexed settlement_id,
@@ -422,7 +502,8 @@ interface TrancheTxRegistry {
         SettlementStep step,
         uint64[] collect_response_chain_ids,
         uint64[] finalize_chain_ids,
-        TxAttestation attestation
+        TxAttestation attestation,
+        BridgeStatus bridge_status
     );
 
     event ReceiveTxRecorded(
@@ -440,14 +521,17 @@ interface TrancheTxRegistry {
     ///      so emitting one here would need an extra storage read this event doesn't
     ///      otherwise need. `product_id` is still recorded pallet-side (see
     ///      pallet_tranche_tx_registry::Event::WhitelistTxRecorded) for anything that
-    ///      needs it.
+    ///      needs it. `bridge_status` is meaningful exclusively when `step ==
+    ///      BridgeExecuted` — MUST be 0 (ignored) otherwise, same
+    ///      convention as RequestTxRecorded's own `bridge_status`.
     event WhitelistTxRecorded(
         address indexed who,
         VaultInput vault,
         bool grant,
         uint256 nonce,
         WhitelistStep step,
-        TxAttestation attestation
+        TxAttestation attestation,
+        BridgeStatus bridge_status
     );
 
     /**
@@ -490,6 +574,16 @@ interface TrancheTxRegistry {
      *      actually observed the underlying events, not this pipeline's own conceptual
      *      order). `step == Requested` must not be called twice for the same request_id, and
      *      RequestBridgeExecuted reverts if called for a Hub-vault request.
+     *      `bridge_status` MUST be meaningful (either `Executed` or `Rejected`) when `step`
+     *      is `RequestBridgeExecuted` or `AdapterBridgeExecuted`, and MUST be 0 (ignored)
+     *      for every other step — same sentinel-gating convention as every other field
+     *      here. Recording `Rejected` means the Bridge message was
+     *      rolled back for this attempt; it is never itself an error to record — only a
+     *      further attempt after an `Executed` one already landed for the same leg is
+     *      (nothing left to retry). Appended to the leg's own attempt list rather than
+     *      overwriting — see get_request's new *_bridge_attempts return values for the
+     *      full history, and BridgeAttempt's own dev notes for the "at most one Executed
+     *      ever" invariant.
      *      `settlement_id` MUST be non-zero when `step == SettlementApproved` and MUST be
      *      zero for every other step. Recording `SettlementApproved` links `request_id` into
      *      this settlement's request set and races with the settlement-side completion
@@ -521,6 +615,9 @@ interface TrancheTxRegistry {
      * @param attestation            The attested off-chain tx
      * @param settlement_id          The settlement this request is approved into — required
      *                               (non-zero) iff step == SettlementApproved, zero otherwise
+     * @param bridge_status          Executed or Rejected — meaningful iff step ==
+     *                               RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0
+     *                               (ignored) otherwise
      */
     function record_request_tx(
         uint64 product_id,
@@ -533,7 +630,8 @@ interface TrancheTxRegistry {
         uint64[] calldata adapter_chain_ids,
         RequestStep step,
         TxAttestation calldata attestation,
-        uint256 settlement_id
+        uint256 settlement_id,
+        BridgeStatus bridge_status
     ) external;
 
     /**
@@ -572,6 +670,11 @@ interface TrancheTxRegistry {
      *      a given (spoke_chain_id, leg) pair, Bridge must be recorded before Hooks, with no
      *      duplicates — this ordering is enforced only within that pair, not across chains
      *      or legs, since chains progress independently.
+     *      `bridge_status` MUST be meaningful (either `Executed` or `Rejected`) when `step`
+     *      is `CollectBridgeExecuted`/`ResponseBridgeExecuted`/`FinalizeBridgeExecuted`, and
+     *      MUST be 0 (ignored) for every other step — same convention as
+     *      record_request_tx's own `bridge_status`; see that function's dev notes for the
+     *      full retry/attempt-list semantics this shares.
      *      Emits SettlementTxRecorded.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  The settlement cycle this attestation belongs to
@@ -582,6 +685,8 @@ interface TrancheTxRegistry {
      *                        empty) iff step == Triggered, empty otherwise
      * @param step            Which pipeline step this attestation is for
      * @param attestation     The attested off-chain tx
+     * @param bridge_status   Executed or Rejected — meaningful iff step is one of the three
+     *                        Bridge-phase leg steps, MUST be 0 (ignored) otherwise
      */
     function record_settlement_tx(
         uint64 product_id,
@@ -590,7 +695,8 @@ interface TrancheTxRegistry {
         uint64[] calldata collect_response_chain_ids,
         uint64[] calldata finalize_chain_ids,
         SettlementStep step,
-        TxAttestation calldata attestation
+        TxAttestation calldata attestation,
+        BridgeStatus bridge_status
     ) external;
 
     /**
@@ -664,6 +770,10 @@ interface TrancheTxRegistry {
      *      all — `step == WhitelistApplied` opens the entry itself, the first time it's
      *      seen for a given (vault, who, nonce), since `vault` resolves to a registered
      *      SingleChain product.
+     *      `bridge_status` MUST be meaningful (either `Executed` or `Rejected`) when
+     *      `step == BridgeExecuted`, and MUST be 0 (ignored) for every other step — same
+     *      convention as record_request_tx's own `bridge_status`; see that function's dev
+     *      notes for the full retry/attempt-list semantics this shares.
      *      Emits WhitelistTxRecorded.
      * @param vault        The tranche vault this whitelist action targets
      * @param who          The account whose whitelist status is being changed
@@ -673,6 +783,8 @@ interface TrancheTxRegistry {
      *                     or TrancheManager-generated (SingleChain)
      * @param step         Which pipeline step this attestation is for
      * @param attestation  The attested off-chain tx
+     * @param bridge_status Executed or Rejected — meaningful iff step == BridgeExecuted,
+     *                     MUST be 0 (ignored) otherwise
      */
     function record_whitelist_tx(
         VaultInput calldata vault,
@@ -680,7 +792,8 @@ interface TrancheTxRegistry {
         bool grant,
         uint256 nonce,
         WhitelistStep step,
-        TxAttestation calldata attestation
+        TxAttestation calldata attestation,
+        BridgeStatus bridge_status
     ) external;
 
     /**
@@ -784,6 +897,13 @@ interface TrancheTxRegistry {
      *      which case this action is.
      *      `status` is the last step whose evidence has actually landed
      *      (`tx.recorded_at != 0`).
+     *      `bridge_attempts` is the Bridge leg's full attempt history — every attempt
+     *      observed, `Executed` or `Rejected` alike, in order — as opposed to `steps`'
+     *      own `BridgeExecuted` entry, which only ever shows the single attempt that
+     *      succeeded (if any), zeroed otherwise, regardless of how many `Rejected`
+     *      attempts preceded it. Empty for a Hub-vault or SingleChain-product action
+     *      (no Bridge leg at all — same cases `steps` itself omits `BridgeExecuted`
+     *      for), or simply not yet attempted.
      * @param vault The tranche vault this whitelist action targeted
      * @param who   The account whose whitelist status was being changed
      * @param nonce Correlator for this action — Orchestrator-generated (Multichain) or
@@ -792,6 +912,7 @@ interface TrancheTxRegistry {
      * @return steps  Ordered step history — length 1 (SingleChain), 2 (Hub-vault), or 3
      *                (Spoke-vault)
      * @return status The furthest step reached so far
+     * @return bridge_attempts The Bridge leg's full attempt history, see above
      */
     function get_whitelist(
         VaultInput calldata vault,
@@ -803,7 +924,8 @@ interface TrancheTxRegistry {
         returns (
             bool grant,
             WhitelistTxStep[] memory steps,
-            WhitelistStep status
+            WhitelistStep status,
+            BridgeAttempt[] memory bridge_attempts
         );
 
     /**
@@ -834,11 +956,19 @@ interface TrancheTxRegistry {
      *        immediate, if Triggered with both chain sets empty, i.e. `spoke_chains` is
      *        empty). `trigger_tx` itself never changes once Triggered — only `status` moves
      *        from `Triggered` to `Settled` as chains complete.
+     *      `spoke_bridge_attempts` is each chain's full Bridge-phase attempt history
+     *      across all three leg kinds — every attempt observed, `Executed` or `Rejected`
+     *      alike, in order — as opposed to `spoke_chains[i].steps`' own Bridge-phase
+     *      entries, which only ever show the single attempt that succeeded (if any),
+     *      zeroed otherwise. Same chain ordering as `spoke_chains`; a chain without a
+     *      given leg kind simply has an empty array for it (see
+     *      SettlementChainBridgeAttempts' own dev notes).
      * @param product_id    The product the settlement belongs to
      * @param settlement_id The settlement to look up
      * @return trigger_tx   Evidence for the Trigger step
      * @return status       The settlement's own overall status — `Queued`/`Triggered`/`Settled`
      * @return spoke_chains Per-chain ordered step history, see above
+     * @return spoke_bridge_attempts Per-chain full Bridge-phase attempt history, see above
      */
     function get_settlement(
         uint64 product_id,
@@ -849,7 +979,8 @@ interface TrancheTxRegistry {
         returns (
             TxRecord memory trigger_tx,
             SettlementStep status,
-            SettlementChainSteps[] memory spoke_chains
+            SettlementChainSteps[] memory spoke_chains,
+            SettlementChainBridgeAttempts[] memory spoke_bridge_attempts
         );
 
     /**
@@ -969,6 +1100,14 @@ interface TrancheTxRegistry {
      *      `status`/`adapter_legs` — a request's own delivery to the Hub and its
      *      linked settlement's delivery of results back out are two separate concerns
      *      tracked here.
+     *      `request_bridge_attempts` is the Inbound leg's full attempt history — every
+     *      attempt observed, `Executed` or `Rejected` alike, in order — as opposed to
+     *      `request_steps`' own `RequestBridgeExecuted` entry, which only ever shows the
+     *      single attempt that succeeded (if any). Empty for a Hub-vault or
+     *      SingleChain-product request (no Inbound leg at all), or simply not yet
+     *      attempted. `adapter_bridge_attempts` is the same idea per Adapter leg, parallel
+     *      to `adapter_legs` (same chain order); a self-fulfilling chain's entry is always
+     *      empty (no Bridge phase at all for it — see AdapterLeg's own dev notes).
      * @param product_id The product the request belongs to
      * @param request_id The request to look up
      * @return info           Investor/vault/amount/order_type, unchanged since Requested
@@ -979,6 +1118,8 @@ interface TrancheTxRegistry {
      * @return settled        Whether this request's settlement has fully completed (the
      *                        investor can now call receive() for it, though that call itself
      *                        isn't tracked here — see record_receive_tx)
+     * @return request_bridge_attempts The Inbound leg's full attempt history, see above
+     * @return adapter_bridge_attempts Per-chain full Adapter-leg attempt history, see above
      */
     function get_request(
         uint64 product_id,
@@ -992,6 +1133,8 @@ interface TrancheTxRegistry {
             AdapterLeg[] memory adapter_legs,
             RequestStep status,
             uint256 settlement_id,
-            bool settled
+            bool settled,
+            BridgeAttempt[] memory request_bridge_attempts,
+            ChainBridgeAttempts[] memory adapter_bridge_attempts
         );
 }

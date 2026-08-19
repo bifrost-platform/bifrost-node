@@ -6,8 +6,8 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::AddressMapping;
 use pallet_tranche_system::{ProductId, ProductInspect, VaultId};
 use pallet_tranche_tx_registry::{
-	Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening, RequestStep, SettlementStep,
-	TxRecord, WhitelistStep, MAX_SPOKE_CHAINS,
+	BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening,
+	RequestStep, SettlementStep, TxRecord, WhitelistStep, MAX_SPOKE_CHAINS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, Get, H160, H256, U256};
@@ -19,16 +19,17 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_REQUEST_TX_RECORDED: [u8; 32] = keccak256!(
-	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32),uint256)"
+	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32),uint256,uint8)"
 );
 pub(crate) const SELECTOR_LOG_SETTLEMENT_TX_RECORDED: [u8; 32] = keccak256!(
-	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],(uint64,bytes32))"
+	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],(uint64,bytes32),uint8)"
 );
 pub(crate) const SELECTOR_LOG_RECEIVE_TX_RECORDED: [u8; 32] = keccak256!(
 	"ReceiveTxRecorded(uint64,address,(uint64,address),address,uint256,uint8,(uint64,bytes32))"
 );
-pub(crate) const SELECTOR_LOG_WHITELIST_TX_RECORDED: [u8; 32] =
-	keccak256!("WhitelistTxRecorded(address,(uint64,address),bool,uint256,uint8,(uint64,bytes32))");
+pub(crate) const SELECTOR_LOG_WHITELIST_TX_RECORDED: [u8; 32] = keccak256!(
+	"WhitelistTxRecorded(address,(uint64,address),bool,uint256,uint8,(uint64,bytes32),uint8)"
+);
 
 // ---------------------------------------------------------------------------
 // interface.sol struct <-> tuple mappings
@@ -56,6 +57,14 @@ type EvmInvestorRequest = (u64, H256);
 type EvmReceiveHistoryEntry = (EvmVaultInput, H256);
 /// `WhitelistTxStep` — (step, tx)
 type EvmWhitelistTxStep = (u8, EvmTxRecord);
+/// `BridgeAttempt` — (status, tx)
+type EvmBridgeAttempt = (u8, EvmTxRecord);
+/// `ChainBridgeAttempts` — (chain_id, attempts)
+type EvmChainBridgeAttempts = (u64, Vec<EvmBridgeAttempt>);
+/// `SettlementChainBridgeAttempts` — (spoke_chain_id, collect_attempts, response_attempts,
+/// finalize_attempts)
+type EvmSettlementChainBridgeAttempts =
+	(u64, Vec<EvmBridgeAttempt>, Vec<EvmBridgeAttempt>, Vec<EvmBridgeAttempt>);
 
 /// Upper bound on `get_investor_request_history`'s `limit` — caps the page size
 /// so a single `eth_call` can't be asked to serialize an unbounded response,
@@ -129,8 +138,10 @@ where
 	/// 6 = RequestCompleted (never valid here), 7 = SettlementApproved
 	/// @param settlement_id         The settlement this request is approved into —
 	/// required (non-zero) iff step == SettlementApproved, zero otherwise
+	/// @param bridge_status         0 = Rejected, 1 = Executed — meaningful iff step ==
+	/// RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
-		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256)"
+		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256,uint8)"
 	)]
 	fn record_request_tx(
 		handle: &mut impl PrecompileHandle,
@@ -145,6 +156,7 @@ where
 		step: u8,
 		attestation: EvmTxAttestation,
 		settlement_id: U256,
+		bridge_status: u8,
 	) -> EvmResult {
 		let decoded_step = decode_request_step(step)?;
 		let opening = decode_request_opening(
@@ -158,6 +170,11 @@ where
 		let decoded_adapter_chains =
 			decode_request_adapter_chains(decoded_step, &adapter_chain_ids)?;
 		let decoded_settlement_id = decode_request_settlement_id(decoded_step, settlement_id)?;
+		let is_bridge_step = matches!(
+			decoded_step,
+			RequestStep::RequestBridgeExecuted | RequestStep::AdapterBridgeExecuted
+		);
+		let decoded_bridge_status = decode_gated_bridge_status(is_bridge_step, bridge_status)?;
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -170,6 +187,7 @@ where
 			chain_id,
 			tx_hash,
 			settlement_id: decoded_settlement_id,
+			bridge_status: decoded_bridge_status,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -193,6 +211,7 @@ where
 				adapter_chain_ids,
 				attestation,
 				settlement_id,
+				bridge_status,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -217,8 +236,10 @@ where
 	/// meaningful (and may be empty) iff step == Triggered
 	/// @param step            0 = Queued (never valid here), 1 = Triggered,
 	/// 2-7 = leg steps, 8 = Settled (never valid here)
+	/// @param bridge_status   0 = Rejected, 1 = Executed — meaningful iff step is one of
+	/// the three Bridge-phase leg steps, MUST be 0 otherwise
 	#[precompile::public(
-		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32))"
+		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32),uint8)"
 	)]
 	fn record_settlement_tx(
 		handle: &mut impl PrecompileHandle,
@@ -229,6 +250,7 @@ where
 		finalize_chain_ids: Vec<u64>,
 		step: u8,
 		attestation: EvmTxAttestation,
+		bridge_status: u8,
 	) -> EvmResult {
 		let decoded_step = decode_settlement_step(step)?;
 		let (
@@ -241,6 +263,13 @@ where
 			&collect_response_chain_ids,
 			&finalize_chain_ids,
 		)?;
+		let is_bridge_step = matches!(
+			decoded_step,
+			SettlementStep::CollectBridgeExecuted
+				| SettlementStep::ResponseBridgeExecuted
+				| SettlementStep::FinalizeBridgeExecuted
+		);
+		let decoded_bridge_status = decode_gated_bridge_status(is_bridge_step, bridge_status)?;
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -253,6 +282,7 @@ where
 			step: decoded_step,
 			chain_id,
 			tx_hash,
+			bridge_status: decoded_bridge_status,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -272,6 +302,7 @@ where
 				collect_response_chain_ids,
 				finalize_chain_ids,
 				attestation,
+				bridge_status,
 			)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -351,8 +382,10 @@ where
 	/// product, TrancheManager-generated for a SingleChain product (no Orchestrator there)
 	/// @param step   0 = None (invalid), 1 = WhitelistRequested, 2 = BridgeExecuted,
 	/// 3 = WhitelistApplied
+	/// @param bridge_status 0 = Rejected, 1 = Executed — meaningful iff step ==
+	/// BridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
-		"record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32))"
+		"record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32),uint8)"
 	)]
 	fn record_whitelist_tx(
 		handle: &mut impl PrecompileHandle,
@@ -362,10 +395,13 @@ where
 		nonce: U256,
 		step: u8,
 		attestation: EvmTxAttestation,
+		bridge_status: u8,
 	) -> EvmResult {
 		let (vault_chain_id, vault_address) = vault;
 		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
 		let decoded_step = decode_whitelist_step(step)?;
+		let is_bridge_step = decoded_step == WhitelistStep::BridgeExecuted;
+		let decoded_bridge_status = decode_gated_bridge_status(is_bridge_step, bridge_status)?;
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
@@ -377,6 +413,7 @@ where
 			step: decoded_step,
 			chain_id,
 			tx_hash,
+			bridge_status: decoded_bridge_status,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -389,7 +426,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_WHITELIST_TX_RECORDED,
 			topic_h160(who.0),
-			solidity::encode_event_data((vault, grant, nonce, step, attestation)),
+			solidity::encode_event_data((vault, grant, nonce, step, attestation, bridge_status)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
@@ -428,13 +465,22 @@ where
 	/// @return trigger_tx   Evidence for the Trigger step
 	/// @return status       The settlement's own overall status — `Queued`/`Triggered`/`Settled`
 	/// @return spoke_chains Per-chain ordered step history, see above
+	/// @return spoke_bridge_attempts Per-chain full Bridge-phase attempt history across all
+	/// three leg kinds — every attempt observed, Executed or Rejected alike, in order; a
+	/// chain without a given leg kind has an empty array for it
 	#[precompile::public("get_settlement(uint64,uint256)")]
 	#[precompile::view]
+	#[allow(clippy::type_complexity)]
 	fn get_settlement(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		settlement_id: U256,
-	) -> EvmResult<(EvmTxRecord, u8, Vec<EvmSettlementChainSteps>)> {
+	) -> EvmResult<(
+		EvmTxRecord,
+		u8,
+		Vec<EvmSettlementChainSteps>,
+		Vec<EvmSettlementChainBridgeAttempts>,
+	)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let Some(trigger_tx) = pallet_tranche_tx_registry::SettlementTriggers::<Runtime>::get(
 			product_id,
@@ -443,6 +489,7 @@ where
 			return Ok((
 				encode_tx_record::<BlockNumberFor<Runtime>>(None),
 				encode_settlement_step(SettlementStep::Queued),
+				Vec::new(),
 				Vec::new(),
 			));
 		};
@@ -463,6 +510,7 @@ where
 		let chain_ids = union_chain_ids(&collect_response_chain_ids, &finalize_chain_ids);
 
 		let mut spoke_chains = Vec::with_capacity(chain_ids.len());
+		let mut spoke_bridge_attempts = Vec::with_capacity(chain_ids.len());
 		let mut all_complete = true;
 		for chain_id in chain_ids.iter() {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
@@ -487,13 +535,17 @@ where
 				all_complete = false;
 			}
 
+			let collect_tx = select_executed(&entry.collect_bridge_attempts);
+			let response_tx = select_executed(&entry.response_bridge_attempts);
+			let finalize_tx = select_executed(&entry.finalize_bridge_attempts);
+
 			let mut steps = Vec::with_capacity(
 				if needs_collect_response { 4 } else { 0 } + if needs_finalize { 2 } else { 0 },
 			);
 			if needs_collect_response {
 				steps.push((
 					encode_settlement_step(SettlementStep::CollectBridgeExecuted),
-					encode_tx_record(entry.collect_bridge_tx),
+					encode_tx_record(collect_tx),
 				));
 				steps.push((
 					encode_settlement_step(SettlementStep::NavReported),
@@ -501,7 +553,7 @@ where
 				));
 				steps.push((
 					encode_settlement_step(SettlementStep::ResponseBridgeExecuted),
-					encode_tx_record(entry.response_bridge_tx),
+					encode_tx_record(response_tx),
 				));
 				steps.push((
 					encode_settlement_step(SettlementStep::NavReceived),
@@ -511,7 +563,7 @@ where
 			if needs_finalize {
 				steps.push((
 					encode_settlement_step(SettlementStep::FinalizeBridgeExecuted),
-					encode_tx_record(entry.finalize_bridge_tx),
+					encode_tx_record(finalize_tx),
 				));
 				steps.push((
 					encode_settlement_step(SettlementStep::SettleApplied),
@@ -519,10 +571,21 @@ where
 				));
 			}
 			spoke_chains.push((*chain_id, steps));
+			spoke_bridge_attempts.push((
+				*chain_id,
+				encode_bridge_attempts(entry.collect_bridge_attempts),
+				encode_bridge_attempts(entry.response_bridge_attempts),
+				encode_bridge_attempts(entry.finalize_bridge_attempts),
+			));
 		}
 
 		let status = if all_complete { SettlementStep::Settled } else { SettlementStep::Triggered };
-		Ok((encode_tx_record(Some(trigger_tx)), encode_settlement_step(status), spoke_chains))
+		Ok((
+			encode_tx_record(Some(trigger_tx)),
+			encode_settlement_step(status),
+			spoke_chains,
+			spoke_bridge_attempts,
+		))
 	}
 
 	/// Enumerate an investor's currently in-flight requests. An empty array means the
@@ -760,6 +823,9 @@ where
 	/// @return steps  Ordered step history — length 1 (SingleChain), 2 (Hub-vault), or
 	/// 3 (Spoke-vault)
 	/// @return status The furthest step reached so far
+	/// @return bridge_attempts The Bridge leg's full attempt history — every attempt
+	/// observed, Executed or Rejected alike, in order; empty if no Bridge leg applies
+	/// (same cases `steps` itself omits BridgeExecuted for) or simply not yet attempted
 	#[precompile::public("get_whitelist((uint64,address),address,uint256)")]
 	#[precompile::view]
 	fn get_whitelist(
@@ -767,7 +833,7 @@ where
 		vault: EvmVaultInput,
 		who: Address,
 		nonce: U256,
-	) -> EvmResult<(bool, Vec<EvmWhitelistTxStep>, u8)> {
+	) -> EvmResult<(bool, Vec<EvmWhitelistTxStep>, u8, Vec<EvmBridgeAttempt>)> {
 		let (vault_chain_id, vault_address) = vault;
 		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
 
@@ -788,9 +854,10 @@ where
 		let local_chain_id =
 			single_chain_id.unwrap_or_else(<Runtime as pallet_evm::Config>::ChainId::get);
 		let has_bridge_leg = entry.vault.chain_id != local_chain_id;
+		let bridge_tx = select_executed(&entry.bridge_attempts);
 		let status = if entry.applied_tx.is_some() {
 			WhitelistStep::WhitelistApplied
-		} else if entry.bridge_tx.is_some() {
+		} else if bridge_tx.is_some() {
 			WhitelistStep::BridgeExecuted
 		} else {
 			WhitelistStep::WhitelistRequested
@@ -805,7 +872,7 @@ where
 		if has_bridge_leg {
 			steps.push((
 				encode_whitelist_step(WhitelistStep::BridgeExecuted),
-				encode_tx_record(entry.bridge_tx),
+				encode_tx_record(bridge_tx),
 			));
 		}
 		steps.push((
@@ -813,7 +880,12 @@ where
 			encode_tx_record(entry.applied_tx),
 		));
 
-		Ok((entry.grant, steps, encode_whitelist_step(status)))
+		Ok((
+			entry.grant,
+			steps,
+			encode_whitelist_step(status),
+			encode_bridge_attempts(entry.bridge_attempts),
+		))
 	}
 
 	/// Read a request's full state in one call: its static details (bundled as one
@@ -891,6 +963,10 @@ where
 	/// @return settled        Whether this request's settlement has fully completed (the
 	/// investor can now call receive() for it, though that call itself isn't tracked here —
 	/// see record_receive_tx)
+	/// @return request_bridge_attempts The Inbound leg's full attempt history, empty if no
+	/// Inbound leg applies or simply not yet attempted
+	/// @return adapter_bridge_attempts Per-chain full Adapter-leg attempt history, parallel
+	/// to adapter_legs — a self-fulfilling chain's entry is always empty
 	#[precompile::public("get_request(uint64,bytes32)")]
 	#[precompile::view]
 	#[allow(clippy::type_complexity)]
@@ -898,7 +974,16 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		request_id: H256,
-	) -> EvmResult<(EvmRequestInfo, Vec<EvmRequestTxStep>, Vec<EvmAdapterLeg>, u8, U256, bool)> {
+	) -> EvmResult<(
+		EvmRequestInfo,
+		Vec<EvmRequestTxStep>,
+		Vec<EvmAdapterLeg>,
+		u8,
+		U256,
+		bool,
+		Vec<EvmBridgeAttempt>,
+		Vec<EvmChainBridgeAttempts>,
+	)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let entry =
 			pallet_tranche_tx_registry::RequestEntries::<Runtime>::get(product_id, request_id)
@@ -929,12 +1014,14 @@ where
 		// treat completion as needing only the `Requested` step.
 		let is_single_chain = single_chain_id.is_some();
 		let queued_done = is_single_chain || entry.queued_tx.is_some();
+		let request_bridge_tx = select_executed(&entry.bridge_attempts);
+		let request_bridge_attempts = encode_bridge_attempts(entry.bridge_attempts.clone());
 		let mut request_steps =
 			vec![(encode_request_step(RequestStep::Requested), encode_tx_record(entry.request_tx))];
 		if has_inbound_leg {
 			request_steps.push((
 				encode_request_step(RequestStep::RequestBridgeExecuted),
-				encode_tx_record(entry.bridge_tx),
+				encode_tx_record(request_bridge_tx),
 			));
 		}
 		if !is_single_chain {
@@ -951,6 +1038,7 @@ where
 		.unwrap_or_default();
 
 		let mut adapter_legs = Vec::with_capacity(adapter_chain_ids.len());
+		let mut adapter_bridge_attempts = Vec::with_capacity(adapter_chain_ids.len());
 		let mut all_adapter_done = true;
 		for chain_id in adapter_chain_ids.iter() {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
@@ -969,6 +1057,7 @@ where
 			// uses for a colocated request's Inbound leg above.
 			let is_self_fulfilling =
 				*chain_id == entry.vault.chain_id || *chain_id == local_chain_id;
+			let leg_bridge_tx = select_executed(&leg.bridge_attempts);
 			let steps = if is_self_fulfilling {
 				vec![(
 					encode_request_step(RequestStep::AdapterApplied),
@@ -978,7 +1067,7 @@ where
 				vec![
 					(
 						encode_request_step(RequestStep::AdapterBridgeExecuted),
-						encode_tx_record(leg.bridge_tx),
+						encode_tx_record(leg_bridge_tx),
 					),
 					(
 						encode_request_step(RequestStep::AdapterApplied),
@@ -987,6 +1076,7 @@ where
 				]
 			};
 			adapter_legs.push((*chain_id, steps));
+			adapter_bridge_attempts.push((*chain_id, encode_bridge_attempts(leg.bridge_attempts)));
 		}
 		let status = if queued_done && all_adapter_done {
 			RequestStep::RequestCompleted
@@ -1002,6 +1092,8 @@ where
 				encode_request_step(status),
 				U256::zero(),
 				false,
+				request_bridge_attempts,
+				adapter_bridge_attempts,
 			));
 		};
 
@@ -1057,7 +1149,16 @@ where
 				}
 			};
 
-		Ok((info, request_steps, adapter_legs, encode_request_step(status), settlement_id, settled))
+		Ok((
+			info,
+			request_steps,
+			adapter_legs,
+			encode_request_step(status),
+			settlement_id,
+			settled,
+			request_bridge_attempts,
+			adapter_bridge_attempts,
+		))
 	}
 }
 
@@ -1085,6 +1186,71 @@ fn encode_tx_record<BlockNumber: Into<U256>>(record: Option<TxRecord<BlockNumber
 		Some(record) => (record.chain_id, record.tx_hash, record.recorded_at.into()),
 		None => (0, H256::zero(), U256::zero()),
 	}
+}
+
+/// Wire value `0 = Rejected, 1 = Executed` — matches `BridgeStatus`'s own
+/// declaration order (`Rejected` before `Executed`), see that enum's doc
+/// comment in `pallet_tranche_tx_registry`.
+fn encode_bridge_status(status: BridgeStatus) -> u8 {
+	match status {
+		BridgeStatus::Rejected => 0,
+		BridgeStatus::Executed => 1,
+	}
+}
+
+fn decode_bridge_status(bridge_status: u8) -> EvmResult<BridgeStatus> {
+	match bridge_status {
+		0 => Ok(BridgeStatus::Rejected),
+		1 => Ok(BridgeStatus::Executed),
+		_ => Err(revert("invalid bridge_status")),
+	}
+}
+
+/// Translates a `record_request_tx`/`record_settlement_tx`/`record_whitelist_tx`
+/// call's `bridge_status` calldata into the pallet's `Option<BridgeStatus>`,
+/// gated by whether the step being recorded is one of that extrinsic's
+/// Bridge-phase steps. Reverts if `bridge_status` isn't 0 when `is_bridge_step`
+/// is false — matching interface.sol's documented contract.
+fn decode_gated_bridge_status(
+	is_bridge_step: bool,
+	bridge_status: u8,
+) -> EvmResult<Option<BridgeStatus>> {
+	if is_bridge_step {
+		Ok(Some(decode_bridge_status(bridge_status)?))
+	} else {
+		if bridge_status != 0 {
+			return Err(revert("bridge_status must be 0 unless step is a Bridge-phase step"));
+		}
+		Ok(None)
+	}
+}
+
+/// The `Executed` attempt in `attempts`, if any — what every pre-existing
+/// `steps`/`spoke_chains`/`adapter_legs` array entry shows for a Bridge-phase
+/// step (zeroed if none, regardless of how many `Rejected` attempts preceded
+/// it). See `BridgeAttempts`'s own doc comment for the "which one counts as
+/// done" convention this preserves unchanged from before this pallet tracked
+/// `Rejected` attempts at all.
+fn select_executed<BlockNumber: Clone>(
+	attempts: &BridgeAttempts<BlockNumber>,
+) -> Option<TxRecord<BlockNumber>> {
+	attempts
+		.iter()
+		.find(|attempt| attempt.status == BridgeStatus::Executed)
+		.map(|attempt| attempt.tx.clone())
+}
+
+/// Encodes a leg's full attempt history — every attempt observed, `Executed` or
+/// `Rejected` alike, in order. The new, "Option A" full-history counterpart to
+/// `select_executed`, exposed by `get_request`/`get_settlement`/`get_whitelist`
+/// alongside (not instead of) their pre-existing `steps`-shaped return values.
+fn encode_bridge_attempts<BlockNumber: Into<U256> + Clone>(
+	attempts: BridgeAttempts<BlockNumber>,
+) -> Vec<EvmBridgeAttempt> {
+	attempts
+		.into_iter()
+		.map(|attempt| (encode_bridge_status(attempt.status), encode_tx_record(Some(attempt.tx))))
+		.collect()
 }
 
 /// `a` followed by every id in `b` not already in `a`, deduplicated — used to

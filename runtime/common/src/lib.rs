@@ -161,19 +161,20 @@ where
 		// Function selectors for pallet-tranche-tx-registry's record_* calls (keccak256 of the
 		// canonical signature in precompiles/tranche-tx-registry/src/lib.rs's
 		// `#[precompile::public(...)]` strings, first 4 bytes — verified against those exact
-		// strings via `cast sig`, not reconstructed from memory). Re-verified 2026-08-18 after
-		// `product_id` changed from `uint256` to `uint64` across every precompile — that
-		// silently changes every selector here except `record_whitelist_tx`'s (it takes no
-		// `product_id` param at all, resolved internally from `vault`), so re-derive rather
-		// than hand-edit if this ever changes again.
-		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256) => 0xa2a34630
-		const RECORD_REQUEST_TX: [u8; 4] = [0xa2, 0xa3, 0x46, 0x30];
-		// record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32)) => 0xb59cb2d0
-		const RECORD_SETTLEMENT_TX: [u8; 4] = [0xb5, 0x9c, 0xb2, 0xd0];
+		// strings via `cast sig`, not reconstructed from memory). Re-verified 2026-08-19 after
+		// every record_*_tx (except record_receive_tx) gained a trailing `bridge_status`
+		// param (Bridge retry tracking — see BridgeAttempts in the pallet) — that changes
+		// every selector here except `record_receive_tx`'s (no Bridge-phase step of its
+		// own, not part of this change at all), so re-derive rather than hand-edit if this
+		// ever changes again.
+		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256,uint8) => 0x46661fde
+		const RECORD_REQUEST_TX: [u8; 4] = [0x46, 0x66, 0x1f, 0xde];
+		// record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32),uint8) => 0x44a135cb
+		const RECORD_SETTLEMENT_TX: [u8; 4] = [0x44, 0xa1, 0x35, 0xcb];
 		// record_receive_tx(uint64,(uint64,address),address,address,uint256,uint8,(uint64,bytes32)) => 0x8ef97ccd
 		const RECORD_RECEIVE_TX: [u8; 4] = [0x8e, 0xf9, 0x7c, 0xcd];
-		// record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32)) => 0x888fa3de (unchanged — no product_id param)
-		const RECORD_WHITELIST_TX: [u8; 4] = [0x88, 0x8f, 0xa3, 0xde];
+		// record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32),uint8) => 0xcfb6fca5
+		const RECORD_WHITELIST_TX: [u8; 4] = [0xcf, 0xb6, 0xfc, 0xa5];
 
 		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
 		const TX_PAYMENT_PRECOMPILE: H160 =

@@ -1,9 +1,10 @@
 mod impls;
 
 use crate::{
-	migrations, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry, RequestEntry,
-	RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId, SettlementStep,
-	TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_SPOKE_CHAINS,
+	migrations, BridgeStatus, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
+	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId,
+	SettlementStep, TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep,
+	MAX_SPOKE_CHAINS,
 };
 use pallet_tranche_system::{AdapterInspect, ProductInspect, VaultId, VaultInspect};
 
@@ -19,7 +20,7 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -28,7 +29,13 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
+			// Chained rather than just `MigrateToV2` alone: each `VersionedMigration`
+			// self-gates on its own exact on-chain version, so this is safe regardless of
+			// whether a given chain is still at v0 (runs both, back to back, in the same
+			// upgrade) or already at v1 (skips straight to v2 — the live testbed case) —
+			// same pattern as `pallet_tranche_system::pallet::Hooks::on_runtime_upgrade`.
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
 		}
 	}
 
@@ -162,6 +169,24 @@ pub mod pallet {
 		/// docs), so a zero `tx_hash` slipping into storage would be indistinguishable
 		/// from a genuine attestation to any caller inspecting `tx_hash` alone.
 		TxHashRequired,
+		/// `bridge_status` must be `Some` when `step` is one of the Bridge-phase
+		/// steps (`RequestBridgeExecuted`/`AdapterBridgeExecuted` for
+		/// `record_request_tx`, `CollectBridgeExecuted`/`ResponseBridgeExecuted`/
+		/// `FinalizeBridgeExecuted` for `record_settlement_tx`, `BridgeExecuted`
+		/// for `record_whitelist_tx`) — there's no other way to know whether the
+		/// attempt being recorded is `Executed` or `Rejected`.
+		BridgeStatusRequired,
+		/// `bridge_status` must be `None` for every step other than the
+		/// Bridge-phase ones listed on `BridgeStatusRequired` — those steps have
+		/// no attempt list to append to.
+		UnexpectedBridgeStatus,
+		/// A Bridge-phase leg's attempt list is already at `MAX_BRIDGE_ATTEMPTS`.
+		TooManyBridgeAttempts,
+		/// A Bridge-phase leg already has an `Executed` attempt — nothing left to
+		/// retry, so a further attempt (`Executed` or `Rejected`) is refused
+		/// rather than appended. See `BridgeAttempt`'s doc comment on the "at
+		/// most one `Executed` ever" invariant.
+		BridgeLegAlreadySucceeded,
 		/// `step == WhitelistStep::WhitelistRequested` was recorded for a
 		/// `(who, vault, nonce)` that already has an entry.
 		WhitelistAlreadyTriggered,
@@ -214,6 +239,10 @@ pub mod pallet {
 			opening: Option<RequestOpening>,
 			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			settlement_id: Option<SettlementId>,
+			/// `Some` iff `step` was a Bridge-phase step (`RequestBridgeExecuted`/
+			/// `AdapterBridgeExecuted`) — the attempt's outcome, mirroring what was
+			/// just appended to the relevant `bridge_attempts` list.
+			bridge_status: Option<BridgeStatus>,
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -225,6 +254,10 @@ pub mod pallet {
 			spoke_chain_id: Option<ChainId>,
 			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			/// `Some` iff `step` was a Bridge-phase step (`CollectBridgeExecuted`/
+			/// `ResponseBridgeExecuted`/`FinalizeBridgeExecuted`) — same convention
+			/// as `RequestTxRecorded::bridge_status`.
+			bridge_status: Option<BridgeStatus>,
 			step: SettlementStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -253,6 +286,9 @@ pub mod pallet {
 			who: H160,
 			grant: bool,
 			nonce: WhitelistNonce,
+			/// `Some` iff `step == WhitelistStep::BridgeExecuted` — same convention
+			/// as `RequestTxRecorded::bridge_status`.
+			bridge_status: Option<BridgeStatus>,
 			step: WhitelistStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -279,9 +315,9 @@ pub mod pallet {
 	/// `pallet_tranche_investments::RequestedInvestments`. Opened by
 	/// `record_request_tx`'s `RequestStep::Requested` step; `queued_tx` is
 	/// filled in afterward by `RequestQueued` (every request, Hub or Spoke
-	/// alike), and `bridge_tx` by `RequestBridgeExecuted` (Spoke-vault only —
-	/// see `RequestEntry`'s doc comment). Adapter leg evidence lives in
-	/// `RequestChainEntries` instead, not here.
+	/// alike), and `bridge_attempts` appended to by `RequestBridgeExecuted`
+	/// (Spoke-vault only — see `RequestEntry`'s doc comment). Adapter leg
+	/// evidence lives in `RequestChainEntries` instead, not here.
 	pub type RequestEntries<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -627,7 +663,9 @@ pub mod pallet {
 		/// MUST be `Some` iff `step == RequestStep::Requested`, `None` otherwise.
 		/// `adapter_chain_ids` MUST be `Some` iff `step == RequestStep::RequestQueued`
 		/// (Hub-vault or Spoke-vault alike), `None` otherwise. `settlement_id` MUST be
-		/// `Some` iff `step == RequestStep::SettlementApproved`, `None` otherwise —
+		/// `Some` iff `step == RequestStep::SettlementApproved`, `None` otherwise.
+		/// `bridge_status` MUST be `Some` iff `step` is `RequestBridgeExecuted` or
+		/// `AdapterBridgeExecuted` (the two Bridge-phase steps), `None` otherwise —
 		/// see interface.sol's `record_request_tx` for the full sentinel-gating/
 		/// ordering contract this mirrors.
 		///
@@ -654,6 +692,7 @@ pub mod pallet {
 			chain_id: ChainId,
 			tx_hash: H256,
 			settlement_id: Option<SettlementId>,
+			bridge_status: Option<BridgeStatus>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
@@ -680,6 +719,7 @@ pub mod pallet {
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
+					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					RequestEntries::<T>::insert(
 						product_id,
 						request_id,
@@ -690,7 +730,7 @@ pub mod pallet {
 							amount: opening.amount,
 							order_type: opening.order_type,
 							request_tx: Some(tx),
-							bridge_tx: None,
+							bridge_attempts: Default::default(),
 							queued_tx: None,
 							settlement_id: None,
 							approved_tx: None,
@@ -710,25 +750,29 @@ pub mod pallet {
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
+					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
 					ensure!(
 						entry.vault.chain_id != local_chain_id,
 						Error::<T>::UnexpectedInboundLeg
 					);
-					ensure!(entry.bridge_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
-					entry.bridge_tx = Some(tx);
+					Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
 					RequestEntries::<T>::insert(product_id, request_id, entry);
 				},
 				RequestStep::RequestQueued => {
 					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
+					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
 					if entry.vault.chain_id != local_chain_id {
 						// Spoke-vault — only reachable once the Inbound leg's own Bridge
-						// phase has landed.
-						ensure!(entry.bridge_tx.is_some(), Error::<T>::RequestStepOutOfOrder);
+						// phase has landed with an `Executed` attempt.
+						ensure!(
+							Self::bridge_succeeded(&entry.bridge_attempts),
+							Error::<T>::RequestStepOutOfOrder
+						);
 					}
 					// A vault colocated with its own product's Valuation Contract — Hub
 					// itself for a Multichain product, or a SingleChain product's own
@@ -775,11 +819,11 @@ pub mod pallet {
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
+					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
 					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
 						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
-					ensure!(entry.bridge_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
-					entry.bridge_tx = Some(tx);
+					Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
 					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
 				},
 				RequestStep::AdapterApplied => {
@@ -789,11 +833,13 @@ pub mod pallet {
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
 					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
+					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
 						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
-					// No `entry.bridge_tx.is_some()` precondition here (unlike every other
-					// Bridge-then-Applied/Hooks pair in this pallet) — a chain that
+					// No `Self::bridge_succeeded(&entry.bridge_attempts)` precondition here
+					// (unlike every other Bridge-then-Applied/Hooks pair in this pallet) —
+					// a chain that
 					// self-fulfills locally (origin vault's own chain, or Hub) never gets
 					// a Bridge leg at all, so `AdapterApplied` must be recordable on its
 					// own. See `Pallet::ensure_adapter_chain_declared`'s doc comment.
@@ -807,6 +853,7 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
+					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					let settlement_id =
 						settlement_id.ok_or(Error::<T>::RequestSettlementIdRequired)?;
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
@@ -835,6 +882,7 @@ pub mod pallet {
 				opening,
 				adapter_chain_ids,
 				settlement_id,
+				bridge_status,
 				step,
 				chain_id,
 				tx_hash,
@@ -848,7 +896,10 @@ pub mod pallet {
 		/// `finalize_chain_ids` MUST both be `Some` iff `step ==
 		/// SettlementStep::Triggered` (each may independently be empty — see below);
 		/// `spoke_chain_id` MUST be `Some` for every leg step (every step other than
-		/// `Triggered`) — see interface.sol's `record_settlement_tx` for the full
+		/// `Triggered`). `bridge_status` MUST be `Some` iff `step` is one of the
+		/// three Bridge-phase leg steps (`CollectBridgeExecuted`/
+		/// `ResponseBridgeExecuted`/`FinalizeBridgeExecuted`), `None` otherwise —
+		/// see interface.sol's `record_settlement_tx` for the full
 		/// contract this mirrors.
 		///
 		/// The two sets declare, per chain, which leg kind(s) it needs — Collect/
@@ -890,6 +941,7 @@ pub mod pallet {
 			step: SettlementStep,
 			chain_id: ChainId,
 			tx_hash: H256,
+			bridge_status: Option<BridgeStatus>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
@@ -898,6 +950,7 @@ pub mod pallet {
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
 
 			if step == SettlementStep::Triggered {
+				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
 				let collect_response_chains =
 					collect_response_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
@@ -955,15 +1008,18 @@ pub mod pallet {
 					SettlementChainEntries::<T>::get((product_id, settlement_id, spoke_chain_id));
 				match step {
 					SettlementStep::CollectBridgeExecuted => {
-						ensure!(
-							entry.collect_bridge_tx.is_none(),
-							Error::<T>::SettlementStepAlreadyRecorded
-						);
-						entry.collect_bridge_tx = Some(tx);
+						let bridge_status =
+							bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
+						Self::push_bridge_attempt(
+							&mut entry.collect_bridge_attempts,
+							bridge_status,
+							tx,
+						)?;
 					},
 					SettlementStep::NavReported => {
+						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 						ensure!(
-							entry.collect_bridge_tx.is_some(),
+							Self::bridge_succeeded(&entry.collect_bridge_attempts),
 							Error::<T>::SettlementStepOutOfOrder
 						);
 						ensure!(
@@ -973,15 +1029,18 @@ pub mod pallet {
 						entry.nav_reported_tx = Some(tx);
 					},
 					SettlementStep::ResponseBridgeExecuted => {
-						ensure!(
-							entry.response_bridge_tx.is_none(),
-							Error::<T>::SettlementStepAlreadyRecorded
-						);
-						entry.response_bridge_tx = Some(tx);
+						let bridge_status =
+							bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
+						Self::push_bridge_attempt(
+							&mut entry.response_bridge_attempts,
+							bridge_status,
+							tx,
+						)?;
 					},
 					SettlementStep::NavReceived => {
+						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 						ensure!(
-							entry.response_bridge_tx.is_some(),
+							Self::bridge_succeeded(&entry.response_bridge_attempts),
 							Error::<T>::SettlementStepOutOfOrder
 						);
 						ensure!(
@@ -991,15 +1050,18 @@ pub mod pallet {
 						entry.nav_received_tx = Some(tx);
 					},
 					SettlementStep::FinalizeBridgeExecuted => {
-						ensure!(
-							entry.finalize_bridge_tx.is_none(),
-							Error::<T>::SettlementStepAlreadyRecorded
-						);
-						entry.finalize_bridge_tx = Some(tx);
+						let bridge_status =
+							bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
+						Self::push_bridge_attempt(
+							&mut entry.finalize_bridge_attempts,
+							bridge_status,
+							tx,
+						)?;
 					},
 					SettlementStep::SettleApplied => {
+						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 						ensure!(
-							entry.finalize_bridge_tx.is_some(),
+							Self::bridge_succeeded(&entry.finalize_bridge_attempts),
 							Error::<T>::SettlementStepOutOfOrder
 						);
 						ensure!(
@@ -1032,6 +1094,7 @@ pub mod pallet {
 				spoke_chain_id,
 				collect_response_chain_ids,
 				finalize_chain_ids,
+				bridge_status,
 				step,
 				chain_id,
 				tx_hash,
@@ -1109,7 +1172,8 @@ pub mod pallet {
 		/// `step == BridgeExecuted` reverts (`Error::UnexpectedWhitelistBridgeLeg`)
 		/// if `vault` is on its product's own local chain (`Pallet::local_chain_id`)
 		/// — see `WhitelistStep`'s doc comment for why such an action has no Bridge
-		/// leg at all.
+		/// leg at all. `bridge_status` MUST be `Some` iff `step == BridgeExecuted`,
+		/// `None` otherwise.
 		///
 		/// A `Multichain` product's action still requires `WhitelistStep::WhitelistRequested`
 		/// to open the entry first (Hub-vault or Spoke-vault alike) — `WhitelistApplied`/
@@ -1130,6 +1194,7 @@ pub mod pallet {
 			step: WhitelistStep,
 			chain_id: ChainId,
 			tx_hash: H256,
+			bridge_status: Option<BridgeStatus>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
@@ -1140,6 +1205,7 @@ pub mod pallet {
 
 			let product_id = match step {
 				WhitelistStep::WhitelistRequested => {
+					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					ensure!(
 						!WhitelistEntries::<T>::contains_key(key.clone()),
 						Error::<T>::WhitelistAlreadyTriggered
@@ -1154,7 +1220,7 @@ pub mod pallet {
 							who,
 							grant,
 							request_tx: Some(tx),
-							bridge_tx: None,
+							bridge_attempts: Default::default(),
 							applied_tx: None,
 						},
 					);
@@ -1168,6 +1234,7 @@ pub mod pallet {
 					product_id
 				},
 				WhitelistStep::BridgeExecuted => {
+					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
 					let mut entry = WhitelistEntries::<T>::get(key.clone())
 						.ok_or(Error::<T>::WhitelistNotTriggered)?;
 					ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
@@ -1175,17 +1242,20 @@ pub mod pallet {
 						entry.vault.chain_id != Self::local_chain_id(entry.product_id),
 						Error::<T>::UnexpectedWhitelistBridgeLeg
 					);
-					ensure!(entry.bridge_tx.is_none(), Error::<T>::WhitelistStepAlreadyRecorded);
-					entry.bridge_tx = Some(tx);
+					Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
 					let product_id = entry.product_id;
 					WhitelistEntries::<T>::insert(key, entry);
 					product_id
 				},
 				WhitelistStep::WhitelistApplied => match WhitelistEntries::<T>::get(key.clone()) {
 					Some(mut entry) => {
+						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 						ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
 						if entry.vault.chain_id != Self::local_chain_id(entry.product_id) {
-							ensure!(entry.bridge_tx.is_some(), Error::<T>::WhitelistStepOutOfOrder);
+							ensure!(
+								Self::bridge_succeeded(&entry.bridge_attempts),
+								Error::<T>::WhitelistStepOutOfOrder
+							);
 						}
 						ensure!(
 							entry.applied_tx.is_none(),
@@ -1206,6 +1276,7 @@ pub mod pallet {
 					// `WhitelistRequested` is a genuine ordering error, not a
 					// self-open case.
 					None => {
+						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 						let product_id = T::Vaults::product_id_for_vault(&vault)
 							.ok_or(Error::<T>::VaultNotRegistered)?;
 						ensure!(
@@ -1220,7 +1291,7 @@ pub mod pallet {
 								who,
 								grant,
 								request_tx: None,
-								bridge_tx: None,
+								bridge_attempts: Default::default(),
 								applied_tx: Some(tx),
 							},
 						);
@@ -1245,6 +1316,7 @@ pub mod pallet {
 				who,
 				grant,
 				nonce,
+				bridge_status,
 				step,
 				chain_id,
 				tx_hash,
