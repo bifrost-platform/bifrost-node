@@ -125,6 +125,23 @@ pub struct Allocation {
 	pub amount: U256,
 }
 
+/// One entry of `record_investment_approvals`' batch input — the same three
+/// fields `record_investment_approval` takes per call (`request_id`/
+/// `allocations`/`receivable_amount`), bundled so a Valuation Contract that
+/// resolves an entire settlement's approvals in one pass can record all of
+/// them in a single extrinsic instead of one call per `request_id`. Mirrors
+/// `TrancheInput`'s role for `pallet_tranche_system::create_product` — a
+/// per-entry input shape distinct from the stored `Allocation`/
+/// `ApprovedInvestment` types.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct InvestmentApprovalInput {
+	pub request_id: RequestId,
+	pub allocations: BoundedVec<Allocation, ConstU32<MAX_ALLOCATIONS>>,
+	pub receivable_amount: U256,
+}
+
 /// A request's full approval. Embeds the original `RequestedInvestment` in
 /// full (rather than a differently-shaped record) so that moving a request
 /// from `RequestedInvestments` to `ApprovedInvestments` loses no information —

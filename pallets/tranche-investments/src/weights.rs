@@ -11,6 +11,7 @@ use sp_std::marker::PhantomData;
 pub trait WeightInfo {
 	fn record_investment_request() -> Weight;
 	fn record_investment_approval() -> Weight;
+	fn record_investment_approvals(n: u32) -> Weight;
 	fn record_adapter_valuations() -> Weight;
 	fn record_settlement() -> Weight;
 }
@@ -27,6 +28,12 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(3_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
+	}
+	fn record_investment_approvals(n: u32) -> Weight {
+		Weight::from_parts(20_000_000, 0)
+			.saturating_add(Weight::from_parts(20_000_000, 0).saturating_mul(n as u64))
+			.saturating_add(T::DbWeight::get().reads(3_u64.saturating_mul(n as u64)))
+			.saturating_add(T::DbWeight::get().writes(2_u64.saturating_mul(n as u64)))
 	}
 	fn record_adapter_valuations() -> Weight {
 		Weight::from_parts(20_000_000, 0)
@@ -51,6 +58,12 @@ impl WeightInfo for () {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(3_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
+	}
+	fn record_investment_approvals(n: u32) -> Weight {
+		Weight::from_parts(20_000_000, 0)
+			.saturating_add(Weight::from_parts(20_000_000, 0).saturating_mul(n as u64))
+			.saturating_add(RocksDbWeight::get().reads(3_u64.saturating_mul(n as u64)))
+			.saturating_add(RocksDbWeight::get().writes(2_u64.saturating_mul(n as u64)))
 	}
 	fn record_adapter_valuations() -> Weight {
 		Weight::from_parts(20_000_000, 0)

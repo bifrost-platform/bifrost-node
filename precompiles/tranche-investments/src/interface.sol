@@ -20,6 +20,20 @@ interface Investments {
         uint256 amount;
     }
 
+    /// @dev One entry of record_investment_approvals' batch input — the same three
+    ///      fields record_investment_approval takes per call, bundled so a Valuation
+    ///      Contract that resolves an entire settlement's approvals in one pass can
+    ///      record all of them in a single tx instead of one call per request_id.
+    /// @param request_id        The pending request being approved
+    /// @param allocations       Per-Adapter allocation breakdown of the request's amount
+    /// @param receivable_amount Finalized receivable amount for the investor — shares
+    ///                          (deposit) or assets (redeem), per the request's order_type
+    struct InvestmentApprovalInput {
+        bytes32 request_id;
+        Allocation[] allocations;
+        uint256 receivable_amount;
+    }
+
     /// @dev Adapter-level NAV breakdown for one settlement — one entry per Adapter within a
     ///      product. Field naming/shape intentionally mirrors the node's own base valuation
     ///      record format (chainId, adapter, epochId, valuationCutoff), not this file's usual
@@ -175,6 +189,33 @@ interface Investments {
         uint256 settlement_id,
         Allocation[] calldata allocations,
         uint256 receivable_amount
+    ) external;
+
+    /**
+     * @notice Batch form of record_investment_approval — records every entry in
+     *         `approvals` against the same (product_id, settlement_id) in one tx, for a
+     *         Valuation Contract that resolves an entire settlement's approvals in one
+     *         pass rather than one call per request_id.
+     * @dev Only callable by the calling product's registered Valuation contract address.
+     *      Does the exact same per-entry work record_investment_approval does (allocation
+     *      validation, RequestedInvestments -> ApprovedInvestments move, SettlementRequests
+     *      append), repeated once per `approvals` entry — record_investment_approval itself
+     *      is unchanged and still the right call for a single request_id.
+     *      Atomic like any other tx: if any entry fails, the whole batch reverts, including
+     *      entries already applied earlier in the same call. A duplicate request_id within
+     *      the same batch fails on its second occurrence (RequestNotFound) — same outcome
+     *      as calling record_investment_approval twice for the same request_id.
+     *      Emits one InvestmentApproved per entry, in the same shape a caller would see
+     *      from record_investment_approval, so indexers don't need to special-case this
+     *      batch entry point.
+     * @param product_id    The product these approvals belong to
+     * @param settlement_id Valuation Contract's settlement cycle these approvals settle in
+     * @param approvals     One entry per request being approved — see InvestmentApprovalInput
+     */
+    function record_investment_approvals(
+        uint64 product_id,
+        uint256 settlement_id,
+        InvestmentApprovalInput[] calldata approvals
     ) external;
 
     /**

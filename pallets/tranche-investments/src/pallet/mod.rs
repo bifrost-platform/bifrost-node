@@ -1,6 +1,6 @@
 use crate::{
-	migrations, AdapterValuation, Allocation, ApprovedInvestment, OrderType, RequestId,
-	RequestedInvestment, Settlement, SettlementId, TrancheSettle, WeightInfo,
+	migrations, AdapterValuation, Allocation, ApprovedInvestment, InvestmentApprovalInput,
+	OrderType, RequestId, RequestedInvestment, Settlement, SettlementId, TrancheSettle, WeightInfo,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
@@ -382,6 +382,94 @@ pub mod pallet {
 				settlement_id,
 				receivable_amount,
 			});
+			Ok(())
+		}
+
+		/// Batch form of `record_investment_approval` — records every entry in
+		/// `approvals` against the same `(product_id, settlement_id)` in one
+		/// extrinsic, for a Valuation Contract that resolves an entire
+		/// settlement's approvals in one pass rather than one call per
+		/// `request_id`. Does the exact same per-entry work
+		/// `record_investment_approval` does (allocation validation,
+		/// `RequestedInvestments` -> `ApprovedInvestments` move,
+		/// `SettlementRequests` append, `InvestmentApproved` event), repeated
+		/// once per entry — kept as a fully separate extrinsic (rather than
+		/// having `record_investment_approval` delegate to a shared helper) so
+		/// the existing single-entry call path is untouched.
+		/// Origin must be `ValuationOrigin`. Atomic like any other extrinsic: if
+		/// any entry fails, every entry in this call — including ones already
+		/// applied earlier in the same batch — is rolled back. A duplicate
+		/// `request_id` within the same batch fails on its second occurrence
+		/// with `RequestNotFound`, since the first occurrence already moved it
+		/// out of `RequestedInvestments` — same outcome as calling
+		/// `record_investment_approval` twice for the same `request_id`.
+		/// Emits one `InvestmentApproved` per entry, in the same shape a caller
+		/// would see from `record_investment_approval`, so indexers don't need
+		/// to special-case this batch entry point.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::record_investment_approvals(approvals.len() as u32))]
+		pub fn record_investment_approvals(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			settlement_id: SettlementId,
+			approvals: BoundedVec<InvestmentApprovalInput, ConstU32<MAX_SETTLEMENT_REQUESTS>>,
+		) -> DispatchResult {
+			T::ValuationOrigin::ensure_origin(origin)?;
+
+			for InvestmentApprovalInput { request_id, allocations, receivable_amount } in approvals
+			{
+				let requested = RequestedInvestments::<T>::get(product_id, request_id)
+					.ok_or(Error::<T>::RequestNotFound)?;
+
+				let mut seen = BTreeSet::new();
+				let mut sum = U256::zero();
+				for allocation in allocations.iter() {
+					ensure!(
+						seen.insert(allocation.adapter.clone()),
+						Error::<T>::DuplicateAllocationAdapter
+					);
+					ensure!(
+						T::Adapters::multichain_adapter_belongs_to_product(
+							product_id,
+							&allocation.adapter
+						),
+						Error::<T>::AllocationAdapterNotRegistered
+					);
+					sum = sum
+						.checked_add(allocation.amount)
+						.ok_or(Error::<T>::AllocationSumOverflow)?;
+				}
+				ensure!(sum == requested.amount, Error::<T>::AllocationSumMismatch);
+
+				let mut settlement_requests =
+					SettlementRequests::<T>::get(product_id, settlement_id);
+				settlement_requests
+					.try_push(request_id)
+					.map_err(|_| Error::<T>::TooManySettlementRequests)?;
+
+				RequestedInvestments::<T>::remove(product_id, request_id);
+				ApprovedInvestments::<T>::insert(
+					product_id,
+					request_id,
+					ApprovedInvestment {
+						requested,
+						settlement_id,
+						allocations,
+						receivable_amount,
+						recorded_at: frame_system::Pallet::<T>::block_number(),
+						timestamp: pallet_timestamp::Pallet::<T>::get(),
+					},
+				);
+				SettlementRequests::<T>::insert(product_id, settlement_id, settlement_requests);
+
+				Self::deposit_event(Event::InvestmentApproved {
+					product_id,
+					request_id,
+					settlement_id,
+					receivable_amount,
+				});
+			}
+
 			Ok(())
 		}
 
