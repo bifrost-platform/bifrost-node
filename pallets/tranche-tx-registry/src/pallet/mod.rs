@@ -174,7 +174,7 @@ pub mod pallet {
 		/// `record_request_tx`, `CollectBridgeExecuted`/`ResponseBridgeExecuted`/
 		/// `FinalizeBridgeExecuted` for `record_settlement_tx`, `BridgeExecuted`
 		/// for `record_whitelist_tx`) — there's no other way to know whether the
-		/// attempt being recorded is `Executed` or `Rejected`.
+		/// attempt being recorded is `Executed` or `Reverted`.
 		BridgeStatusRequired,
 		/// `bridge_status` must be `None` for every step other than the
 		/// Bridge-phase ones listed on `BridgeStatusRequired` — those steps have
@@ -183,7 +183,7 @@ pub mod pallet {
 		/// A Bridge-phase leg's attempt list is already at `MAX_BRIDGE_ATTEMPTS`.
 		TooManyBridgeAttempts,
 		/// A Bridge-phase leg already has an `Executed` attempt — nothing left to
-		/// retry, so a further attempt (`Executed` or `Rejected`) is refused
+		/// retry, so a further attempt (`Executed` or `Reverted`) is refused
 		/// rather than appended. See `BridgeAttempt`'s doc comment on the "at
 		/// most one `Executed` ever" invariant.
 		BridgeLegAlreadySucceeded,

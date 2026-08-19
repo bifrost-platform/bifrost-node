@@ -85,10 +85,10 @@ pub struct TxRecord<BlockNumber> {
 // ---------------------------------------------------------------------------
 
 /// Maximum number of Bridge-phase attempts (one `SocketMessage` resolution —
-/// `Executed` or `Rejected` — per attempt) this pallet will record for a
+/// `Executed` or `Reverted` — per attempt) this pallet will record for a
 /// single Bridge leg before refusing further ones with
 /// `Error::TooManyBridgeAttempts`. CCCP-v2 can roll a Bridge message back
-/// (`Rejected`) — when that happens, the refunded contract
+/// (`Reverted`) — when that happens, the refunded contract
 /// (`MultichainTrancheManager` for an Inbound/Response leg's refund, since
 /// those originate on a Spoke chain; `OrchestratorHub` for an
 /// Adapter/Collect/Finalize/Whitelist leg's refund, since those originate on
@@ -100,11 +100,25 @@ pub struct TxRecord<BlockNumber> {
 /// to make.
 pub const MAX_BRIDGE_ATTEMPTS: u32 = 10;
 
-/// A Bridge-phase message's terminal outcome, per CCCP-v2's `SocketMessage`.
-/// Mirrors interface.sol's `BridgeStatus` — declared `Rejected` (0) before
-/// `Executed` (1) so the ABI-encoded wire value (Solidity enums encode as
-/// their declaration-order discriminant, same as this SCALE-encoded one) reads
-/// `0 = Rejected, 1 = Executed` on the precompile boundary.
+/// A Bridge-phase message's terminal outcome, per CCCP-v2's `SocketMessage`
+/// (see `cccp_primitives::SocketEventStatus` — `None = 0, Requested = 1,
+/// Failed = 2, Executed = 3, Reverted = 4, Accepted = 5, Rejected = 6,
+/// Committed = 7, Rollbacked = 8`). This pallet only ever cares about the two
+/// terminal Bridge-phase outcomes — `Executed` (3) and `Reverted` (4), the
+/// direct opposite of `Executed` in that enum — so only those two are
+/// represented here, not the full nine-variant enum; `#[codec(index = ...)]`
+/// pins each variant's on-chain (and, via the precompile, EVM ABI) byte value
+/// to the real `SocketEventStatus` discriminant it corresponds to, so a
+/// recorder that already has a raw `SocketEventStatus` byte in hand (from
+/// watching the Socket contract directly) can pass it straight through as
+/// `bridge_status` without any translation step — and `0` stays free
+/// (matching `SocketEventStatus::None`) to unambiguously mean "not
+/// applicable" wherever `bridge_status` is sentinel-gated by `step`, with no
+/// risk of colliding with a genuine status value the way reusing `0` for one
+/// of the two real variants would have. Mirrors interface.sol's raw
+/// `uint8 bridge_status`/`BridgeAttempt.status` convention (no Solidity enum
+/// — Solidity enums are always contiguously 0-indexed and can't represent
+/// this pair's real, non-contiguous values).
 #[derive(
 	Clone,
 	Copy,
@@ -118,21 +132,23 @@ pub const MAX_BRIDGE_ATTEMPTS: u32 = 10;
 	MaxEncodedLen,
 )]
 pub enum BridgeStatus {
+	/// The Bridge message was relayed and successfully executed at its
+	/// destination — the leg's Hooks phase (if any) is now reachable.
+	#[codec(index = 3)]
+	Executed,
 	/// The Bridge message was rolled back — the leg never reached its
 	/// destination, and the refunded contract (see `MAX_BRIDGE_ATTEMPTS`'s
 	/// doc comment) is expected to `retry()` it. Any step gated on this leg
 	/// (e.g. `RequestStep::RequestQueued` gated on the Inbound leg) stays
 	/// unreachable until some later attempt for the same leg resolves
 	/// `Executed`.
-	Rejected,
-	/// The Bridge message was relayed and successfully executed at its
-	/// destination — the leg's Hooks phase (if any) is now reachable.
-	Executed,
+	#[codec(index = 4)]
+	Reverted,
 }
 
 /// One Bridge-phase attempt for a leg — `record_*_tx` appends one of these
 /// each time the recorder observes a `SocketMessage` resolve for that leg,
-/// `Executed` or `Rejected` alike, rather than overwriting a single evidence
+/// `Executed` or `Reverted` alike, rather than overwriting a single evidence
 /// slot. Mirrors interface.sol's `BridgeAttempt`.
 ///
 /// A leg's "did this actually complete" question (what every downstream gate
@@ -165,7 +181,7 @@ pub struct BridgeAttempt<BlockNumber> {
 /// `WhitelistEntry::bridge_attempts`) uses this same shape. An empty list
 /// means "no attempt observed yet" (the pre-existing `None`-equivalent
 /// sentinel); a non-empty list with no `Executed` entry means "attempted,
-/// currently rejected, awaiting retry" — read-side callers (`get_request`/
+/// currently reverted, awaiting retry" — read-side callers (`get_request`/
 /// `get_settlement`/`get_whitelist`) distinguish the two only by inspecting
 /// the list itself, since this pallet doesn't track a separate "awaiting
 /// retry" flag (see this pallet's `docs/tranche-tx-registry/CHANGELOG.md`

@@ -391,38 +391,51 @@ interface TrancheTxRegistry {
         WhitelistApplied
     }
 
-    /// @dev A Bridge-phase message's terminal outcome, per CCCP-v2's SocketMessage.
-    ///      Declared `Rejected` (0) before `Executed` (1) — the wire value is
-    ///      `0 = Rejected, 1 = Executed`. `Rejected` means the Bridge message was
-    ///      rolled back — the refunded contract (MultichainTrancheManager for an
-    ///      Inbound/Response leg's refund, OrchestratorHub for an
-    ///      Adapter/Collect/Finalize/Whitelist leg's refund) is expected to retry()
-    ///      it; any step gated on this leg stays unreachable until some later attempt
-    ///      resolves `Executed`. `Executed` means the leg's own Hooks phase (if any)
-    ///      is now reachable. Used both as a record_request_tx/record_settlement_tx/
-    ///      record_whitelist_tx input (only meaningful for that extrinsic's
-    ///      Bridge-phase steps, where it MUST be 0 otherwise — see each function's own
-    ///      dev notes) and inside BridgeAttempt on the read side (always meaningful
-    ///      there).
-    enum BridgeStatus {
-        Rejected,
-        Executed
-    }
-
     /// @dev One observed Bridge-phase attempt for a leg — a leg's full attempt
     ///      history (get_request/get_settlement/get_whitelist's new
     ///      *_bridge_attempts return values) is an ordered array of these, one per
-    ///      SocketMessage resolution the recorder observed, `Executed` or `Rejected`
-    ///      alike. At most one `Executed` attempt can ever exist per leg — once one
-    ///      lands, no further attempt is ever recorded for it (nothing left to
-    ///      retry). Distinct from the pre-existing *_steps/*_tx return values, which
-    ///      only ever show the single attempt that succeeded (if any), zeroed
-    ///      otherwise, regardless of how many `Rejected` attempts preceded it — see
-    ///      this interface's top-level dev notes on the two views' relationship.
-    /// @param status `Executed` or `Rejected`
+    ///      SocketMessage resolution the recorder observed, `Executed` (3) or
+    ///      `Reverted` (4) alike — `status` is never `0` here, since an attempt that
+    ///      exists always resolved to one or the other. At most one `Executed`
+    ///      attempt can ever exist per leg — once one lands, no further attempt is
+    ///      ever recorded for it (nothing left to retry). Distinct from the
+    ///      pre-existing *_steps/*_tx return values, which only ever show the single
+    ///      attempt that succeeded (if any), zeroed otherwise, regardless of how many
+    ///      `Reverted` attempts preceded it — see this interface's top-level dev
+    ///      notes on the two views' relationship.
+    ///
+    ///      `status` (and every `bridge_status` parameter elsewhere in this
+    ///      interface) is a plain `uint8`, deliberately NOT a Solidity `enum` — its
+    ///      value matches CCCP-v2's own SocketEventStatus (`None = 0, Requested = 1,
+    ///      Failed = 2, Executed = 3, Reverted = 4, Accepted = 5, Rejected = 6,
+    ///      Committed = 7, Rollbacked = 8`) restricted to exactly three values:
+    ///        - `0` — not applicable (matches SocketEventStatus.None) — the sentinel
+    ///                every `bridge_status` parameter elsewhere in this interface
+    ///                uses when no Bridge-phase step is involved. Unambiguous, since
+    ///                neither real outcome below is ever `0`. Never valid for
+    ///                `BridgeAttempt.status` itself (an attempt that exists always
+    ///                resolved to one of the two real outcomes).
+    ///        - `3` — Executed. The Bridge message was relayed and successfully
+    ///                executed at its destination — the leg's own Hooks phase (if
+    ///                any) is now reachable.
+    ///        - `4` — Reverted. The Bridge message was rolled back — the leg never
+    ///                reached its destination, and the refunded contract
+    ///                (MultichainTrancheManager for an Inbound/Response leg's
+    ///                refund, OrchestratorHub for an Adapter/Collect/Finalize/
+    ///                Whitelist leg's refund) is expected to retry() it; any step
+    ///                gated on this leg stays unreachable until some later attempt
+    ///                resolves `Executed`.
+    ///      Solidity enums are always contiguously 0-indexed, so a genuine `enum`
+    ///      here couldn't represent this non-contiguous pair (3/4) without also
+    ///      declaring seven unused placeholder variants — a recorder that already
+    ///      has a raw SocketEventStatus byte in hand (from watching the Socket
+    ///      contract directly) can instead pass it straight through as
+    ///      `bridge_status` with no translation step. Any value other than 0/3/4
+    ///      reverts wherever `bridge_status` is a `record_*_tx` input.
+    /// @param status `3` (Executed) or `4` (Reverted) — see the dev notes above
     /// @param tx     Evidence for this specific attempt
     struct BridgeAttempt {
-        BridgeStatus status;
+        uint8 status;
         TxRecord tx;
     }
 
@@ -482,7 +495,7 @@ interface TrancheTxRegistry {
         uint64[] adapter_chain_ids,
         TxAttestation attestation,
         uint256 settlement_id,
-        BridgeStatus bridge_status
+        uint8 bridge_status
     );
 
     /// @dev `spoke_chain_id` is 0 only when `step == Triggered` (`collect_response_chain_ids`/
@@ -503,7 +516,7 @@ interface TrancheTxRegistry {
         uint64[] collect_response_chain_ids,
         uint64[] finalize_chain_ids,
         TxAttestation attestation,
-        BridgeStatus bridge_status
+        uint8 bridge_status
     );
 
     event ReceiveTxRecorded(
@@ -531,7 +544,7 @@ interface TrancheTxRegistry {
         uint256 nonce,
         WhitelistStep step,
         TxAttestation attestation,
-        BridgeStatus bridge_status
+        uint8 bridge_status
     );
 
     /**
@@ -574,10 +587,10 @@ interface TrancheTxRegistry {
      *      actually observed the underlying events, not this pipeline's own conceptual
      *      order). `step == Requested` must not be called twice for the same request_id, and
      *      RequestBridgeExecuted reverts if called for a Hub-vault request.
-     *      `bridge_status` MUST be meaningful (either `Executed` or `Rejected`) when `step`
-     *      is `RequestBridgeExecuted` or `AdapterBridgeExecuted`, and MUST be 0 (ignored)
-     *      for every other step — same sentinel-gating convention as every other field
-     *      here. Recording `Rejected` means the Bridge message was
+     *      `bridge_status` MUST be meaningful (either `3` (Executed) or `4` (Reverted))
+     *      when `step` is `RequestBridgeExecuted` or `AdapterBridgeExecuted`, and MUST be
+     *      `0` for every other step — same sentinel-gating convention as every other
+     *      field here. Recording `4` (Reverted) means the Bridge message was
      *      rolled back for this attempt; it is never itself an error to record — only a
      *      further attempt after an `Executed` one already landed for the same leg is
      *      (nothing left to retry). Appended to the leg's own attempt list rather than
@@ -615,7 +628,7 @@ interface TrancheTxRegistry {
      * @param attestation            The attested off-chain tx
      * @param settlement_id          The settlement this request is approved into — required
      *                               (non-zero) iff step == SettlementApproved, zero otherwise
-     * @param bridge_status          Executed or Rejected — meaningful iff step ==
+     * @param bridge_status          3 (Executed) or 4 (Reverted) — meaningful iff step ==
      *                               RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0
      *                               (ignored) otherwise
      */
@@ -631,7 +644,7 @@ interface TrancheTxRegistry {
         RequestStep step,
         TxAttestation calldata attestation,
         uint256 settlement_id,
-        BridgeStatus bridge_status
+        uint8 bridge_status
     ) external;
 
     /**
@@ -670,9 +683,9 @@ interface TrancheTxRegistry {
      *      a given (spoke_chain_id, leg) pair, Bridge must be recorded before Hooks, with no
      *      duplicates — this ordering is enforced only within that pair, not across chains
      *      or legs, since chains progress independently.
-     *      `bridge_status` MUST be meaningful (either `Executed` or `Rejected`) when `step`
-     *      is `CollectBridgeExecuted`/`ResponseBridgeExecuted`/`FinalizeBridgeExecuted`, and
-     *      MUST be 0 (ignored) for every other step — same convention as
+     *      `bridge_status` MUST be meaningful (either `3` (Executed) or `4` (Reverted)) when
+     *      `step` is `CollectBridgeExecuted`/`ResponseBridgeExecuted`/`FinalizeBridgeExecuted`,
+     *      and MUST be `0` for every other step — same convention as
      *      record_request_tx's own `bridge_status`; see that function's dev notes for the
      *      full retry/attempt-list semantics this shares.
      *      Emits SettlementTxRecorded.
@@ -685,7 +698,7 @@ interface TrancheTxRegistry {
      *                        empty) iff step == Triggered, empty otherwise
      * @param step            Which pipeline step this attestation is for
      * @param attestation     The attested off-chain tx
-     * @param bridge_status   Executed or Rejected — meaningful iff step is one of the three
+     * @param bridge_status   3 (Executed) or 4 (Reverted) — meaningful iff step is one of the three
      *                        Bridge-phase leg steps, MUST be 0 (ignored) otherwise
      */
     function record_settlement_tx(
@@ -696,7 +709,7 @@ interface TrancheTxRegistry {
         uint64[] calldata finalize_chain_ids,
         SettlementStep step,
         TxAttestation calldata attestation,
-        BridgeStatus bridge_status
+        uint8 bridge_status
     ) external;
 
     /**
@@ -770,8 +783,8 @@ interface TrancheTxRegistry {
      *      all — `step == WhitelistApplied` opens the entry itself, the first time it's
      *      seen for a given (vault, who, nonce), since `vault` resolves to a registered
      *      SingleChain product.
-     *      `bridge_status` MUST be meaningful (either `Executed` or `Rejected`) when
-     *      `step == BridgeExecuted`, and MUST be 0 (ignored) for every other step — same
+     *      `bridge_status` MUST be meaningful (either `3` (Executed) or `4` (Reverted)) when
+     *      `step == BridgeExecuted`, and MUST be `0` for every other step — same
      *      convention as record_request_tx's own `bridge_status`; see that function's dev
      *      notes for the full retry/attempt-list semantics this shares.
      *      Emits WhitelistTxRecorded.
@@ -783,7 +796,7 @@ interface TrancheTxRegistry {
      *                     or TrancheManager-generated (SingleChain)
      * @param step         Which pipeline step this attestation is for
      * @param attestation  The attested off-chain tx
-     * @param bridge_status Executed or Rejected — meaningful iff step == BridgeExecuted,
+     * @param bridge_status 3 (Executed) or 4 (Reverted) — meaningful iff step == BridgeExecuted,
      *                     MUST be 0 (ignored) otherwise
      */
     function record_whitelist_tx(
@@ -793,7 +806,7 @@ interface TrancheTxRegistry {
         uint256 nonce,
         WhitelistStep step,
         TxAttestation calldata attestation,
-        BridgeStatus bridge_status
+        uint8 bridge_status
     ) external;
 
     /**
@@ -898,9 +911,9 @@ interface TrancheTxRegistry {
      *      `status` is the last step whose evidence has actually landed
      *      (`tx.recorded_at != 0`).
      *      `bridge_attempts` is the Bridge leg's full attempt history — every attempt
-     *      observed, `Executed` or `Rejected` alike, in order — as opposed to `steps`'
+     *      observed, `Executed` or `Reverted` alike, in order — as opposed to `steps`'
      *      own `BridgeExecuted` entry, which only ever shows the single attempt that
-     *      succeeded (if any), zeroed otherwise, regardless of how many `Rejected`
+     *      succeeded (if any), zeroed otherwise, regardless of how many `Reverted`
      *      attempts preceded it. Empty for a Hub-vault or SingleChain-product action
      *      (no Bridge leg at all — same cases `steps` itself omits `BridgeExecuted`
      *      for), or simply not yet attempted.
@@ -957,7 +970,7 @@ interface TrancheTxRegistry {
      *        empty). `trigger_tx` itself never changes once Triggered — only `status` moves
      *        from `Triggered` to `Settled` as chains complete.
      *      `spoke_bridge_attempts` is each chain's full Bridge-phase attempt history
-     *      across all three leg kinds — every attempt observed, `Executed` or `Rejected`
+     *      across all three leg kinds — every attempt observed, `Executed` or `Reverted`
      *      alike, in order — as opposed to `spoke_chains[i].steps`' own Bridge-phase
      *      entries, which only ever show the single attempt that succeeded (if any),
      *      zeroed otherwise. Same chain ordering as `spoke_chains`; a chain without a
@@ -1101,7 +1114,7 @@ interface TrancheTxRegistry {
      *      linked settlement's delivery of results back out are two separate concerns
      *      tracked here.
      *      `request_bridge_attempts` is the Inbound leg's full attempt history — every
-     *      attempt observed, `Executed` or `Rejected` alike, in order — as opposed to
+     *      attempt observed, `Executed` or `Reverted` alike, in order — as opposed to
      *      `request_steps`' own `RequestBridgeExecuted` entry, which only ever shows the
      *      single attempt that succeeded (if any). Empty for a Hub-vault or
      *      SingleChain-product request (no Inbound leg at all), or simply not yet

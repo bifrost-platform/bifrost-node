@@ -16,7 +16,7 @@ impl<T: Config> Pallet<T> {
 	/// this leg actually complete" question every downstream gate
 	/// (`RequestQueued`, `NavReported`, `NavReceived`, `SettleApplied`,
 	/// `WhitelistApplied`) asks, per `BridgeAttempts`'s doc comment. NOT the
-	/// same as `!attempts.is_empty()` — a list full of `Rejected` attempts
+	/// same as `!attempts.is_empty()` — a list full of `Reverted` attempts
 	/// still answers `false` here (awaiting retry).
 	pub(crate) fn bridge_succeeded(attempts: &BridgeAttempts<BlockNumberFor<T>>) -> bool {
 		attempts.iter().any(|attempt| attempt.status == BridgeStatus::Executed)
@@ -29,7 +29,7 @@ impl<T: Config> Pallet<T> {
 	/// see `BridgeAttempt`'s doc comment on the "at most one `Executed` ever"
 	/// invariant), and with `Error::TooManyBridgeAttempts` if the list is
 	/// already at `MAX_BRIDGE_ATTEMPTS`. Unlike the old `Option`-overwrite
-	/// shape this replaces, a `Rejected` attempt is never itself an error —
+	/// shape this replaces, a `Reverted` attempt is never itself an error —
 	/// only a second attempt after a success is.
 	pub(crate) fn push_bridge_attempt(
 		attempts: &mut BridgeAttempts<BlockNumberFor<T>>,
