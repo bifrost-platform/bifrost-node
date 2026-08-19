@@ -4,8 +4,9 @@
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_tranche_investments::{
-	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, OrderType, TrancheSettle,
-	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_ASSET_POSITIONS,
+	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, InvestmentApprovalInput,
+	OrderType, TrancheSettle, MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_ASSET_POSITIONS,
+	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
 use precompile_utils::prelude::*;
@@ -33,6 +34,8 @@ pub(crate) const SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED: [u8; 32] =
 
 /// `Allocation` — (adapter_address, adapter_chain_id, amount)
 type EvmAllocation = (Address, u64, U256);
+/// `InvestmentApprovalInput` — (request_id, allocations, receivable_amount)
+type EvmInvestmentApprovalInput = (H256, Vec<EvmAllocation>, U256);
 /// `AssetPosition` — (asset, amount, priceUsd, usdValue, counted)
 type EvmAssetPosition = (Address, U256, U256, U256, bool);
 /// `AdapterValuation` — (chainId, adapter, epochId, valuationCutoff, principal, positions)
@@ -173,6 +176,55 @@ where
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Batch form of `record_investment_approval`. See
+	/// `pallet_tranche_investments::record_investment_approvals`'s doc comment.
+	#[precompile::public(
+		"record_investment_approvals(uint64,uint256,(bytes32,(address,uint64,uint256)[],uint256)[])"
+	)]
+	fn record_investment_approvals(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		settlement_id: U256,
+		approvals: Vec<EvmInvestmentApprovalInput>,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		let bounded_approvals = decode_investment_approvals(&approvals)?;
+
+		let call = InvestmentsCall::<Runtime>::record_investment_approvals {
+			product_id,
+			settlement_id,
+			approvals: bounded_approvals,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_investments::Origin::Valuation.into(),
+			call,
+			0,
+		)?;
+
+		// One InvestmentApproved log per entry, same shape a caller would see from
+		// `record_investment_approval` — so an indexer watching that event doesn't
+		// need to special-case this batch entry point.
+		for (request_id, allocations, receivable_amount) in approvals {
+			let event = log1(
+				handle.context().address,
+				SELECTOR_LOG_INVESTMENT_APPROVED,
+				solidity::encode_event_data((
+					product_id,
+					request_id,
+					settlement_id,
+					allocations,
+					receivable_amount,
+				)),
+			);
+			handle.record_log_costs(&[&event])?;
+			event.record(handle)?;
+		}
 
 		Ok(())
 	}
@@ -675,6 +727,24 @@ fn decode_allocations(
 		bounded
 			.try_push(Allocation { adapter, amount })
 			.map_err(|_| revert("too many allocations"))?;
+	}
+	Ok(bounded)
+}
+
+fn decode_investment_approvals(
+	approvals: &[EvmInvestmentApprovalInput],
+) -> EvmResult<BoundedVec<InvestmentApprovalInput, ConstU32<MAX_SETTLEMENT_REQUESTS>>> {
+	let mut bounded =
+		BoundedVec::<InvestmentApprovalInput, ConstU32<MAX_SETTLEMENT_REQUESTS>>::default();
+	for (request_id, allocations, receivable_amount) in approvals.iter().cloned() {
+		let bounded_allocations = decode_allocations(&allocations)?;
+		bounded
+			.try_push(InvestmentApprovalInput {
+				request_id,
+				allocations: bounded_allocations,
+				receivable_amount,
+			})
+			.map_err(|_| revert("too many approvals"))?;
 	}
 	Ok(bounded)
 }
