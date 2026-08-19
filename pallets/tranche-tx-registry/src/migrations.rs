@@ -154,13 +154,13 @@ pub mod v1 {
 /// `RequestChainEntry::bridge_tx`, `SettlementChainEntry::{collect,response,
 /// finalize}_bridge_tx`, `WhitelistEntry::bridge_tx`) changes shape from a single
 /// `Option<TxRecord<BlockNumber>>` evidence slot to a `BridgeAttempts<BlockNumber>`
-/// (bounded list of `{ status, tx }`), so a rolled-back (`Rejected`) Bridge message
+/// (bounded list of `{ status, tx }`), so a rolled-back (`Reverted`) Bridge message
 /// can be recorded and retried without losing the original attempt's evidence — see
 /// `BridgeAttempt`'s doc comment for the full rationale. Every pre-existing
 /// `Some(tx)` becomes a single-element list with `status: BridgeStatus::Executed` —
 /// the only outcome a `bridge_tx` slot could ever have held before this upgrade (a
 /// rejected Bridge message was never recordable at all pre-v2, so there's no
-/// existing data that could genuinely mean `Rejected`); `None` becomes an empty
+/// existing data that could genuinely mean `Reverted`); `None` becomes an empty
 /// list, the exact same "no attempt observed yet" meaning it had before.
 pub mod v2 {
 	use super::*;

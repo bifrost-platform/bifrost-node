@@ -138,7 +138,7 @@ where
 	/// 6 = RequestCompleted (never valid here), 7 = SettlementApproved
 	/// @param settlement_id         The settlement this request is approved into —
 	/// required (non-zero) iff step == SettlementApproved, zero otherwise
-	/// @param bridge_status         0 = Rejected, 1 = Executed — meaningful iff step ==
+	/// @param bridge_status         3 = Executed, 4 = Reverted — meaningful iff step ==
 	/// RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
 		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256,uint8)"
@@ -236,7 +236,7 @@ where
 	/// meaningful (and may be empty) iff step == Triggered
 	/// @param step            0 = Queued (never valid here), 1 = Triggered,
 	/// 2-7 = leg steps, 8 = Settled (never valid here)
-	/// @param bridge_status   0 = Rejected, 1 = Executed — meaningful iff step is one of
+	/// @param bridge_status   3 = Executed, 4 = Reverted — meaningful iff step is one of
 	/// the three Bridge-phase leg steps, MUST be 0 otherwise
 	#[precompile::public(
 		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32),uint8)"
@@ -382,7 +382,7 @@ where
 	/// product, TrancheManager-generated for a SingleChain product (no Orchestrator there)
 	/// @param step   0 = None (invalid), 1 = WhitelistRequested, 2 = BridgeExecuted,
 	/// 3 = WhitelistApplied
-	/// @param bridge_status 0 = Rejected, 1 = Executed — meaningful iff step ==
+	/// @param bridge_status 3 = Executed, 4 = Reverted — meaningful iff step ==
 	/// BridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
 		"record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32),uint8)"
@@ -466,7 +466,7 @@ where
 	/// @return status       The settlement's own overall status — `Queued`/`Triggered`/`Settled`
 	/// @return spoke_chains Per-chain ordered step history, see above
 	/// @return spoke_bridge_attempts Per-chain full Bridge-phase attempt history across all
-	/// three leg kinds — every attempt observed, Executed or Rejected alike, in order; a
+	/// three leg kinds — every attempt observed, Executed or Reverted alike, in order; a
 	/// chain without a given leg kind has an empty array for it
 	#[precompile::public("get_settlement(uint64,uint256)")]
 	#[precompile::view]
@@ -824,7 +824,7 @@ where
 	/// 3 (Spoke-vault)
 	/// @return status The furthest step reached so far
 	/// @return bridge_attempts The Bridge leg's full attempt history — every attempt
-	/// observed, Executed or Rejected alike, in order; empty if no Bridge leg applies
+	/// observed, Executed or Reverted alike, in order; empty if no Bridge leg applies
 	/// (same cases `steps` itself omits BridgeExecuted for) or simply not yet attempted
 	#[precompile::public("get_whitelist((uint64,address),address,uint256)")]
 	#[precompile::view]
@@ -1188,29 +1188,35 @@ fn encode_tx_record<BlockNumber: Into<U256>>(record: Option<TxRecord<BlockNumber
 	}
 }
 
-/// Wire value `0 = Rejected, 1 = Executed` — matches `BridgeStatus`'s own
-/// declaration order (`Rejected` before `Executed`), see that enum's doc
-/// comment in `pallet_tranche_tx_registry`.
+/// Wire value matches CCCP-v2's own `SocketEventStatus` discriminant for each
+/// outcome (`Executed = 3`, `Reverted = 4`) rather than a bespoke 0-based
+/// encoding — see `BridgeStatus`'s own doc comment in
+/// `pallet_tranche_tx_registry` for why. `0` (== `SocketEventStatus::None`)
+/// is deliberately never returned here — it's reserved as the "not
+/// applicable" sentinel `decode_gated_bridge_status` checks for below,
+/// unambiguous precisely because neither real status is `0`.
 fn encode_bridge_status(status: BridgeStatus) -> u8 {
 	match status {
-		BridgeStatus::Rejected => 0,
-		BridgeStatus::Executed => 1,
+		BridgeStatus::Executed => 3,
+		BridgeStatus::Reverted => 4,
 	}
 }
 
 fn decode_bridge_status(bridge_status: u8) -> EvmResult<BridgeStatus> {
 	match bridge_status {
-		0 => Ok(BridgeStatus::Rejected),
-		1 => Ok(BridgeStatus::Executed),
-		_ => Err(revert("invalid bridge_status")),
+		3 => Ok(BridgeStatus::Executed),
+		4 => Ok(BridgeStatus::Reverted),
+		_ => Err(revert("invalid bridge_status — expected 3 (Executed) or 4 (Reverted)")),
 	}
 }
 
 /// Translates a `record_request_tx`/`record_settlement_tx`/`record_whitelist_tx`
 /// call's `bridge_status` calldata into the pallet's `Option<BridgeStatus>`,
 /// gated by whether the step being recorded is one of that extrinsic's
-/// Bridge-phase steps. Reverts if `bridge_status` isn't 0 when `is_bridge_step`
-/// is false — matching interface.sol's documented contract.
+/// Bridge-phase steps. Reverts if `bridge_status` isn't `0` when
+/// `is_bridge_step` is false — matching interface.sol's documented contract.
+/// `0` can never be confused with a genuine attempt outcome here since
+/// neither `Executed` (3) nor `Reverted` (4) is `0` — see `encode_bridge_status`.
 fn decode_gated_bridge_status(
 	is_bridge_step: bool,
 	bridge_status: u8,
@@ -1227,10 +1233,10 @@ fn decode_gated_bridge_status(
 
 /// The `Executed` attempt in `attempts`, if any — what every pre-existing
 /// `steps`/`spoke_chains`/`adapter_legs` array entry shows for a Bridge-phase
-/// step (zeroed if none, regardless of how many `Rejected` attempts preceded
+/// step (zeroed if none, regardless of how many `Reverted` attempts preceded
 /// it). See `BridgeAttempts`'s own doc comment for the "which one counts as
 /// done" convention this preserves unchanged from before this pallet tracked
-/// `Rejected` attempts at all.
+/// `Reverted` attempts at all.
 fn select_executed<BlockNumber: Clone>(
 	attempts: &BridgeAttempts<BlockNumber>,
 ) -> Option<TxRecord<BlockNumber>> {
@@ -1241,7 +1247,7 @@ fn select_executed<BlockNumber: Clone>(
 }
 
 /// Encodes a leg's full attempt history — every attempt observed, `Executed` or
-/// `Rejected` alike, in order. The new, "Option A" full-history counterpart to
+/// `Reverted` alike, in order. The new, "Option A" full-history counterpart to
 /// `select_executed`, exposed by `get_request`/`get_settlement`/`get_whitelist`
 /// alongside (not instead of) their pre-existing `steps`-shaped return values.
 fn encode_bridge_attempts<BlockNumber: Into<U256> + Clone>(
