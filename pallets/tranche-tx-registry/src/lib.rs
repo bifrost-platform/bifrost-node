@@ -48,6 +48,14 @@ pub type ChainId = u64;
 /// reusing `MAX_MULTICHAIN_ADAPTERS`.
 pub const MAX_SPOKE_CHAINS: u32 = pallet_tranche_system::MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 
+/// Maximum number of `request_id`s a single `record_settlement_tx` call can batch
+/// into one `SettlementStep::RequestsApproved` attestation. Same value as
+/// `pallet_tranche_investments::MAX_SETTLEMENT_REQUESTS` (that pallet's own bound
+/// on the analogous `record_investment_approvals` batch), but declared
+/// independently rather than imported — this pallet deliberately has no hard
+/// dependency on tranche-investments (see `RequestId`'s doc comment).
+pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
+
 // ---------------------------------------------------------------------------
 // TxRecord
 // ---------------------------------------------------------------------------
@@ -195,8 +203,10 @@ pub type BridgeAttempts<BlockNumber> =
 
 /// Step within a request's pipeline. Mirrors interface.sol's `RequestStep`.
 /// `Requested`/`RequestBridgeExecuted`/`RequestQueued`/
-/// `AdapterBridgeExecuted`/`AdapterApplied`/`SettlementApproved` are the only
-/// six values `record_request_tx` ever accepts as input. Named after the
+/// `AdapterBridgeExecuted`/`AdapterApplied` are the only five values
+/// `record_request_tx` ever accepts as input — a request's link to a
+/// settlement is recorded elsewhere entirely now (see
+/// `SettlementStep::RequestsApproved`'s doc comment for why). Named after the
 /// underlying Valuation Contract events wherever one exists 1:1 — `Requested`
 /// (`DepositRequested`/`RedeemRequested`, at TrancheManager), `RequestQueued`
 /// (`DepositQueued`/`RedeemQueued`, at Valuation), `AdapterApplied`
@@ -242,27 +252,14 @@ pub type BridgeAttempts<BlockNumber> =
 ///   see `Pallet::ensure_adapter_chain_declared`'s doc comment for why this
 ///   pallet self-declares it on first touch rather than requiring
 ///   `RequestQueued` to have already listed it.
-/// - `SettlementApproved` — Valuation's `DepositApproved`/`RedeemApproved` event,
-///   which links this request to a `settlement_id`. Named to be unmistakable next to
-///   `RequestCompleted` below: this is about the request being approved *into a
-///   settlement*, not about the request's own delivery pipeline finishing (a
-///   deliberately different concept — see `RequestCompleted`'s own note). For a
-///   Multichain product this fires at Hub Valuation right after every one of the
-///   settlement's `collect_response_chain_ids` has reported NAV (see
-///   `docs/tranche-tx-registry/settlement-flow.md`'s 1.5) — i.e. at essentially the
-///   same moment the settlement's own Hub-vault completion condition
-///   (`try_close_local_requests`) becomes true, via a separate,
-///   independently-ordered `record_settlement_tx` call. Recording
-///   `SettlementApproved` both writes `RequestEntry::settlement_id`/`approved_tx` and
-///   links `request_id` into `SettlementRequests` — see that storage's doc comment
-///   for why this pallet keeps its own copy of this linkage rather than asking
-///   pallet-tranche-investments for it. Because of the race with the settlement-side
-///   trigger described above, recording `SettlementApproved` also opportunistically
-///   closes this one request out of `InvestorActiveRequests` immediately if its
-///   settlement's completion condition has *already* landed by the time this call
-///   runs (see `Pallet::try_close_request`) — otherwise it would sit there forever,
-///   since nothing else re-triggers once the settlement-side condition has already
-///   fired.
+///
+/// A request's link to a settlement — what used to be a sixth step here,
+/// `SettlementApproved` — is recorded via `record_settlement_tx`'s
+/// `SettlementStep::RequestsApproved` instead, one settlement-wide batch call rather
+/// than one `record_request_tx` call per request. See that variant's doc
+/// comment for the full mechanism and why it moved; `RequestEntry::settlement_id`/
+/// `approved_tx` and `get_request`'s own `settlement_id`/`settled` return values
+/// are unaffected by where the write comes from.
 ///
 /// `adapter_chain_ids` (the explicit parameter) is only ever supplied at
 /// `RequestQueued` — never at `Requested`, regardless of Hub or Spoke — since
@@ -288,10 +285,23 @@ pub type BridgeAttempts<BlockNumber> =
 /// `status` value once `RequestQueued` has landed and every declared Adapter
 /// chain's last step has too (or none were declared) — it describes the
 /// request's own delivery pipeline finishing, and is deliberately unrelated to
-/// whether the settlement it's linked to (see `SettlementApproved` above) has
+/// whether the settlement it's linked to (see `SettlementStep::RequestsApproved`) has
 /// itself settled. `get_request`'s separate `settled` return value answers
 /// that second question — the bare name `Completed` read as ambiguous between
-/// the two once `SettlementApproved` existed alongside it, hence the rename.
+/// the two once this pallet started tracking settlement linkage at all, hence
+/// the rename.
+///
+/// 2026-08-20 — this enum used to have a seventh variant, `SettlementApproved`,
+/// appended after `RequestCompleted`. Removed outright (not merely deprecated)
+/// once `SettlementStep::RequestsApproved` took over recording this evidence: nothing
+/// in this pallet's own storage ever encoded a bare `RequestStep` value (see
+/// e.g. `RequestEntry`, which stores per-step `Option<TxRecord<_>>` fields
+/// directly, never a `step` tag), so removing the trailing variant needs no
+/// migration — only `record_request_tx`'s own Call-encoding and
+/// `RequestTxRecorded`'s event shape are affected, both fine to break across a
+/// coordinated recorder+runtime upgrade (this pallet's `record_*` extrinsics
+/// have no caller other than the single registered recorder account — see
+/// `Config::RecorderOrigin`).
 #[derive(
 	Clone,
 	Copy,
@@ -311,17 +321,12 @@ pub enum RequestStep {
 	RequestQueued,
 	AdapterBridgeExecuted,
 	AdapterApplied,
-	/// Renamed from `Completed` — see this enum's doc comment for why, now that
-	/// `SettlementApproved` exists alongside it. Purely a Rust/interface.sol
-	/// identifier rename: enum variant *names* don't affect SCALE or Solidity
-	/// ABI encoding (only declaration order/discriminant does), so this didn't
-	/// need a migration despite `RequestStep` already being live.
+	/// Renamed from `Completed` — see this enum's doc comment for why. Purely a
+	/// Rust/interface.sol identifier rename: enum variant *names* don't affect
+	/// SCALE or Solidity ABI encoding (only declaration order/discriminant
+	/// does), so this didn't need a migration despite `RequestStep` already
+	/// being live.
 	RequestCompleted,
-	/// Appended after `RequestCompleted` (not inserted among the earlier
-	/// variants) to preserve their existing on-chain discriminants — this
-	/// pallet's `record_request_tx`/`RequestStep` were already live before this
-	/// variant was added.
-	SettlementApproved,
 }
 
 /// 0 = redeem, 1 = deposit — mirrors interface.sol's `order_type` and
@@ -390,9 +395,12 @@ pub struct RequestOpening {
 /// `settlement_id`/`approved_tx` were originally left out entirely (this
 /// pallet had no way to learn `settlement_id` before Valuation's
 /// `DepositApproved`/`RedeemApproved` event existed as a recordable step) —
-/// they're written by `RequestStep::SettlementApproved`, see that variant's
-/// doc comment on `RequestStep` for the full mechanism, including why this
-/// pallet now keeps its own copy of this linkage rather than asking
+/// they're written by `record_settlement_tx`'s `SettlementStep::RequestsApproved` arm
+/// (originally `RequestStep::SettlementApproved`, one `record_request_tx` call
+/// per request — moved once Valuation started batching every request it
+/// approves into one settlement behind a single event, see
+/// `SettlementStep::RequestsApproved`'s doc comment for the full mechanism), including
+/// why this pallet keeps its own copy of this linkage rather than asking
 /// `pallet-tranche-investments` for it.
 #[derive(
 	Clone,
@@ -430,10 +438,10 @@ pub struct RequestEntry<BlockNumber> {
 	/// `RequestStep::RequestQueued`'s doc comment).
 	pub queued_tx: Option<TxRecord<BlockNumber>>,
 	/// The settlement cycle this request was approved into. `None` until
-	/// `RequestStep::SettlementApproved` is recorded — see that variant's doc
-	/// comment on `RequestStep`.
+	/// `record_settlement_tx`'s `SettlementStep::RequestsApproved` arm records it — see
+	/// that variant's doc comment.
 	pub settlement_id: Option<SettlementId>,
-	/// Evidence for `RequestStep::SettlementApproved`.
+	/// Evidence for `SettlementStep::RequestsApproved` recording this request.
 	pub approved_tx: Option<TxRecord<BlockNumber>>,
 }
 
@@ -493,8 +501,9 @@ pub struct RequestChainEntry<BlockNumber> {
 /// leg) — same event-name-mirroring convention as `RequestStep`'s
 /// `RequestQueued`/`AdapterApplied`. `Queued` and `Settled` are read-only
 /// sentinels and must never be accepted as `record_settlement_tx`'s
-/// extrinsic input (rejected with `Error::InvalidSettlementStep`) — seven
-/// recordable values in total (`Triggered` plus the six leg steps).
+/// extrinsic input (rejected with `Error::InvalidSettlementStep`) — eight
+/// recordable values in total (`Triggered`, `RequestsApproved`, plus the six leg
+/// steps).
 ///
 /// A settlement that needs no cross-chain action at all is represented by
 /// `Triggered` with both `collect_response_chain_ids` and `finalize_chain_ids`
@@ -504,6 +513,55 @@ pub struct RequestChainEntry<BlockNumber> {
 /// unambiguously means "nothing to collect/respond/finalize" to every read
 /// path via vacuous truth — `get_settlement` already reports this correctly
 /// with no special-casing.
+///
+/// `RequestsApproved` (2026-08-20) is declared right after `NavReceived` — where it
+/// actually fires in the real pipeline (see below) — rather than appended at
+/// the end: unlike `RequestStep` (whose `record_request_tx`/`step` parameter
+/// is itself SCALE-decoded off submitted extrinsic bytes, so discriminant
+/// order genuinely had to stay append-only there), nothing in this pallet's
+/// own storage ever encodes a raw `SettlementStep` value, and the EVM-facing
+/// `step: uint8` the recorder actually submits is translated through the
+/// precompile's own hand-maintained `decode_settlement_step` mapping, not a
+/// derive-based cast — so this enum's *declaration* order is free to match
+/// the real pipeline for readability, independent of whatever numbering the
+/// ABI happens to expose.
+///
+/// Records evidence for every `request_id` Valuation approved into this
+/// settlement, in one batch — replaces what used to be a per-request
+/// `RequestStep::SettlementApproved` step on `record_request_tx` (one
+/// `record_request_tx` call per approved request). The underlying Valuation
+/// Contract event changed from firing once per request
+/// (`DepositApproved`/`RedeemApproved`) to firing once per settlement
+/// (`DepositsApproved`/`RedeemsApproved`, each carrying an array of approved
+/// items), so the recorder now only needs one `record_settlement_tx` call —
+/// carrying every approved `request_id` from that one event — instead of one
+/// call per request; fires at essentially the same moment as before (right
+/// after every one of the settlement's `collect_response_chain_ids` has
+/// reported NAV, i.e. `NavReceived`), just batched. Like `Triggered`,
+/// `RequestsApproved` is settlement-wide rather than chain-scoped: `spoke_chain_id`
+/// MUST be `0` and both `collect_response_chain_ids`/`finalize_chain_ids`
+/// MUST be empty for it, same as `Triggered` — but unlike `Triggered`, its own
+/// dedicated `request_ids` parameter is what MUST be non-empty instead (see
+/// `record_settlement_tx`'s dev notes for the full sentinel-gating table).
+/// Per-entry amounts/price the underlying `ApprovedItem` array may carry
+/// aren't recorded here — this pallet only ever tracks tx evidence and the
+/// request<->settlement linkage, never settlement financials (those live in
+/// `pallet-tranche-investments`).
+///
+/// Writes the exact same fields `RequestStep::SettlementApproved` used to,
+/// for every `request_id` in the batch: `RequestEntry::settlement_id`/
+/// `approved_tx`, plus a link into `SettlementRequests` — see that storage's
+/// doc comment for why this pallet keeps its own copy of the linkage. A
+/// `request_id` already recorded (from an earlier `RequestsApproved` call for the
+/// same settlement) fails that entry with `Error::RequestStepAlreadyRecorded`,
+/// same as calling the old per-request step twice — since a batch is atomic,
+/// this rolls back the whole call, same rationale as
+/// `pallet_tranche_investments::record_investment_approvals`'s duplicate
+/// handling. Also opportunistically closes each request out of
+/// `InvestorActiveRequests` immediately if its settlement's completion
+/// condition has already landed by the time this call runs (see
+/// `Pallet::try_close_request`) — same race this step's per-request
+/// predecessor already had to handle.
 #[derive(
 	Clone,
 	Copy,
@@ -523,6 +581,7 @@ pub enum SettlementStep {
 	NavReported,
 	ResponseBridgeExecuted,
 	NavReceived,
+	RequestsApproved,
 	FinalizeBridgeExecuted,
 	SettleApplied,
 	Settled,

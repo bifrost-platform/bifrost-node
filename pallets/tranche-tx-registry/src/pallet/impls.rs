@@ -113,8 +113,8 @@ impl<T: Config> Pallet<T> {
 	/// always known at the call site), kept only because it costs nothing to
 	/// leave the filter optional.
 	/// Reads `SettlementRequests` — this pallet's own event-sourced copy of the
-	/// request<->settlement linkage, written by `record_request_tx`'s
-	/// `RequestStep::SettlementApproved` arm (see that storage's own doc comment
+	/// request<->settlement linkage, written by `record_settlement_tx`'s
+	/// `SettlementStep::RequestsApproved` arm (see that storage's own doc comment
 	/// for why it's no longer queried cross-pallet from
 	/// pallet-tranche-investments).
 	pub(crate) fn close_active_requests(
@@ -172,22 +172,24 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	/// Called right after `record_request_tx`'s `RequestStep::SettlementApproved`
-	/// arm links `request_id` into `SettlementRequests` — closes just this one
-	/// request out of `InvestorActiveRequests` immediately if its settlement's
-	/// completion condition has *already* landed by the time `SettlementApproved`
-	/// is recorded. This exists because `SettlementApproved` races with the
-	/// settlement-side completion trigger (`try_close_local_requests`/
-	/// `close_active_requests` at `SettleApplied`) — both can fire at essentially
-	/// the same moment (see `RequestStep::SettlementApproved`'s doc comment), via
-	/// separate, independently-ordered `record_request_tx`/`record_settlement_tx`
-	/// calls. If the settlement-side trigger already ran before this request was
-	/// linked into `SettlementRequests`, nothing would otherwise ever re-close
-	/// it — the settlement-side trigger only iterates whatever was in
-	/// `SettlementRequests` *at the time it ran*, and doesn't re-fire once its
-	/// own condition has already been satisfied. A no-op if the condition isn't
-	/// met yet — the settlement-side trigger will close this request once it is
-	/// (this request is now linked into `SettlementRequests`, so it'll be found).
+	/// Called right after `record_settlement_tx`'s `SettlementStep::RequestsApproved` arm
+	/// links `request_id` into `SettlementRequests` (once per entry in that
+	/// call's batch) — closes just this one request out of
+	/// `InvestorActiveRequests` immediately if its settlement's completion
+	/// condition has *already* landed by the time `RequestsApproved` is recorded. This
+	/// exists because `RequestsApproved` races with the settlement-side completion
+	/// trigger (`try_close_local_requests`/`close_active_requests` at
+	/// `SettleApplied`) — both can fire at essentially the same moment (see
+	/// `SettlementStep::RequestsApproved`'s doc comment), via separate,
+	/// independently-ordered `record_settlement_tx` calls (RequestsApproved for one
+	/// settlement, a leg step for another chain). If the settlement-side trigger
+	/// already ran before this request was linked into `SettlementRequests`,
+	/// nothing would otherwise ever re-close it — the settlement-side trigger
+	/// only iterates whatever was in `SettlementRequests` *at the time it ran*,
+	/// and doesn't re-fire once its own condition has already been satisfied. A
+	/// no-op if the condition isn't met yet — the settlement-side trigger will
+	/// close this request once it is (this request is now linked into
+	/// `SettlementRequests`, so it'll be found).
 	pub(crate) fn try_close_request(
 		product_id: ProductId,
 		settlement_id: SettlementId,

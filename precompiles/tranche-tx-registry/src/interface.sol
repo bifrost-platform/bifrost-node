@@ -42,11 +42,12 @@ pragma solidity >=0.8.0;
  *    observed the underlying events, self-declaring a not-yet-seen chain rather than requiring
  *    RequestQueued to have listed it first. A request needing no cross-chain action at all
  *    (Hub vault, no weighted remote Adapters) declares an empty set at RequestQueued and is
- *    immediately RequestCompleted. Separately, once Valuation's DepositApproved/RedeemApproved
- *    event links a request to a settlement_id, a single SettlementApproved tx records that
- *    linkage too — deliberately named apart from RequestCompleted, which is about the
- *    request's own delivery pipeline finishing, not whether its settlement has (see
- *    RequestStep's dev notes).
+ *    immediately RequestCompleted. Separately, once Valuation's DepositsApproved/RedeemsApproved
+ *    event (fired once per settlement, batching every request it approves) links a batch of
+ *    requests to a settlement_id, a single record_settlement_tx RequestsApproved call records
+ *    that linkage for the whole batch — deliberately named apart from RequestCompleted, which
+ *    is about a request's own delivery pipeline finishing, not whether its settlement has (see
+ *    SettlementStep's dev notes).
  *  - Settlement (per settlement_id, fanned out per chain): a single trigger_tx
  *    (Hub-local tryUpdateNAV) that also declares two independent chain sets —
  *    collect_response_chain_ids (chains with a registered Adapter, excluding Hub
@@ -229,14 +230,16 @@ interface TrancheTxRegistry {
     }
 
     /// @dev Step within a request's pipeline. `Requested`/`RequestBridgeExecuted`/
-    ///      `RequestQueued`/`AdapterBridgeExecuted`/`AdapterApplied`/`SettlementApproved`
-    ///      are the only six values record_request_tx ever accepts as input. Named after
-    ///      the underlying Valuation Contract events wherever one exists 1:1 — `Requested`
-    ///      (DepositRequested/RedeemRequested, at TrancheManager), `RequestQueued`
-    ///      (DepositQueued/RedeemQueued, at Valuation), `AdapterApplied`
-    ///      (Supplied/WithdrawRequested, at the MultichainAdapter) — so a recorder can map
-    ///      "which event did I just see" to "which step do I record" without needing to
-    ///      special-case Hub-vault vs Spoke-vault:
+    ///      `RequestQueued`/`AdapterBridgeExecuted`/`AdapterApplied` are the only five
+    ///      values record_request_tx ever accepts as input — a request's link to a
+    ///      settlement is recorded elsewhere entirely now, via
+    ///      record_settlement_tx's `RequestsApproved` step (see SettlementStep's dev
+    ///      notes for why). Named after the underlying Valuation Contract events
+    ///      wherever one exists 1:1 — `Requested` (DepositRequested/RedeemRequested, at
+    ///      TrancheManager), `RequestQueued` (DepositQueued/RedeemQueued, at Valuation),
+    ///      `AdapterApplied` (Supplied/WithdrawRequested, at the MultichainAdapter) — so
+    ///      a recorder can map "which event did I just see" to "which step do I record"
+    ///      without needing to special-case Hub-vault vs Spoke-vault:
     ///
     ///      - `Requested` — the investor's request lands at TrancheManager, wherever the
     ///        vault is (Hub or Spoke). Opens the registry entry, never carries
@@ -262,23 +265,9 @@ interface TrancheTxRegistry {
     ///        `Supplied` for a deposit, `WithdrawRequested` for a redeem — since both mean
     ///        the same thing structurally: the Adapter has been notified and acted on this
     ///        leg.
-    ///      - `SettlementApproved` — Valuation's DepositApproved/RedeemApproved event,
-    ///        linking this request to a settlement_id. Named to be unmistakable next to
-    ///        `RequestCompleted` below: this is about the request being approved *into a
-    ///        settlement*, not about the request's own delivery pipeline finishing (a
-    ///        deliberately different concept). For a Multichain product this fires at Hub
-    ///        Valuation right after every one of the settlement's collect_response_chain_ids
-    ///        has reported NAV — i.e. at essentially the same moment the settlement's own
-    ///        Hub-vault completion condition becomes true, via a separate,
-    ///        independently-ordered record_settlement_tx call. Because of this race, the
-    ///        pallet opportunistically self-closes this one request out of
-    ///        get_investor_active_requests immediately if its settlement's completion
-    ///        condition has already landed by the time this call runs — see
-    ///        record_request_tx's dev notes.
     ///
     ///      `adapter_chain_ids` is only ever supplied at `RequestQueued` — never at
-    ///      `Requested`, regardless of Hub or Spoke. `settlement_id` is only ever supplied
-    ///      at `SettlementApproved`.
+    ///      `Requested`, regardless of Hub or Spoke.
     ///
     ///      `None` and `RequestCompleted` are read-only sentinels, never valid
     ///      record_request_tx input. Unlike SettlementStep.Queued (which get_settlement
@@ -291,8 +280,8 @@ interface TrancheTxRegistry {
     ///      `status` value once `RequestQueued` has landed and every declared Adapter
     ///      chain's last step has too — it describes the request's own delivery pipeline
     ///      finishing, and is deliberately unrelated to whether the settlement it's linked
-    ///      to (see `SettlementApproved` above) has itself settled; get_request's separate
-    ///      `settled` return value answers that second question.
+    ///      to (see SettlementStep.RequestsApproved) has itself settled; get_request's
+    ///      separate `settled` return value answers that second question.
     enum RequestStep {
         None,
         Requested,
@@ -300,8 +289,7 @@ interface TrancheTxRegistry {
         RequestQueued,
         AdapterBridgeExecuted,
         AdapterApplied,
-        RequestCompleted,
-        SettlementApproved
+        RequestCompleted
     }
 
     /// @dev Step within the settlement pipeline. `Queued`/`Triggered`/`Settled` are the
@@ -319,8 +307,8 @@ interface TrancheTxRegistry {
     ///      event-name-mirroring convention as RequestStep's `RequestQueued`/`AdapterApplied`.
     ///      `Queued` and `Settled` are read-only sentinels — "nothing recorded yet" and
     ///      "settlement fully complete", respectively — and must never be passed to
-    ///      record_settlement_tx (seven recordable values in total: `Triggered` plus the six
-    ///      leg steps).
+    ///      record_settlement_tx (eight recordable values in total: `Triggered`,
+    ///      `RequestsApproved`, plus the six leg steps).
     ///
     ///      Each chain's own terminal step depends on its role, declared at Trigger time
     ///      (see record_settlement_tx's dev notes): `SettleApplied` if it's in
@@ -336,6 +324,33 @@ interface TrancheTxRegistry {
     ///      set to be non-empty, so both empty alone unambiguously means "nothing to
     ///      collect/respond/finalize" via vacuous truth (get_settlement's `spoke_chains`
     ///      array comes back empty, and `status` is `Settled` immediately).
+    ///
+    ///      `RequestsApproved` is declared right after `NavReceived` — where it actually
+    ///      fires in the real pipeline — rather than at the end, since nothing depends on
+    ///      this enum's declaration order the way a raw SCALE-decoded Rust enum would (see
+    ///      the pallet's own SettlementStep doc comment for the full reasoning); the
+    ///      numeric `step` values below follow the same order. Records evidence for every
+    ///      request_id Valuation approved into this settlement, in one batch — replaces
+    ///      what used to be a per-request `SettlementApproved` step on record_request_tx
+    ///      (one record_request_tx call per approved request). The underlying Valuation
+    ///      Contract event changed from firing once per request
+    ///      (DepositApproved/RedeemApproved) to firing once per settlement
+    ///      (DepositsApproved/RedeemsApproved, each carrying an array of approved items),
+    ///      so the recorder now only needs one record_settlement_tx call — carrying every
+    ///      approved request_id from that one event — instead of one call per request;
+    ///      fires at essentially the same moment as before (right after every one of the
+    ///      settlement's collect_response_chain_ids has reported NAV), just batched. Like
+    ///      `Triggered`, `RequestsApproved` is settlement-wide rather than chain-scoped:
+    ///      `spoke_chain_id` MUST be 0 and both collect_response_chain_ids/
+    ///      finalize_chain_ids MUST be empty for it, same as `Triggered` — but unlike
+    ///      `Triggered`, its own dedicated `request_ids` parameter is what MUST be
+    ///      non-empty instead. Per-entry amounts/price the underlying approved-items array
+    ///      may carry aren't recorded here — this contract only ever tracks tx evidence
+    ///      and the request<->settlement linkage, never settlement financials. Because of
+    ///      the race with the settlement-side completion trigger described above, recording
+    ///      `RequestsApproved` also opportunistically closes each of its request_ids out of
+    ///      get_investor_active_requests immediately if its settlement's completion
+    ///      condition has already landed by the time this call runs.
     enum SettlementStep {
         Queued,
         Triggered,
@@ -343,6 +358,7 @@ interface TrancheTxRegistry {
         NavReported,
         ResponseBridgeExecuted,
         NavReceived,
+        RequestsApproved,
         FinalizeBridgeExecuted,
         SettleApplied,
         Settled
@@ -477,12 +493,13 @@ interface TrancheTxRegistry {
     ///      meaningful when `step == Requested` (zero/empty otherwise) — same sentinel
     ///      convention as record_request_tx's own parameters. `adapter_chain_ids` is
     ///      meaningful (and may be empty) exclusively when `step == RequestQueued`, empty
-    ///      otherwise. `settlement_id` is meaningful (and non-zero) exclusively when
-    ///      `step == SettlementApproved`, zero otherwise. `bridge_status` is meaningful
+    ///      otherwise. `bridge_status` is meaningful
     ///      exclusively when `step` is `RequestBridgeExecuted` or `AdapterBridgeExecuted`
     ///      (the two Bridge-phase steps) — MUST be 0 (ignored) otherwise, same
     ///      "reuses a real enum value as its own N/A sentinel, disambiguated only by
-    ///      `step`" convention `order_type` already uses.
+    ///      `step`" convention `order_type` already uses. No `settlement_id` field here —
+    ///      a request's link to a settlement is recorded via SettlementTxRecorded's own
+    ///      `request_ids` instead, see record_settlement_tx's dev notes.
     event RequestTxRecorded(
         uint64 indexed product_id,
         bytes32 indexed request_id,
@@ -494,14 +511,15 @@ interface TrancheTxRegistry {
         RequestStep step,
         uint64[] adapter_chain_ids,
         TxAttestation attestation,
-        uint256 settlement_id,
         uint8 bridge_status
     );
 
-    /// @dev `spoke_chain_id` is 0 only when `step == Triggered` (`collect_response_chain_ids`/
-    ///      `finalize_chain_ids` are then meaningful, each independently possibly empty);
-    ///      otherwise `spoke_chain_id` identifies the chain and both arrays are empty — same
-    ///      sentinel convention as record_settlement_tx's own parameters. `settlement_id` is
+    /// @dev `spoke_chain_id` is 0 only when `step == Triggered` or `RequestsApproved`
+    ///      (`collect_response_chain_ids`/`finalize_chain_ids` are then meaningful, each
+    ///      independently possibly empty, only for `Triggered`; `request_ids` is meaningful,
+    ///      and non-empty, only for `RequestsApproved`); otherwise `spoke_chain_id`
+    ///      identifies the chain and all three array params are empty — same sentinel
+    ///      convention as record_settlement_tx's own parameters. `settlement_id` is
     ///      only unique within `product_id`'s own namespace (each product's Valuation
     ///      Contract generates its own sequence), never globally. `bridge_status` is
     ///      meaningful exclusively when `step` is `CollectBridgeExecuted`/
@@ -515,6 +533,7 @@ interface TrancheTxRegistry {
         SettlementStep step,
         uint64[] collect_response_chain_ids,
         uint64[] finalize_chain_ids,
+        bytes32[] request_ids,
         TxAttestation attestation,
         uint8 bridge_status
     );
@@ -549,9 +568,10 @@ interface TrancheTxRegistry {
 
     /**
      * @notice Attest to one tx in a request's pipeline — the single Requested tx, one
-     *         Bridge/Hooks half of the Inbound leg (Spoke-vault requests only), one
-     *         Bridge/Hooks half of a per-chain Adapter leg, or the single
-     *         SettlementApproved tx.
+     *         Bridge/Hooks half of the Inbound leg (Spoke-vault requests only), or one
+     *         Bridge/Hooks half of a per-chain Adapter leg. A request's link to a
+     *         settlement is recorded separately, via record_settlement_tx's
+     *         RequestsApproved step.
      * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
      *      MUST NOT be the zero hash (rejected otherwise) — the pallet's own "not yet
      *      recorded" sentinel is a stored TxRecord's `recorded_at == 0`, never `tx_hash`, so
@@ -597,14 +617,10 @@ interface TrancheTxRegistry {
      *      overwriting — see get_request's new *_bridge_attempts return values for the
      *      full history, and BridgeAttempt's own dev notes for the "at most one Executed
      *      ever" invariant.
-     *      `settlement_id` MUST be non-zero when `step == SettlementApproved` and MUST be
-     *      zero for every other step. Recording `SettlementApproved` links `request_id` into
-     *      this settlement's request set and races with the settlement-side completion
-     *      trigger for a Multichain product (see RequestStep's dev notes) — the pallet
-     *      opportunistically self-closes this one request out of get_investor_active_requests
-     *      immediately if the settlement's completion condition has already landed by the
-     *      time this call runs, rather than relying solely on the settlement-side trigger to
-     *      find it later.
+     *      A request's link to a settlement is recorded separately, via
+     *      record_settlement_tx's `RequestsApproved` step (batched across every request
+     *      approved into one settlement — see that function's dev notes and
+     *      SettlementStep's own doc comment).
      *      Opening a registry entry registers (product_id, request_id) under the investor for
      *      get_investor_active_requests; this registration is independent of, and can
      *      precede, the Investments precompile's record_investment_request (which is only
@@ -626,8 +642,6 @@ interface TrancheTxRegistry {
      *                               declared — see dev notes above on self-declaration
      * @param step                   Which pipeline step this attestation is for
      * @param attestation            The attested off-chain tx
-     * @param settlement_id          The settlement this request is approved into — required
-     *                               (non-zero) iff step == SettlementApproved, zero otherwise
      * @param bridge_status          3 (Executed) or 4 (Reverted) — meaningful iff step ==
      *                               RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0
      *                               (ignored) otherwise
@@ -643,13 +657,13 @@ interface TrancheTxRegistry {
         uint64[] calldata adapter_chain_ids,
         RequestStep step,
         TxAttestation calldata attestation,
-        uint256 settlement_id,
         uint8 bridge_status
     ) external;
 
     /**
-     * @notice Attest to one tx in a settlement's pipeline: either the single Trigger tx, or
-     *         one bridge/hooks half of a Collect/Response/Finalize leg for one chain.
+     * @notice Attest to one tx in a settlement's pipeline: the single Trigger tx, the
+     *         (possibly batched) RequestsApproved tx, or one bridge/hooks half of a
+     *         Collect/Response/Finalize leg for one chain.
      * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
      *      MUST NOT be the zero hash (rejected otherwise) — same rationale as
      *      record_request_tx's own `tx_hash` check.
@@ -664,7 +678,9 @@ interface TrancheTxRegistry {
      *      record_request_tx: for `step == Triggered`, `spoke_chain_id` MUST be 0 and both
      *      `collect_response_chain_ids`/`finalize_chain_ids` are meaningful — each may
      *      independently be empty, and both empty means the settlement needs no cross-chain
-     *      action at all; for every leg step, `spoke_chain_id` MUST be non-zero and both
+     *      action at all; for `step == RequestsApproved`, `spoke_chain_id` MUST also be 0 and
+     *      both chain-set params MUST be empty, but `request_ids` MUST be non-empty instead
+     *      (see below); for every leg step, `spoke_chain_id` MUST be non-zero and both
      *      chain-set params MUST be empty. Safe as a sentinel because no EVM chain in this
      *      protocol's supported set is ever assigned chain_id 0. `spoke_chain_id` identifies
      *      which chain a leg step is about — not necessarily the chain `attestation.chain_id`
@@ -679,10 +695,16 @@ interface TrancheTxRegistry {
      *      FinalizeBridgeExecuted/SettleApplied call is only valid for a chain in
      *      this set. A chain may appear in both (it has both a registered Adapter and a
      *      registered vault) or just one. `step == Triggered` must be recorded exactly once
-     *      per (product_id, settlement_id), before any leg step for that settlement. Within
-     *      a given (spoke_chain_id, leg) pair, Bridge must be recorded before Hooks, with no
-     *      duplicates — this ordering is enforced only within that pair, not across chains
-     *      or legs, since chains progress independently.
+     *      per (product_id, settlement_id), before any leg step or RequestsApproved call for
+     *      that settlement. Within a given (spoke_chain_id, leg) pair, Bridge must be
+     *      recorded before Hooks, with no duplicates — this ordering is enforced only within
+     *      that pair, not across chains or legs, since chains progress independently.
+     *      `request_ids` MUST be non-empty when `step == RequestsApproved` and MUST be empty
+     *      for every other step — records evidence for every request_id Valuation approved
+     *      into this settlement, in one batch (see SettlementStep.RequestsApproved's doc
+     *      comment for the full mechanism). Reverts the whole call if any request_id in the
+     *      batch doesn't have an open registry entry, or already has one recorded — same
+     *      behavior a caller would see repeating an already-recorded request_id.
      *      `bridge_status` MUST be meaningful (either `3` (Executed) or `4` (Reverted)) when
      *      `step` is `CollectBridgeExecuted`/`ResponseBridgeExecuted`/`FinalizeBridgeExecuted`,
      *      and MUST be `0` for every other step — same convention as
@@ -691,11 +713,15 @@ interface TrancheTxRegistry {
      *      Emits SettlementTxRecorded.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  The settlement cycle this attestation belongs to
-     * @param spoke_chain_id  The chain this leg step is for — 0 if step == Triggered
+     * @param spoke_chain_id  The chain this leg step is for — 0 if step == Triggered or
+     *                        RequestsApproved (both settlement-wide, not chain-scoped)
      * @param collect_response_chain_ids Chains needing a Collect/Response leg — meaningful
      *                        (and may be empty) iff step == Triggered, empty otherwise
      * @param finalize_chain_ids Chains needing a Finalize leg — meaningful (and may be
      *                        empty) iff step == Triggered, empty otherwise
+     * @param request_ids     Every request_id Valuation approved into this settlement —
+     *                        required (non-empty) iff step == RequestsApproved, empty
+     *                        otherwise
      * @param step            Which pipeline step this attestation is for
      * @param attestation     The attested off-chain tx
      * @param bridge_status   3 (Executed) or 4 (Reverted) — meaningful iff step is one of the three
@@ -707,6 +733,7 @@ interface TrancheTxRegistry {
         uint64 spoke_chain_id,
         uint64[] calldata collect_response_chain_ids,
         uint64[] calldata finalize_chain_ids,
+        bytes32[] calldata request_ids,
         SettlementStep step,
         TxAttestation calldata attestation,
         uint8 bridge_status
@@ -1084,8 +1111,8 @@ interface TrancheTxRegistry {
      *      unrelated to `settlement_id`/`settled` below — see RequestStep's dev notes for
      *      why `RequestCompleted` was renamed from `Completed` to disambiguate the two.
      *      `settlement_id`/`settled` are resolved entirely from this pallet's own registry
-     *      entry, written by record_request_tx's `SettlementApproved` step (Valuation's
-     *      DepositApproved/RedeemApproved event) — `settlement_id` is 0 until that step is
+     *      entry, written by record_settlement_tx's `RequestsApproved` step (Valuation's
+     *      DepositsApproved/RedeemsApproved event) — `settlement_id` is 0 until that step is
      *      recorded. Safe as a sentinel because settlement_id is 1-indexed protocol-wide (0
      *      is reserved to mean "no settlement", the first real settlement is 1) — see the
      *      Investments precompile's get_settlement_id.
