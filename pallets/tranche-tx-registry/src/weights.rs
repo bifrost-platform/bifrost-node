@@ -11,7 +11,7 @@ use sp_std::marker::PhantomData;
 pub trait WeightInfo {
 	fn set_tx_recorder() -> Weight;
 	fn record_request_tx() -> Weight;
-	fn record_settlement_tx() -> Weight;
+	fn record_settlement_tx(n: u32) -> Weight;
 	fn record_receive_tx() -> Weight;
 	fn record_whitelist_tx() -> Weight;
 }
@@ -29,10 +29,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
 	}
-	fn record_settlement_tx() -> Weight {
+	fn record_settlement_tx(n: u32) -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(3_u64))
 			.saturating_add(T::DbWeight::get().writes(3_u64))
+			// `SettlementStep::RequestsApproved` reads+writes one `RequestEntries` entry per
+			// `request_ids` element, on top of the fixed cost above — `n == 0` for
+			// every other step.
+			.saturating_add(T::DbWeight::get().reads_writes(n as u64, n as u64))
 	}
 	fn record_receive_tx() -> Weight {
 		Weight::from_parts(20_000_000, 0)
@@ -58,10 +62,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
 	}
-	fn record_settlement_tx() -> Weight {
+	fn record_settlement_tx(n: u32) -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(3_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
+			.saturating_add(RocksDbWeight::get().reads_writes(n as u64, n as u64))
 	}
 	fn record_receive_tx() -> Weight {
 		Weight::from_parts(20_000_000, 0)

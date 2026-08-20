@@ -161,16 +161,17 @@ where
 		// Function selectors for pallet-tranche-tx-registry's record_* calls (keccak256 of the
 		// canonical signature in precompiles/tranche-tx-registry/src/lib.rs's
 		// `#[precompile::public(...)]` strings, first 4 bytes — verified against those exact
-		// strings via `cast sig`, not reconstructed from memory). Re-verified 2026-08-19 after
-		// every record_*_tx (except record_receive_tx) gained a trailing `bridge_status`
-		// param (Bridge retry tracking — see BridgeAttempts in the pallet) — that changes
-		// every selector here except `record_receive_tx`'s (no Bridge-phase step of its
-		// own, not part of this change at all), so re-derive rather than hand-edit if this
-		// ever changes again.
-		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256,uint8) => 0x46661fde
-		const RECORD_REQUEST_TX: [u8; 4] = [0x46, 0x66, 0x1f, 0xde];
-		// record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32),uint8) => 0x44a135cb
-		const RECORD_SETTLEMENT_TX: [u8; 4] = [0x44, 0xa1, 0x35, 0xcb];
+		// strings via `cast sig`, not reconstructed from memory). Re-verified 2026-08-20 after
+		// record_request_tx dropped its `settlement_id` param (a request's link to a settlement
+		// moved to record_settlement_tx's new batched `RequestsApproved` step, replacing what
+		// used to be a per-request record_request_tx call — see SettlementStep::RequestsApproved
+		// in the pallet) and record_settlement_tx gained a `bytes32[] request_ids` param for
+		// that same step — that changes both of those two selectors; record_receive_tx/
+		// record_whitelist_tx are untouched by this change.
+		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint8) => 0x116de5e0
+		const RECORD_REQUEST_TX: [u8; 4] = [0x11, 0x6d, 0xe5, 0xe0];
+		// record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],bytes32[],uint8,(uint64,bytes32),uint8) => 0x1c62e124
+		const RECORD_SETTLEMENT_TX: [u8; 4] = [0x1c, 0x62, 0xe1, 0x24];
 		// record_receive_tx(uint64,(uint64,address),address,address,uint256,uint8,(uint64,bytes32)) => 0x8ef97ccd
 		const RECORD_RECEIVE_TX: [u8; 4] = [0x8e, 0xf9, 0x7c, 0xcd];
 		// record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32),uint8) => 0xcfb6fca5

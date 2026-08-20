@@ -4,7 +4,7 @@ use crate::{
 	migrations, BridgeStatus, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
 	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId,
 	SettlementStep, TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep,
-	MAX_SPOKE_CHAINS,
+	MAX_SETTLEMENT_REQUESTS, MAX_SPOKE_CHAINS,
 };
 use pallet_tranche_system::{AdapterInspect, ProductInspect, VaultId, VaultInspect};
 
@@ -124,14 +124,10 @@ pub mod pallet {
 		RequestStepOutOfOrder,
 		/// This step has already been recorded for this request.
 		RequestStepAlreadyRecorded,
-		/// `step` must be one of the six recordable values — never
+		/// `step` must be one of the five recordable values — never
 		/// `RequestStep::None`/`RequestCompleted`, both read-only sentinels.
 		InvalidRequestStep,
-		/// `settlement_id` must be `Some` when `step == RequestStep::SettlementApproved`.
-		RequestSettlementIdRequired,
-		/// `settlement_id` must be `None` for every step other than `SettlementApproved`.
-		UnexpectedRequestSettlementId,
-		/// `step` must be one of the seven recordable values — never
+		/// `step` must be one of the eight recordable values — never
 		/// `SettlementStep::Queued`/`Settled`, both read-only sentinels.
 		InvalidSettlementStep,
 		/// `collect_response_chain_ids` and `finalize_chain_ids` must both be `Some`
@@ -144,10 +140,14 @@ pub mod pallet {
 		/// for every step other than `Triggered`.
 		UnexpectedSpokeChainIds,
 		/// `spoke_chain_id` must be `Some` for every leg step (every step other than
-		/// `Triggered`).
+		/// `Triggered`/`RequestsApproved`).
 		SpokeChainIdRequired,
-		/// `spoke_chain_id` must be `None` when `step == Triggered`.
+		/// `spoke_chain_id` must be `None` when `step == Triggered` or `RequestsApproved`.
 		UnexpectedSpokeChainId,
+		/// `request_ids` must be non-empty when `step == SettlementStep::RequestsApproved`.
+		RequestIdsRequired,
+		/// `request_ids` must be empty for every step other than `RequestsApproved`.
+		UnexpectedRequestIds,
 		/// Trigger has already been recorded for this (product_id, settlement_id).
 		SettlementAlreadyTriggered,
 		/// Trigger has not been recorded yet for this (product_id, settlement_id).
@@ -238,7 +238,6 @@ pub mod pallet {
 			request_id: RequestId,
 			opening: Option<RequestOpening>,
 			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
-			settlement_id: Option<SettlementId>,
 			/// `Some` iff `step` was a Bridge-phase step (`RequestBridgeExecuted`/
 			/// `AdapterBridgeExecuted`) — the attempt's outcome, mirroring what was
 			/// just appended to the relevant `bridge_attempts` list.
@@ -247,13 +246,19 @@ pub mod pallet {
 			chain_id: ChainId,
 			tx_hash: H256,
 		},
-		/// One tx in a settlement's pipeline was recorded.
+		/// One tx in a settlement's pipeline was recorded — either the single
+		/// Trigger tx, one bridge/hooks half of a per-chain
+		/// Collect/Response/Finalize leg, or the (possibly batched)
+		/// `SettlementStep::RequestsApproved` tx.
 		SettlementTxRecorded {
 			product_id: ProductId,
 			settlement_id: SettlementId,
 			spoke_chain_id: Option<ChainId>,
 			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			/// `Some` iff `step == SettlementStep::RequestsApproved` — every `request_id`
+			/// this call recorded evidence for, in the order supplied.
+			request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 			/// `Some` iff `step` was a Bridge-phase step (`CollectBridgeExecuted`/
 			/// `ResponseBridgeExecuted`/`FinalizeBridgeExecuted`) — same convention
 			/// as `RequestTxRecorded::bridge_status`.
@@ -441,23 +446,25 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// Every `request_id` approved into a given `(product_id, settlement_id)`,
-	/// in the order `RequestStep::SettlementApproved` recorded them — this
+	/// in the order `record_settlement_tx`'s `SettlementStep::RequestsApproved` arm
+	/// recorded them (possibly several at once, from one batch call) — this
 	/// pallet's own copy of the request<->settlement linkage, read by
 	/// `close_active_requests`/`try_close_local_requests`/
 	/// `try_close_request` to know which `InvestorActiveRequests` entries to
 	/// drop once a settlement (or one of its legs) completes. Originally this
 	/// linkage was queried cross-pallet from pallet-tranche-investments (via
 	/// the now-removed `RequestSettlementInspect` trait), but that pallet only
-	/// ever learns of the approval secondhand — `DepositApproved`/
-	/// `RedeemApproved` fires at Valuation, the same event this pallet's own
-	/// `RequestStep::SettlementApproved` step is recorded from — so keeping an
-	/// independent, event-sourced copy here removes the hard dependency
-	/// entirely rather than just hiding it behind a trait.
+	/// ever learns of the approval secondhand — Valuation's
+	/// `DepositsApproved`/`RedeemsApproved` events are the same events this
+	/// pallet's own `SettlementStep::RequestsApproved` step is recorded from — so
+	/// keeping an independent, event-sourced copy here removes the hard
+	/// dependency entirely rather than just hiding it behind a trait.
 	///
 	/// Deliberately unbounded, same `#[pallet::unbounded]` rationale as
 	/// `InvestorActiveRequests` — growth is bounded in practice by how many
-	/// requests a single settlement cycle can genuinely batch, not by anything
-	/// this pallet caps directly.
+	/// requests a single settlement cycle can genuinely batch (and, per
+	/// `RequestsApproved` call, by `MAX_SETTLEMENT_REQUESTS`), not by anything this
+	/// pallet caps directly here.
 	pub type SettlementRequests<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -657,17 +664,17 @@ pub mod pallet {
 
 		/// Attest to one tx in a request's pipeline — the single Requested tx, the
 		/// single RequestQueued tx, one Bridge half of the Inbound leg (Spoke-vault
-		/// requests only), one Bridge/Applied half of a per-chain Adapter leg (see
-		/// `RequestStep`'s doc comment for exactly which chains need one), or the
-		/// single SettlementApproved tx. Origin must be `RecorderOrigin`. `opening`
-		/// MUST be `Some` iff `step == RequestStep::Requested`, `None` otherwise.
-		/// `adapter_chain_ids` MUST be `Some` iff `step == RequestStep::RequestQueued`
-		/// (Hub-vault or Spoke-vault alike), `None` otherwise. `settlement_id` MUST be
-		/// `Some` iff `step == RequestStep::SettlementApproved`, `None` otherwise.
-		/// `bridge_status` MUST be `Some` iff `step` is `RequestBridgeExecuted` or
-		/// `AdapterBridgeExecuted` (the two Bridge-phase steps), `None` otherwise —
-		/// see interface.sol's `record_request_tx` for the full sentinel-gating/
-		/// ordering contract this mirrors.
+		/// requests only), or one Bridge/Applied half of a per-chain Adapter leg (see
+		/// `RequestStep`'s doc comment for exactly which chains need one). A request's
+		/// link to a settlement is recorded separately, via `record_settlement_tx`'s
+		/// `SettlementStep::RequestsApproved` — see that variant's doc comment. Origin must be
+		/// `RecorderOrigin`. `opening` MUST be `Some` iff `step ==
+		/// RequestStep::Requested`, `None` otherwise. `adapter_chain_ids` MUST be
+		/// `Some` iff `step == RequestStep::RequestQueued` (Hub-vault or Spoke-vault
+		/// alike), `None` otherwise. `bridge_status` MUST be `Some` iff `step` is
+		/// `RequestBridgeExecuted` or `AdapterBridgeExecuted` (the two Bridge-phase
+		/// steps), `None` otherwise — see interface.sol's `record_request_tx` for the
+		/// full sentinel-gating/ordering contract this mirrors.
 		///
 		/// Steps do NOT need to be recorded in the pipeline's own conceptual order —
 		/// only in the order the recorder actually observed the underlying events
@@ -677,9 +684,6 @@ pub mod pallet {
 		/// Contract call happens locally, in the same tx as (and possibly logged
 		/// before) the domain event that would otherwise open/advance this request —
 		/// see `RequestStep`'s doc comment and `Pallet::ensure_adapter_chain_declared`.
-		/// `SettlementApproved` races with the settlement-side completion trigger for
-		/// the same reason — see `RequestStep::SettlementApproved`'s doc comment and
-		/// `Pallet::try_close_request`.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx())]
 		pub fn record_request_tx(
@@ -691,7 +695,6 @@ pub mod pallet {
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
-			settlement_id: Option<SettlementId>,
 			bridge_status: Option<BridgeStatus>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
@@ -718,7 +721,6 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
-					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					RequestEntries::<T>::insert(
 						product_id,
@@ -749,7 +751,6 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
-					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
@@ -762,7 +763,6 @@ pub mod pallet {
 				},
 				RequestStep::RequestQueued => {
 					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					let mut entry = RequestEntries::<T>::get(product_id, request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
@@ -818,7 +818,6 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
-					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
 					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
@@ -832,7 +831,6 @@ pub mod pallet {
 						adapter_chain_ids.is_none(),
 						Error::<T>::UnexpectedRequestAdapterChains
 					);
-					ensure!(settlement_id.is_none(), Error::<T>::UnexpectedRequestSettlementId);
 					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 					let mut entry =
@@ -847,30 +845,6 @@ pub mod pallet {
 					entry.applied_tx = Some(tx);
 					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
 				},
-				RequestStep::SettlementApproved => {
-					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(
-						adapter_chain_ids.is_none(),
-						Error::<T>::UnexpectedRequestAdapterChains
-					);
-					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-					let settlement_id =
-						settlement_id.ok_or(Error::<T>::RequestSettlementIdRequired)?;
-					let mut entry = RequestEntries::<T>::get(product_id, request_id)
-						.ok_or(Error::<T>::RequestNotOpened)?;
-					ensure!(entry.approved_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
-					entry.settlement_id = Some(settlement_id);
-					entry.approved_tx = Some(tx);
-					RequestEntries::<T>::insert(product_id, request_id, entry);
-					SettlementRequests::<T>::mutate(product_id, settlement_id, |requests| {
-						requests.push(request_id);
-					});
-					// Opportunistically self-close: this can race with the settlement-side
-					// completion trigger (`try_close_local_requests`/
-					// `close_active_requests`) — see `RequestStep::SettlementApproved`'s doc
-					// comment.
-					Self::try_close_request(product_id, settlement_id, request_id);
-				},
 				RequestStep::None | RequestStep::RequestCompleted => {
 					return Err(Error::<T>::InvalidRequestStep.into());
 				},
@@ -881,7 +855,6 @@ pub mod pallet {
 				request_id,
 				opening,
 				adapter_chain_ids,
-				settlement_id,
 				bridge_status,
 				step,
 				chain_id,
@@ -890,28 +863,39 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Attest to one tx in a settlement's pipeline: either the single Trigger
-		/// tx, or one bridge/hooks half of a Collect/Response/Finalize leg for one
-		/// chain. Origin must be `RecorderOrigin`. `collect_response_chain_ids` and
-		/// `finalize_chain_ids` MUST both be `Some` iff `step ==
-		/// SettlementStep::Triggered` (each may independently be empty — see below);
-		/// `spoke_chain_id` MUST be `Some` for every leg step (every step other than
-		/// `Triggered`). `bridge_status` MUST be `Some` iff `step` is one of the
-		/// three Bridge-phase leg steps (`CollectBridgeExecuted`/
-		/// `ResponseBridgeExecuted`/`FinalizeBridgeExecuted`), `None` otherwise —
-		/// see interface.sol's `record_settlement_tx` for the full
-		/// contract this mirrors.
+		/// Attest to one tx in a settlement's pipeline: the single Trigger tx, the
+		/// (possibly batched) RequestsApproved tx, or one bridge/hooks half of a
+		/// Collect/Response/Finalize leg for one chain. Origin must be
+		/// `RecorderOrigin`. `collect_response_chain_ids` and `finalize_chain_ids`
+		/// MUST both be `Some` iff `step == SettlementStep::Triggered` (each may
+		/// independently be empty — see below); `request_ids` MUST be non-empty iff
+		/// `step == SettlementStep::RequestsApproved`; `spoke_chain_id` MUST be `Some` for
+		/// every leg step (every step other than `Triggered`/`RequestsApproved`, both of
+		/// which are settlement-wide rather than chain-scoped).
+		/// `bridge_status` MUST be `Some` iff `step` is one of the three
+		/// Bridge-phase leg steps (`CollectBridgeExecuted`/`ResponseBridgeExecuted`/
+		/// `FinalizeBridgeExecuted`), `None` otherwise — see interface.sol's
+		/// `record_settlement_tx` for the full contract this mirrors.
 		///
-		/// The two sets declare, per chain, which leg kind(s) it needs — Collect/
-		/// Response for a chain with a registered Adapter, Finalize for a chain with
-		/// a registered vault, both for a chain with both (excluding Hub itself in
-		/// either case — see `SettlementCollectResponseChains`/`SettlementFinalizeChains`'s
-		/// doc comments). A chain absent from `finalize_chain_ids` never blocks
-		/// completion on a Finalize leg it was never going to get — completion waits
-		/// on `NavReceived` for it instead (see `SettlementStep`'s doc
-		/// comment). A settlement needing no cross-chain action at all is recorded as
-		/// `Triggered` with both sets empty — every read path already reports this
-		/// correctly via vacuous truth, with no dedicated step needed for it.
+		/// The two chain-id sets declare, per chain, which leg kind(s) it needs —
+		/// Collect/Response for a chain with a registered Adapter, Finalize for a
+		/// chain with a registered vault, both for a chain with both (excluding Hub
+		/// itself in either case — see `SettlementCollectResponseChains`/
+		/// `SettlementFinalizeChains`'s doc comments). A chain absent from
+		/// `finalize_chain_ids` never blocks completion on a Finalize leg it was
+		/// never going to get — completion waits on `NavReceived` for it instead
+		/// (see `SettlementStep`'s doc comment). A settlement needing no
+		/// cross-chain action at all is recorded as `Triggered` with both sets
+		/// empty — every read path already reports this correctly via vacuous
+		/// truth, with no dedicated step needed for it.
+		///
+		/// `request_ids` records every `request_id` Valuation approved into this
+		/// settlement in one call — see `SettlementStep::RequestsApproved`'s doc comment
+		/// for the full mechanism, including why this replaced a per-request
+		/// `record_request_tx` step. Rejects the whole call (atomic, like any other
+		/// extrinsic) if any `request_id` in the batch doesn't have an open
+		/// `RequestEntries` entry, or already has one recorded — same behavior a
+		/// caller would see repeating the old per-request step for a duplicate.
 		///
 		/// Side effects on `InvestorActiveRequests` (see its own storage doc comment
 		/// for the full mechanism — `SettlementRequests` +
@@ -928,9 +912,13 @@ pub mod pallet {
 		/// might have just become fully responded (including vacuously, right at
 		/// Trigger, if it was declared empty — always the case for a `SingleChain`
 		/// product's own settlement, since its Adapters are colocated too and never
-		/// need a Collect/Response leg).
+		/// need a Collect/Response leg). `step == SettlementStep::RequestsApproved` tries to
+		/// close each request in the batch individually right after linking it in,
+		/// same race-handling rationale as `SettlementStep::RequestsApproved`'s doc comment.
 		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx())]
+		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx(
+			request_ids.as_ref().map_or(0, |ids| ids.len() as u32)
+		))]
 		pub fn record_settlement_tx(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -938,6 +926,7 @@ pub mod pallet {
 			spoke_chain_id: Option<ChainId>,
 			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
 			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 			step: SettlementStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -952,6 +941,7 @@ pub mod pallet {
 			if step == SettlementStep::Triggered {
 				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
+				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
 				let collect_response_chains =
 					collect_response_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
 				let finalize_chains =
@@ -986,11 +976,44 @@ pub mod pallet {
 				// case for a `SingleChain` product), same as a leg-by-leg `NavReceived`
 				// reaching this state later would.
 				Self::try_close_local_requests(product_id, settlement_id);
+			} else if step == SettlementStep::RequestsApproved {
+				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
+				ensure!(
+					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
+					Error::<T>::UnexpectedSpokeChainIds
+				);
+				let approved_request_ids =
+					request_ids.clone().ok_or(Error::<T>::RequestIdsRequired)?;
+				ensure!(!approved_request_ids.is_empty(), Error::<T>::RequestIdsRequired);
+				ensure!(
+					SettlementTriggers::<T>::contains_key(product_id, settlement_id),
+					Error::<T>::SettlementNotTriggered
+				);
+				for request_id in approved_request_ids.iter() {
+					let mut entry = RequestEntries::<T>::get(product_id, *request_id)
+						.ok_or(Error::<T>::RequestNotOpened)?;
+					ensure!(entry.approved_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
+					entry.settlement_id = Some(settlement_id);
+					entry.approved_tx = Some(tx.clone());
+					RequestEntries::<T>::insert(product_id, *request_id, entry);
+				}
+				SettlementRequests::<T>::mutate(product_id, settlement_id, |requests| {
+					requests.extend(approved_request_ids.iter().copied());
+				});
+				// Opportunistically self-close each request individually: this can race
+				// with the settlement-side completion trigger
+				// (`try_close_local_requests`/`close_active_requests`) — see
+				// `SettlementStep::RequestsApproved`'s doc comment.
+				for request_id in approved_request_ids.iter() {
+					Self::try_close_request(product_id, settlement_id, *request_id);
+				}
 			} else {
 				ensure!(
 					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
 					Error::<T>::UnexpectedSpokeChainIds
 				);
+				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
 				let spoke_chain_id = spoke_chain_id.ok_or(Error::<T>::SpokeChainIdRequired)?;
 				let is_finalize_step = matches!(
 					step,
@@ -1072,6 +1095,7 @@ pub mod pallet {
 					},
 					SettlementStep::Queued
 					| SettlementStep::Triggered
+					| SettlementStep::RequestsApproved
 					| SettlementStep::Settled => {
 						return Err(Error::<T>::InvalidSettlementStep.into());
 					},
@@ -1094,6 +1118,7 @@ pub mod pallet {
 				spoke_chain_id,
 				collect_response_chain_ids,
 				finalize_chain_ids,
+				request_ids,
 				bridge_status,
 				step,
 				chain_id,

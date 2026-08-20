@@ -7,7 +7,8 @@ use pallet_evm::AddressMapping;
 use pallet_tranche_system::{ProductId, ProductInspect, VaultId};
 use pallet_tranche_tx_registry::{
 	BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening,
-	RequestStep, SettlementStep, TxRecord, WhitelistStep, MAX_SPOKE_CHAINS,
+	RequestStep, SettlementStep, TxRecord, WhitelistStep, MAX_SETTLEMENT_REQUESTS,
+	MAX_SPOKE_CHAINS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, Get, H160, H256, U256};
@@ -19,10 +20,10 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_REQUEST_TX_RECORDED: [u8; 32] = keccak256!(
-	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32),uint256,uint8)"
+	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32),uint8)"
 );
 pub(crate) const SELECTOR_LOG_SETTLEMENT_TX_RECORDED: [u8; 32] = keccak256!(
-	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],(uint64,bytes32),uint8)"
+	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],bytes32[],(uint64,bytes32),uint8)"
 );
 pub(crate) const SELECTOR_LOG_RECEIVE_TX_RECORDED: [u8; 32] = keccak256!(
 	"ReceiveTxRecorded(uint64,address,(uint64,address),address,uint256,uint8,(uint64,bytes32))"
@@ -82,8 +83,8 @@ const MAX_HISTORY_PAGE_SIZE: usize = 50;
 /// `settlement_id`/`settled` are resolved entirely from this pallet's own
 /// `RequestEntries`/`SettlementChainEntries`/`SettlementCollectResponseChains` —
 /// no cross-pallet read into `pallet-tranche-investments` is needed here (unlike
-/// an earlier version of this precompile, before `RequestStep::SettlementApproved`
-/// gave this pallet its own copy of the request<->settlement linkage — see
+/// an earlier version of this precompile, before this pallet started tracking
+/// its own copy of the request<->settlement linkage — see
 /// `pallet_tranche_tx_registry::SettlementRequests`'s doc comment).
 ///
 /// Called exclusively by the pallet-registered tx recorder account — not a Gateway,
@@ -111,13 +112,14 @@ where
 {
 	/// Attest to one tx in a request's pipeline — the single Requested tx, the
 	/// single RequestQueued tx, one Bridge half of the Inbound leg (Spoke-vault
-	/// requests only), one Bridge/Applied half of a per-chain Adapter leg, or the
-	/// single SettlementApproved tx. See
+	/// requests only), or one Bridge/Applied half of a per-chain Adapter leg. A
+	/// request's link to a settlement is recorded separately, via
+	/// `record_settlement_tx`'s `RequestsApproved` step (batched across every request
+	/// approved into one settlement — see that function's doc comment). See
 	/// `pallet_tranche_tx_registry::record_request_tx`'s doc comment for the full
 	/// ordering/duplicate-recording contract this dispatches into; this function's
 	/// own job is only translating interface.sol's flat, sentinel-gated calldata
-	/// into the pallet's `Option<RequestOpening>`/`Option<BoundedVec<..>>`/
-	/// `Option<SettlementId>` shapes.
+	/// into the pallet's `Option<RequestOpening>`/`Option<BoundedVec<..>>` shapes.
 	///
 	/// @param investor              Investor address — required iff step == Requested
 	/// @param vault_chain_id        EVM chain ID of the tranche vault — required iff
@@ -135,13 +137,11 @@ where
 	/// @param step                  0 = None (never valid here), 1 = Requested,
 	/// 2 = RequestBridgeExecuted, 3 = RequestQueued,
 	/// 4 = AdapterBridgeExecuted, 5 = AdapterApplied,
-	/// 6 = RequestCompleted (never valid here), 7 = SettlementApproved
-	/// @param settlement_id         The settlement this request is approved into —
-	/// required (non-zero) iff step == SettlementApproved, zero otherwise
+	/// 6 = RequestCompleted (never valid here)
 	/// @param bridge_status         3 = Executed, 4 = Reverted — meaningful iff step ==
 	/// RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
-		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint256,uint8)"
+		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint8)"
 	)]
 	fn record_request_tx(
 		handle: &mut impl PrecompileHandle,
@@ -155,7 +155,6 @@ where
 		adapter_chain_ids: Vec<u64>,
 		step: u8,
 		attestation: EvmTxAttestation,
-		settlement_id: U256,
 		bridge_status: u8,
 	) -> EvmResult {
 		let decoded_step = decode_request_step(step)?;
@@ -169,7 +168,6 @@ where
 		)?;
 		let decoded_adapter_chains =
 			decode_request_adapter_chains(decoded_step, &adapter_chain_ids)?;
-		let decoded_settlement_id = decode_request_settlement_id(decoded_step, settlement_id)?;
 		let is_bridge_step = matches!(
 			decoded_step,
 			RequestStep::RequestBridgeExecuted | RequestStep::AdapterBridgeExecuted
@@ -186,7 +184,6 @@ where
 			step: decoded_step,
 			chain_id,
 			tx_hash,
-			settlement_id: decoded_settlement_id,
 			bridge_status: decoded_bridge_status,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -210,7 +207,6 @@ where
 				step,
 				adapter_chain_ids,
 				attestation,
-				settlement_id,
 				bridge_status,
 			)),
 		);
@@ -220,26 +216,32 @@ where
 		Ok(())
 	}
 
-	/// Attest to one tx in a settlement's pipeline: either the single Trigger tx, or
-	/// one bridge/hooks half of a Collect/Response/Finalize leg for one chain. A
-	/// settlement needing no cross-chain action at all is recorded as `Triggered`
-	/// with both chain sets empty. See
-	/// `pallet_tranche_tx_registry::record_settlement_tx`'s doc comment for the full
-	/// ordering/duplicate-recording contract this dispatches into; this function's own
-	/// job is only translating interface.sol's flat, sentinel-gated calldata into the
-	/// pallet's `Option<ChainId>`/`Option<BoundedVec<..>>` shapes.
+	/// Attest to one tx in a settlement's pipeline: the single Trigger tx, the
+	/// (possibly batched) RequestsApproved tx, or one bridge/hooks half of a
+	/// Collect/Response/Finalize leg for one chain. A settlement needing no
+	/// cross-chain action at all is recorded as `Triggered` with both chain sets
+	/// empty. See `pallet_tranche_tx_registry::record_settlement_tx`'s doc comment
+	/// for the full ordering/duplicate-recording contract this dispatches into;
+	/// this function's own job is only translating interface.sol's flat,
+	/// sentinel-gated calldata into the pallet's
+	/// `Option<ChainId>`/`Option<BoundedVec<..>>` shapes.
 	///
-	/// @param spoke_chain_id  The spoke chain this leg step is for — 0 if step == Triggered
+	/// @param spoke_chain_id  The spoke chain this leg step is for — 0 if step ==
+	/// Triggered or RequestsApproved (both settlement-wide, not chain-scoped)
 	/// @param collect_response_chain_ids Chains needing a Collect/Response leg (have a
 	/// registered Adapter) — meaningful (and may be empty) iff step == Triggered
 	/// @param finalize_chain_ids Chains needing a Finalize leg (have a registered vault) —
 	/// meaningful (and may be empty) iff step == Triggered
+	/// @param request_ids Every request_id Valuation approved into this settlement —
+	/// required (non-empty) iff step == RequestsApproved, empty otherwise
 	/// @param step            0 = Queued (never valid here), 1 = Triggered,
-	/// 2-7 = leg steps, 8 = Settled (never valid here)
+	/// 2 = CollectBridgeExecuted, 3 = NavReported, 4 = ResponseBridgeExecuted,
+	/// 5 = NavReceived, 6 = RequestsApproved, 7 = FinalizeBridgeExecuted, 8 = SettleApplied,
+	/// 9 = Settled (never valid here)
 	/// @param bridge_status   3 = Executed, 4 = Reverted — meaningful iff step is one of
 	/// the three Bridge-phase leg steps, MUST be 0 otherwise
 	#[precompile::public(
-		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],uint8,(uint64,bytes32),uint8)"
+		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],bytes32[],uint8,(uint64,bytes32),uint8)"
 	)]
 	fn record_settlement_tx(
 		handle: &mut impl PrecompileHandle,
@@ -248,6 +250,7 @@ where
 		spoke_chain_id: u64,
 		collect_response_chain_ids: Vec<u64>,
 		finalize_chain_ids: Vec<u64>,
+		request_ids: Vec<H256>,
 		step: u8,
 		attestation: EvmTxAttestation,
 		bridge_status: u8,
@@ -263,6 +266,7 @@ where
 			&collect_response_chain_ids,
 			&finalize_chain_ids,
 		)?;
+		let decoded_request_ids = decode_settlement_request_ids(decoded_step, &request_ids)?;
 		let is_bridge_step = matches!(
 			decoded_step,
 			SettlementStep::CollectBridgeExecuted
@@ -279,6 +283,7 @@ where
 			spoke_chain_id: decoded_spoke_chain_id,
 			collect_response_chain_ids: decoded_collect_response_chain_ids,
 			finalize_chain_ids: decoded_finalize_chain_ids,
+			request_ids: decoded_request_ids,
 			step: decoded_step,
 			chain_id,
 			tx_hash,
@@ -301,6 +306,7 @@ where
 				step,
 				collect_response_chain_ids,
 				finalize_chain_ids,
+				request_ids,
 				attestation,
 				bridge_status,
 			)),
@@ -939,9 +945,9 @@ where
 	/// `RequestCompleted` was renamed from `Completed` to disambiguate the two.
 	///
 	/// `settlement_id`/`settled` are resolved from `entry.settlement_id`/
-	/// `entry.approved_tx`, written by `record_request_tx`'s
-	/// `RequestStep::SettlementApproved` arm — `settlement_id` is 0 until that step
-	/// is recorded (Valuation's `DepositApproved`/`RedeemApproved` event). `settled`
+	/// `entry.approved_tx`, written by `record_settlement_tx`'s
+	/// `SettlementStep::RequestsApproved` arm — `settlement_id` is 0 until that step
+	/// is recorded (Valuation's `DepositsApproved`/`RedeemsApproved` event). `settled`
 	/// depends on whether this request's own vault is on Hub or Spoke, mirroring the
 	/// Inbound-leg asymmetry above: for a Spoke vault, true once the Finalize leg's
 	/// Hooks phase lands for this request's own origin chain; for a Hub vault (no
@@ -1284,7 +1290,6 @@ fn decode_request_step(step: u8) -> EvmResult<RequestStep> {
 		4 => Ok(RequestStep::AdapterBridgeExecuted),
 		5 => Ok(RequestStep::AdapterApplied),
 		6 => Ok(RequestStep::RequestCompleted),
-		7 => Ok(RequestStep::SettlementApproved),
 		_ => Err(revert("invalid step")),
 	}
 }
@@ -1298,10 +1303,14 @@ fn encode_request_step(step: RequestStep) -> u8 {
 		RequestStep::AdapterBridgeExecuted => 4,
 		RequestStep::AdapterApplied => 5,
 		RequestStep::RequestCompleted => 6,
-		RequestStep::SettlementApproved => 7,
 	}
 }
 
+/// Numbering matches `pallet_tranche_tx_registry::SettlementStep`'s own
+/// declaration order (`RequestsApproved` sits right after `NavReceived`,
+/// where it actually fires — see that enum's doc comment) — this mapping is
+/// hand-maintained rather than a derive-based cast, so it's free to do that
+/// regardless of the Rust enum's internal SCALE discriminants.
 fn decode_settlement_step(step: u8) -> EvmResult<SettlementStep> {
 	match step {
 		0 => Ok(SettlementStep::Queued),
@@ -1310,9 +1319,10 @@ fn decode_settlement_step(step: u8) -> EvmResult<SettlementStep> {
 		3 => Ok(SettlementStep::NavReported),
 		4 => Ok(SettlementStep::ResponseBridgeExecuted),
 		5 => Ok(SettlementStep::NavReceived),
-		6 => Ok(SettlementStep::FinalizeBridgeExecuted),
-		7 => Ok(SettlementStep::SettleApplied),
-		8 => Ok(SettlementStep::Settled),
+		6 => Ok(SettlementStep::RequestsApproved),
+		7 => Ok(SettlementStep::FinalizeBridgeExecuted),
+		8 => Ok(SettlementStep::SettleApplied),
+		9 => Ok(SettlementStep::Settled),
 		_ => Err(revert("invalid step")),
 	}
 }
@@ -1325,9 +1335,10 @@ fn encode_settlement_step(step: SettlementStep) -> u8 {
 		SettlementStep::NavReported => 3,
 		SettlementStep::ResponseBridgeExecuted => 4,
 		SettlementStep::NavReceived => 5,
-		SettlementStep::FinalizeBridgeExecuted => 6,
-		SettlementStep::SettleApplied => 7,
-		SettlementStep::Settled => 8,
+		SettlementStep::RequestsApproved => 6,
+		SettlementStep::FinalizeBridgeExecuted => 7,
+		SettlementStep::SettleApplied => 8,
+		SettlementStep::Settled => 9,
 	}
 }
 
@@ -1453,44 +1464,26 @@ fn decode_request_adapter_chains(
 	}
 }
 
-/// Translates `record_request_tx`'s `settlement_id` calldata into the pallet's
-/// `Option<SettlementId>`. Meaningful (and required non-zero) only for
-/// `step == SettlementApproved` — zero/`None` for every other step, same
-/// sentinel-gating convention as `decode_request_adapter_chains`. Reverts on any
-/// syntactically inconsistent combination, matching interface.sol's documented
-/// contract.
-fn decode_request_settlement_id(step: RequestStep, settlement_id: U256) -> EvmResult<Option<U256>> {
-	match step {
-		RequestStep::SettlementApproved => {
-			if settlement_id.is_zero() {
-				return Err(revert("settlement_id required when step == SettlementApproved"));
-			}
-			Ok(Some(settlement_id))
-		},
-		_ => {
-			if !settlement_id.is_zero() {
-				return Err(revert("settlement_id must be zero unless step == SettlementApproved"));
-			}
-			Ok(None)
-		},
-	}
-}
-
 /// `record_settlement_tx`'s decoded `spoke_chain_id`/`collect_response_chain_ids`/
 /// `finalize_chain_ids` triple — either only `spoke_chain_id` is `Some` (a leg step),
-/// or both chain sets are (never a mix), matching
+/// or both chain sets are (`step == Triggered`), or neither (`step ==
+/// RequestsApproved`, settlement-wide like `Triggered` but with no chain sets of
+/// its own — see `decode_settlement_request_ids`), matching
 /// `pallet_tranche_tx_registry::record_settlement_tx`'s own parameter shapes.
 type BoundedChainIds = BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_SPOKE_CHAINS>>;
 type DecodedSpokeChains =
 	(Option<pallet_tranche_tx_registry::ChainId>, Option<BoundedChainIds>, Option<BoundedChainIds>);
 
 /// Translates `record_settlement_tx`'s flat, sentinel-gated calldata into the
-/// pallet's `Option<ChainId>`/`Option<BoundedVec<..>>` triple. Two cases:
+/// pallet's `Option<ChainId>`/`Option<BoundedVec<..>>` triple. Three cases:
 /// `step == Triggered` requires `spoke_chain_id == 0` and both
 /// `collect_response_chain_ids`/`finalize_chain_ids` that may independently be
 /// empty (both empty means the settlement needs no cross-chain action at all);
-/// every leg step requires non-zero `spoke_chain_id` and both empty. Reverts on
-/// any other combination, matching interface.sol's documented contract.
+/// `step == RequestsApproved` also requires `spoke_chain_id == 0` but both chain
+/// sets empty (it has `request_ids` instead — see
+/// `decode_settlement_request_ids`); every leg step requires non-zero
+/// `spoke_chain_id` and both chain sets empty. Reverts on any other combination,
+/// matching interface.sol's documented contract.
 fn decode_settlement_spoke_chains(
 	step: SettlementStep,
 	spoke_chain_id: u64,
@@ -1512,9 +1505,47 @@ fn decode_settlement_spoke_chains(
 				"collect_response_chain_ids/finalize_chain_ids must be empty unless step == Triggered",
 			));
 		}
+		if step == SettlementStep::RequestsApproved {
+			if spoke_chain_id != 0 {
+				return Err(revert("spoke_chain_id must be 0 when step == RequestsApproved"));
+			}
+			return Ok((None, None, None));
+		}
 		if spoke_chain_id == 0 {
-			return Err(revert("spoke_chain_id required unless step == Triggered"));
+			return Err(revert(
+				"spoke_chain_id required unless step == Triggered or RequestsApproved",
+			));
 		}
 		Ok((Some(spoke_chain_id), None, None))
+	}
+}
+
+/// Translates `record_settlement_tx`'s `request_ids` calldata into the pallet's
+/// `Option<BoundedVec<RequestId, ..>>`. Meaningful (and required non-empty) only
+/// for `step == RequestsApproved` — empty/`None` for every other step, same
+/// sentinel-gating convention as `decode_request_adapter_chains`. Reverts on any
+/// syntactically inconsistent combination, matching interface.sol's documented
+/// contract.
+fn decode_settlement_request_ids(
+	step: SettlementStep,
+	request_ids: &[H256],
+) -> EvmResult<
+	Option<BoundedVec<pallet_tranche_tx_registry::RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
+> {
+	match step {
+		SettlementStep::RequestsApproved => {
+			if request_ids.is_empty() {
+				return Err(revert("request_ids required when step == RequestsApproved"));
+			}
+			let bounded = BoundedVec::try_from(request_ids.to_vec())
+				.map_err(|_| revert("too many request_ids"))?;
+			Ok(Some(bounded))
+		},
+		_ => {
+			if !request_ids.is_empty() {
+				return Err(revert("request_ids must be empty unless step == RequestsApproved"));
+			}
+			Ok(None)
+		},
 	}
 }
