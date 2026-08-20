@@ -337,10 +337,16 @@ interface TrancheTxRegistry {
     ///      (DepositApproved/RedeemApproved) to firing once per settlement
     ///      (DepositsApproved/RedeemsApproved, each carrying an array of approved items),
     ///      so the recorder now only needs one record_settlement_tx call — carrying every
-    ///      approved request_id from that one event — instead of one call per request;
-    ///      fires at essentially the same moment as before (right after every one of the
-    ///      settlement's collect_response_chain_ids has reported NAV), just batched. Like
-    ///      `Triggered`, `RequestsApproved` is settlement-wide rather than chain-scoped:
+    ///      approved request_id from that one event — instead of one call per request. For a
+    ///      Multichain product this fires at essentially the same moment as before (right
+    ///      after every one of the settlement's collect_response_chain_ids has reported
+    ///      NAV), just batched — but for a SingleChain SYNC product, Valuation emits
+    ///      DepositsApproved/RedeemsApproved *before* Settled, so this step can genuinely
+    ///      land before Triggered for the same settlement_id. Deliberately has NO Trigger
+    ///      precondition (unlike every leg step) precisely because of that — the old
+    ///      per-request SettlementApproved step this replaced never required Trigger to have
+    ///      landed first either. Like `Triggered`, `RequestsApproved` is settlement-wide
+    ///      rather than chain-scoped:
     ///      `spoke_chain_id` MUST be 0 and both collect_response_chain_ids/
     ///      finalize_chain_ids MUST be empty for it, same as `Triggered` — but unlike
     ///      `Triggered`, its own dedicated `request_ids` parameter is what MUST be
@@ -695,10 +701,14 @@ interface TrancheTxRegistry {
      *      FinalizeBridgeExecuted/SettleApplied call is only valid for a chain in
      *      this set. A chain may appear in both (it has both a registered Adapter and a
      *      registered vault) or just one. `step == Triggered` must be recorded exactly once
-     *      per (product_id, settlement_id), before any leg step or RequestsApproved call for
-     *      that settlement. Within a given (spoke_chain_id, leg) pair, Bridge must be
-     *      recorded before Hooks, with no duplicates — this ordering is enforced only within
-     *      that pair, not across chains or legs, since chains progress independently.
+     *      per (product_id, settlement_id), before any leg step for that settlement — but NOT
+     *      necessarily before a `RequestsApproved` call for it: a SingleChain SYNC product's
+     *      Valuation Contract emits DepositsApproved/RedeemsApproved before Settled, so
+     *      `RequestsApproved` can legitimately land before `Triggered` (unlike every leg
+     *      step, `RequestsApproved` has no Trigger precondition). Within a given
+     *      (spoke_chain_id, leg) pair, Bridge must be recorded before Hooks, with no
+     *      duplicates — this ordering is enforced only within that pair, not across chains
+     *      or legs, since chains progress independently.
      *      `request_ids` MUST be non-empty when `step == RequestsApproved` and MUST be empty
      *      for every other step — records evidence for every request_id Valuation approved
      *      into this settlement, in one batch (see SettlementStep.RequestsApproved's doc
