@@ -20,9 +20,30 @@ use sp_std::marker::PhantomData;
 /// Product identifier. Same convention as the old pallet-pools' `PoolId`.
 pub type ProductId = u64;
 
-/// Maximum number of tranches per product. Carried over from pallet-pools' `MAX_TRANCHES`
-/// (each tranche entry there mapped 1:1 to what's now a `Tranche` here).
+/// Maximum number of tranches a single chain within a product can have.
+/// Originally carried over from pallet-pools' `MAX_TRANCHES` as a flat,
+/// product-wide cap; rescoped (2026-08-20) to apply per chain instead, once
+/// waterfall priority ordering (and the Senior-before-Junior invariant) became
+/// chain-scoped rather than product-wide — see `MultichainProductDetails::tranches`'
+/// doc comment for why cross-chain tranche ordering was never a meaningful
+/// comparison to begin with (each chain's tranches only ever compete against
+/// each other for that chain's own waterfall).
 pub const MAX_TRANCHES: u32 = 10;
+
+/// Maximum number of distinct chains a single product's tranches can span —
+/// bounds `MultichainProductDetails::tranches`' outer map (one entry per
+/// chain with at least one tranche). A `SingleChainProductDetails` needs no
+/// equivalent bound — it's structurally already exactly one chain.
+pub const MAX_TRANCHE_CHAINS: u32 = 10;
+
+/// Maximum number of `TrancheInput` entries `create_product` accepts in one
+/// call — the flat input array spans every chain's tranches at once (grouped
+/// by `vault.chain_id` during validation, see `create_product`'s doc
+/// comment), so this must cover the worst case of every one of a product's
+/// chains (`MAX_TRANCHE_CHAINS`) each at its own per-chain cap
+/// (`MAX_TRANCHES`). `create_single_chain_product`'s own `tranches` input
+/// stays bounded by `MAX_TRANCHES` alone — inherently one chain, no fan-out.
+pub const MAX_TRANCHE_INPUTS: u32 = MAX_TRANCHES * MAX_TRANCHE_CHAINS;
 
 /// Maximum number of MultichainAdapter routing entries per product.
 pub const MAX_MULTICHAIN_ADAPTERS: u32 = 20;
@@ -165,12 +186,14 @@ pub enum TrancheType {
 /// A single tranche within a product.
 ///
 /// Deliberately has NO explicit `priority` field — priority is represented by
-/// this entry's position within the owning product's `tranches`
-/// (`MultichainProductDetails::tranches` or `SingleChainProductDetails::tranches`
-/// — both a `BoundedVec`).
+/// this entry's position within the owning product's *own chain's* tranche
+/// list: `MultichainProductDetails::tranches[vault.chain_id]` (a per-chain
+/// `BoundedVec`, one entry per chain that has at least one tranche) or
+/// `SingleChainProductDetails::tranches` directly (already exactly one chain,
+/// so no per-chain grouping needed there).
 /// `set_tranche`'s insert-and-shift semantics (see interface.sol) map directly
-/// onto `Vec::insert`/`Vec::remove` at the target position, so there's no
-/// separate ordering value to keep in sync.
+/// onto `Vec::insert`/`Vec::remove` at the target position within that one
+/// chain's own list, so there's no separate ordering value to keep in sync.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
@@ -194,11 +217,19 @@ pub struct Tranche {
 /// `priority` (0 = highest) used once, at creation time, to sort the incoming
 /// set into the owning product's `tranches`' final order — `priority` itself is
 /// never persisted (see `Tranche`'s doc comment for why position alone
-/// suffices after that). Sorting by `priority` must yield all `Senior`
-/// tranches before all `Junior` ones — `create_product` reverts otherwise, so
-/// a product's waterfall always pays Seniors before Juniors by construction,
-/// not just by whatever order a caller happened to submit them in. Mirrors
-/// interface.sol's `TrancheInput`.
+/// suffices after that).
+///
+/// `priority` is scoped to `vault.chain_id` — two entries on *different*
+/// chains may freely share the same `priority` (each chain gets its own,
+/// independent 0-indexed ordering), but two entries on the *same* chain may
+/// not. `create_product` groups the incoming set by `vault.chain_id` first,
+/// then, within each chain's own group, sorts by `priority` and requires all
+/// `Senior` tranches to precede all `Junior` ones — reverts otherwise. This
+/// invariant is deliberately per-chain, not product-wide: cross-chain tranche
+/// comparison isn't meaningful (a Junior tranche on one chain and a Senior
+/// tranche on another chain don't compete in the same waterfall), so there's
+/// no product-wide Senior/Junior ordering to enforce in the first place.
+/// Mirrors interface.sol's `TrancheInput`.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
@@ -388,6 +419,12 @@ pub enum SettlementMode {
 // MultichainProductDetails
 // ---------------------------------------------------------------------------
 
+/// One chain's own ordered slice of a product's tranches — index 0 is that
+/// chain's own highest priority. Used only within `MultichainProductDetails::tranches`
+/// (`SingleChainProductDetails::tranches` uses this same underlying shape
+/// directly, unwrapped, since it's already exactly one chain).
+pub type ChainTranches = BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>;
+
 /// Generic over `AccountId` (via `SourceType`, see its doc comment) — unlike the
 /// old design, this pallet now stores adapter `borrower`s directly rather than
 /// delegating them to the permissions pallet. `product_admin` is still NOT
@@ -405,9 +442,15 @@ pub enum SettlementMode {
 )]
 pub struct MultichainProductDetails<AccountId> {
 	pub valuation: ValuationInfo,
-	/// Ordered by waterfall priority — index 0 is highest priority. See
-	/// `Tranche`'s doc comment for why there's no separate `priority` field.
-	pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+	/// Keyed by `chain_id` — one entry per chain that has at least one
+	/// tranche (an entry is removed entirely once its last tranche is, via
+	/// `set_tranche`'s `Remove`; never left around empty). Each chain's own
+	/// `ChainTranches` is independently ordered by waterfall priority (index 0
+	/// = that chain's own highest) — priority is deliberately NOT comparable
+	/// *across* different chains' entries here; see `TrancheInput`'s doc
+	/// comment for why (2026-08-20 — rescoped from a single flat, product-wide
+	/// `BoundedVec<Tranche, ...>` to this per-chain shape).
+	pub tranches: BoundedBTreeMap<u64, ChainTranches, ConstU32<MAX_TRANCHE_CHAINS>>,
 	/// Always replaced wholesale by `set_multichain_adapters` — see that
 	/// function's doc comment in interface.sol for why (100%-sum invariant).
 	/// Each entry now owns its own nested `adapters` (see `MultichainAdapterInfo`)
@@ -473,13 +516,13 @@ pub struct SingleChainProductDetails<AccountId> {
 	pub valuation: SingleChainValuationInfo,
 	/// The single EVM chain every contract in this product lives on.
 	pub chain_id: u64,
-	/// This product's waterfall, ordered by priority (index 0 = highest) —
-	/// same flexible shape as `MultichainProductDetails::tranches` (any mix
-	/// of Senior/Junior counts, as long as every Senior precedes every
-	/// Junior; see `Tranche`'s doc comment), except every entry's
-	/// `vault.chain_id` must equal `chain_id` (enforced at
-	/// `create_single_chain_product`).
-	pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+	/// This product's waterfall, ordered by priority (index 0 = highest) — a
+	/// flat `ChainTranches` directly, unlike `MultichainProductDetails::tranches`'
+	/// per-chain-keyed map, since this product structurally has only the one
+	/// chain to begin with (every entry's `vault.chain_id` must equal
+	/// `chain_id`, enforced at `create_single_chain_product`) — no grouping
+	/// needed when there's nothing to group by.
+	pub tranches: ChainTranches,
 	/// The single TrancheManager contract address, on `chain_id`. Unlike
 	/// `MultichainProductDetails::multichain_tranche_managers`, there's only
 	/// ever one — no per-chain table, since there's only one chain.

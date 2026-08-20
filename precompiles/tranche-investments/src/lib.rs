@@ -45,6 +45,11 @@ type EvmAdapterValuation = (u64, Address, U256, u64, U256, Vec<EvmAssetPosition>
 type EvmTrancheSettle = (u64, Address, U256, U256, U256, U256);
 /// `VaultInput` — (chain_id, vault_address)
 type EvmVaultInput = (u64, Address);
+/// `ChainSettlement` — (chain_id, share_prices, tranche_navs), one entry per chain that has
+/// at least one tranche — see `get_last_settlement`'s doc comment on why this is chain-grouped
+/// rather than one flat pair of arrays (tranche priority became chain-scoped, not
+/// product-wide, in `pallet-tranche-system` — see `TrancheInput`'s doc comment there).
+type EvmChainSettlement = (u64, Vec<U256>, Vec<U256>);
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -477,9 +482,14 @@ where
 	}
 
 	/// Read a product's most recently recorded settlement: its settlement_id, each
-	/// tranche's share price/NAV (ordered by tranche priority — see TrancheSystem's
-	/// `get_tranches`, NOT the order Valuation happened to submit them in), and the
-	/// product's finalized aggregate NAV.
+	/// tranche's share price/NAV grouped by chain (tranche priority — and so this
+	/// grouping — is scoped per chain in `pallet-tranche-system`, not product-wide; see
+	/// `TrancheInput`'s doc comment there for why cross-chain tranche ordering was never
+	/// meaningful to begin with), and the product's finalized aggregate NAV.
+	///
+	/// `chains` is ordered by ascending `chain_id`; within each chain's own entry,
+	/// `share_prices`/`tranche_navs` are ordered by that chain's own tranche priority (see
+	/// TrancheSystem's `get_tranches`), NOT the order Valuation happened to submit them in.
 	///
 	/// @param product_id The product to look up
 	#[precompile::public("get_last_settlement(uint64)")]
@@ -487,7 +497,7 @@ where
 	fn get_last_settlement(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
-	) -> EvmResult<(U256, Vec<U256>, Vec<U256>, U256)> {
+	) -> EvmResult<(U256, Vec<EvmChainSettlement>, U256)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 
 		// Checked first, before any pallet-tranche-investments storage reads below —
@@ -513,19 +523,23 @@ where
 			pallet_tranche_investments::ProductNavs::<Runtime>::get(product_id, last_id)
 				.ok_or_else(|| revert("product has no recorded settlement"))?;
 
-		let mut share_prices = Vec::with_capacity(product.tranches.len());
-		let mut tranche_navs = Vec::with_capacity(product.tranches.len());
-		for tranche in product.tranches.iter() {
-			let settle = settlement
-				.tranches
-				.iter()
-				.find(|s| s.vault == tranche.vault)
-				.ok_or_else(|| revert("tranche missing from latest settlement"))?;
-			share_prices.push(settle.share_price);
-			tranche_navs.push(settle.tranche_nav);
+		let mut chains = Vec::with_capacity(product.tranches.len());
+		for (chain_id, chain_tranches) in product.tranches.iter() {
+			let mut share_prices = Vec::with_capacity(chain_tranches.len());
+			let mut tranche_navs = Vec::with_capacity(chain_tranches.len());
+			for tranche in chain_tranches.iter() {
+				let settle = settlement
+					.tranches
+					.iter()
+					.find(|s| s.vault == tranche.vault)
+					.ok_or_else(|| revert("tranche missing from latest settlement"))?;
+				share_prices.push(settle.share_price);
+				tranche_navs.push(settle.tranche_nav);
+			}
+			chains.push((*chain_id, share_prices, tranche_navs));
 		}
 
-		Ok((last_id, share_prices, tranche_navs, product_nav))
+		Ok((last_id, chains, product_nav))
 	}
 
 	/// Read one specific settlement's full state — unlike `get_last_settlement` (which

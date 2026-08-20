@@ -99,6 +99,21 @@ interface Investments {
         uint256 principal;
     }
 
+    /// @dev One chain's own share prices/NAVs within get_last_settlement's response —
+    ///      TrancheSystem's tranche waterfall priority is scoped per chain (not
+    ///      product-wide, see pallet-tranche-system's TrancheInput notes), so this
+    ///      pairs each chain's own ordered arrays with the chain_id they belong to,
+    ///      rather than one flat pair of arrays spanning every chain.
+    /// @param chain_id      The chain this entry's tranches are on
+    /// @param share_prices  That chain's own tranches' share prices, in that chain's own
+    ///                      waterfall priority order (see TrancheSystem's get_tranches)
+    /// @param tranche_navs  That chain's own tranches' NAVs, same order as share_prices
+    struct ChainSettlement {
+        uint64 chain_id;
+        uint256[] share_prices;
+        uint256[] tranche_navs;
+    }
+
     event InvestmentRequested(
         uint64 product_id,
         bytes32 request_id,
@@ -370,14 +385,18 @@ interface Investments {
 
     /**
      * @notice Read a product's most recently recorded settlement in full: its
-     *         settlement_id, each tranche's share price and NAV, and the product's
-     *         finalized aggregate NAV.
-     * @dev Reverts if the product has no recorded settlement yet. `share_prices`/
-     *      `tranche_navs` are ordered by the product's CURRENT tranche priority order
-     *      (TrancheSystem.get_tranches' order), not by whatever order Valuation happened
-     *      to submit `tranches` in when it called record_settlement — reverts if
-     *      a currently-registered tranche is missing from the latest settlement's
-     *      tranches array (a partial settlement can't be summarized this way).
+     *         settlement_id, each tranche's share price and NAV grouped by chain, and
+     *         the product's finalized aggregate NAV.
+     * @dev Reverts if the product has no recorded settlement yet. `chains` is ordered by
+     *      ascending chain_id; within each entry, `share_prices`/`tranche_navs` are
+     *      ordered by that chain's own CURRENT tranche priority order (TrancheSystem's
+     *      get_tranches — tranche priority is scoped per chain, not product-wide, see
+     *      pallet-tranche-system's TrancheInput notes, which is why this is grouped by
+     *      chain rather than one flat pair of arrays spanning every chain), not by
+     *      whatever order Valuation happened to submit `tranches` in when it called
+     *      record_settlement — reverts if a currently-registered tranche is missing from
+     *      the latest settlement's tranches array (a partial settlement can't be
+     *      summarized this way).
      * @param product_id The product to look up
      */
     function get_last_settlement(
@@ -387,8 +406,7 @@ interface Investments {
         view
         returns (
             uint256 settlement_id,
-            uint256[] memory share_prices,
-            uint256[] memory tranche_navs,
+            ChainSettlement[] memory chains,
             uint256 product_nav
         );
 

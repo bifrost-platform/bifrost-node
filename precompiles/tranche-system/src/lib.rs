@@ -1,14 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
-use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	traits::Get,
+};
 use pallet_evm::AddressMapping;
 use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
-	SourceType, TrancheInput, TrancheType, ValuationInfo, VaultId,
+	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
 	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
-	MAX_TRANCHE_MANAGERS,
+	MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
@@ -141,7 +144,7 @@ where
 			settlement_offset_secs,
 		};
 
-		let bounded_tranches = decode_tranches(&tranches)?;
+		let bounded_tranches = decode_tranches::<ConstU32<MAX_TRANCHE_INPUTS>>(&tranches)?;
 		let bounded_multichain_adapters =
 			decode_multichain_adapters::<Runtime>(&multichain_adapters)?;
 		let bounded_multichain_tranche_managers =
@@ -227,7 +230,7 @@ where
 			}
 		};
 
-		let bounded_tranches = decode_tranches(&tranches)?;
+		let bounded_tranches = decode_tranches::<ConstU32<MAX_TRANCHES>>(&tranches)?;
 		let bounded_adapters = decode_adapters::<Runtime>(&adapters)?;
 
 		let call = TrancheSystemCall::<Runtime>::create_single_chain_product {
@@ -535,8 +538,12 @@ where
 	/// Works for both Multichain and single-chain products.
 	///
 	/// @param product_id The product to look up
-	/// @return Tranche configs; `priority` in each entry reflects stored order, not
-	/// the original create_product/create_single_chain_product input
+	/// @return Tranche configs; `priority` in each entry reflects stored order within
+	/// its own `vault.chain_id` (NOT a product-wide position — two entries on different
+	/// chains may share the same `priority`), not the original
+	/// create_product/create_single_chain_product input. For a Multichain product, entries
+	/// are grouped by chain (ascending `chain_id`), each chain's own group in its own
+	/// priority order; for a single-chain product there's only ever the one chain's group.
 	#[precompile::public("get_tranches(uint64)")]
 	#[precompile::view]
 	fn get_tranches(
@@ -547,27 +554,20 @@ where
 		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product not found"))?;
 		let tranches = match &product {
-			ProductDetails::Multichain(product) => &product.tranches,
-			ProductDetails::SingleChain(product) => &product.tranches,
+			ProductDetails::Multichain(product) => product
+				.tranches
+				.values()
+				.flat_map(|chain_tranches| chain_tranches.iter().enumerate())
+				.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+				.collect(),
+			ProductDetails::SingleChain(product) => product
+				.tranches
+				.iter()
+				.enumerate()
+				.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+				.collect(),
 		};
-		Ok(tranches
-			.iter()
-			.enumerate()
-			.map(|(idx, tranche)| {
-				let (tranche_type, apr) = match &tranche.tranche_type {
-					TrancheType::Junior => (0u8, U256::zero()),
-					TrancheType::Senior { apr } => (1u8, *apr),
-				};
-				(
-					tranche_type,
-					apr,
-					(tranche.vault.chain_id, Address(tranche.vault.vault_address)),
-					Address(tranche.asset),
-					Address(tranche.shares),
-					idx as u8,
-				)
-			})
-			.collect())
+		Ok(tranches)
 	}
 
 	/// Read a Multichain product's MultichainAdapter routing table, each entry carrying its
@@ -783,14 +783,38 @@ fn decode_tranche_type(tranche_type: u8, apr: U256) -> EvmResult<TrancheType> {
 	}
 }
 
+/// `get_tranches`-only: encodes one stored `Tranche` back into the wire tuple
+/// shape, with the given `priority` (the caller's job to compute — within
+/// `vault.chain_id`'s own group for a Multichain product, or the product's
+/// one flat group for a single-chain one).
+fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmTrancheInput {
+	let (tranche_type, apr) = match &tranche.tranche_type {
+		TrancheType::Junior => (0u8, U256::zero()),
+		TrancheType::Senior { apr } => (1u8, *apr),
+	};
+	(
+		tranche_type,
+		apr,
+		(tranche.vault.chain_id, Address(tranche.vault.vault_address)),
+		Address(tranche.asset),
+		Address(tranche.shares),
+		priority,
+	)
+}
+
 /// `create_product`-only: each entry's `priority` is passed straight through
 /// (not derived from array position) — the pallet sorts by it and reverts if
 /// two entries share a `priority` or if the sorted order doesn't put every
 /// Senior tranche before every Junior one. See `TrancheInput`'s doc comment.
-fn decode_tranches(
+/// Generic over the target bound `S` — `create_product` needs
+/// `ConstU32<MAX_TRANCHE_INPUTS>` (its flat input spans every chain's
+/// tranches at once), while `create_single_chain_product` needs the smaller
+/// `ConstU32<MAX_TRANCHES>` (inherently one chain) — see `MAX_TRANCHE_INPUTS`'s
+/// doc comment in `pallet_tranche_system`.
+fn decode_tranches<S: Get<u32>>(
 	tranches: &[EvmTrancheInput],
-) -> EvmResult<BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>> {
-	let mut bounded = BoundedVec::<TrancheInput, ConstU32<MAX_TRANCHES>>::default();
+) -> EvmResult<BoundedVec<TrancheInput, S>> {
+	let mut bounded = BoundedVec::<TrancheInput, S>::default();
 	for (tranche_type, apr, vault, asset, shares, priority) in tranches.iter().cloned() {
 		let (chain_id, vault_address) = vault;
 		let tranche_type = decode_tranche_type(tranche_type, apr)?;

@@ -1,6 +1,6 @@
 use crate::{
-	AdapterInspect, AdapterKey, MultichainAdapterInfo, ProductDetails, ProductId, ProductInspect,
-	Tranche, TrancheType, VaultId, VaultInspect,
+	AdapterInspect, AdapterKey, ChainTranches, CrudAction, MultichainAdapterInfo, ProductDetails,
+	ProductId, ProductInspect, Tranche, TrancheType, VaultId, VaultInspect,
 };
 
 use super::pallet::*;
@@ -22,11 +22,15 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
-	/// `create_product`-only: checks none of the incoming tranches' vaults are
-	/// already registered — either to an existing product, or duplicated
-	/// within this same call (impossible for `multichain_adapters`/`adapters`,
-	/// since those are `BoundedBTreeMap`s and can't hold duplicate keys, but
-	/// `tranches` is a plain `BoundedVec`).
+	/// `create_product`/`create_single_chain_product`-only: checks none of the
+	/// incoming tranches' vaults are already registered — either to an
+	/// existing product, or duplicated within this same call (impossible for
+	/// `multichain_adapters`/`adapters`, since those are `BoundedBTreeMap`s
+	/// and can't hold duplicate keys, but a chain's own tranche list is a
+	/// plain `ChainTranches`). Callers pass a flattened iterator across every
+	/// chain (e.g. `tranches_map.values().flat_map(|chain| chain.iter())`)
+	/// since vault uniqueness must hold across the whole product, not just
+	/// within one chain's own group.
 	pub(crate) fn ensure_tranches_are_unregistered<'a>(
 		tranches: impl Iterator<Item = &'a Tranche>,
 	) -> DispatchResult {
@@ -76,10 +80,14 @@ impl<T: Config> Pallet<T> {
 
 	/// Checks that, in priority order (index 0 = highest — i.e. array order,
 	/// since `Tranche` carries no separate priority field), every `Senior`
-	/// tranche precedes every `Junior` one. Shared by `create_product` (on the
-	/// freshly-sorted input) and every `set_tranche` branch (re-checked on the
-	/// resulting full list after the mutation, since `Add`/`Remove`/`Update`
-	/// can all change relative order).
+	/// tranche precedes every `Junior` one. Deliberately takes one chain's own
+	/// slice at a time (`ChainTranches`, or `SingleChainProductDetails::tranches`
+	/// directly) — this invariant is per-chain, not product-wide (see
+	/// `TrancheInput`'s doc comment for why cross-chain tranche ordering isn't
+	/// meaningful). Shared by `create_product`/`create_single_chain_product`
+	/// (on each chain's freshly-sorted input group) and `apply_tranche_action`
+	/// (re-checked on the resulting one-chain list after the mutation, since
+	/// `Add`/`Remove`/`Update` can all change relative order within it).
 	pub(crate) fn ensure_senior_precedes_junior(tranches: &[Tranche]) -> DispatchResult {
 		let mut seen_junior = false;
 		for tranche in tranches {
@@ -89,6 +97,119 @@ impl<T: Config> Pallet<T> {
 					ensure!(!seen_junior, Error::<T>::SeniorMustPrecedeJunior);
 				},
 			}
+		}
+		Ok(())
+	}
+
+	/// Checks a chain's own tranche list holds at most one `Junior` (the
+	/// residual slot is singular) and, if the list is non-empty at all, at
+	/// least one `Senior` (a chain can't have a Junior with nothing to claim
+	/// the residual *of*) — same per-chain scope as
+	/// `ensure_senior_precedes_junior`, and shared by the exact same call
+	/// sites (`create_product`/`create_single_chain_product` on each chain's
+	/// freshly-sorted group, `apply_tranche_action` on the resulting list
+	/// after every mutation). Vacuously satisfied by an empty list —
+	/// `set_tranche`'s `Remove` is allowed to empty a chain's list out
+	/// entirely (e.g. retiring a Hub-deployed vault while keeping Spoke ones,
+	/// or vice versa); the *product-wide* "at least one tranche somewhere"
+	/// floor is enforced separately, once, by `set_tranche` itself — see
+	/// `Error::ProductMustHaveAtLeastOneTranche`.
+	pub(crate) fn ensure_valid_tranche_composition(tranches: &[Tranche]) -> DispatchResult {
+		if tranches.is_empty() {
+			return Ok(());
+		}
+		let junior_count = tranches
+			.iter()
+			.filter(|t| matches!(t.tranche_type, TrancheType::Junior))
+			.count();
+		let senior_count = tranches
+			.iter()
+			.filter(|t| matches!(t.tranche_type, TrancheType::Senior { .. }))
+			.count();
+		ensure!(junior_count <= 1, Error::<T>::TooManyJuniorTranches);
+		ensure!(senior_count >= 1, Error::<T>::AtLeastOneSeniorTrancheRequired);
+		Ok(())
+	}
+
+	/// Applies one `CrudAction` to a single chain's own `ChainTranches` list —
+	/// shared by `set_tranche`'s Multichain branch (called on the target
+	/// chain's own map entry, `product_id` threaded through only for the
+	/// `Vaults` index write/removal) and SingleChain branch (called on the
+	/// product's one and only list) — both use identical insert-and-shift
+	/// semantics once scoped down to "the one list this action's
+	/// `vault.chain_id` applies to." Re-validates `ensure_senior_precedes_junior`
+	/// and `ensure_valid_tranche_composition` on the resulting list after every
+	/// mutation (not just `Add`) since `Remove`/`Update` can all change relative
+	/// order and/or Junior/Senior counts.
+	pub(crate) fn apply_tranche_action(
+		product_id: ProductId,
+		tranches: &mut ChainTranches,
+		action: CrudAction,
+		vault: &VaultId,
+		tranche_type: &TrancheType,
+		asset: H160,
+		shares: H160,
+		priority: u8,
+	) -> DispatchResult {
+		match action {
+			CrudAction::Add => {
+				ensure!(!Vaults::<T>::contains_key(vault), Error::<T>::VaultAlreadyRegistered);
+				let idx = priority as usize;
+				ensure!(idx <= tranches.len(), Error::<T>::InvalidPriority);
+				tranches
+					.try_insert(
+						idx,
+						Tranche {
+							tranche_type: tranche_type.clone(),
+							vault: vault.clone(),
+							asset,
+							shares,
+						},
+					)
+					.map_err(|_| Error::<T>::TooManyTranches)?;
+				Self::ensure_senior_precedes_junior(tranches)?;
+				Self::ensure_valid_tranche_composition(tranches)?;
+				Vaults::<T>::insert(vault, product_id);
+			},
+			CrudAction::Remove => {
+				let idx = tranches
+					.iter()
+					.position(|t| &t.vault == vault)
+					.ok_or(Error::<T>::VaultNotFound)?;
+				tranches.remove(idx);
+				Self::ensure_senior_precedes_junior(tranches)?;
+				Self::ensure_valid_tranche_composition(tranches)?;
+				Vaults::<T>::remove(vault);
+			},
+			CrudAction::Update => {
+				let idx = tranches
+					.iter()
+					.position(|t| &t.vault == vault)
+					.ok_or(Error::<T>::VaultNotFound)?;
+				let type_matches = matches!(
+					(&tranches[idx].tranche_type, tranche_type),
+					(TrancheType::Junior, TrancheType::Junior)
+						| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
+				);
+				ensure!(type_matches, Error::<T>::TrancheTypeImmutable);
+
+				tranches.remove(idx);
+				let new_idx = priority as usize;
+				ensure!(new_idx <= tranches.len(), Error::<T>::InvalidPriority);
+				tranches
+					.try_insert(
+						new_idx,
+						Tranche {
+							tranche_type: tranche_type.clone(),
+							vault: vault.clone(),
+							asset,
+							shares,
+						},
+					)
+					.map_err(|_| Error::<T>::TooManyTranches)?;
+				Self::ensure_senior_precedes_junior(tranches)?;
+				Self::ensure_valid_tranche_composition(tranches)?;
+			},
 		}
 		Ok(())
 	}
@@ -171,9 +292,9 @@ impl<T: Config> VaultInspect for Pallet<T> {
 		let product = Products::<T>::get(product_id);
 		chain_ids.iter().all(|chain_id| {
 			product.as_ref().is_some_and(|product| match product {
-				ProductDetails::Multichain(product) => {
-					product.tranches.iter().any(|tranche| tranche.vault.chain_id == *chain_id)
-				},
+				// `chain_id` is now the map's own key — a direct lookup rather
+				// than a linear scan, now that `tranches` is chain-keyed.
+				ProductDetails::Multichain(product) => product.tranches.contains_key(chain_id),
 				ProductDetails::SingleChain(product) => product.chain_id == *chain_id,
 			})
 		})
