@@ -25,22 +25,49 @@ pragma solidity >=0.8.0;
  *     ERC-7540 vault — not by `tranche_type`. A product can register more than one
  *     vault under the same `tranche_type` (e.g. Senior vaults on multiple Spoke
  *     chains feeding the same waterfall slot).
- *   - `priority` is a single ordered sequence across ALL of a product's tranches
- *     (not scoped per tranche_type) — confirmed by remove_tranche's behavior
- *     ("뒷 우선순위 트랜치는 하나씩 앞으로 당겨짐", i.e. every tranche after the
- *     removed one shifts up by one). 0 = highest priority (paid first in the
- *     waterfall). Inserting at an occupied priority (via set_tranche's `priority`
- *     field, on both Add and Update) shifts the existing tranche at that slot,
- *     and everything after it, down by one — this is an insert, not an overwrite.
- *   - Every Senior tranche must precede every Junior tranche in priority order —
- *     a hard invariant, not advisory. `create_product` sorts its `tranches` array
- *     by each entry's own `priority` field (NOT array position — see below) and
- *     reverts if that produces a Junior-before-Senior ordering, or if two entries
- *     share a `priority`. `set_tranche`'s Add/Remove/Update all re-check this
- *     invariant on the resulting full list, since any of them can change relative
- *     order. `set_tranche`'s Update additionally cannot change a tranche's
+ *   - `priority` is an ordered sequence scoped to one chain at a time (2026-08-20 —
+ *     rescoped from a single flat, product-wide sequence; not scoped per
+ *     tranche_type either way) — each `VaultInput.chain_id` that has at least one
+ *     tranche gets its own independent 0-indexed ordering, confirmed by
+ *     set_tranche's Remove behavior (every tranche after the removed one, ON THAT
+ *     SAME CHAIN, shifts up by one — tranches on other chains are untouched). 0 =
+ *     highest priority *within that chain's own waterfall* (paid first among that
+ *     chain's own tranches) — cross-chain tranche comparison isn't meaningful (a
+ *     Junior tranche on one chain and a Senior tranche on another don't compete in
+ *     the same waterfall), so two entries on *different* chains may freely share
+ *     the same `priority`; two entries on the *same* chain may not. Inserting at
+ *     an occupied priority within a chain's own ordering (via set_tranche's
+ *     `priority` field, on both Add and Update) shifts the existing tranche at
+ *     that slot, and everything after it ON THAT SAME CHAIN, down by one — this is
+ *     an insert, not an overwrite.
+ *   - Every Senior tranche must precede every Junior tranche in priority order,
+ *     within that same chain — a hard invariant per chain, not product-wide, and
+ *     not advisory either way. `create_product` groups its `tranches` array by
+ *     each entry's `vault.chain_id`, then sorts each chain's own group by that
+ *     entry's own `priority` field (NOT array position — see below) and reverts if
+ *     that produces a Junior-before-Senior ordering within any one chain's group,
+ *     or if two entries on the same chain share a `priority`. `set_tranche`'s
+ *     Add/Remove/Update all re-check this invariant on the resulting list for
+ *     `vault.chain_id`'s own chain, since any of them can change relative order
+ *     within it. `set_tranche`'s Update additionally cannot change a tranche's
  *     Junior/Senior discriminant at all (reverts if attempted) — only `apr` and
  *     `priority` are mutable there; changing Junior<->Senior requires remove + re-add.
+ *   - A chain's own tranche group (2026-08-20) can hold AT MOST ONE Junior tranche
+ *     — the residual/variable-yield slot is singular per chain — but MAY hold any
+ *     number of Senior tranches, and MUST hold AT LEAST ONE if the group is
+ *     non-empty at all (a lone Junior with nothing to claim the residual of isn't a
+ *     valid waterfall). Both bounds are per chain, not product-wide — a Multichain
+ *     product can still have its own Junior on several different chains at once.
+ *     `create_product`/`create_single_chain_product` check this per chain's group
+ *     at creation; `set_tranche`'s Add/Remove/Update all re-check it on the
+ *     resulting list for the affected chain (removing a chain's very last tranche
+ *     drops that chain's whole group instead, so it's never left around violating
+ *     the "at least one Senior" rule vacuously). Separately, and product-wide
+ *     rather than per-chain: set_tranche's Remove can never take a PRODUCT's
+ *     absolute last tranche (summed across every chain) — a product must always
+ *     retain at least one tranche somewhere, even though any single chain's own
+ *     group may be emptied out entirely (e.g. retiring a Hub-deployed vault while
+ *     keeping Spoke ones, or vice versa).
  *   - `AdapterInput.borrower`/`AdapterInput.collaterals` are only meaningful when
  *     `source_type == OffchainSource` (mirrors the old Pools precompile's
  *     borrower_id/CollateralInput fields, now living per-adapter instead of
@@ -209,7 +236,8 @@ interface TrancheSystem {
     /// @param shares       This tranche's own share-token contract address — the ERC-7540
     ///                     vault's share token investors receive/burn on deposit/redeem, on
     ///                     `vault.chain_id`. Distinct from `asset` (what's deposited in)
-    /// @param priority     Waterfall priority within the product; 0 = highest priority, see notes above
+    /// @param priority     Waterfall priority within `vault.chain_id`'s own ordering (NOT
+    ///                     product-wide); 0 = highest priority on that chain, see notes above
     struct TrancheInput {
         TrancheType tranche_type;
         uint256 apr;
@@ -361,14 +389,20 @@ interface TrancheSystem {
      *      before dispatch and only then constructs the ProductAdmin origin, so
      *      this function trusts that check rather than re-taking the admin address
      *      as a parameter.
-     *      `tranches` is sorted by each entry's own `priority` field (0 = highest) to
-     *      establish the product's stored waterfall order — NOT by array position.
-     *      Reverts if `product_id` is already taken, `tranches` is empty, two entries
-     *      share a `priority`, sorting by `priority` doesn't put every Senior tranche
-     *      before every Junior one, weightBps across `multichain_adapters` don't sum
-     *      to 100% (10_000 bps), any entry's nested `adapters` weightBps don't
-     *      themselves sum to 100%, the same nested Adapter (address, chain_id)
-     *      appears under two different `multichain_adapters` entries,
+     *      `tranches` is grouped by each entry's own `vault.chain_id`, then each chain's
+     *      own group is sorted by that entry's own `priority` field (0 = highest within
+     *      that chain) to establish that chain's own stored waterfall order — NOT by
+     *      array position, and NOT a single product-wide order (see the top-level notes
+     *      above on why cross-chain tranche ordering isn't meaningful).
+     *      Reverts if `product_id` is already taken, `tranches` is empty, two entries on
+     *      the SAME chain share a `priority` (different chains sharing one is fine),
+     *      sorting a chain's own group by `priority` doesn't put every Senior tranche
+     *      before every Junior one within that chain, any chain's own group has more
+     *      than one Junior tranche, any chain's own group has zero Senior tranches,
+     *      weightBps across `multichain_adapters` don't sum to 100% (10_000 bps), any
+     *      entry's nested `adapters` weightBps don't themselves sum to 100%, the same
+     *      nested Adapter (address, chain_id) appears under two different
+     *      `multichain_adapters` entries,
      *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`,
      *      `valuation.settlement_start_timestamp` is not strictly after the current
      *      block time.
@@ -377,8 +411,9 @@ interface TrancheSystem {
      *                                     ProductAdmin)
      * @param valuation                    Valuation contract binding + settlement cadence config
      * @param tranches                     Array of tranche configurations (each identified by its
-     *                                     vault); `priority`, not array order, determines final
-     *                                     stored order
+     *                                     vault) spanning every chain at once; `vault.chain_id` +
+     *                                     `priority`, not array order, determine final stored
+     *                                     order within each chain's own group
      * @param multichain_adapters          Array of MultichainAdapter routing entries, each
      *                                     carrying its own nested individual-Adapter
      *                                     registrations (address, chain_id, weightBps, adapters)
@@ -445,28 +480,49 @@ interface TrancheSystem {
      *      path that bypasses this check.
      *      Field usage differs by `action` — unused fields are ignored, but callers
      *      must still supply the full struct (e.g. pass zero/default values for
-     *      `tranche_type`/`apr`/`asset`/`shares`/`priority` on a `Remove` call):
+     *      `tranche_type`/`apr`/`asset`/`shares`/`priority` on a `Remove` call). Every
+     *      priority/shift-semantics below is scoped to `tranche.vault.chain_id`'s own
+     *      ordering — tranches on other chains are never touched:
      *        - Add:    `tranche.vault` becomes the new tranche's identity (reverts if
      *                  a tranche with the same vault already exists for this product).
      *                  `tranche_type`, `apr` (Senior-only), `asset`, `shares`, and
-     *                  `priority` are used. If `priority` is already occupied, the
-     *                  existing tranche at that slot (and everything after it) shifts
-     *                  down by one.
+     *                  `priority` are used. If `priority` is already occupied within
+     *                  `tranche.vault.chain_id`'s own ordering, the existing tranche at
+     *                  that slot (and everything after it, on that same chain) shifts
+     *                  down by one. For a Multichain product, `tranche.vault.chain_id`
+     *                  need not already have any tranches — a fresh per-chain group is
+     *                  created on first use.
      *        - Remove: only `tranche.vault` is used, to identify which tranche to
-     *                  remove (reverts if not found, or if it has outstanding
+     *                  remove — searched within `tranche.vault.chain_id`'s own group
+     *                  (reverts if not found there, or if it has outstanding
      *                  investments). Every tranche with a lower priority ranking
-     *                  (higher numeric value) than the removed one shifts up by
-     *                  one, closing the gap.
-     *        - Update: `tranche.vault` identifies which tranche to update (reverts
-     *                  if not found); `apr`, `asset`, `shares`, and `priority` are
-     *                  applied as new values. `tranche_type`'s Junior/Senior discriminant
-     *                  is immutable — reverts if it doesn't match the existing tranche's
-     *                  (remove + re-add to actually change it); `apr` may still change
-     *                  freely for a Senior tranche, since only the discriminant is checked.
+     *                  (higher numeric value) than the removed one, on that same chain,
+     *                  shifts up by one, closing the gap.
+     *        - Update: `tranche.vault` identifies which tranche to update — searched
+     *                  within `tranche.vault.chain_id`'s own group (reverts if not
+     *                  found there); `apr`, `asset`, `shares`, and `priority` are
+     *                  applied as new values, `priority` still scoped to that same
+     *                  chain's own ordering (Update never moves a tranche to a
+     *                  different chain — only Remove then Add can). `tranche_type`'s
+     *                  Junior/Senior discriminant is immutable — reverts if it doesn't
+     *                  match the existing tranche's (remove + re-add to actually
+     *                  change it); `apr` may still change freely for a Senior tranche,
+     *                  since only the discriminant is checked.
      *                  If `priority` differs from the tranche's current priority, it
-     *                  re-inserts using the same shift semantics as Add.
-     *      Every branch reverts if the resulting full tranche list would put any
-     *      Junior tranche before a Senior one (see notes above).
+     *                  re-inserts (still within that same chain) using the same shift
+     *                  semantics as Add.
+     *      Every branch reverts if the resulting tranche list, for the chain
+     *      `tranche.vault.chain_id` identifies, would put any Junior tranche before a
+     *      Senior one on that same chain, would hold more than one Junior tranche, or
+     *      would hold zero Senior tranches while still non-empty (see notes above) —
+     *      other chains' own lists are never affected. Emptying a chain's list
+     *      entirely via Remove (its last tranche) is fine — that chain's own group is
+     *      then dropped rather than left around violating the last rule vacuously
+     *      (e.g. retiring a Hub-deployed vault while keeping Spoke ones, or vice
+     *      versa). One additional check is product-wide rather than per-chain:
+     *      Remove reverts if it would take the PRODUCT's absolute last tranche,
+     *      summed across every chain — a product must always retain at least one
+     *      tranche somewhere, even though any single chain may be emptied out.
      *      Emits TrancheSet on success.
      * @param product_id The product whose tranche is being mutated
      * @param action     Add, Remove, or Update
@@ -601,12 +657,17 @@ interface TrancheSystem {
         );
 
     /**
-     * @notice Read a product's tranches, in waterfall priority order (index 0 = highest
-     *         priority — see notes above).
+     * @notice Read a product's tranches, in waterfall priority order WITHIN EACH CHAIN
+     *         (index 0 = that chain's own highest priority — see notes above; NOT a
+     *         single product-wide order).
      * @dev Reverts if `product_id` doesn't exist. Works for both Multichain and
-     *      single-chain products. Each returned entry's `priority` field reflects
-     *      current stored order, not necessarily whatever `priority` value the
-     *      tranche was originally added/updated with.
+     *      single-chain products. For a Multichain product, entries are grouped by
+     *      `vault.chain_id` (ascending), each chain's own group in its own priority
+     *      order; for a single-chain product there's only ever the one chain's group.
+     *      Each returned entry's `priority` field reflects current stored order WITHIN
+     *      ITS OWN CHAIN, not necessarily whatever `priority` value the tranche was
+     *      originally added/updated with, and not comparable across different chains'
+     *      entries (two entries on different chains may share the same `priority`).
      * @param product_id The product to look up
      */
     function get_tranches(

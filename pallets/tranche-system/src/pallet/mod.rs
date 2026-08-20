@@ -1,11 +1,12 @@
 mod impls;
 
 use crate::{
-	migrations, AdapterInfo, AdapterKey, CrudAction, MultichainAdapterInfo,
+	migrations, AdapterInfo, AdapterKey, ChainTranches, CrudAction, MultichainAdapterInfo,
 	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
 	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
 	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT,
-	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_MANAGERS,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS,
+	MAX_TRANCHE_MANAGERS,
 };
 
 use frame_support::{
@@ -14,13 +15,13 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use sp_core::H160;
-use sp_std::vec::Vec;
+use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -83,15 +84,20 @@ pub mod pallet {
 		ProductNotFound,
 		/// `create_product` requires at least one tranche.
 		EmptyTranches,
-		/// A product cannot hold more than `MAX_TRANCHES` tranches.
+		/// A single chain within a product cannot hold more than `MAX_TRANCHES`
+		/// tranches, and a product cannot span more than `MAX_TRANCHE_CHAINS`
+		/// distinct chains with tranches on them.
 		TooManyTranches,
 		/// The vault (chain_id, vault_address) is already registered — either
 		/// to this product or a different one.
 		VaultAlreadyRegistered,
 		/// No tranche with the given vault exists for this product.
 		VaultNotFound,
-		/// `priority` is beyond the current number of tranches — can only
-		/// insert at an existing slot or immediately after the last one.
+		/// `priority` is beyond the current number of tranches on that
+		/// tranche's own chain — can only insert at an existing slot or
+		/// immediately after the last one within that chain's own ordering
+		/// (priority is scoped per chain, not product-wide — see
+		/// `TrancheInput`'s doc comment).
 		InvalidPriority,
 		/// The MultichainAdapter (address, chain_id) is already registered —
 		/// either to this product or a different one.
@@ -106,12 +112,37 @@ pub mod pallet {
 		/// A `weightBps` set (top-level `multichain_adapters`, or one parent's
 		/// nested `adapters`) must sum to exactly 10_000 (100%).
 		WeightsMustSumTo10000,
-		/// Two entries of `create_product`'s `tranches` input shared the same
-		/// `priority` — sort order would be ambiguous.
+		/// Two entries of `create_product`'s `tranches` input, on the *same*
+		/// chain (`vault.chain_id`), shared the same `priority` — sort order
+		/// would be ambiguous within that chain's own ordering. Entries on
+		/// different chains sharing a `priority` is fine — see `TrancheInput`'s
+		/// doc comment.
 		DuplicatePriority,
-		/// In priority order (0 = highest), every `Senior` tranche must precede
-		/// every `Junior` tranche.
+		/// Within one chain's own priority order (0 = highest), every `Senior`
+		/// tranche must precede every `Junior` tranche on that same chain —
+		/// this invariant is per-chain, not product-wide.
 		SeniorMustPrecedeJunior,
+		/// A chain's own tranche list can hold at most one `Junior` tranche —
+		/// the residual/variable-yield slot is singular per chain (multiple
+		/// `Senior` tranches on the same chain are fine; there's only ever one
+		/// residual claimant). Per-chain, not product-wide — a `Multichain`
+		/// product can still have one Junior per chain across several chains.
+		TooManyJuniorTranches,
+		/// A chain's own tranche list, if non-empty, must contain at least one
+		/// `Senior` tranche — a chain with only a `Junior` (nothing for it to
+		/// receive the *residual* of) isn't a valid waterfall. Vacuously
+		/// satisfied for a chain with no tranches at all (that chain simply
+		/// has no entry — see `MultichainProductDetails::tranches`' doc
+		/// comment on empty chain groups never being left around).
+		AtLeastOneSeniorTrancheRequired,
+		/// `set_tranche`'s `Remove` cannot take a product's very last tranche
+		/// (summed across every chain for a `Multichain` product, or the
+		/// product's one flat list for a `SingleChain` one) — a product must
+		/// always retain at least one tranche somewhere. Emptying one
+		/// specific chain entirely is fine (see `AtLeastOneSeniorTrancheRequired`'s
+		/// doc comment) as long as at least one *other* chain still has a
+		/// tranche; only removing the product's absolute last one reverts.
+		ProductMustHaveAtLeastOneTranche,
 		/// `set_tranche`'s `Update` cannot change a tranche's Junior/Senior
 		/// discriminant (only `apr` and `priority` are mutable) — remove and
 		/// re-add to change it.
@@ -180,6 +211,8 @@ pub mod pallet {
 			tranche_type: TrancheType,
 			asset: H160,
 			shares: H160,
+			/// Position within `vault.chain_id`'s own ordering, NOT
+			/// product-wide — see `TrancheInput`'s doc comment.
 			priority: u8,
 		},
 		/// A MultichainAdapter's nested adapters were replaced wholesale.
@@ -249,14 +282,15 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV2` alone: each `VersionedMigration`
+			// Chained rather than just `MigrateToV3` alone: each `VersionedMigration`
 			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs both, back to back, in the same
-			// upgrade) or already at v1 (skips straight to v2 — the live testbed case,
-			// see `migrations::v2`'s doc comment for why v1 alone didn't get every chain
-			// to v2 on its own).
+			// whether a given chain is still at v0 (runs all three, back to back, in the
+			// same upgrade), already at v1 (skips straight to v2 then v3 — the live
+			// testbed case, see `migrations::v2`'s doc comment for why v1 alone didn't
+			// get every chain to v2 on its own), or already at v2 (skips straight to v3).
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
+				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
 		}
 	}
 
@@ -277,10 +311,16 @@ pub mod pallet {
 		/// before this is ever called).
 		///
 		/// `tranches` carries an explicit `priority` per entry (see
-		/// `TrancheInput`'s doc comment) — sorted once here to establish
-		/// `ProductDetails::tranches`' final order. Reverts if two entries share
-		/// a `priority`, or if sorting by `priority` doesn't put every `Senior`
-		/// tranche before every `Junior` one.
+		/// `TrancheInput`'s doc comment) — grouped by `vault.chain_id` here,
+		/// then each chain's own group sorted independently to establish
+		/// `MultichainProductDetails::tranches[chain_id]`'s final order.
+		/// Reverts if two entries on the *same* chain share a `priority`, if
+		/// sorting a chain's own group by `priority` doesn't put every
+		/// `Senior` tranche before every `Junior` one on that chain, if any
+		/// chain's own group holds more than one `Junior` tranche, or if any
+		/// chain's own group holds zero `Senior` tranches — all four checks
+		/// are per-chain, not product-wide (see `Error::TooManyJuniorTranches`/
+		/// `Error::AtLeastOneSeniorTrancheRequired`).
 		///
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::create_product())]
@@ -288,7 +328,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			product_id: ProductId,
 			valuation: ValuationInfo,
-			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHE_INPUTS>>,
 			multichain_adapters: BoundedBTreeMap<
 				AdapterKey,
 				MultichainAdapterInfo<T::AccountId>,
@@ -317,28 +357,44 @@ pub mod pallet {
 				Self::ensure_weights_sum_to_10000(info.adapters.values().map(|a| a.weight_bps))?;
 			}
 
-			let mut sorted: Vec<TrancheInput> = tranches.into_inner();
-			sorted.sort_by_key(|input| input.priority);
-			for pair in sorted.windows(2) {
-				ensure!(pair[0].priority != pair[1].priority, Error::<T>::DuplicatePriority);
+			// Group by chain first — priority/duplicate/Senior-before-Junior are all
+			// checked per chain, not across the whole product (see `TrancheInput`'s
+			// doc comment for why cross-chain tranche ordering isn't meaningful).
+			let mut by_chain: BTreeMap<u64, Vec<TrancheInput>> = BTreeMap::new();
+			for input in tranches.into_inner() {
+				by_chain.entry(input.vault.chain_id).or_default().push(input);
 			}
-			let ordered: Vec<Tranche> = sorted
-				.into_iter()
-				.map(|input| Tranche {
-					tranche_type: input.tranche_type,
-					vault: input.vault,
-					asset: input.asset,
-					shares: input.shares,
-				})
-				.collect();
-			Self::ensure_senior_precedes_junior(&ordered)?;
-			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>> =
-				BoundedVec::try_from(ordered).map_err(|_| Error::<T>::TooManyTranches)?;
+			let mut tranches: BoundedBTreeMap<u64, ChainTranches, ConstU32<MAX_TRANCHE_CHAINS>> =
+				BoundedBTreeMap::new();
+			for (chain_id, mut chain_inputs) in by_chain {
+				chain_inputs.sort_by_key(|input| input.priority);
+				for pair in chain_inputs.windows(2) {
+					ensure!(pair[0].priority != pair[1].priority, Error::<T>::DuplicatePriority);
+				}
+				let ordered: Vec<Tranche> = chain_inputs
+					.into_iter()
+					.map(|input| Tranche {
+						tranche_type: input.tranche_type,
+						vault: input.vault,
+						asset: input.asset,
+						shares: input.shares,
+					})
+					.collect();
+				Self::ensure_senior_precedes_junior(&ordered)?;
+				Self::ensure_valid_tranche_composition(&ordered)?;
+				let chain_tranches: ChainTranches =
+					BoundedVec::try_from(ordered).map_err(|_| Error::<T>::TooManyTranches)?;
+				tranches
+					.try_insert(chain_id, chain_tranches)
+					.map_err(|_| Error::<T>::TooManyTranches)?;
+			}
 
-			Self::ensure_tranches_are_unregistered(tranches.iter())?;
+			Self::ensure_tranches_are_unregistered(
+				tranches.values().flat_map(|chain| chain.iter()),
+			)?;
 			Self::ensure_multichain_adapters_are_unregistered(multichain_adapters.iter())?;
 
-			for tranche in tranches.iter() {
+			for tranche in tranches.values().flat_map(|chain| chain.iter()) {
 				Vaults::<T>::insert(&tranche.vault, product_id);
 			}
 			Self::insert_multichain_adapter_index(product_id, multichain_adapters.iter());
@@ -375,12 +431,17 @@ pub mod pallet {
 		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
 		/// as `create_product`.
 		///
-		/// `tranches` uses the same `priority`-sort-and-validate rules as
-		/// `create_product` (see `TrancheInput`'s doc comment), plus one
-		/// extra check: every entry's `vault.chain_id` must equal `chain_id`
-		/// (reverts with `SingleChainTranchesMustShareChain` otherwise).
-		/// `adapters`' `weight_bps` must sum to exactly 10_000, same
-		/// invariant as one `MultichainAdapterInfo`'s nested `adapters`.
+		/// `tranches` uses the same `priority`-sort-and-validate rules
+		/// `create_product` applies within one chain's own group (sort by
+		/// `priority`, reject duplicates, require every `Senior` before every
+		/// `Junior`, at most one `Junior`, at least one `Senior`) — applied
+		/// directly to the whole flat input here, without `create_product`'s
+		/// chain-grouping step, since every entry's `vault.chain_id` must
+		/// equal `chain_id` anyway (reverts with
+		/// `SingleChainTranchesMustShareChain` otherwise) — there's only ever
+		/// the one chain to group by. `adapters`' `weight_bps` must sum to
+		/// exactly 10_000, same invariant as one `MultichainAdapterInfo`'s
+		/// nested `adapters`.
 		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product())]
 		pub fn create_single_chain_product(
@@ -441,6 +502,7 @@ pub mod pallet {
 				})
 				.collect();
 			Self::ensure_senior_precedes_junior(&ordered)?;
+			Self::ensure_valid_tranche_composition(&ordered)?;
 			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>> =
 				BoundedVec::try_from(ordered).map_err(|_| Error::<T>::TooManyTranches)?;
 
@@ -507,27 +569,51 @@ pub mod pallet {
 		/// `ProductAdminOrigin` — same precompile-only gating as `create_product`.
 		///
 		/// Field usage differs by `action`, mirroring interface.sol's
-		/// `set_tranche`. Every branch re-validates, on the resulting full
-		/// tranche list, that all `Senior` tranches still precede all `Junior`
-		/// ones (same invariant `create_product` establishes) — reverts if the
-		/// requested change would break it. For a single-chain product, `Add`/
-		/// `Update` additionally revert unless `vault.chain_id` equals the
-		/// product's own `chain_id` (same constraint
-		/// `create_single_chain_product` enforces at creation time).
+		/// `set_tranche`. Every branch re-validates, on the resulting list for
+		/// `vault.chain_id`'s own chain (Multichain — a `Remove`/`Update` on a
+		/// chain with no existing tranches reverts with `VaultNotFound`
+		/// before even reaching this; SingleChain — the product's one and
+		/// only list): that all `Senior` tranches on that chain still precede
+		/// all `Junior` ones on that same chain; that chain's own list still
+		/// holds at most one `Junior`; and, if that chain's own list is still
+		/// non-empty after the mutation, that it holds at least one `Senior`
+		/// — reverts if the requested change would break any of these. All
+		/// per-chain checks, not product-wide (see `TrancheInput`'s doc
+		/// comment). Emptying a chain's list entirely (its last tranche
+		/// removed) is fine — that chain's own entry is then dropped, not
+		/// left around violating the "at least one Senior" rule vacuously
+		/// (e.g. retiring a Hub-deployed vault while keeping Spoke ones, or
+		/// vice versa). One additional check IS product-wide, checked once
+		/// here rather than per-chain: `Remove` reverts with
+		/// `Error::ProductMustHaveAtLeastOneTranche` if it would take the
+		/// product's absolute last tranche, summed across every chain — a
+		/// product must always retain at least one tranche *somewhere*, even
+		/// though any single chain may be emptied out entirely. For a
+		/// single-chain product, `Add`/`Update` additionally revert unless
+		/// `vault.chain_id` equals the product's own `chain_id` (same
+		/// constraint `create_single_chain_product` enforces at creation
+		/// time).
 		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
 		///   any product). `tranche_type`, `asset`, `shares`, and `priority` are used. If
-		///   `priority` is already occupied, the existing tranche at that slot (and everything
-		///   after it) shifts down by one.
-		/// - `Remove`: only `vault` is used, to find which tranche to remove. Every tranche after
-		///   it shifts up by one, closing the gap. NOT YET CHECKED (deferred): interface.sol also
-		///   specifies this should revert if the tranche has outstanding investments —
-		///   pallet-tranche-investments doesn't expose an inspection trait for this yet.
-		/// - `Update`: `vault` identifies which tranche to update (reverts if not found);
-		///   `asset`, `shares`, and `priority` are applied as new values using the same
-		///   insert-and-shift semantics as `Add` for `priority`. `tranche_type`'s Junior/Senior
-		///   discriminant is immutable — reverts if it doesn't match the existing tranche's;
-		///   `apr` (carried inside `tranche_type` for `Senior`) may still change, since only the
-		///   discriminant is checked.
+		///   `priority` is already occupied within `vault.chain_id`'s own list, the existing
+		///   tranche at that slot (and everything after it, on that same chain) shifts down by
+		///   one. For a Multichain product, `vault.chain_id` need not already have any tranches
+		///   — a fresh per-chain entry is created on first use.
+		/// - `Remove`: only `vault` is used, to find which tranche to remove — searched within
+		///   `vault.chain_id`'s own list. Every tranche after it, on that same chain, shifts up
+		///   by one, closing the gap. For a Multichain product, removing a chain's last tranche
+		///   drops that chain's entry entirely (never left around empty). NOT YET CHECKED
+		///   (deferred): interface.sol also specifies this should revert if the tranche has
+		///   outstanding investments — pallet-tranche-investments doesn't expose an inspection
+		///   trait for this yet.
+		/// - `Update`: `vault` identifies which tranche to update (reverts if not found, searched
+		///   within `vault.chain_id`'s own list); `asset`, `shares`, and `priority` are applied
+		///   as new values using the same insert-and-shift semantics as `Add` for `priority`
+		///   (still scoped to that same chain — `Update` never moves a tranche to a different
+		///   chain, only `Remove` then `Add` can). `tranche_type`'s Junior/Senior discriminant is
+		///   immutable — reverts if it doesn't match the existing tranche's; `apr` (carried
+		///   inside `tranche_type` for `Senior`) may still change, since only the discriminant is
+		///   checked.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_tranche())]
 		pub fn set_tranche(
@@ -544,84 +630,72 @@ pub mod pallet {
 
 			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				let (tranches, single_chain_id) = match product {
-					ProductDetails::Multichain(product) => (&mut product.tranches, None),
+
+				match product {
+					ProductDetails::Multichain(product) => {
+						let chain_id = vault.chain_id;
+						if action == CrudAction::Add && !product.tranches.contains_key(&chain_id) {
+							product
+								.tranches
+								.try_insert(chain_id, ChainTranches::default())
+								.map_err(|_| Error::<T>::TooManyTranches)?;
+						}
+						let chain_tranches =
+							product.tranches.get_mut(&chain_id).ok_or(Error::<T>::VaultNotFound)?;
+						Self::apply_tranche_action(
+							product_id,
+							chain_tranches,
+							action,
+							&vault,
+							&tranche_type,
+							asset,
+							shares,
+							priority,
+						)?;
+						if chain_tranches.is_empty() {
+							product.tranches.remove(&chain_id);
+						}
+					},
 					ProductDetails::SingleChain(product) => {
-						(&mut product.tranches, Some(product.chain_id))
-					},
-				};
-				// A single-chain product has exactly one chain — every tranche's
-				// vault must live on it, same constraint `create_single_chain_product`
-				// enforces at creation time.
-				if let Some(chain_id) = single_chain_id {
-					if matches!(action, CrudAction::Add | CrudAction::Update) {
-						ensure!(
-							vault.chain_id == chain_id,
-							Error::<T>::SingleChainTranchesMustShareChain
-						);
-					}
-				}
-
-				match action {
-					CrudAction::Add => {
-						ensure!(
-							!Vaults::<T>::contains_key(&vault),
-							Error::<T>::VaultAlreadyRegistered
-						);
-						let idx = priority as usize;
-						ensure!(idx <= tranches.len(), Error::<T>::InvalidPriority);
-						tranches
-							.try_insert(
-								idx,
-								Tranche {
-									tranche_type: tranche_type.clone(),
-									vault: vault.clone(),
-									asset,
-									shares,
-								},
-							)
-							.map_err(|_| Error::<T>::TooManyTranches)?;
-						Self::ensure_senior_precedes_junior(tranches)?;
-						Vaults::<T>::insert(&vault, product_id);
-					},
-					CrudAction::Remove => {
-						let idx = tranches
-							.iter()
-							.position(|t| t.vault == vault)
-							.ok_or(Error::<T>::VaultNotFound)?;
-						tranches.remove(idx);
-						Self::ensure_senior_precedes_junior(tranches)?;
-						Vaults::<T>::remove(&vault);
-					},
-					CrudAction::Update => {
-						let idx = tranches
-							.iter()
-							.position(|t| t.vault == vault)
-							.ok_or(Error::<T>::VaultNotFound)?;
-						let type_matches = matches!(
-							(&tranches[idx].tranche_type, &tranche_type),
-							(TrancheType::Junior, TrancheType::Junior)
-								| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
-						);
-						ensure!(type_matches, Error::<T>::TrancheTypeImmutable);
-
-						tranches.remove(idx);
-						let new_idx = priority as usize;
-						ensure!(new_idx <= tranches.len(), Error::<T>::InvalidPriority);
-						tranches
-							.try_insert(
-								new_idx,
-								Tranche {
-									tranche_type: tranche_type.clone(),
-									vault: vault.clone(),
-									asset,
-									shares,
-								},
-							)
-							.map_err(|_| Error::<T>::TooManyTranches)?;
-						Self::ensure_senior_precedes_junior(tranches)?;
+						// A single-chain product has exactly one chain — every
+						// tranche's vault must live on it, same constraint
+						// `create_single_chain_product` enforces at creation time.
+						if matches!(action, CrudAction::Add | CrudAction::Update) {
+							ensure!(
+								vault.chain_id == product.chain_id,
+								Error::<T>::SingleChainTranchesMustShareChain
+							);
+						}
+						Self::apply_tranche_action(
+							product_id,
+							&mut product.tranches,
+							action,
+							&vault,
+							&tranche_type,
+							asset,
+							shares,
+							priority,
+						)?;
 					},
 				}
+
+				// `apply_tranche_action`/`ensure_valid_tranche_composition` only ever
+				// check one chain's own list — emptying a chain entirely (Remove) is
+				// allowed there (e.g. retiring a Hub-deployed vault while keeping
+				// Spoke ones). What's checked here, once, at the product level, is
+				// the floor beneath that: a product must always retain at least one
+				// tranche *somewhere*. Only reachable via `Remove` — `Add` only ever
+				// grows the total, `Update` never changes it.
+				if action == CrudAction::Remove {
+					let total_tranches: usize = match &*product {
+						ProductDetails::Multichain(product) => {
+							product.tranches.values().map(|chain| chain.len()).sum()
+						},
+						ProductDetails::SingleChain(product) => product.tranches.len(),
+					};
+					ensure!(total_tranches > 0, Error::<T>::ProductMustHaveAtLeastOneTranche);
+				}
+
 				Ok(())
 			})?;
 
