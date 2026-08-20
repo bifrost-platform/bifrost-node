@@ -535,9 +535,17 @@ pub struct RequestChainEntry<BlockNumber> {
 /// (`DepositsApproved`/`RedeemsApproved`, each carrying an array of approved
 /// items), so the recorder now only needs one `record_settlement_tx` call —
 /// carrying every approved `request_id` from that one event — instead of one
-/// call per request; fires at essentially the same moment as before (right
-/// after every one of the settlement's `collect_response_chain_ids` has
-/// reported NAV, i.e. `NavReceived`), just batched. Like `Triggered`,
+/// call per request; for a Multichain product this fires at essentially the
+/// same moment as before (right after every one of the settlement's
+/// `collect_response_chain_ids` has reported NAV, i.e. `NavReceived`), just
+/// batched — but for a `SingleChain` SYNC product, Valuation emits
+/// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so this step can
+/// genuinely land before `Triggered` for the same `settlement_id`.
+/// Deliberately has **no** `SettlementTriggers` precondition (unlike every
+/// leg step) precisely because of that — the old per-request
+/// `RequestStep::SettlementApproved` this replaced never required Trigger to
+/// have landed first either, and adding that requirement here would have
+/// broken the SingleChain SYNC ordering. Like `Triggered`,
 /// `RequestsApproved` is settlement-wide rather than chain-scoped: `spoke_chain_id`
 /// MUST be `0` and both `collect_response_chain_ids`/`finalize_chain_ids`
 /// MUST be empty for it, same as `Triggered` — but unlike `Triggered`, its own

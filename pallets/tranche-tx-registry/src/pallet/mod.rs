@@ -986,10 +986,12 @@ pub mod pallet {
 				let approved_request_ids =
 					request_ids.clone().ok_or(Error::<T>::RequestIdsRequired)?;
 				ensure!(!approved_request_ids.is_empty(), Error::<T>::RequestIdsRequired);
-				ensure!(
-					SettlementTriggers::<T>::contains_key(product_id, settlement_id),
-					Error::<T>::SettlementNotTriggered
-				);
+				// No `SettlementTriggers` precondition here (unlike every other leg step) —
+				// a SingleChain SYNC product's Valuation Contract emits
+				// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so `RequestsApproved`
+				// can genuinely arrive before `Triggered` for the same settlement_id. The old
+				// per-request `RequestStep::SettlementApproved` this replaced never had this
+				// precondition either.
 				for request_id in approved_request_ids.iter() {
 					let mut entry = RequestEntries::<T>::get(product_id, *request_id)
 						.ok_or(Error::<T>::RequestNotOpened)?;
