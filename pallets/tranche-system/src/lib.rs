@@ -17,14 +17,14 @@ use sp_std::marker::PhantomData;
 // Primitive type aliases / constants
 // ---------------------------------------------------------------------------
 
-/// Product identifier. Same convention as the old pallet-pools' `PoolId`.
+/// Product identifier.
 pub type ProductId = u64;
 
 /// Maximum number of tranches a single chain within a product can have.
-/// Originally carried over from pallet-pools' `MAX_TRANCHES` as a flat,
-/// product-wide cap; rescoped (2026-08-20) to apply per chain instead, once
-/// waterfall priority ordering (and the Senior-before-Junior invariant) became
-/// chain-scoped rather than product-wide — see `MultichainProductDetails::tranches`'
+/// Originally a flat, product-wide cap; rescoped (2026-08-20) to apply per
+/// chain instead, once waterfall priority ordering (and the
+/// Senior-before-Junior invariant) became chain-scoped rather than
+/// product-wide — see `MultichainProductDetails::tranches`'
 /// doc comment for why cross-chain tranche ordering was never a meaningful
 /// comparison to begin with (each chain's tranches only ever compete against
 /// each other for that chain's own waterfall).
@@ -65,9 +65,8 @@ pub const MAX_TRANCHE_MANAGERS: u32 = 20;
 /// Same bound as `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER` — no reason to differ.
 pub const MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT: u32 = 20;
 
-/// Maximum number of collateral NFTs per (OffchainSource) Adapter.
-/// Carried over from pallet-pools' `MAX_COLLATERALS`, now scoped per-adapter
-/// instead of per-pool since a product can mix multiple offchain sources.
+/// Maximum number of collateral NFTs per (OffchainSource) Adapter. Scoped
+/// per-adapter since a product can mix multiple offchain sources.
 pub const MAX_COLLATERALS: u32 = 10;
 
 // ---------------------------------------------------------------------------
@@ -76,7 +75,7 @@ pub const MAX_COLLATERALS: u32 = 10;
 
 /// Identifies a tranche within a product: the EVM chain where its ERC-7540 vault
 /// is deployed, paired with the vault contract address on that chain.
-/// Globally unique across ALL products, mirroring pallet-pools' `TrancheId`.
+/// Globally unique across ALL products.
 #[derive(
 	Clone,
 	Encode,
@@ -102,8 +101,7 @@ pub struct VaultId {
 // ---------------------------------------------------------------------------
 
 /// Identifies a MultichainAdapter entry: its own address paired with the EVM
-/// chain it lives on. Globally unique across ALL products, mirroring
-/// pallet-pools' `CollateralAsset` uniqueness convention.
+/// chain it lives on. Globally unique across ALL products.
 ///
 /// Nested Adapters (see `AdapterInfo`) are NOT keyed by this type — they carry
 /// no `chain_id` of their own (removed 2026-07-27; a nested adapter always
@@ -162,10 +160,9 @@ pub enum CrudAction {
 // TrancheType
 // ---------------------------------------------------------------------------
 
-/// Unlike pallet-pools' `TrancheType`, this carries no derived on-chain accrual
-/// rate — pricing/waterfall math is never computed on-node anymore (the Hub
-/// Valuation Contract does it off-chain), so `apr` here is stored config only,
-/// not a basis for on-chain compounding.
+/// Carries no derived on-chain accrual rate — pricing/waterfall math is never
+/// computed on-node (the Hub Valuation Contract does it off-chain), so `apr`
+/// here is stored config only, not a basis for on-chain compounding.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
@@ -270,8 +267,8 @@ pub enum SourceType<AccountId> {
 	OnchainSource,
 }
 
-/// NFT collateral backing an OffchainSource adapter's loan book.
-/// Same shape as pallet-pools' `CollateralAsset`, now scoped per-adapter.
+/// NFT collateral backing an OffchainSource adapter's loan book, scoped
+/// per-adapter.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
@@ -569,8 +566,7 @@ pub enum ProductDetails<AccountId> {
 /// Implemented by pallet-tranche-system itself (it owns the `Vaults` reverse
 /// index). Consumed by pallet-tranche-permissions to reject granting
 /// `Role::TrancheInvestor(vault)` for a vault that doesn't belong to the
-/// product the caller is ProductAdmin for — mirrors pallet-pools'
-/// `PoolInspect::tranche_exists` check in the old `grant_permission`.
+/// product the caller is ProductAdmin for.
 pub trait VaultInspect {
 	/// Returns `true` if `vault` is registered as one of `product_id`'s
 	/// tranches.
@@ -649,7 +645,7 @@ pub trait ProductInspect {
 /// `frame_system::EnsureSigned`, which does the same for a plain signed origin.
 /// The tranche-system precompile creates this origin before dispatching to
 /// `create_product`, guaranteeing it can't be called via a plain signed
-/// extrinsic — mirrors pallet-pools' `EnsurePoolAdmin`.
+/// extrinsic.
 /// Wire as `type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>`
 /// in the runtime.
 pub struct EnsureProductAdmin<T>(PhantomData<T>);

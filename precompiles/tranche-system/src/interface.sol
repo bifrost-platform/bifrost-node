@@ -2,24 +2,13 @@
 pragma solidity >=0.8.0;
 
 /**
- * @title Tranche System Precompile Interface (tranche-system draft)
+ * @title Tranche System Precompile Interface
  * @notice Owns product/tranche/adapter configuration for the OmniFi tranche-system
- *         model. Replaces the old single-source pallet-pools — a "product" here can
- *         be backed by multiple yield sources (Adapters) at once, priced by a single
- *         Hub-chain Valuation Contract registered per product.
+ *         model. A "product" here can be backed by multiple yield sources (Adapters)
+ *         at once, priced by a single Hub-chain Valuation Contract registered per
+ *         product.
  *
- * DRAFT — reflects the tranche-system pivot (2026-07-23), not yet locked in. pallet-
- * tranche-system does not exist yet; this interface is written ahead of the pallet so
- * the Solidity-facing shape can be reviewed first (see [[project_omnifi_revamp_callflow]]
- * in project memory for the full spec this was drafted from).
- *
- *   - Address reassignment as part of the pivot: the old Investments precompile
- *     moved from 0x...0200 to 0x...0201 (see precompiles/investments/src/interface.sol),
- *     vacating 0x...0200 for this new precompile. pallet-pools/its precompile (still
- *     at 0x...0201) is retired once pallet-tranche-system fully replaces it — the two
- *     addresses aren't reused 1:1 from pools, they're a three-way rotation.
- *   - `TrancheInput.apr` follows the same convention as the old Pools precompile's
- *     TrancheInput: only meaningful when `tranche_type == Senior` (fixed APR
+ *   - `TrancheInput.apr` is only meaningful when `tranche_type == Senior` (fixed APR
  *     entitlement); Junior gets the residual/variable yield after the waterfall.
  *   - A tranche is identified by its `VaultInput` (chain_id, vault_address) — its
  *     ERC-7540 vault — not by `tranche_type`. A product can register more than one
@@ -69,9 +58,8 @@ pragma solidity >=0.8.0;
  *     group may be emptied out entirely (e.g. retiring a Hub-deployed vault while
  *     keeping Spoke ones, or vice versa).
  *   - `AdapterInput.borrower`/`AdapterInput.collaterals` are only meaningful when
- *     `source_type == OffchainSource` (mirrors the old Pools precompile's
- *     borrower_id/CollateralInput fields, now living per-adapter instead of
- *     per-pool). Both should be left empty/zero for `OnchainSource` entries.
+ *     `source_type == OffchainSource`, living per-adapter. Both should be left
+ *     empty/zero for `OnchainSource` entries.
  *   - Two distinct adapter concepts, per the source spec:
  *     `adapters` (this interface's `AdapterInput`) are individual single-yield-
  *     source registrations (an offchain RWA loan book, or one onchain money
@@ -102,7 +90,7 @@ pragma solidity >=0.8.0;
  *     always sum to exactly 10_000 — see `set_adapters` for why that's a
  *     full-array replace scoped to one parent, mirroring `set_multichain_adapters`.
  *   - `weightBps`/`apr` unit conventions differ: `apr` (Senior tranche) is a
- *     FixedU128 inner value as in the old Pools precompile (1e18 = 100%);
+ *     FixedU128 inner value (1e18 = 100%);
  *     `weightBps` (both `MultichainAdapterInput` and `AdapterInput`) is
  *     **basis points** (10_000 = 100%), a `uint16`.
  *   - A product's `multichain_adapters` weights must always sum to exactly 100%
@@ -380,7 +368,7 @@ interface TrancheSystem {
      *         its tranches, its MultichainAdapter routing table, its individual
      *         yield-source Adapter registrations, and its per-chain
      *         TrancheManager bindings.
-     * @dev Flow mirrors old pallet-pools: sudo grants ProductAdmin for `product_id`
+     * @dev Sudo grants ProductAdmin for `product_id`
      *      via pallet-tranche-permissions BEFORE this is ever called (`product_id`
      *      is reserved to an admin up front, not decided here) — that admin then
      *      calls create_product using the `product_id` they were issued. Caller

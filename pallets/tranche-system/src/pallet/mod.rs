@@ -47,8 +47,7 @@ pub mod pallet {
 		/// field without re-deriving it — mirrors
 		/// `frame_system::RawOrigin::Signed`. The only accepted origin for
 		/// every extrinsic in this pallet, ensuring none of them can be
-		/// called except through the precompile — mirrors pallet-pools'
-		/// `Origin::PoolAdmin`.
+		/// called except through the precompile.
 		ProductAdmin(T::AccountId),
 	}
 
@@ -242,7 +241,6 @@ pub mod pallet {
 	/// vault can't be registered to two different products, and lets other
 	/// pallets (tranche-investments, tranche-permissions) resolve a vault to its
 	/// product without the caller supplying `product_id` up front.
-	/// Mirrors pallet-pools' `Tranches: TrancheId -> PoolId`.
 	pub type Vaults<T: Config> = StorageMap<_, Blake2_128Concat, VaultId, ProductId>;
 
 	#[pallet::storage]
@@ -256,7 +254,6 @@ pub mod pallet {
 	/// global uniqueness stays chain-aware (some on-chain protocols share the
 	/// same contract address across different chains via CREATE2) without the
 	/// adapter itself having to carry a redundant `chain_id` field.
-	/// Mirrors pallet-pools' `Collaterals: CollateralAsset -> PoolId`.
 	pub type AdapterIndex<T: Config> = StorageMap<_, Blake2_128Concat, AdapterKey, ProductId>;
 
 	#[pallet::storage]
@@ -271,8 +268,7 @@ pub mod pallet {
 	/// chain, not per product. The tranche-permissions precompile calls
 	/// `Orchestrator.sendWhitelist(...)` here to propagate a `TrancheInvestor`
 	/// grant/revoke to the Spoke chain a vault lives on. Defaults to the zero
-	/// address (propagation reverts until sudo sets it) — mirrors old pools'
-	/// `GatewayAddress`. Only writable by root.
+	/// address (propagation reverts until sudo sets it). Only writable by root.
 	pub type OrchestratorAddress<T: Config> = StorageValue<_, H160, ValueQuery>;
 
 	// -----------------------------------------------------------------------

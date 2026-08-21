@@ -264,7 +264,8 @@ interface Investments {
      *      Folds what used to be the separate record_product_nav call in here, so both are
      *      recorded atomically in one transaction: `product_nav` is the finalized total across
      *      all of the product's sources (both OnchainSource adapters, read live by Valuation,
-     *      and OffchainSource adapters, fed via pallet-rwa-nav-oracle) — the aggregate figure
+     *      and OffchainSource adapters, whose NAV reaches Valuation off-chain/externally,
+     *      not via any on-chain feeder pallet) — the aggregate figure
      *      Valuation actually used for this settlement's waterfall/share-price computation. Not
      *      independently verified by this pallet against `record_adapter_valuations`'s
      *      breakdown — Valuation is trusted for the aggregation, same as it's trusted for every

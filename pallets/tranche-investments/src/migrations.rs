@@ -76,7 +76,15 @@ pub mod v2 {
 		pub receivable_amount: U256,
 	}
 
-	/// `Settlement` as it existed under `STORAGE_VERSION::new(1)`.
+	/// `Settlement` as it existed under `STORAGE_VERSION::new(1)`. `tranches`'
+	/// bound is frozen at the literal `10` here (what
+	/// `pallet_tranche_system::MAX_TRANCHES` actually meant at this
+	/// snapshot's own time — a flat, product-wide cap) rather than
+	/// referencing that constant live: `MAX_TRANCHES` was later rescoped
+	/// (2026-08-20) to a per-chain cap, so aliasing it here would silently
+	/// change this historical snapshot's meaning out from under it — same
+	/// "old migration references current type" pitfall this pallet family
+	/// has already hit before.
 	#[derive(
 		Clone,
 		Encode,
@@ -88,7 +96,7 @@ pub mod v2 {
 		MaxEncodedLen,
 	)]
 	pub struct TrancheSettlementV1 {
-		pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+		pub tranches: BoundedVec<TrancheSettle, ConstU32<10>>,
 		pub pending_deposit_assets: U256,
 	}
 
@@ -201,7 +209,9 @@ pub mod v2 {
 					product_id,
 					settlement_id,
 					Settlement {
-						tranches: old.tranches,
+						// Widening bound (10 -> MAX_TRANCHE_INPUTS) — always fits, never
+						// actually truncates.
+						tranches: BoundedVec::truncate_from(old.tranches.into_inner()),
 						pending_deposit_assets: old.pending_deposit_assets,
 						recorded_at,
 						timestamp,
@@ -300,7 +310,10 @@ pub mod v3 {
 		pub recorded_at: BlockNumber,
 	}
 
-	/// `Settlement` as it existed under `STORAGE_VERSION::new(2)`.
+	/// `Settlement` as it existed under `STORAGE_VERSION::new(2)`. `tranches`'
+	/// bound is frozen at the literal `10` — see `TrancheSettlementV1`'s doc
+	/// comment for why this can't safely alias the live `MAX_TRANCHES`
+	/// constant.
 	#[derive(
 		Clone,
 		Encode,
@@ -312,7 +325,7 @@ pub mod v3 {
 		MaxEncodedLen,
 	)]
 	pub struct TrancheSettlementV2<BlockNumber> {
-		pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+		pub tranches: BoundedVec<TrancheSettle, ConstU32<10>>,
 		pub pending_deposit_assets: U256,
 		pub recorded_at: BlockNumber,
 	}
@@ -417,7 +430,9 @@ pub mod v3 {
 					product_id,
 					settlement_id,
 					Settlement {
-						tranches: old.tranches,
+						// Widening bound (10 -> MAX_TRANCHE_INPUTS) — always fits, never
+						// actually truncates.
+						tranches: BoundedVec::truncate_from(old.tranches.into_inner()),
 						pending_deposit_assets: old.pending_deposit_assets,
 						recorded_at: old.recorded_at,
 						timestamp,

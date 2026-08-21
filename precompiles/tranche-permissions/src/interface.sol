@@ -2,7 +2,7 @@
 pragma solidity >=0.8.0;
 
 /**
- * @title Tranche Permissions Precompile Interface (tranche-system draft)
+ * @title Tranche Permissions Precompile Interface
  * @notice Manages role-based permissions for OmniFi tranche-system products:
  *         ProductAdmin, OracleFeeder, and TrancheInvestor (whitelist). Replaces
  *         the old TrancheInvestor-only Permissions precompile — grant/revoke is
@@ -10,18 +10,13 @@ pragma solidity >=0.8.0;
  *         the old precompile's narrower `add_tranche_investor`/
  *         `remove_tranche_investor`.
  *
- * DRAFT — reflects the tranche-system pivot (2026-07-24), not yet locked in.
- * pallet-tranche-permissions does not exist yet; this interface is written
- * ahead of the pallet, same as tranche-system/investments (see
- * [[project_omnifi_revamp_callflow]] in project memory).
- *
  *   - Address reused from the old Permissions precompile (0x...0202) — same
  *     address-rotation pattern already applied to investments/tranche-system
  *     (each new precompile takes over the slot of the pallet it functionally
  *     replaces).
- *   - `Role.ProductAdmin` can only ever be granted by sudo/root, mirroring old
- *     pools' `Role::PoolAdmin` (pre-granted before `create_product` is called —
- *     see pallet-tranche-system). Calling grant_permission/revoke_permission
+ *   - `Role.ProductAdmin` can only ever be granted by sudo/root (pre-granted
+ *     before `create_product` is called — see pallet-tranche-system). Calling
+ *     grant_permission/revoke_permission
  *     with `role == ProductAdmin` through THIS precompile will always revert,
  *     since precompile-dispatched calls never carry a root origin. The variant
  *     still exists in this enum because other pallets need to represent/check
@@ -50,8 +45,8 @@ pragma solidity >=0.8.0;
  *   - **No `Borrower` role here** — deliberately removed (2026-07-24). A
  *     product can have multiple OffchainSource adapters, each potentially a
  *     different institution, so there's no single product-scoped "Borrower"
- *     account the way old pools had `Role::Borrower`. Borrower identity now
- *     lives directly on each adapter instead — see pallet-tranche-system's
+ *     account to represent. Borrower identity now lives directly on each
+ *     adapter instead — see pallet-tranche-system's
  *     `SourceType::OffchainSource { borrower, .. }` — set via
  *     TrancheSystem's `set_adapter`, not through this precompile at all.
  *     Borrow/repay bookkeeping itself is no longer an on-chain concern at

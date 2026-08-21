@@ -21,13 +21,12 @@ use sp_runtime::RuntimeDebug;
 /// - `ProductAdmin` — exactly one. Pre-granted by sudo before `create_product` is ever called (see
 ///   pallet-tranche-system's `create_product` flow).
 /// - `OracleFeeder` — many.
-/// - `TrancheInvestor` — many, scoped to a specific tranche (`VaultId`), not the whole product —
-///   mirrors old pools' `Role::TrancheInvestor(TrancheId)`.
+/// - `TrancheInvestor` — many, scoped to a specific tranche (`VaultId`), not the whole product.
 ///
-/// No `Borrower` variant, unlike old pools' `Role`: a product can have
-/// multiple OffchainSource adapters, each potentially a different
-/// institution, so there's no single product-scoped borrower to represent
-/// here. Borrower identity lives directly on each adapter instead — see
+/// No `Borrower` variant: a product can have multiple OffchainSource
+/// adapters, each potentially a different institution, so there's no single
+/// product-scoped borrower to represent here. Borrower identity lives
+/// directly on each adapter instead — see
 /// `pallet_tranche_system::SourceType::OffchainSource { borrower, .. }`.
 #[derive(
 	Clone,
@@ -46,7 +45,9 @@ pub enum Role {
 	/// May manage this product: its tranches, adapters, and sub-roles.
 	/// Granted by sudo before the product is created.
 	ProductAdmin,
-	/// May submit NAV updates for the product (see pallet-rwa-nav-oracle).
+	/// May submit NAV updates for the product. Not currently gated by any
+	/// on-chain extrinsic — reserved for a future on-chain NAV-feeding
+	/// mechanism; today NAV reaches Valuation entirely off-chain/externally.
 	OracleFeeder,
 	/// May submit deposit/redeem requests for a specific tranche.
 	TrancheInvestor(VaultId),
