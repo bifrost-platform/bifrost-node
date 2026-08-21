@@ -48,9 +48,12 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config + pallet_timestamp::Config<Moment = u64> {
-		/// Only accepted origin for all four extrinsics in this pallet.
-		/// Wire as `pallet_tranche_investments::EnsureValuation` in the runtime
-		/// so that only the tranche-investments precompile can invoke them.
+		/// Only accepted origin for every extrinsic in this pallet
+		/// (`record_investment_request`/`record_investment_approval`/
+		/// `record_investment_approvals`/`record_adapter_valuations`/
+		/// `record_settlement`). Wire as `pallet_tranche_investments::EnsureValuation`
+		/// in the runtime so that only the tranche-investments precompile can
+		/// invoke them.
 		type ValuationOrigin: frame_support::traits::EnsureOrigin<Self::RuntimeOrigin>;
 		/// Vault inspector — implemented by pallet-tranche-system. Used to
 		/// verify a vault actually belongs to `product_id` before recording a
@@ -519,7 +522,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			product_id: ProductId,
 			settlement_id: SettlementId,
-			tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+			tranches: BoundedVec<
+				TrancheSettle,
+				ConstU32<{ pallet_tranche_system::MAX_TRANCHE_INPUTS }>,
+			>,
 			pending_deposit_assets: U256,
 			product_nav: U256,
 		) -> DispatchResult {

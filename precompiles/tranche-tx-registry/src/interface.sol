@@ -97,13 +97,11 @@ pragma solidity >=0.8.0;
  * `steps[steps.length - 1].tx.recorded_at != 0` — no separate "is this one done" field
  * needed per entry.
  *
- * DRAFT — split out of the Investments precompile (2026-08-06) once the tx-tracing
+ * Split out of the Investments precompile (2026-08-06) once the tx-tracing
  * functionality outgrew it: different trust model (a single bot-driven recorder account
  * vs. the product's Valuation Contract), different write volume (expected far more
  * frequent than Investments' own ledger calls), and potential reuse by other CCCP-v2
- * Bridge&Call flows beyond tranche-investments. pallet-tranche-tx-registry does not exist
- * yet; this interface is written ahead of the pallet, same as tranche-system/investments
- * (see [[project_omnifi_revamp_callflow]] in project memory).
+ * Bridge&Call flows beyond tranche-investments.
  *
  *   - Address: next free slot after tranche-system (0x...0200), investments (0x...0201),
  *     tranche-permissions (0x...0202) — 0x...0203 was briefly assigned to the

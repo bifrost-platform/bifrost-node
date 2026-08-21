@@ -818,11 +818,16 @@ fn decode_adapter_valuations(
 	Ok(bounded)
 }
 
+/// Bounded by `MAX_TRANCHE_INPUTS` (the product-wide cap across every chain),
+/// not `MAX_TRANCHES` (rescoped to a per-chain cap, 2026-08-20) — `tranches`
+/// here spans a whole product's settlement, not any one chain's.
 fn decode_tranche_settles(
 	tranches: &[EvmTrancheSettle],
-) -> EvmResult<BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>> {
-	let mut bounded =
-		BoundedVec::<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>::default();
+) -> EvmResult<BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHE_INPUTS }>>> {
+	let mut bounded = BoundedVec::<
+		TrancheSettle,
+		ConstU32<{ pallet_tranche_system::MAX_TRANCHE_INPUTS }>,
+	>::default();
 	for (vault_chain_id, vault_address, tranche_nav, share_price, units_outstanding, principal) in
 		tranches.iter().cloned()
 	{

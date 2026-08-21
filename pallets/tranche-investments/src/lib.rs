@@ -255,11 +255,21 @@ pub struct TrancheSettle {
 /// One settlement's full tranche-level result for a product, as recorded by
 /// `record_settlement` — one entry per tranche, plus the product's
 /// pending (unconfirmed) deposit total.
+///
+/// `tranches` spans every tranche across every chain a Multichain product has
+/// (`record_settlement` validates each entry's vault against `product_id`
+/// alone, not any one chain), so it's bounded by
+/// `pallet_tranche_system::MAX_TRANCHE_INPUTS` (the product-wide cap) rather
+/// than `MAX_TRANCHES` (rescoped to a per-chain cap, 2026-08-20 — see that
+/// constant's own doc comment) — using the per-chain cap here would wrongly
+/// reject a real settlement for any product whose tranches, summed across
+/// chains, exceed it.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
 pub struct Settlement<BlockNumber> {
-	pub tranches: BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHES }>>,
+	pub tranches:
+		BoundedVec<TrancheSettle, ConstU32<{ pallet_tranche_system::MAX_TRANCHE_INPUTS }>>,
 	/// Product-level pending/unconfirmed deposit amount as of this
 	/// settlement — not yet reflected in any tranche's `units_outstanding`.
 	pub pending_deposit_assets: U256,
