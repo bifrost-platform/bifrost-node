@@ -919,20 +919,24 @@ where
 	/// which case this request is, and each present entry's own `tx.recorded_at`
 	/// to tell whether it's landed yet.
 	/// `adapter_legs[i].steps` is `[AdapterBridgeExecuted, AdapterApplied]` (length
-	/// 2) for a genuinely remote chain, but just `[AdapterApplied]` (length 1) for
-	/// a chain that's the same as the origin vault's own chain, or this product's
-	/// own local chain — same "absent means not applicable" convention as
-	/// `request_steps` above, since such a chain never gets a Bridge phase at all
-	/// (fulfilled synchronously — see
-	/// `pallet_tranche_tx_registry::record_request_tx`'s dev notes), not merely
-	/// pending one. `adapter_legs` itself is always empty for a `SingleChain`
-	/// product — its Adapters are colocated too, so there's no leg to track at
-	/// all. Check `adapter_legs[i].steps.length` (1 vs 2) the same way
-	/// `request_steps.length` is checked, rather than assuming a fixed shape.
-	/// `RequestAdapterChains`' own order (and so `adapter_legs`' order) is normally
-	/// the order declared at `RequestQueued`, but a self-fulfilling chain (recorded
-	/// before `RequestQueued` ever ran) appears in whatever order it was first
-	/// touched instead.
+	/// 2) for a Deposit's Adapter chain that's on a Spoke — including one that
+	/// happens to be the origin vault's own chain, since a Deposit's allocation is
+	/// only decided once capital reaches the Hub (at `RequestQueued`), so even the
+	/// origin chain's own share routes back out over a real Bridge phase — but just
+	/// `[AdapterApplied]` (length 1) for this product's own local chain (Hub), whose
+	/// allocation is applied synchronously (already where capital lands), or for a
+	/// Redeem whose Adapter chain is the origin vault's own chain (that share is
+	/// collected out of the same chain's own Adapter at request time, before
+	/// anything reaches the Hub, same as before this pallet's 2026-08-21 change —
+	/// see `record_request_tx`'s dev notes) — same "absent means not applicable"
+	/// convention as `request_steps` above, not merely pending one. `adapter_legs`
+	/// itself is always empty for a `SingleChain` product — its Adapters are
+	/// colocated too, so there's no leg to track at all. Check
+	/// `adapter_legs[i].steps.length` (1 vs 2) the same way `request_steps.length`
+	/// is checked, rather than assuming a fixed shape. `RequestAdapterChains`' own
+	/// order (and so `adapter_legs`' order) is normally the order declared at
+	/// `RequestQueued`, but a self-fulfilling entry (recorded before `RequestQueued`
+	/// ever ran) appears in whatever order it was first touched instead.
 	///
 	/// `status` only ever takes `Requested` (`RequestQueued` not yet reached, or
 	/// some Adapter leg still has an unfinished step — never true for a
@@ -973,7 +977,8 @@ where
 	/// @return request_bridge_attempts The Inbound leg's full attempt history, empty if no
 	/// Inbound leg applies or simply not yet attempted
 	/// @return adapter_bridge_attempts Per-chain full Adapter-leg attempt history, parallel
-	/// to adapter_legs — a self-fulfilling chain's entry is always empty
+	/// to adapter_legs — a self-fulfilling entry (Hub, or a Redeem's own origin chain) is
+	/// always empty
 	#[precompile::public("get_request(uint64,bytes32)")]
 	#[precompile::view]
 	#[allow(clippy::type_complexity)]
@@ -1055,15 +1060,23 @@ where
 			if leg.applied_tx.is_none() {
 				all_adapter_done = false;
 			}
-			// A chain that's the same as the origin vault's own chain, or this
-			// product's own local chain, never gets a Bridge phase at all (fulfilled
-			// synchronously — see `pallet_tranche_tx_registry::record_request_tx`'s
-			// dev notes), so `AdapterBridgeExecuted` is permanently inapplicable for
-			// it, not merely pending — omit it entirely rather than showing a zeroed
-			// entry, same "absent means not applicable" convention `request_steps`
-			// uses for a colocated request's Inbound leg above.
-			let is_self_fulfilling =
-				*chain_id == entry.vault.chain_id || *chain_id == local_chain_id;
+			// This product's own local chain (Hub) always fulfills an Adapter leg
+			// synchronously — capital is already there, so there's no Bridge phase at
+			// all, and `AdapterBridgeExecuted` is permanently inapplicable for it, not
+			// merely pending — omit it entirely rather than showing a zeroed entry,
+			// same "absent means not applicable" convention `request_steps` uses for a
+			// colocated request's Inbound leg above. A Spoke chain otherwise needs a
+			// real Bridge phase — its Adapter allocation is only decided once capital
+			// has reached the Hub (at `RequestQueued`), so it can't be pre-applied
+			// locally the way `Requested` itself can — EXCEPT for a Redeem whose
+			// Adapter chain is the request's own origin vault chain: unlike a Deposit
+			// (whose capital must reach the Hub before any allocation, even back to the
+			// origin chain, can be decided), a Redeem collects its share out of that
+			// same chain's own Adapter at request time, before anything reaches the
+			// Hub, so that leg is still self-fulfilling exactly as before (see
+			// `docs/tranche-tx-registry/request-flow.md`'s 2026-08-21 changelog entry).
+			let is_self_fulfilling = *chain_id == local_chain_id
+				|| (*chain_id == entry.vault.chain_id && entry.order_type == OrderType::Redeem);
 			let leg_bridge_tx = select_executed(&leg.bridge_attempts);
 			let steps = if is_self_fulfilling {
 				vec![(
