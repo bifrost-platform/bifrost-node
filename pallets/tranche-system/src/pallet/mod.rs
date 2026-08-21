@@ -5,7 +5,7 @@ use crate::{
 	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
 	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
 	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT,
-	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS,
 	MAX_TRANCHE_MANAGERS,
 };
 
@@ -83,7 +83,7 @@ pub mod pallet {
 		ProductNotFound,
 		/// `create_product` requires at least one tranche.
 		EmptyTranches,
-		/// A single chain within a product cannot hold more than `MAX_TRANCHES`
+		/// A single chain within a product cannot hold more than `MAX_TRANCHES_PER_CHAIN`
 		/// tranches, and a product cannot span more than `MAX_TRANCHE_CHAINS`
 		/// distinct chains with tranches on them.
 		TooManyTranches,
@@ -163,6 +163,14 @@ pub mod pallet {
 		/// — every tranche's `vault.chain_id` must equal the product's
 		/// declared `chain_id`.
 		SingleChainTranchesMustShareChain,
+		/// `set_multichain_tranche_managers`'s input carried a `chain_id` with
+		/// no tranche registered on it for this product — a TrancheManager
+		/// binding only makes sense for a chain one of the product's vaults
+		/// is actually deployed on (see
+		/// `MultichainProductDetails::multichain_tranche_managers`'s doc
+		/// comment). Register a tranche on that chain first (`set_tranche`),
+		/// then bind its TrancheManager.
+		TrancheManagerChainHasNoTranche,
 	}
 
 	// -----------------------------------------------------------------------
@@ -445,7 +453,7 @@ pub mod pallet {
 			product_id: ProductId,
 			chain_id: u64,
 			valuation: SingleChainValuationInfo,
-			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES>>,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
 			tranche_manager: H160,
 			adapters: BoundedBTreeMap<
 				H160,
@@ -499,7 +507,7 @@ pub mod pallet {
 				.collect();
 			Self::ensure_senior_precedes_junior(&ordered)?;
 			Self::ensure_valid_tranche_composition(&ordered)?;
-			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>> =
+			let tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>> =
 				BoundedVec::try_from(ordered).map_err(|_| Error::<T>::TooManyTranches)?;
 
 			Self::ensure_tranches_are_unregistered(tranches.iter())?;
@@ -851,7 +859,11 @@ pub mod pallet {
 		/// atomically (Hub included, if the product has a Hub vault — see
 		/// `ProductDetails::multichain_tranche_managers`'s doc comment).
 		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
-		/// as `create_product`.
+		/// as `create_product`. Every `chain_id` key in the input must already
+		/// have at least one tranche registered on it (`Error::TrancheManagerChainHasNoTranche`
+		/// otherwise) — a TrancheManager binding for a chain with no vault on
+		/// it doesn't mean anything. Register a chain's tranche first
+		/// (`set_tranche`), then bind its TrancheManager here.
 		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_tranche_managers())]
 		pub fn set_multichain_tranche_managers(
@@ -869,6 +881,12 @@ pub mod pallet {
 						return Err(Error::<T>::WrongProductType.into())
 					},
 				};
+				for chain_id in multichain_tranche_managers.keys() {
+					ensure!(
+						product.tranches.contains_key(chain_id),
+						Error::<T>::TrancheManagerChainHasNoTranche
+					);
+				}
 				product.multichain_tranche_managers = multichain_tranche_managers;
 				Ok(())
 			})?;

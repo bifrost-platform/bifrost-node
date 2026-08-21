@@ -29,13 +29,24 @@ pub type RequestId = H256;
 pub type SettlementId = U256;
 
 /// Maximum number of Adapter allocations a single investment can be split across.
-/// Matches pallet-tranche-system's `MAX_MULTICHAIN_ADAPTERS` — an investment can't
-/// be allocated across more MultichainAdapters than a product actually has.
+/// Matches pallet-tranche-system's `MAX_MULTICHAIN_ADAPTERS` — `Allocation::adapter`
+/// is checked against the top-level MultichainAdapter routing table
+/// (`multichain_adapter_belongs_to_product`, one entry per chain a product routes
+/// to), not the individual Adapters nested inside each entry, so an investment
+/// can't be allocated across more MultichainAdapters than a product actually has.
 pub const MAX_ALLOCATIONS: u32 = pallet_tranche_system::MAX_MULTICHAIN_ADAPTERS;
 
 /// Maximum number of Adapter valuation entries recorded per settlement — one
-/// entry per Adapter, so bounded the same way as `MAX_ALLOCATIONS`.
-pub const MAX_ADAPTER_VALUATIONS: u32 = pallet_tranche_system::MAX_MULTICHAIN_ADAPTERS;
+/// entry per *individual* Adapter (`record_adapter_valuations` checks each
+/// entry against `adapter_belongs_to_product`, the nested-Adapter reverse
+/// index — see `AdapterKey`'s doc comment — not `multichain_adapter_belongs_to_product`
+/// like `MAX_ALLOCATIONS` above). A product's individual Adapters are nested
+/// inside its MultichainAdapters, so this needs the product-wide total across
+/// all of them — `pallet_tranche_system::MAX_TOTAL_ADAPTERS`
+/// (`MAX_MULTICHAIN_ADAPTERS * MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER`) — not bare
+/// `MAX_MULTICHAIN_ADAPTERS` (that only counts the top-level routing entries,
+/// undercounting whatever's nested inside each one).
+pub const MAX_ADAPTER_VALUATIONS: u32 = pallet_tranche_system::MAX_TOTAL_ADAPTERS;
 
 /// Maximum number of `AssetPosition` entries per `AdapterValuation`. No
 /// equivalent bound exists elsewhere in this pallet family — an Adapter's
@@ -44,17 +55,14 @@ pub const MAX_ADAPTER_VALUATIONS: u32 = pallet_tranche_system::MAX_MULTICHAIN_AD
 /// ballpark as other per-entity bounds (e.g. `MAX_COLLATERALS`).
 pub const MAX_ASSET_POSITIONS: u32 = 20;
 
-/// Maximum number of requests that can be approved into a single
-/// (product_id, settlement_id) — bounds `SettlementRequests`, the reverse index
-/// `record_investment_approval` writes to. pallet-tranche-tx-registry used to read
-/// this cross-pallet (via the now-removed `RequestSettlementInspect` trait) to close
-/// out its own `InvestorActiveRequests` entries; it now keeps an independent,
-/// event-sourced copy of the same linkage instead (see
-/// `pallet_tranche_tx_registry::SettlementRequests`'s doc comment). No equivalent
-/// bound exists elsewhere in this pallet family — sized generously since it caps
-/// "investors settled together in one cycle", not a per-product structural count
-/// like `MAX_ALLOCATIONS`.
-pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
+/// Bounds `SettlementRequests`, the reverse index `record_investment_approval`
+/// writes to. Re-exported here for convenience; defined in
+/// `pallet_tranche_system` since `pallet_tranche_tx_registry` needs the same
+/// bound for its own, independently-tracked copy of the same settlement-cycle
+/// linkage (see that pallet's `SettlementRequests`/`RequestId` doc comments
+/// for why the two pallets don't share a hard dependency) — hosting it in
+/// their common dependency avoids two copies that merely happen to agree.
+pub use pallet_tranche_system::MAX_SETTLEMENT_REQUESTS;
 
 // ---------------------------------------------------------------------------
 // OrderType
@@ -260,7 +268,7 @@ pub struct TrancheSettle {
 /// (`record_settlement` validates each entry's vault against `product_id`
 /// alone, not any one chain), so it's bounded by
 /// `pallet_tranche_system::MAX_TRANCHE_INPUTS` (the product-wide cap) rather
-/// than `MAX_TRANCHES` (rescoped to a per-chain cap, 2026-08-20 — see that
+/// than `MAX_TRANCHES_PER_CHAIN` (rescoped to a per-chain cap, 2026-08-20 — see that
 /// constant's own doc comment) — using the per-chain cap here would wrongly
 /// reject a real settlement for any product whose tranches, summed across
 /// chains, exceed it.

@@ -10,7 +10,7 @@ use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
 	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES,
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
 	MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
@@ -230,7 +230,7 @@ where
 			}
 		};
 
-		let bounded_tranches = decode_tranches::<ConstU32<MAX_TRANCHES>>(&tranches)?;
+		let bounded_tranches = decode_tranches::<ConstU32<MAX_TRANCHES_PER_CHAIN>>(&tranches)?;
 		let bounded_adapters = decode_adapters::<Runtime>(&adapters)?;
 
 		let call = TrancheSystemCall::<Runtime>::create_single_chain_product {
@@ -809,7 +809,7 @@ fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmTrancheInput {
 /// Generic over the target bound `S` — `create_product` needs
 /// `ConstU32<MAX_TRANCHE_INPUTS>` (its flat input spans every chain's
 /// tranches at once), while `create_single_chain_product` needs the smaller
-/// `ConstU32<MAX_TRANCHES>` (inherently one chain) — see `MAX_TRANCHE_INPUTS`'s
+/// `ConstU32<MAX_TRANCHES_PER_CHAIN>` (inherently one chain) — see `MAX_TRANCHE_INPUTS`'s
 /// doc comment in `pallet_tranche_system`.
 fn decode_tranches<S: Get<u32>>(
 	tranches: &[EvmTrancheInput],

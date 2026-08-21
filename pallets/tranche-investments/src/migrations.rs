@@ -78,9 +78,9 @@ pub mod v2 {
 
 	/// `Settlement` as it existed under `STORAGE_VERSION::new(1)`. `tranches`'
 	/// bound is frozen at the literal `10` here (what
-	/// `pallet_tranche_system::MAX_TRANCHES` actually meant at this
+	/// `pallet_tranche_system::MAX_TRANCHES_PER_CHAIN` actually meant at this
 	/// snapshot's own time — a flat, product-wide cap) rather than
-	/// referencing that constant live: `MAX_TRANCHES` was later rescoped
+	/// referencing that constant live: `MAX_TRANCHES_PER_CHAIN` was later rescoped
 	/// (2026-08-20) to a per-chain cap, so aliasing it here would silently
 	/// change this historical snapshot's meaning out from under it — same
 	/// "old migration references current type" pitfall this pallet family
@@ -312,7 +312,7 @@ pub mod v3 {
 
 	/// `Settlement` as it existed under `STORAGE_VERSION::new(2)`. `tranches`'
 	/// bound is frozen at the literal `10` — see `TrancheSettlementV1`'s doc
-	/// comment for why this can't safely alias the live `MAX_TRANCHES`
+	/// comment for why this can't safely alias the live `MAX_TRANCHES_PER_CHAIN`
 	/// constant.
 	#[derive(
 		Clone,

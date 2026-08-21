@@ -1,7 +1,7 @@
 use crate::{
 	AdapterKey, ChainTranches, Config, MultichainAdapterInfo, MultichainProductDetails, Pallet,
 	ProductDetails, ProductId, SingleChainProductDetails, Tranche, ValuationInfo,
-	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES, MAX_TRANCHE_CHAINS, MAX_TRANCHE_MANAGERS,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_CHAINS, MAX_TRANCHE_MANAGERS,
 };
 
 use frame_support::{
@@ -41,7 +41,7 @@ macro_rules! log {
 /// satisfied "every Senior precedes every Junior" as a whole, each chain's
 /// own subsequence trivially still does too.
 fn group_tranches_by_chain(
-	flat: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+	flat: BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
 ) -> BoundedBTreeMap<u64, ChainTranches, ConstU32<MAX_TRANCHE_CHAINS>> {
 	let mut by_chain: BTreeMap<u64, Vec<Tranche>> = BTreeMap::new();
 	for tranche in flat.into_inner() {
@@ -49,8 +49,8 @@ fn group_tranches_by_chain(
 	}
 	let mut grouped = BoundedBTreeMap::new();
 	for (chain_id, tranches) in by_chain {
-		// Bounded at `MAX_TRANCHES` (10) per chain and `MAX_TRANCHE_CHAINS`
-		// (10) distinct chains — a flat list already bounded at `MAX_TRANCHES`
+		// Bounded at `MAX_TRANCHES_PER_CHAIN` (10) per chain and `MAX_TRANCHE_CHAINS`
+		// (10) distinct chains — a flat list already bounded at `MAX_TRANCHES_PER_CHAIN`
 		// (10) total can never produce a per-chain group exceeding 10, nor
 		// more than 10 distinct chains, so neither fallback below can ever
 		// actually trigger; kept only so this stays a total function rather
@@ -105,7 +105,7 @@ pub mod v1 {
 	)]
 	pub struct ProductDetailsV0<AccountId> {
 		pub valuation: ValuationInfo,
-		pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+		pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
 		pub multichain_adapters: BoundedBTreeMap<
 			AdapterKey,
 			MultichainAdapterInfo<AccountId>,
@@ -149,7 +149,7 @@ pub mod v1 {
 						.map(|chain_id| (chain_id, H160::zero()))
 						.collect::<sp_std::collections::btree_map::BTreeMap<_, _>>(),
 				)
-				// `MAX_TRANCHES` (10) <= `MAX_TRANCHE_MANAGERS` (20), so the set of
+				// `MAX_TRANCHES_PER_CHAIN` (10) <= `MAX_TRANCHE_MANAGERS` (20), so the set of
 				// distinct tranche chain_ids can never overflow this bound — falls
 				// back to an empty table in the unreachable case it somehow did,
 				// rather than panicking a migration.
@@ -229,7 +229,7 @@ pub mod v2 {
 	)]
 	pub struct MultichainProductDetailsV1<AccountId> {
 		pub valuation: ValuationInfo,
-		pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>,
+		pub tranches: BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
 		pub multichain_adapters: BoundedBTreeMap<
 			AdapterKey,
 			MultichainAdapterInfo<AccountId>,
@@ -294,7 +294,7 @@ pub mod v2 {
 }
 
 /// v2 -> v3: `MultichainProductDetails::tranches` changes shape from a single
-/// flat, product-wide-ordered `BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>` to
+/// flat, product-wide-ordered `BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>` to
 /// a per-chain-keyed `BoundedBTreeMap<u64, ChainTranches, ConstU32<MAX_TRANCHE_CHAINS>>`
 /// — waterfall priority ordering (and the Senior-before-Junior invariant) is
 /// now enforced independently per chain rather than product-wide, since
