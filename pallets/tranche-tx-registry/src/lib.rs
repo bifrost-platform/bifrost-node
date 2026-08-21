@@ -37,24 +37,15 @@ pub type SettlementId = U256;
 /// — no dedicated newtype exists elsewhere in this pallet family.
 pub type ChainId = u64;
 
-/// Maximum number of spoke chains a single settlement can register in
-/// `SettlementCollectResponseChains`/`SettlementFinalizeChains`, or a single
-/// request can register in `RequestAdapterChains`. Reuses
-/// pallet-tranche-system's
-/// `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER` rather than defining a fresh bound —
-/// either one's chain fan-out is ultimately bounded by how many chains a
-/// product's own MultichainAdapters (plus, for a request, its own one vault)
-/// span, same rationale as `pallet_tranche_investments::MAX_ALLOCATIONS`
-/// reusing `MAX_MULTICHAIN_ADAPTERS`.
-pub const MAX_SPOKE_CHAINS: u32 = pallet_tranche_system::MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
-
 /// Maximum number of `request_id`s a single `record_settlement_tx` call can batch
-/// into one `SettlementStep::RequestsApproved` attestation. Same value as
-/// `pallet_tranche_investments::MAX_SETTLEMENT_REQUESTS` (that pallet's own bound
-/// on the analogous `record_investment_approvals` batch), but declared
-/// independently rather than imported — this pallet deliberately has no hard
-/// dependency on tranche-investments (see `RequestId`'s doc comment).
-pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
+/// into one `SettlementStep::RequestsApproved` attestation. Re-exported here
+/// for convenience; defined in `pallet_tranche_system` (not
+/// `pallet_tranche_investments`, whose own `record_investment_approvals` batch
+/// shares this exact bound) so both pallets read one definition instead of
+/// maintaining independent copies that happen to agree — this pallet still has
+/// no hard dependency on tranche-investments itself (see `RequestId`'s doc
+/// comment).
+pub use pallet_tranche_system::MAX_SETTLEMENT_REQUESTS;
 
 // ---------------------------------------------------------------------------
 // TxRecord

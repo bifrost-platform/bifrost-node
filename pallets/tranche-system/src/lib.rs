@@ -28,7 +28,7 @@ pub type ProductId = u64;
 /// doc comment for why cross-chain tranche ordering was never a meaningful
 /// comparison to begin with (each chain's tranches only ever compete against
 /// each other for that chain's own waterfall).
-pub const MAX_TRANCHES: u32 = 10;
+pub const MAX_TRANCHES_PER_CHAIN: u32 = 10;
 
 /// Maximum number of distinct chains a single product's tranches can span —
 /// bounds `MultichainProductDetails::tranches`' outer map (one entry per
@@ -41,33 +41,65 @@ pub const MAX_TRANCHE_CHAINS: u32 = 10;
 /// by `vault.chain_id` during validation, see `create_product`'s doc
 /// comment), so this must cover the worst case of every one of a product's
 /// chains (`MAX_TRANCHE_CHAINS`) each at its own per-chain cap
-/// (`MAX_TRANCHES`). `create_single_chain_product`'s own `tranches` input
-/// stays bounded by `MAX_TRANCHES` alone — inherently one chain, no fan-out.
-pub const MAX_TRANCHE_INPUTS: u32 = MAX_TRANCHES * MAX_TRANCHE_CHAINS;
+/// (`MAX_TRANCHES_PER_CHAIN`). `create_single_chain_product`'s own `tranches` input
+/// stays bounded by `MAX_TRANCHES_PER_CHAIN` alone — inherently one chain, no fan-out.
+pub const MAX_TRANCHE_INPUTS: u32 = MAX_TRANCHES_PER_CHAIN * MAX_TRANCHE_CHAINS;
 
 /// Maximum number of MultichainAdapter routing entries per product.
-pub const MAX_MULTICHAIN_ADAPTERS: u32 = 20;
+pub const MAX_MULTICHAIN_ADAPTERS: u32 = 10;
 
 /// Maximum number of individual (single-yield-source) Adapters per
 /// MultichainAdapter. Rescoped from per-product to per-MultichainAdapter
 /// (2026-07-27): adapters now live nested under their parent MultichainAdapter
 /// (see `MultichainAdapterInfo`) instead of in a flat, product-wide registry.
-pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 20;
+pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 10;
+
+/// Worst-case total number of individual Adapters a Multichain product can
+/// have, summed across every one of its MultichainAdapter entries — every one
+/// of up to `MAX_MULTICHAIN_ADAPTERS` entries nesting up to
+/// `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER` individual Adapters each. Same
+/// "per-group cap times group count" pattern as `MAX_TRANCHE_INPUTS`. For
+/// anything that needs a single product-wide bound on individual Adapters
+/// (flattened across all of a product's MultichainAdapters) —
+/// `MAX_MULTICHAIN_ADAPTERS` alone underbounds this, since it only counts the
+/// top-level routing entries, not what's nested inside each one.
+pub const MAX_TOTAL_ADAPTERS: u32 = MAX_MULTICHAIN_ADAPTERS * MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 
 /// Maximum number of per-chain TrancheManager bindings per product (see
-/// `MultichainProductDetails::multichain_tranche_managers`).
-pub const MAX_TRANCHE_MANAGERS: u32 = 20;
+/// `MultichainProductDetails::multichain_tranche_managers`) — one entry per
+/// chain that has at least one tranche, so this is bounded by the same
+/// `MAX_TRANCHE_CHAINS` a product's tranches themselves are (not an
+/// independent cap — a `multichain_tranche_managers` entry can never outnumber
+/// the distinct tranche chains it's binding TrancheManagers for, since
+/// `set_multichain_tranche_managers` rejects any `chain_id` without a tranche
+/// on it).
+pub const MAX_TRANCHE_MANAGERS: u32 = MAX_TRANCHE_CHAINS;
 
 /// Maximum number of individual Adapters per single-chain product (see
 /// `SingleChainProductDetails::adapters`) — a flat list, unlike
 /// `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER`'s per-MultichainAdapter nesting,
 /// since a single-chain product has no MultichainAdapter wrapper at all.
 /// Same bound as `MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER` — no reason to differ.
-pub const MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT: u32 = 20;
+pub const MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT: u32 = 10;
 
 /// Maximum number of collateral NFTs per (OffchainSource) Adapter. Scoped
 /// per-adapter since a product can mix multiple offchain sources.
 pub const MAX_COLLATERALS: u32 = 10;
+
+/// Maximum number of requests that can be approved into a single
+/// (product_id, settlement_id) cycle — bounds both
+/// `pallet_tranche_investments`'s `record_investment_approval` batch input and
+/// `pallet_tranche_tx_registry`'s `record_settlement_tx` `RequestsApproved`
+/// attestation batch (the two pallets track the same settlement cycle
+/// independently — see `pallet_tranche_tx_registry::RequestId`'s doc comment
+/// for why tx-registry has no hard dependency on tranche-investments). Hosted
+/// here, in the common dependency both pallets already share, rather than in
+/// either sibling, so there's exactly one definition instead of two
+/// independently-maintained copies that happen to agree. No equivalent bound
+/// exists elsewhere in this pallet family — sized generously since it caps
+/// "investors settled together in one cycle", not a per-product structural
+/// count like `MAX_ALLOCATIONS`.
+pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
 
 // ---------------------------------------------------------------------------
 // VaultId — tranche identity
@@ -420,7 +452,7 @@ pub enum SettlementMode {
 /// chain's own highest priority. Used only within `MultichainProductDetails::tranches`
 /// (`SingleChainProductDetails::tranches` uses this same underlying shape
 /// directly, unwrapped, since it's already exactly one chain).
-pub type ChainTranches = BoundedVec<Tranche, ConstU32<MAX_TRANCHES>>;
+pub type ChainTranches = BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>;
 
 /// Generic over `AccountId` (via `SourceType`, see its doc comment) — unlike the
 /// old design, this pallet now stores adapter `borrower`s directly rather than
@@ -462,7 +494,11 @@ pub struct MultichainProductDetails<AccountId> {
 	/// Hub included: a Hub-chain entry is required if (and only if) the
 	/// product has a Hub-deployed vault, same as any Spoke chain. Independent
 	/// per product — two products sharing a chain each bind their own
-	/// TrancheManager instance there.
+	/// TrancheManager instance there. `set_multichain_tranche_managers`
+	/// enforces that every key here already has at least one tranche on that
+	/// chain (`Error::TrancheManagerChainHasNoTranche` otherwise) — this map
+	/// can never have more entries than `tranches` has chain groups, hence
+	/// reusing `MAX_TRANCHE_CHAINS` as this map's own bound.
 	pub multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
 }
 

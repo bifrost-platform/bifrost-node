@@ -4,11 +4,12 @@
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::AddressMapping;
-use pallet_tranche_system::{ProductId, ProductInspect, VaultId};
+use pallet_tranche_system::{
+	ProductId, ProductInspect, VaultId, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHE_CHAINS,
+};
 use pallet_tranche_tx_registry::{
 	BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening,
 	RequestStep, SettlementStep, TxRecord, WhitelistStep, MAX_SETTLEMENT_REQUESTS,
-	MAX_SPOKE_CHAINS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, Get, H160, H256, U256};
@@ -1447,8 +1448,9 @@ fn decode_request_opening(
 fn decode_request_adapter_chains(
 	step: RequestStep,
 	adapter_chain_ids: &[u64],
-) -> EvmResult<Option<BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_SPOKE_CHAINS>>>>
-{
+) -> EvmResult<
+	Option<BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
+> {
 	match step {
 		RequestStep::RequestQueued => {
 			let bounded = BoundedVec::try_from(adapter_chain_ids.to_vec())
@@ -1470,9 +1472,20 @@ fn decode_request_adapter_chains(
 /// RequestsApproved`, settlement-wide like `Triggered` but with no chain sets of
 /// its own — see `decode_settlement_request_ids`), matching
 /// `pallet_tranche_tx_registry::record_settlement_tx`'s own parameter shapes.
-type BoundedChainIds = BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_SPOKE_CHAINS>>;
-type DecodedSpokeChains =
-	(Option<pallet_tranche_tx_registry::ChainId>, Option<BoundedChainIds>, Option<BoundedChainIds>);
+/// The two chain sets carry different bounds — `collect_response_chain_ids` is
+/// an Adapter-chain concept (`MAX_MULTICHAIN_ADAPTERS`), `finalize_chain_ids` is
+/// a tranche/vault-chain concept (`MAX_TRANCHE_CHAINS`) — see
+/// `SettlementCollectResponseChains`'/`SettlementFinalizeChains`'s own doc
+/// comments in the pallet for why these aren't the same quantity.
+type BoundedCollectResponseChainIds =
+	BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>;
+type BoundedFinalizeChainIds =
+	BoundedVec<pallet_tranche_tx_registry::ChainId, ConstU32<MAX_TRANCHE_CHAINS>>;
+type DecodedSpokeChains = (
+	Option<pallet_tranche_tx_registry::ChainId>,
+	Option<BoundedCollectResponseChainIds>,
+	Option<BoundedFinalizeChainIds>,
+);
 
 /// Translates `record_settlement_tx`'s flat, sentinel-gated calldata into the
 /// pallet's `Option<ChainId>`/`Option<BoundedVec<..>>` triple. Three cases:

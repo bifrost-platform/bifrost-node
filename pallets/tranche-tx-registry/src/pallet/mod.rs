@@ -4,9 +4,12 @@ use crate::{
 	migrations, BridgeStatus, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
 	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId,
 	SettlementStep, TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep,
-	MAX_SETTLEMENT_REQUESTS, MAX_SPOKE_CHAINS,
+	MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{AdapterInspect, ProductInspect, VaultId, VaultInspect};
+use pallet_tranche_system::{
+	AdapterInspect, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHE_CHAINS,
+};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -110,7 +113,7 @@ pub mod pallet {
 		/// `RequestQueued` instead).
 		UnexpectedRequestAdapterChains,
 		/// A request's `RequestAdapterChains` can't hold any more distinct chains —
-		/// bounded by `MAX_SPOKE_CHAINS`. Surfaced both by `RequestQueued`'s own
+		/// bounded by `MAX_MULTICHAIN_ADAPTERS`. Surfaced both by `RequestQueued`'s own
 		/// declared `adapter_chain_ids` and by `AdapterBridgeExecuted`/`AdapterApplied`
 		/// self-declaring a not-yet-seen chain (see `Pallet::ensure_adapter_chain_declared`).
 		TooManyAdapterChains,
@@ -237,7 +240,7 @@ pub mod pallet {
 			product_id: ProductId,
 			request_id: RequestId,
 			opening: Option<RequestOpening>,
-			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
 			/// `Some` iff `step` was a Bridge-phase step (`RequestBridgeExecuted`/
 			/// `AdapterBridgeExecuted`) — the attempt's outcome, mirroring what was
 			/// just appended to the relevant `bridge_attempts` list.
@@ -254,8 +257,9 @@ pub mod pallet {
 			product_id: ProductId,
 			settlement_id: SettlementId,
 			spoke_chain_id: Option<ChainId>,
-			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
-			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			collect_response_chain_ids:
+				Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
+			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
 			/// `Some` iff `step == SettlementStep::RequestsApproved` — every `request_id`
 			/// this call recorded evidence for, in the order supplied.
 			request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
@@ -362,7 +366,7 @@ pub mod pallet {
 		ProductId,
 		Blake2_128Concat,
 		RequestId,
-		BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>,
+		BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>,
 	>;
 
 	#[pallet::storage]
@@ -510,7 +514,7 @@ pub mod pallet {
 		ProductId,
 		Blake2_128Concat,
 		SettlementId,
-		BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>,
+		BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>,
 	>;
 
 	#[pallet::storage]
@@ -533,7 +537,7 @@ pub mod pallet {
 		ProductId,
 		Blake2_128Concat,
 		SettlementId,
-		BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>,
+		BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>,
 	>;
 
 	#[pallet::storage]
@@ -691,7 +695,7 @@ pub mod pallet {
 			product_id: ProductId,
 			request_id: RequestId,
 			opening: Option<RequestOpening>,
-			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
@@ -924,8 +928,10 @@ pub mod pallet {
 			product_id: ProductId,
 			settlement_id: SettlementId,
 			spoke_chain_id: Option<ChainId>,
-			collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
-			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_SPOKE_CHAINS>>>,
+			collect_response_chain_ids: Option<
+				BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>,
+			>,
+			finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
 			request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 			step: SettlementStep,
 			chain_id: ChainId,
