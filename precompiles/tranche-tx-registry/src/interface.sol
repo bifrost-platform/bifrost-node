@@ -30,13 +30,19 @@ pragma solidity >=0.8.0;
  *    Bridge-attempt-history/applied_tx (or Bridge-attempt-history/queued_tx) pair — see
  *    BridgeAttempt's own dev notes for why the Bridge half is a full attempt history rather
  *    than a single tx — except when an Adapter leg's chain is
- *    the same chain as the origin vault, or Hub itself: that chain's allocation is fulfilled
- *    synchronously (no Bridge phase at all — the Adapter Contract call is local), so only
- *    applied_tx is ever set for it. `adapter_chain_ids` — which chains need an Adapter leg —
- *    is normally declared at RequestQueued, once the capital has genuinely arrived at the
- *    Valuation Contract (never at Requested itself), but a self-fulfilling chain's
- *    AdapterApplied evidence can be recorded before RequestQueued ever runs (its Adapter
- *    Contract call happens locally, in the same tx as — and possibly logged before — the
+ *    Hub itself, or the request's own origin vault chain for a Redeem specifically: that
+ *    allocation is fulfilled synchronously (no Bridge phase at all — the Adapter Contract
+ *    call is local), so only applied_tx is ever set for it. A Redeem collects its share out
+ *    of the origin chain's own Adapter at request time, before anything reaches the Hub, so
+ *    it never needs a Bridge phase there either way. A Deposit's Adapter leg on a Spoke chain
+ *    always needs a real Bridge phase instead, even one that happens to be the origin vault's
+ *    own chain — a Deposit's allocation decision is only made once capital reaches the
+ *    Valuation Contract, so unlike a Redeem it can't be pre-applied locally at the origin
+ *    chain (2026-08-21 change — see request-flow.md's changelog). `adapter_chain_ids` — which
+ *    chains need an Adapter leg — is normally declared at RequestQueued, once the capital has
+ *    genuinely arrived at the Valuation Contract (never at Requested itself), but a
+ *    self-fulfilling chain's AdapterApplied evidence can be recorded before RequestQueued ever
+ *    runs (its Adapter Contract call happens locally, in the same tx as — and possibly logged before — the
  *    domain event that would otherwise declare it); record_request_tx accepts
  *    AdapterBridgeExecuted/AdapterApplied calls in whatever order the recorder actually
  *    observed the underlying events, self-declaring a not-yet-seen chain rather than requiring
@@ -179,18 +185,22 @@ interface TrancheTxRegistry {
     }
 
     /// @dev One chain's Adapter leg. `steps` is `[AdapterBridgeExecuted,
-    ///      AdapterApplied]` (length 2) for a genuinely remote chain — this leg is
-    ///      done iff `steps[1].tx.recorded_at != 0`. For a chain that's the same as
-    ///      the request's own origin vault chain, or Hub itself, the allocation is
+    ///      AdapterApplied]` (length 2) for a Deposit's Adapter leg on a Spoke chain —
+    ///      even one that happens to be the request's own origin vault chain, since a
+    ///      Deposit's allocation is only decided once capital reaches the Hub, so even
+    ///      the origin chain's own share routes back out over a real Bridge phase —
+    ///      this leg is done iff `steps[1].tx.recorded_at != 0`. For Hub itself (any
+    ///      order type), or for a Redeem whose Adapter chain is the origin vault's own
+    ///      chain (that share is collected out of the same chain's own Adapter at
+    ///      request time, before anything reaches the Hub), the allocation is
     ///      fulfilled synchronously (no Bridge phase at all — see
     ///      record_request_tx's dev notes), so `steps` is just `[AdapterApplied]`
     ///      (length 1) instead; this leg is done iff `steps[0].tx.recorded_at != 0`.
     ///      Always check `steps.length` before indexing — it is NOT fixed the way
     ///      SettlementTxStep-family arrays with a truly constant shape are.
     /// @param chain_id The chain this leg is for
-    /// @param steps    `[AdapterBridgeExecuted, AdapterApplied]` (remote chain) or
-    ///                 `[AdapterApplied]` (self-fulfilling chain — origin vault's own
-    ///                 chain, or Hub)
+    /// @param steps    `[AdapterBridgeExecuted, AdapterApplied]` (Deposit, Spoke chain) or
+    ///                 `[AdapterApplied]` (Hub, or a Redeem's own origin chain — self-fulfilling)
     struct AdapterLeg {
         uint64 chain_id;
         RequestTxStep[] steps;
@@ -464,10 +474,10 @@ interface TrancheTxRegistry {
     ///      but carrying every attempt observed for that leg rather than just the one
     ///      (if any) that landed in AdapterLeg.steps. Empty `attempts` means either no
     ///      attempt has been observed yet, or this chain self-fulfills synchronously
-    ///      (no Bridge phase at all — see AdapterLeg's own dev notes); the two cases
-    ///      aren't distinguishable from this struct alone, same as `AdapterLeg.steps`
-    ///      already can't distinguish "empty because self-fulfilling" without
-    ///      cross-referencing which chain it is.
+    ///      (Hub itself, or a Redeem's own origin chain — no Bridge phase at all, see
+    ///      AdapterLeg's own dev notes); the two cases aren't distinguishable from this
+    ///      struct alone, same as `AdapterLeg.steps` already can't distinguish "empty
+    ///      because self-fulfilling" without cross-referencing the chain and order type.
     /// @param chain_id  The chain this leg is for
     /// @param attempts  Every attempt observed for this chain's Adapter leg, in order
     struct ChainBridgeAttempts {
@@ -598,15 +608,20 @@ interface TrancheTxRegistry {
      *      RequestQueued means the request needs no further Adapter leg beyond whatever's
      *      already self-declared (see below); if none are, it's immediately RequestCompleted.
      *      Each Adapter chain needs an AdapterApplied call, identified by
-     *      `attestation.chain_id` — preceded by AdapterBridgeExecuted for a genuinely remote
-     *      chain, but not for a chain that's the same as the origin vault's own chain or Hub
-     *      itself: that allocation is fulfilled synchronously (no Bridge phase at all), so
-     *      AdapterApplied alone is valid for it, and calling AdapterBridgeExecuted for it is
-     *      simply unnecessary (not rejected — it just never happens in practice). A chain
-     *      does NOT need to already appear in a prior RequestQueued call's
+     *      `attestation.chain_id` — preceded by AdapterBridgeExecuted for a Deposit's Adapter
+     *      leg on a Spoke chain, including one that's the same as the origin vault's own
+     *      chain (a Deposit's allocation is only decided once capital reaches the Hub, so
+     *      routing even the origin chain's own share back out still needs a real bridge
+     *      there), but not for Hub itself, nor for a Redeem whose Adapter chain is the origin
+     *      vault's own chain (that share is collected out of the same chain's own Adapter at
+     *      request time, before anything reaches the Hub): those two cases are fulfilled
+     *      synchronously (no Bridge phase at all), so AdapterApplied alone is valid for them,
+     *      and calling AdapterBridgeExecuted for either is simply unnecessary (not rejected —
+     *      it just never happens in practice). A chain does NOT need to already appear in a
+     *      prior RequestQueued call's
      *      `adapter_chain_ids` before its AdapterBridgeExecuted/AdapterApplied can be
-     *      recorded — this pallet self-declares a not-yet-seen chain on first touch, since a
-     *      self-fulfilling chain's AdapterApplied evidence can arrive before RequestQueued
+     *      recorded — this pallet self-declares a not-yet-seen chain on first touch, since
+     *      a self-fulfilling chain's AdapterApplied evidence can arrive before RequestQueued
      *      ever runs (record_request_tx calls only need to follow the order the recorder
      *      actually observed the underlying events, not this pipeline's own conceptual
      *      order). `step == Requested` must not be called twice for the same request_id, and
@@ -1096,17 +1111,20 @@ interface TrancheTxRegistry {
      *      get_settlement's `steps` arrays, so check `request_steps.length` (1 vs 2 vs 3)
      *      to tell which case this request is, and each present entry's own
      *      `tx.recorded_at` to tell whether it's landed yet. `adapter_legs[i].steps` is
-     *      `[AdapterBridgeExecuted, AdapterApplied]` (length 2) for a genuinely remote
-     *      chain, but just `[AdapterApplied]` (length 1) for a chain that's the same as
-     *      the origin vault's own chain, or this product's own local chain — same "absent
-     *      means not applicable" convention as request_steps above, since such a chain
-     *      never gets a Bridge phase at all (fulfilled synchronously — see
+     *      `[AdapterBridgeExecuted, AdapterApplied]` (length 2) for a Deposit's Adapter leg
+     *      on a Spoke chain — including one that's the same as the origin vault's own chain,
+     *      since a Deposit's allocation is only decided once capital reaches the Hub — but
+     *      just `[AdapterApplied]` (length 1) for this product's own local chain (Hub, any
+     *      order type), or for a Redeem whose Adapter chain is the origin vault's own chain
+     *      (collected out of that chain's own Adapter at request time, before anything
+     *      reaches the Hub) — same "absent means not applicable" convention as request_steps
+     *      above, since neither ever gets a Bridge phase (fulfilled synchronously — see
      *      record_request_tx's dev notes), not merely a pending one. `adapter_legs` itself
      *      is always empty for a SingleChain product — its Adapters are colocated too, so
      *      there's no leg to track at all. Check `adapter_legs[i].steps.length` (1 vs 2)
      *      the same way request_steps.length is checked. `RequestAdapterChains`' own
      *      order (and so `adapter_legs`' order) is normally the order declared at
-     *      RequestQueued, but a self-fulfilling chain (recorded before RequestQueued
+     *      RequestQueued, but a self-fulfilling entry (recorded before RequestQueued
      *      ever ran) appears in whatever order it was first touched instead;
      *      `adapter_legs` itself is empty if none were declared, yet or ever.
      *      `status` only ever takes `Requested` (`RequestQueued` not yet reached, or some
@@ -1154,8 +1172,9 @@ interface TrancheTxRegistry {
      *      single attempt that succeeded (if any). Empty for a Hub-vault or
      *      SingleChain-product request (no Inbound leg at all), or simply not yet
      *      attempted. `adapter_bridge_attempts` is the same idea per Adapter leg, parallel
-     *      to `adapter_legs` (same chain order); a self-fulfilling chain's entry is always
-     *      empty (no Bridge phase at all for it — see AdapterLeg's own dev notes).
+     *      to `adapter_legs` (same chain order); a self-fulfilling entry (Hub, or a Redeem's
+     *      own origin chain) is always empty (no Bridge phase at all for it — see
+     *      AdapterLeg's own dev notes).
      * @param product_id The product the request belongs to
      * @param request_id The request to look up
      * @return info           Investor/vault/amount/order_type, unchanged since Requested
