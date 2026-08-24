@@ -21,7 +21,7 @@ use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(5);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -52,7 +52,9 @@ pub mod pallet {
 	}
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_timestamp::Config<Moment = u64> {
+	pub trait Config:
+		frame_system::Config + pallet_timestamp::Config<Moment = u64> + pallet_evm::Config
+	{
 		/// Only accepted origin for every extrinsic in this pallet
 		/// (`create_product`, `set_tranche`, `set_adapters`,
 		/// `set_multichain_adapters`) — none of them can be called via a plain
@@ -316,17 +318,18 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV4` alone: each `VersionedMigration`
+			// Chained rather than just `MigrateToV5` alone: each `VersionedMigration`
 			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs all four, back to back, in the
-			// same upgrade), already at v1 (skips straight to v2 then v3 then v4 — the
-			// live testbed case, see `migrations::v2`'s doc comment for why v1 alone
-			// didn't get every chain to v2 on its own), or already at v3 (skips straight
-			// to v4).
+			// whether a given chain is still at v0 (runs all five, back to back, in the
+			// same upgrade), already at v1 (skips straight to v2 then v3 then v4 then v5 —
+			// the live testbed case, see `migrations::v2`'s doc comment for why v1 alone
+			// didn't get every chain to v2 on its own), or already at v4 (skips straight
+			// to v5).
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v4::MigrateToV4::<T>::on_runtime_upgrade())
+				.saturating_add(migrations::v5::MigrateToV5::<T>::on_runtime_upgrade())
 		}
 	}
 

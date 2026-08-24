@@ -305,7 +305,9 @@ pub enum SourceType<AccountId> {
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
 pub struct CollateralAsset {
-	/// ERC-721 / ERC-1155 contract address on Bifrost EVM.
+	/// The EVM chain `nft_contract` is deployed on — not necessarily Bifrost.
+	pub chain_id: u64,
+	/// ERC-721 / ERC-1155 contract address on `chain_id`.
 	pub nft_contract: H160,
 	/// Token ID identifying the specific NFT.
 	pub nft_token_id: U256,

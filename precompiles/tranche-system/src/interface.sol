@@ -166,9 +166,12 @@ interface TrancheSystem {
         Update
     }
 
-    /// @param nft_contract ERC-721 contract address of the collateral
+    /// @param chain_id     The EVM chain nft_contract is deployed on — not
+    ///                     necessarily Bifrost itself (2026-08-24)
+    /// @param nft_contract ERC-721 contract address of the collateral, on chain_id
     /// @param nft_token_id Token ID of the collateral NFT
     struct CollateralInput {
+        uint64 chain_id;
         address nft_contract;
         uint256 nft_token_id;
     }

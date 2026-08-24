@@ -45,6 +45,11 @@
                     {
                         "components": [
                             {
+                                "internalType": "uint64",
+                                "name": "chain_id",
+                                "type": "uint64"
+                            },
+                            {
                                 "internalType": "address",
                                 "name": "nft_contract",
                                 "type": "address"
@@ -119,6 +124,11 @@
                             },
                             {
                                 "components": [
+                                    {
+                                        "internalType": "uint64",
+                                        "name": "chain_id",
+                                        "type": "uint64"
+                                    },
                                     {
                                         "internalType": "address",
                                         "name": "nft_contract",
@@ -493,6 +503,11 @@
                             {
                                 "components": [
                                     {
+                                        "internalType": "uint64",
+                                        "name": "chain_id",
+                                        "type": "uint64"
+                                    },
+                                    {
                                         "internalType": "address",
                                         "name": "nft_contract",
                                         "type": "address"
@@ -675,6 +690,11 @@
                     {
                         "components": [
                             {
+                                "internalType": "uint64",
+                                "name": "chain_id",
+                                "type": "uint64"
+                            },
+                            {
                                 "internalType": "address",
                                 "name": "nft_contract",
                                 "type": "address"
@@ -746,6 +766,11 @@
                             },
                             {
                                 "components": [
+                                    {
+                                        "internalType": "uint64",
+                                        "name": "chain_id",
+                                        "type": "uint64"
+                                    },
                                     {
                                         "internalType": "address",
                                         "name": "nft_contract",
@@ -845,6 +870,11 @@
                             },
                             {
                                 "components": [
+                                    {
+                                        "internalType": "uint64",
+                                        "name": "chain_id",
+                                        "type": "uint64"
+                                    },
                                     {
                                         "internalType": "address",
                                         "name": "nft_contract",
@@ -1081,6 +1111,11 @@
                     {
                         "components": [
                             {
+                                "internalType": "uint64",
+                                "name": "chain_id",
+                                "type": "uint64"
+                            },
+                            {
                                 "internalType": "address",
                                 "name": "nft_contract",
                                 "type": "address"
@@ -1154,6 +1189,11 @@
                             },
                             {
                                 "components": [
+                                    {
+                                        "internalType": "uint64",
+                                        "name": "chain_id",
+                                        "type": "uint64"
+                                    },
                                     {
                                         "internalType": "address",
                                         "name": "nft_contract",
