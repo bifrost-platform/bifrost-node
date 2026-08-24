@@ -2,12 +2,13 @@ mod impls;
 
 use crate::{
 	migrations, BridgeStatus, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
-	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry, SettlementId,
-	SettlementStep, TxRecord, WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep,
+	RequestEntry, RequestExtraV2, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
+	SettlementExtraV2, SettlementFlowExtension, SettlementId, SettlementStep, TxRecord, WeightInfo,
+	WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
 	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
-	AdapterInspect, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
+	AdapterInspect, FlowVersion, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
 	MAX_TRANCHE_CHAINS,
 };
 
@@ -23,7 +24,7 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -32,13 +33,15 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV2` alone: each `VersionedMigration`
+			// Chained rather than just `MigrateToV3` alone: each `VersionedMigration`
 			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs both, back to back, in the same
-			// upgrade) or already at v1 (skips straight to v2 — the live testbed case) —
-			// same pattern as `pallet_tranche_system::pallet::Hooks::on_runtime_upgrade`.
+			// whether a given chain is still at v0 (runs all three, back to back, in the
+			// same upgrade) or already at v2 (skips straight to v3 — the live testbed
+			// case) — same pattern as
+			// `pallet_tranche_system::pallet::Hooks::on_runtime_upgrade`.
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
+				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
 		}
 	}
 
@@ -127,9 +130,29 @@ pub mod pallet {
 		RequestStepOutOfOrder,
 		/// This step has already been recorded for this request.
 		RequestStepAlreadyRecorded,
-		/// `step` must be one of the five recordable values — never
+		/// `step` must be one of the six recordable values — never
 		/// `RequestStep::None`/`RequestCompleted`, both read-only sentinels.
 		InvalidRequestStep,
+		/// No `FlowVersion` has been registered yet for this `product_id` — see
+		/// `pallet_tranche_system::RequestFlowVersion`'s storage doc comment
+		/// (that pallet owns the storage; this one only reads it, via
+		/// `T::Products::request_flow_version`). `record_request_tx` only
+		/// needs this looked up for `step == RequestStep::Extended`; every
+		/// other step is identical across every `FlowVersion`.
+		FlowVersionNotSet,
+		/// `step == RequestStep::Extended` was recorded for a product whose
+		/// registered `FlowVersion` has no extended steps of its own
+		/// (`FlowVersion::V1`) — its whole pipeline is the six core
+		/// `RequestStep` values.
+		WrongFlowVersion,
+		/// `extra` must be `None` for every step other than
+		/// `RequestStep::Extended`.
+		UnexpectedRequestExtra,
+		/// `extra` must be `Some` when `step == RequestStep::Extended`.
+		RequestExtraRequired,
+		/// `extra` failed to decode as the calling product's registered
+		/// `FlowVersion`'s extension payload.
+		BadRequestExtra,
 		/// `step` must be one of the eight recordable values — never
 		/// `SettlementStep::Queued`/`Settled`, both read-only sentinels.
 		InvalidSettlementStep,
@@ -163,6 +186,30 @@ pub mod pallet {
 		SettlementStepOutOfOrder,
 		/// This leg step has already been recorded for this chain.
 		SettlementStepAlreadyRecorded,
+		/// No `FlowVersion` has been registered yet for this `product_id`'s
+		/// settlement pipeline — see
+		/// `pallet_tranche_system::SettlementFlowVersion`'s storage doc
+		/// comment. Independent of `FlowVersionNotSet` — each pipeline
+		/// versions separately.
+		SettlementFlowVersionNotSet,
+		/// `step == SettlementStep::Extended` was recorded for a product whose
+		/// registered settlement `FlowVersion` has no extended steps of its own
+		/// (`FlowVersion::V1`) — its whole pipeline is the nine core
+		/// `SettlementStep` values.
+		WrongSettlementFlowVersion,
+		/// `extra` must be `None` for every step other than
+		/// `SettlementStep::Extended`.
+		UnexpectedSettlementExtra,
+		/// `extra` must be `Some` when `step == SettlementStep::Extended`.
+		SettlementExtraRequired,
+		/// `extra` failed to decode as the calling product's registered
+		/// settlement `FlowVersion`'s extension payload.
+		BadSettlementExtra,
+		/// `set_tx_recorder` was called with the new value already equal to
+		/// what's currently stored — rejected rather than silently accepted
+		/// as a no-op, since a genuine call is meant to be a deliberate,
+		/// auditable change; a same-value call is never that.
+		NoWritingSameValue,
 		/// A receive has already been recorded for this (investor, vault, tx_hash).
 		ReceiveAlreadyRecorded,
 		/// `tx_hash` must not be the zero hash — a zero `tx_hash` can never be a
@@ -248,6 +295,10 @@ pub mod pallet {
 			step: RequestStep,
 			chain_id: ChainId,
 			tx_hash: H256,
+			/// `Some` iff `step == RequestStep::Extended` — the raw bytes this
+			/// call decoded into the calling product's `FlowVersion` extension
+			/// payload, echoed verbatim. `None` for every other step.
+			extra: Option<BoundedVec<u8, ConstU32<MAX_REQUEST_EXTRA_LEN>>>,
 		},
 		/// One tx in a settlement's pipeline was recorded — either the single
 		/// Trigger tx, one bridge/hooks half of a per-chain
@@ -270,6 +321,10 @@ pub mod pallet {
 			step: SettlementStep,
 			chain_id: ChainId,
 			tx_hash: H256,
+			/// `Some` iff `step == SettlementStep::Extended` — the raw bytes this
+			/// call decoded into the calling product's settlement `FlowVersion`
+			/// extension payload, echoed verbatim. `None` for every other step.
+			extra: Option<BoundedVec<u8, ConstU32<MAX_SETTLEMENT_EXTRA_LEN>>>,
 		},
 		/// A receive() tx was recorded.
 		ReceiveTxRecorded {
@@ -497,6 +552,22 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
+	/// A settlement's settlement-wide `FlowVersion` extension state — see
+	/// `SettlementFlowExtension`'s doc comment. Keyed by `(product_id,
+	/// settlement_id)`, same as `SettlementTriggers`. Absent means "no
+	/// settlement-wide extension recorded" — unlike `RequestEntry::extension`,
+	/// this needs no backfill migration when introduced (see
+	/// `SettlementFlowExtension`'s doc comment for why).
+	pub type SettlementExtension<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
+		SettlementFlowExtension<BlockNumberFor<T>>,
+	>;
+
+	#[pallet::storage]
 	/// The chains registered for a settlement's Collect/Response legs at Trigger
 	/// time (those with a registered Adapter, excluding Hub itself — an Adapter
 	/// on Hub is queried locally, no Bridge&Call leg needed), in the order the
@@ -660,6 +731,7 @@ pub mod pallet {
 			ensure_root(origin)?;
 
 			let old = TxRecorder::<T>::get();
+			ensure!(old.as_ref() != Some(&recorder), Error::<T>::NoWritingSameValue);
 			TxRecorder::<T>::put(&recorder);
 
 			Self::deposit_event(Event::TxRecorderSet { old, new: recorder });
@@ -688,8 +760,16 @@ pub mod pallet {
 		/// Contract call happens locally, in the same tx as (and possibly logged
 		/// before) the domain event that would otherwise open/advance this request —
 		/// see `RequestStep`'s doc comment and `Pallet::ensure_adapter_chain_declared`.
+		///
+		/// `extra` MUST be `Some` iff `step == RequestStep::Extended`, `None`
+		/// otherwise — its bytes are decoded according to `product_id`'s
+		/// registered `RequestFlowVersion`, never interpreted by this step's
+		/// own dispatch logic directly. See `RequestStep::Extended`'s doc
+		/// comment for the full mechanism.
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx())]
+		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx(
+			extra.as_ref().map_or(0, |bytes| bytes.len() as u32)
+		))]
 		pub fn record_request_tx(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -700,9 +780,13 @@ pub mod pallet {
 			chain_id: ChainId,
 			tx_hash: H256,
 			bridge_status: Option<BridgeStatus>,
+			extra: Option<BoundedVec<u8, ConstU32<MAX_REQUEST_EXTRA_LEN>>>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			if step != RequestStep::Extended {
+				ensure!(extra.is_none(), Error::<T>::UnexpectedRequestExtra);
+			}
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
@@ -740,6 +824,7 @@ pub mod pallet {
 							queued_tx: None,
 							settlement_id: None,
 							approved_tx: None,
+							extension: Default::default(),
 						},
 					);
 					InvestorActiveRequests::<T>::mutate(opening.investor, |requests| {
@@ -849,6 +934,41 @@ pub mod pallet {
 					entry.applied_tx = Some(tx);
 					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
 				},
+				RequestStep::Extended => {
+					// The five core steps above are the only ones that ever gave
+					// `opening`/`adapter_chain_ids`/`bridge_status` meaning —
+					// `Extended`'s own payload lives entirely in `extra`, decoded
+					// below according to `product_id`'s registered `FlowVersion`.
+					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
+					ensure!(
+						adapter_chain_ids.is_none(),
+						Error::<T>::UnexpectedRequestAdapterChains
+					);
+					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+					let flow_version = T::Products::request_flow_version(product_id)
+						.ok_or(Error::<T>::FlowVersionNotSet)?;
+					let extra_bytes = extra.clone().ok_or(Error::<T>::RequestExtraRequired)?;
+					ensure!(
+						RequestEntries::<T>::contains_key(product_id, request_id),
+						Error::<T>::RequestNotOpened
+					);
+					match flow_version {
+						// `V1`'s whole pipeline is the six core `RequestStep` values —
+						// it never has anything to route through `Extended`.
+						FlowVersion::V1 => return Err(Error::<T>::WrongFlowVersion.into()),
+						FlowVersion::V2 => {
+							let request_extra = RequestExtraV2::decode(&mut &extra_bytes[..])
+								.map_err(|_| Error::<T>::BadRequestExtra)?;
+							// No sub-steps exist yet — see `RequestSubStepV2`'s doc
+							// comment. Real arms go here, each fetching+mutating
+							// `RequestEntries`, updating the specific
+							// `RequestFlowExtensionV2` field(s) that sub-step owns,
+							// then inserting the entry back — same pattern the six
+							// core `RequestStep` arms above already use.
+							match request_extra.step {}
+						},
+					}
+				},
 				RequestStep::None | RequestStep::RequestCompleted => {
 					return Err(Error::<T>::InvalidRequestStep.into());
 				},
@@ -863,6 +983,7 @@ pub mod pallet {
 				step,
 				chain_id,
 				tx_hash,
+				extra,
 			});
 			Ok(())
 		}
@@ -919,9 +1040,16 @@ pub mod pallet {
 		/// need a Collect/Response leg). `step == SettlementStep::RequestsApproved` tries to
 		/// close each request in the batch individually right after linking it in,
 		/// same race-handling rationale as `SettlementStep::RequestsApproved`'s doc comment.
+		/// `extra` MUST be `Some` iff `step == SettlementStep::Extended`, `None`
+		/// otherwise — its bytes are decoded according to `product_id`'s
+		/// registered `SettlementFlowVersion`, routed by whether
+		/// `spoke_chain_id` is `Some` (chain-scoped) or `None`
+		/// (settlement-wide). See `SettlementStep::Extended`'s doc comment for
+		/// the full mechanism.
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx(
-			request_ids.as_ref().map_or(0, |ids| ids.len() as u32)
+			request_ids.as_ref().map_or(0, |ids| ids.len() as u32),
+			extra.as_ref().map_or(0, |bytes| bytes.len() as u32),
 		))]
 		pub fn record_settlement_tx(
 			origin: OriginFor<T>,
@@ -937,9 +1065,13 @@ pub mod pallet {
 			chain_id: ChainId,
 			tx_hash: H256,
 			bridge_status: Option<BridgeStatus>,
+			extra: Option<BoundedVec<u8, ConstU32<MAX_SETTLEMENT_EXTRA_LEN>>>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			if step != SettlementStep::Extended {
+				ensure!(extra.is_none(), Error::<T>::UnexpectedSettlementExtra);
+			}
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
@@ -1015,6 +1147,38 @@ pub mod pallet {
 				// `SettlementStep::RequestsApproved`'s doc comment.
 				for request_id in approved_request_ids.iter() {
 					Self::try_close_request(product_id, settlement_id, *request_id);
+				}
+			} else if step == SettlementStep::Extended {
+				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+				ensure!(
+					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
+					Error::<T>::UnexpectedSpokeChainIds
+				);
+				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
+				ensure!(
+					SettlementTriggers::<T>::contains_key(product_id, settlement_id),
+					Error::<T>::SettlementNotTriggered
+				);
+				let flow_version = T::Products::settlement_flow_version(product_id)
+					.ok_or(Error::<T>::SettlementFlowVersionNotSet)?;
+				let extra_bytes = extra.clone().ok_or(Error::<T>::SettlementExtraRequired)?;
+				match flow_version {
+					// `V1`'s whole pipeline is the nine core `SettlementStep` values —
+					// it never has anything to route through `Extended`.
+					FlowVersion::V1 => return Err(Error::<T>::WrongSettlementFlowVersion.into()),
+					FlowVersion::V2 => {
+						let settlement_extra = SettlementExtraV2::decode(&mut &extra_bytes[..])
+							.map_err(|_| Error::<T>::BadSettlementExtra)?;
+						// No sub-steps exist yet — see `SettlementSubStepV2`'s doc
+						// comment. Real arms go here: match `spoke_chain_id` (as
+						// every other step here already does) to decide whether
+						// this sub-step updates `SettlementExtension`
+						// (settlement-wide, `None`) or the named chain's own
+						// `SettlementChainEntry::extension` (chain-scoped,
+						// `Some(_)`), then fetch/mutate/insert the relevant
+						// storage, same pattern the leg steps above use.
+						match settlement_extra.step {}
+					},
 				}
 			} else {
 				ensure!(
@@ -1104,7 +1268,8 @@ pub mod pallet {
 					SettlementStep::Queued
 					| SettlementStep::Triggered
 					| SettlementStep::RequestsApproved
-					| SettlementStep::Settled => {
+					| SettlementStep::Settled
+					| SettlementStep::Extended => {
 						return Err(Error::<T>::InvalidSettlementStep.into());
 					},
 				}
@@ -1131,6 +1296,7 @@ pub mod pallet {
 				step,
 				chain_id,
 				tx_hash,
+				extra,
 			});
 			Ok(())
 		}

@@ -1,6 +1,6 @@
 use crate::{
-	AdapterInspect, AdapterKey, ChainTranches, CrudAction, MultichainAdapterInfo, ProductDetails,
-	ProductId, ProductInspect, Tranche, TrancheType, VaultId, VaultInspect,
+	AdapterInspect, AdapterKey, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
+	ProductDetails, ProductId, ProductInspect, Tranche, TrancheType, VaultId, VaultInspect,
 };
 
 use super::pallet::*;
@@ -337,5 +337,13 @@ impl<T: Config> ProductInspect for Pallet<T> {
 			ProductDetails::Multichain(_) => None,
 			ProductDetails::SingleChain(product) => Some(product.chain_id),
 		}
+	}
+
+	fn request_flow_version(product_id: ProductId) -> Option<FlowVersion> {
+		RequestFlowVersion::<T>::get(product_id)
+	}
+
+	fn settlement_flow_version(product_id: ProductId) -> Option<FlowVersion> {
+		SettlementFlowVersion::<T>::get(product_id)
 	}
 }

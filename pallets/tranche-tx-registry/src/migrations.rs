@@ -124,6 +124,12 @@ pub mod v1 {
 						queued_tx: old.queued_tx,
 						settlement_id: None,
 						approved_tx: None,
+						// `extension` didn't exist at v0 either — same "genuinely correct,
+						// not a placeholder" reasoning as `v3::MigrateV2ToV3`'s own backfill
+						// (see that migration's doc comment): no entry from this era could
+						// have been opened under any `FlowVersion` other than `V1`, since
+						// that axis didn't exist yet.
+						extension: crate::RequestFlowExtension::V1,
 					},
 				);
 			}
@@ -321,6 +327,9 @@ pub mod v2 {
 						queued_tx: old.queued_tx,
 						settlement_id: old.settlement_id,
 						approved_tx: old.approved_tx,
+						// Same reasoning as `v1::MigrateV0ToV1`'s own backfill above — the
+						// `FlowVersion` axis didn't exist at v1 either.
+						extension: crate::RequestFlowExtension::V1,
 					},
 				);
 			}
@@ -359,6 +368,9 @@ pub mod v2 {
 						nav_received_tx: old.nav_received_tx,
 						finalize_bridge_attempts: attempts_from_tx(old.finalize_bridge_tx),
 						settle_applied_tx: old.settle_applied_tx,
+						// `extension` didn't exist at v1 either — same reasoning as
+						// `v4::MigrateV3ToV4`'s own backfill.
+						extension: crate::SettlementChainFlowExtension::V1,
 					},
 				);
 			}
@@ -411,6 +423,180 @@ pub mod v2 {
 		1,
 		2,
 		MigrateV1ToV2<T>,
+		Pallet<T>,
+		<T as frame_system::Config>::DbWeight,
+	>;
+}
+
+/// v2 -> v3: introduces this pallet's `FlowVersion`-scoped extension fields
+/// (see `lib.rs`'s "Flow versioning" section) for both the request and
+/// settlement pipelines at once — two backfills land in the same on-chain
+/// bump because both are needed before those fields are usable at all. The
+/// `FlowVersion` registry itself (`RequestFlowVersion`/`SettlementFlowVersion`)
+/// lives in pallet-tranche-system, not here — see that pallet's own `v4`
+/// migration for the corresponding backfill; this migration only concerns
+/// `RequestEntry`/`SettlementChainEntry`'s own storage shape.
+///
+/// 1. `RequestEntry` gains `extension: RequestFlowExtension<BlockNumber>`. Every
+///    pre-existing entry backfills `RequestFlowExtension::V1` — genuinely correct,
+///    not a placeholder: no entry could have been opened under any other
+///    `FlowVersion` before this upgrade, since no other version existed yet.
+/// 2. `SettlementChainEntry` gains `extension: SettlementChainFlowExtension<BlockNumber>`,
+///    backfilled with `SettlementChainFlowExtension::V1` for every pre-existing
+///    entry — same reasoning as (1). (`SettlementFlowExtension`, the
+///    settlement-*wide* counterpart, needs no such backfill — see its own doc
+///    comment for why.)
+pub mod v3 {
+	use super::*;
+	use crate::{RequestFlowExtension, SettlementChainFlowExtension};
+
+	/// `RequestEntry` as it existed under `STORAGE_VERSION::new(2)`, before
+	/// `extension` existed.
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		Eq,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
+	pub struct RequestEntryV2<BlockNumber> {
+		pub product_id: ProductId,
+		pub vault: VaultId,
+		pub investor: H160,
+		pub amount: U256,
+		pub order_type: OrderType,
+		pub request_tx: Option<TxRecord<BlockNumber>>,
+		pub bridge_attempts: BridgeAttempts<BlockNumber>,
+		pub queued_tx: Option<TxRecord<BlockNumber>>,
+		pub settlement_id: Option<SettlementId>,
+		pub approved_tx: Option<TxRecord<BlockNumber>>,
+	}
+
+	#[storage_alias]
+	type RequestEntries<T: Config> = StorageDoubleMap<
+		Pallet<T>,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		RequestId,
+		RequestEntryV2<BlockNumberFor<T>>,
+	>;
+
+	/// `SettlementChainEntry` as it existed under `STORAGE_VERSION::new(2)`,
+	/// before `extension` existed.
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		Eq,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+		Default,
+	)]
+	pub struct SettlementChainEntryV2<BlockNumber> {
+		pub collect_bridge_attempts: BridgeAttempts<BlockNumber>,
+		pub nav_reported_tx: Option<TxRecord<BlockNumber>>,
+		pub response_bridge_attempts: BridgeAttempts<BlockNumber>,
+		pub nav_received_tx: Option<TxRecord<BlockNumber>>,
+		pub finalize_bridge_attempts: BridgeAttempts<BlockNumber>,
+		pub settle_applied_tx: Option<TxRecord<BlockNumber>>,
+	}
+
+	#[storage_alias]
+	type SettlementChainEntries<T: Config> = StorageNMap<
+		Pallet<T>,
+		(
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, SettlementId>,
+			NMapKey<Blake2_128Concat, ChainId>,
+		),
+		SettlementChainEntryV2<BlockNumberFor<T>>,
+		ValueQuery,
+	>;
+
+	pub struct MigrateV2ToV3<T>(PhantomData<T>);
+
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV2ToV3<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let requests = RequestEntries::<T>::drain().collect::<sp_std::vec::Vec<_>>();
+			let requests_count = requests.len();
+			for (product_id, request_id, old) in requests {
+				crate::RequestEntries::<T>::insert(
+					product_id,
+					request_id,
+					RequestEntry {
+						product_id: old.product_id,
+						vault: old.vault,
+						investor: old.investor,
+						amount: old.amount,
+						order_type: old.order_type,
+						request_tx: old.request_tx,
+						bridge_attempts: old.bridge_attempts,
+						queued_tx: old.queued_tx,
+						settlement_id: old.settlement_id,
+						approved_tx: old.approved_tx,
+						extension: RequestFlowExtension::V1,
+					},
+				);
+			}
+			weight = weight.saturating_add(
+				T::DbWeight::get().reads_writes(requests_count as u64, requests_count as u64),
+			);
+			weight = weight.saturating_add(T::DbWeight::get().writes(requests_count as u64));
+
+			let settlement_chains =
+				SettlementChainEntries::<T>::drain().collect::<sp_std::vec::Vec<_>>();
+			let settlement_chains_count = settlement_chains.len();
+			for ((product_id, settlement_id, chain_id), old) in settlement_chains {
+				crate::SettlementChainEntries::<T>::insert(
+					(product_id, settlement_id, chain_id),
+					SettlementChainEntry {
+						collect_bridge_attempts: old.collect_bridge_attempts,
+						nav_reported_tx: old.nav_reported_tx,
+						response_bridge_attempts: old.response_bridge_attempts,
+						nav_received_tx: old.nav_received_tx,
+						finalize_bridge_attempts: old.finalize_bridge_attempts,
+						settle_applied_tx: old.settle_applied_tx,
+						extension: SettlementChainFlowExtension::V1,
+					},
+				);
+			}
+			weight = weight.saturating_add(
+				T::DbWeight::get()
+					.reads_writes(settlement_chains_count as u64, settlement_chains_count as u64),
+			);
+			weight =
+				weight.saturating_add(T::DbWeight::get().writes(settlement_chains_count as u64));
+
+			log!(
+				info,
+				"tranche-tx-registry v2->v3: backfilled extension=V1 for {} RequestEntries and {} SettlementChainEntries entries ✅",
+				requests_count,
+				settlement_chains_count,
+			);
+
+			weight
+		}
+	}
+
+	/// Gated `on_chain == 2 && in_code == 3`, and bumps the on-chain version itself —
+	/// wire this (not `MigrateV2ToV3` directly) into `Pallet::on_runtime_upgrade`,
+	/// chained after `v1::MigrateToV1`/`v2::MigrateToV2` so a chain still behind v2
+	/// runs all three in the same upgrade (see `Pallet::on_runtime_upgrade`'s own
+	/// doc comment).
+	pub type MigrateToV3<T> = VersionedMigration<
+		2,
+		3,
+		MigrateV2ToV3<T>,
 		Pallet<T>,
 		<T as frame_system::Config>::DbWeight,
 	>;

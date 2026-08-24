@@ -387,3 +387,53 @@ pub mod v3 {
 		<T as frame_system::Config>::DbWeight,
 	>;
 }
+
+/// v3 -> v4: introduces this pallet's `FlowVersion` axis (see `lib.rs`'s
+/// `FlowVersion` doc comment) — `RequestFlowVersion`/`SettlementFlowVersion`
+/// are backfilled with `FlowVersion::V1` for every product already registered
+/// as of this upgrade. Genuinely correct, not a placeholder: no product could
+/// have been registered under any other `FlowVersion` before this upgrade,
+/// since no other version existed yet. `create_product`/
+/// `create_single_chain_product` write both unconditionally from now on, so
+/// this migration only ever needs to run once, over whatever already existed
+/// at upgrade time — any product registered *after* this migration runs
+/// already gets both from those extrinsics directly.
+pub mod v4 {
+	use super::*;
+	use crate::FlowVersion;
+
+	pub struct MigrateV3ToV4<T>(PhantomData<T>);
+
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV3ToV4<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let product_ids: Vec<ProductId> = crate::Products::<T>::iter_keys().collect();
+			let product_ids_count = product_ids.len();
+			weight = weight.saturating_add(T::DbWeight::get().reads(product_ids_count as u64));
+			for product_id in product_ids {
+				crate::RequestFlowVersion::<T>::insert(product_id, FlowVersion::V1);
+				crate::SettlementFlowVersion::<T>::insert(product_id, FlowVersion::V1);
+			}
+			weight = weight.saturating_add(T::DbWeight::get().writes(product_ids_count as u64 * 2));
+
+			log!(
+				info,
+				"tranche-system v3->v4: backfilled request/settlement flow_version=V1 for {} products ✅",
+				product_ids_count,
+			);
+
+			weight
+		}
+	}
+
+	/// Gated `on_chain == 3 && in_code == 4`, and bumps the on-chain version itself —
+	/// wire this (not `MigrateV3ToV4` directly) into the pallet's own hook.
+	pub type MigrateToV4<T> = VersionedMigration<
+		3,
+		4,
+		MigrateV3ToV4<T>,
+		Pallet<T>,
+		<T as frame_system::Config>::DbWeight,
+	>;
+}
