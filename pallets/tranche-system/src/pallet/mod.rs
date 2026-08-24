@@ -1,12 +1,12 @@
 mod impls;
 
 use crate::{
-	migrations, AdapterInfo, AdapterKey, ChainTranches, CrudAction, MultichainAdapterInfo,
-	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
-	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT,
-	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS,
-	MAX_TRANCHE_MANAGERS,
+	migrations, AdapterInfo, AdapterKey, ChainTranches, CrudAction, FlowVersion,
+	MultichainAdapterInfo, MultichainProductDetails, ProductDetails, ProductId, SettlementMode,
+	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
+	ValuationInfo, VaultId, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
+	MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 
 use frame_support::{
@@ -21,7 +21,7 @@ use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -171,6 +171,14 @@ pub mod pallet {
 		/// comment). Register a tranche on that chain first (`set_tranche`),
 		/// then bind its TrancheManager.
 		TrancheManagerChainHasNoTranche,
+		/// `set_request_flow_version`/`set_settlement_flow_version` are stubbed
+		/// to always reject for now — no `FlowVersion` beyond `V1` has a real
+		/// pipeline defined yet (see `FlowVersion`'s own doc comment), so
+		/// there's nothing a genuine call to either could legitimately
+		/// register a product under. Both extrinsics exist (correctly
+		/// `ProductAdminOrigin`-gated, correctly shaped) so the call surface
+		/// is stable ahead of time; only their bodies are disabled.
+		FlowVersionChangeNotYetSupported,
 	}
 
 	// -----------------------------------------------------------------------
@@ -244,6 +252,28 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, ProductId, ProductDetails<T::AccountId>>;
 
 	#[pallet::storage]
+	/// `product_id`'s registered request-pipeline `FlowVersion` — written
+	/// unconditionally as `Some(FlowVersion::V1)` by `create_product`/
+	/// `create_single_chain_product` (never left unset for a registered
+	/// product), and, in principle, by `set_request_flow_version` — currently
+	/// stubbed to always fail (see that extrinsic's own doc comment), so this
+	/// storage never actually holds anything other than `V1` yet. `OptionQuery`
+	/// with no `Default` fallback: a product's flow version is meant to be an
+	/// explicit, auditable value written at a specific point (creation, or a
+	/// deliberate later change), never an implicit default a missing write
+	/// could silently fall back to.
+	pub type RequestFlowVersion<T: Config> =
+		StorageMap<_, Blake2_128Concat, ProductId, FlowVersion>;
+
+	#[pallet::storage]
+	/// `product_id`'s registered settlement-pipeline `FlowVersion` —
+	/// independent of `RequestFlowVersion` (each pipeline versions
+	/// separately, since a future flow change might only ever need to touch
+	/// one of the two). Same write/query conventions as `RequestFlowVersion`.
+	pub type SettlementFlowVersion<T: Config> =
+		StorageMap<_, Blake2_128Concat, ProductId, FlowVersion>;
+
+	#[pallet::storage]
 	/// Reverse index: which product a tranche's vault (chain_id, vault_address)
 	/// belongs to. Globally unique across all products — enforces that the same
 	/// vault can't be registered to two different products, and lets other
@@ -286,15 +316,17 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV3` alone: each `VersionedMigration`
+			// Chained rather than just `MigrateToV4` alone: each `VersionedMigration`
 			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs all three, back to back, in the
-			// same upgrade), already at v1 (skips straight to v2 then v3 — the live
-			// testbed case, see `migrations::v2`'s doc comment for why v1 alone didn't
-			// get every chain to v2 on its own), or already at v2 (skips straight to v3).
+			// whether a given chain is still at v0 (runs all four, back to back, in the
+			// same upgrade), already at v1 (skips straight to v2 then v3 then v4 — the
+			// live testbed case, see `migrations::v2`'s doc comment for why v1 alone
+			// didn't get every chain to v2 on its own), or already at v3 (skips straight
+			// to v4).
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
+				.saturating_add(migrations::v4::MigrateToV4::<T>::on_runtime_upgrade())
 		}
 	}
 
@@ -422,6 +454,12 @@ pub mod pallet {
 					multichain_tranche_managers,
 				}),
 			);
+			// Every product's request/settlement `FlowVersion` starts at `V1` —
+			// `set_request_flow_version`/`set_settlement_flow_version` are the
+			// eventual way to register something else, currently stubbed (see
+			// their own doc comments) since no other flow exists yet.
+			RequestFlowVersion::<T>::insert(product_id, FlowVersion::V1);
+			SettlementFlowVersion::<T>::insert(product_id, FlowVersion::V1);
 
 			Ok(())
 		}
@@ -564,6 +602,9 @@ pub mod pallet {
 					ledger,
 				}),
 			);
+			// Same reasoning as `create_product`'s own FlowVersion writes above.
+			RequestFlowVersion::<T>::insert(product_id, FlowVersion::V1);
+			SettlementFlowVersion::<T>::insert(product_id, FlowVersion::V1);
 
 			Ok(())
 		}
@@ -893,6 +934,53 @@ pub mod pallet {
 
 			Self::deposit_event(Event::MultichainTrancheManagersSet { product_id });
 			Ok(())
+		}
+
+		/// Register `product_id`'s request-pipeline `FlowVersion` as something
+		/// other than the `V1` it was created with. Origin must be
+		/// `ProductAdminOrigin` — same precompile-only gating as
+		/// `create_product`.
+		///
+		/// Stubbed to always reject with `Error::FlowVersionChangeNotYetSupported`
+		/// — no `FlowVersion` beyond `V1` has a real pipeline defined yet (see
+		/// `FlowVersion`'s own doc comment), so there is currently nothing a
+		/// genuine call here could legitimately do. The call surface (origin,
+		/// parameters, call_index) is stable ahead of time; only the body is
+		/// disabled — remove this stub once a real `V2` request pipeline is
+		/// designed.
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_request_flow_version())]
+		pub fn set_request_flow_version(
+			origin: OriginFor<T>,
+			// Named normally (not `_product_id`) despite going unused below —
+			// an underscore-prefixed parameter name here would leak into this
+			// call's on-chain metadata (the field name `#[pallet::call]`
+			// exposes to indexers/dApps), not just silence the compiler.
+			product_id: ProductId,
+			version: FlowVersion,
+		) -> DispatchResult {
+			T::ProductAdminOrigin::ensure_origin(origin)?;
+			let _ = (product_id, version);
+			Err(Error::<T>::FlowVersionChangeNotYetSupported.into())
+		}
+
+		/// Register `product_id`'s settlement-pipeline `FlowVersion` as
+		/// something other than the `V1` it was created with — independent of
+		/// `set_request_flow_version`. Same `ProductAdminOrigin` gating, and
+		/// same "stubbed until a real `V2` pipeline exists" rationale as that
+		/// extrinsic's own doc comment.
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_settlement_flow_version())]
+		pub fn set_settlement_flow_version(
+			origin: OriginFor<T>,
+			// Same naming rationale as `set_request_flow_version`'s own
+			// `product_id`/`version` parameters.
+			product_id: ProductId,
+			version: FlowVersion,
+		) -> DispatchResult {
+			T::ProductAdminOrigin::ensure_origin(origin)?;
+			let _ = (product_id, version);
+			Err(Error::<T>::FlowVersionChangeNotYetSupported.into())
 		}
 	}
 }

@@ -189,13 +189,44 @@ pub type BridgeAttempts<BlockNumber> =
 	BoundedVec<BridgeAttempt<BlockNumber>, ConstU32<MAX_BRIDGE_ATTEMPTS>>;
 
 // ---------------------------------------------------------------------------
+// Flow versioning
+// ---------------------------------------------------------------------------
+//
+// A product's tx flow (the fixed sequence of `record_*_tx` steps its recorder
+// is expected to submit) is pinned once, at that product's own registration,
+// and never changes for its lifetime — see `pallet_tranche_system::FlowVersion`'s
+// doc comment (that pallet owns the `FlowVersion` type itself, and the
+// `RequestFlowVersion`/`SettlementFlowVersion` storage recording it per
+// product, per pipeline — this pallet only ever reads it, via
+// `pallet_tranche_system::ProductInspect::request_flow_version`/
+// `settlement_flow_version`). This lets a genuinely new flow (a product
+// needing steps beyond what `RequestStep`'s fixed five cover) be introduced
+// without touching how any already-live product is recorded: `RequestStep`
+// itself, and every match arm under it in `record_request_tx`, stay frozen
+// forever; a new flow's own steps live entirely behind the single
+// `RequestStep::Extended` escape hatch, opaque to every `FlowVersion::V1`
+// product. See `RequestStep::Extended`'s and `RequestFlowExtension`'s doc
+// comments for the full mechanism.
+
+/// Maximum length, in bytes, of `record_request_tx`'s `extra` parameter —
+/// only ever populated for `step == RequestStep::Extended`, `None` for every
+/// other step. Sized generously for whatever a future flow version's own
+/// SCALE-encoded payload turns out to need; bounds storage growth and this
+/// extrinsic's weight (linear in `extra`'s length — see `WeightInfo::record_request_tx`),
+/// not any real protocol limit.
+pub const MAX_REQUEST_EXTRA_LEN: u32 = 1024;
+
+// ---------------------------------------------------------------------------
 // Request pipeline
 // ---------------------------------------------------------------------------
 
 /// Step within a request's pipeline. Mirrors interface.sol's `RequestStep`.
 /// `Requested`/`RequestBridgeExecuted`/`RequestQueued`/
-/// `AdapterBridgeExecuted`/`AdapterApplied` are the only five values
-/// `record_request_tx` ever accepts as input — a request's link to a
+/// `AdapterBridgeExecuted`/`AdapterApplied` are the five values every
+/// `FlowVersion::V1` product's `record_request_tx` calls use — plus
+/// `Extended`, the version-agnostic escape hatch any later `FlowVersion`
+/// funnels its own steps through (see `Extended`'s own doc comment) — six
+/// recordable values in total. A request's link to a
 /// settlement is recorded elsewhere entirely now (see
 /// `SettlementStep::RequestsApproved`'s doc comment for why). Named after the
 /// underlying Valuation Contract events wherever one exists 1:1 — `Requested`
@@ -318,6 +349,26 @@ pub enum RequestStep {
 	/// does), so this didn't need a migration despite `RequestStep` already
 	/// being live.
 	RequestCompleted,
+	/// 2026-08-24 — the sole, permanent escape hatch for any `FlowVersion`
+	/// beyond `V1`. `record_request_tx` never gives this variant its own
+	/// step-specific parameters (`opening`/`adapter_chain_ids`/`bridge_status`
+	/// must all be `None`, same as every step other than `Requested`); instead
+	/// it carries a version-specific payload in the extrinsic's own `extra`
+	/// bytes, decoded and validated according to the calling product's
+	/// registered `FlowVersion` (see `pallet_tranche_system::RequestFlowVersion`,
+	/// read via `ProductInspect::request_flow_version`) — `FlowVersion::V1`
+	/// rejects this step outright, since a v1 product's flow is fully covered
+	/// by the six steps above.
+	///
+	/// This is deliberately the *only* variant `RequestStep` will ever gain
+	/// after this one: a new flow version's real steps live entirely inside
+	/// `extra`'s own version-specific decode target (see
+	/// `RequestFlowExtension`/`RequestFlowExtensionV2`), so introducing v3,
+	/// v4, ... never needs another `RequestStep` variant, another
+	/// `record_request_tx` match arm, or another call_index — only a new
+	/// `RequestFlowExtension` variant and a new arm in the `FlowVersion` match
+	/// already living inside this one step's own handling.
+	Extended,
 }
 
 /// 0 = redeem, 1 = deposit — mirrors interface.sol's `order_type` and
@@ -393,6 +444,109 @@ pub struct RequestOpening {
 /// `SettlementStep::RequestsApproved`'s doc comment for the full mechanism), including
 /// why this pallet keeps its own copy of this linkage rather than asking
 /// `pallet-tranche-investments` for it.
+/// `RequestEntry`'s version-scoped extension slot — the storage-side landing
+/// spot for whatever `RequestStep::Extended` calls decode out of `extra`, one
+/// variant per `FlowVersion` beyond `V1` (which carries no extension data at
+/// all — its whole pipeline is the six core `RequestStep` values). Every
+/// `FlowVersion::V1` entry holds `V1` here forever; only a product registered
+/// under a later `FlowVersion` ever reaches its corresponding variant. Kept
+/// as a single field on `RequestEntry` (rather than a parallel storage map)
+/// so the entry stays the one place to look up a request's full state
+/// regardless of which flow it belongs to.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub enum RequestFlowExtension<BlockNumber> {
+	V1,
+	V2(RequestFlowExtensionV2<BlockNumber>),
+}
+
+impl<BlockNumber> Default for RequestFlowExtension<BlockNumber> {
+	/// Every request ever opened before this axis existed — and every
+	/// `FlowVersion::V1` request opened after — defaults here. Only
+	/// `record_request_tx`'s `RequestStep::Extended` arm, for a
+	/// `FlowVersion::V2` product, ever writes `V2` instead.
+	fn default() -> Self {
+		Self::V1
+	}
+}
+
+/// `FlowVersion::V2`'s own *accumulated* extension state, persisted on
+/// `RequestEntry::extension` — currently empty: no v2 flow has been designed
+/// yet, so there's nothing real to store. This is never itself decoded
+/// directly out of `extra` — see `RequestExtraV2`, the *per-call* input type
+/// that plays that role instead, the same relationship `RequestEntry` (the
+/// accumulated request) and `RequestStep` (one call's step) already have for
+/// `FlowVersion::V1`. Gains real fields, one per real `RequestSubStepV2`
+/// variant that needs to leave evidence behind, once v2's actual pipeline is
+/// defined. Generic over `BlockNumber` already, even though nothing here uses
+/// it yet, so adding a real `TxRecord<BlockNumber>` field later doesn't
+/// change this type's own signature or any call site that already matches on
+/// `RequestFlowExtension::V2(_)`.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+	Default,
+)]
+pub struct RequestFlowExtensionV2<BlockNumber> {
+	_phantom: PhantomData<BlockNumber>,
+}
+
+/// v2's own step selector — the `FlowVersion::V2` analogue of `RequestStep`,
+/// selecting which of v2's own sub-steps one `RequestStep::Extended` call is
+/// recording. No real sub-steps defined yet — v2's own pipeline hasn't been
+/// designed. Left genuinely empty (uninhabited) rather than seeded with a
+/// placeholder variant: decoding `extra` into `RequestExtraV2` (which embeds
+/// this) will always fail until this gains real variants, an accurate
+/// reflection of "v2 isn't usable yet" rather than a decodable-but-fake shape.
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+)]
+pub enum RequestSubStepV2 {}
+
+/// The wire payload decoded out of `extra` for `RequestStep::Extended`,
+/// `FlowVersion::V2` only — v2's own step (`RequestSubStepV2`) plus that
+/// step's specific data, the same role `RequestStep` (paired with
+/// `record_request_tx`'s own `opening`/`adapter_chain_ids`/`bridge_status`
+/// parameters) plays for `FlowVersion::V1`. This is the *per-call* input:
+/// `record_request_tx` decodes exactly one `RequestExtraV2` per `Extended`
+/// call and applies it to `RequestFlowExtensionV2` (the *accumulated* state)
+/// — never the other way around, and this type itself is never persisted.
+///
+/// Not `#[derive(MaxEncodedLen)]` — unlike `RequestFlowExtensionV2`, this
+/// never lands in storage, only ever decoded from `extra` bytes at call time.
+/// Currently uninhabited (via `RequestSubStepV2`), same rationale as that
+/// type's own doc comment; gains real per-step fields here (gated by `step`,
+/// the same sentinel-gating convention `record_request_tx`'s own parameters
+/// already use for `RequestStep`) once v2's pipeline is defined.
+#[derive(Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct RequestExtraV2 {
+	pub step: RequestSubStepV2,
+}
+
 #[derive(
 	Clone,
 	Encode,
@@ -434,6 +588,10 @@ pub struct RequestEntry<BlockNumber> {
 	pub settlement_id: Option<SettlementId>,
 	/// Evidence for `SettlementStep::RequestsApproved` recording this request.
 	pub approved_tx: Option<TxRecord<BlockNumber>>,
+	/// This request's `FlowVersion`-scoped extension state — `V1` (no data)
+	/// for every request opened under `FlowVersion::V1`, which is every
+	/// request today. See `RequestFlowExtension`'s doc comment.
+	pub extension: RequestFlowExtension<BlockNumber>,
 }
 
 /// One chain's Adapter leg (Bridge+Applied) within a request — the Hub
@@ -492,9 +650,9 @@ pub struct RequestChainEntry<BlockNumber> {
 /// leg) — same event-name-mirroring convention as `RequestStep`'s
 /// `RequestQueued`/`AdapterApplied`. `Queued` and `Settled` are read-only
 /// sentinels and must never be accepted as `record_settlement_tx`'s
-/// extrinsic input (rejected with `Error::InvalidSettlementStep`) — eight
-/// recordable values in total (`Triggered`, `RequestsApproved`, plus the six leg
-/// steps).
+/// extrinsic input (rejected with `Error::InvalidSettlementStep`) — nine
+/// recordable values in total (`Triggered`, `RequestsApproved`, the six leg
+/// steps, plus `Extended` — see that variant's own doc comment).
 ///
 /// A settlement that needs no cross-chain action at all is represented by
 /// `Triggered` with both `collect_response_chain_ids` and `finalize_chain_ids`
@@ -584,6 +742,177 @@ pub enum SettlementStep {
 	FinalizeBridgeExecuted,
 	SettleApplied,
 	Settled,
+	/// 2026-08-24 — this pipeline's own escape hatch, same mechanism and same
+	/// "the only variant this enum will ever gain again" guarantee as
+	/// `RequestStep::Extended` (see that variant's doc comment for the full
+	/// rationale). Unlike `RequestStep::Extended`, which is always scoped to
+	/// the one request it's recorded against, `Extended` here can be either
+	/// settlement-wide or chain-scoped, mirrored by the same
+	/// `spoke_chain_id`-presence convention every other step here already
+	/// uses: `spoke_chain_id == None` routes the decoded `extra` payload into
+	/// `SettlementExtension` (settlement-wide — the `Triggered`/
+	/// `RequestsApproved` role), `spoke_chain_id == Some` routes it into the
+	/// named chain's own `SettlementChainEntry::extension` (chain-scoped —
+	/// the six leg steps' role). `collect_response_chain_ids`/
+	/// `finalize_chain_ids`/`request_ids` must all be `None` either way — this
+	/// step's payload lives entirely in `extra`, decoded according to
+	/// `product_id`'s registered `pallet_tranche_system::SettlementFlowVersion`
+	/// (read via `ProductInspect::settlement_flow_version`, independent of
+	/// `RequestFlowVersion` — see that storage's doc comment for why each
+	/// pipeline versions separately). `FlowVersion::V1` rejects this step
+	/// outright, same as `RequestStep::Extended` does for a v1 product's
+	/// request pipeline.
+	Extended,
+}
+
+/// Maximum length, in bytes, of `record_settlement_tx`'s `extra` parameter —
+/// only ever populated for `step == SettlementStep::Extended`, `None` for
+/// every other step. Same rationale as `MAX_REQUEST_EXTRA_LEN`; kept as its
+/// own constant (rather than reusing that one) since this pallet's flow
+/// versions are independent per pipeline (see
+/// `pallet_tranche_system::SettlementFlowVersion`'s doc comment) and may end
+/// up needing different bounds.
+pub const MAX_SETTLEMENT_EXTRA_LEN: u32 = 1024;
+
+/// A settlement's *settlement-wide* extension slot — `SettlementStep::Extended`
+/// calls with `spoke_chain_id == None` land here (the same scope
+/// `Triggered`/`RequestsApproved` already occupy), keyed by
+/// `(product_id, settlement_id)` in `SettlementExtension`. Kept as its own
+/// storage item rather than a field folded into an existing struct, same
+/// rationale as `SettlementCollectResponseChains`/`SettlementFinalizeChains`
+/// sitting alongside `SettlementTriggers` instead of inside one combined
+/// struct — this pallet has never had a single monolithic "settlement entry"
+/// struct the way `RequestEntry` is one for requests. Unlike
+/// `RequestFlowExtension` (a mandatory field on every `RequestEntry`, needing
+/// a backfill migration when it was introduced), a *missing*
+/// `SettlementExtension` entry needs no such backfill — it simply means "no
+/// settlement-wide extension has been recorded for this settlement," true by
+/// construction for every settlement that predates `FlowVersion::V2`.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub enum SettlementFlowExtension<BlockNumber> {
+	V1,
+	V2(SettlementFlowExtensionV2<BlockNumber>),
+}
+
+/// `FlowVersion::V2`'s settlement-wide *accumulated* extension state,
+/// persisted in `SettlementExtension` — currently empty: no v2 flow has been
+/// designed yet. Never itself decoded directly out of `extra` — see
+/// `SettlementExtraV2`, the *per-call* input type that plays that role
+/// instead, same relationship as `RequestFlowExtensionV2`/`RequestExtraV2`.
+/// Gains real fields, one per real `SettlementSubStepV2` variant that needs
+/// to leave evidence behind, once v2's actual pipeline is defined.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+	Default,
+)]
+pub struct SettlementFlowExtensionV2<BlockNumber> {
+	_phantom: PhantomData<BlockNumber>,
+}
+
+/// v2's own settlement-wide step selector — the `FlowVersion::V2` analogue of
+/// `SettlementStep` for the settlement-wide scope (`Triggered`/
+/// `RequestsApproved`'s role). See `RequestSubStepV2`'s doc comment — same
+/// "genuinely uninhabited until v2 is designed" rationale.
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+)]
+pub enum SettlementSubStepV2 {}
+
+/// The wire payload decoded out of `extra` for `SettlementStep::Extended`,
+/// `FlowVersion::V2` only — see `RequestExtraV2`'s doc comment for the full
+/// input-vs-accumulated-state rationale this mirrors. Shared by both scopes
+/// `Extended` can target (settlement-wide, `spoke_chain_id == None`, landing
+/// in `SettlementExtension`; chain-scoped, `spoke_chain_id == Some(_)`,
+/// landing in the named chain's own `SettlementChainEntry::extension`) —
+/// unlike the *accumulated* state, which is genuinely two different types
+/// (`SettlementFlowExtensionV2`/`SettlementChainFlowExtensionV2`) because
+/// each is shaped by what that scope alone needs to remember, the *input*
+/// only needs to say "which v2 step is this," and `spoke_chain_id` (already a
+/// parameter on `record_settlement_tx` itself, used by every other step here
+/// the same way) is what routes a decoded step to the right one of the two —
+/// no second decode target needed just to duplicate that routing. Not
+/// `#[derive(MaxEncodedLen)]` — never lands in storage.
+#[derive(Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo)]
+pub struct SettlementExtraV2 {
+	pub step: SettlementSubStepV2,
+}
+
+/// `SettlementChainEntry`'s version-scoped extension slot — the chain-scoped
+/// counterpart to `SettlementFlowExtension`. `SettlementStep::Extended` calls
+/// with `spoke_chain_id == Some(_)` land here instead (the same scope the six
+/// leg steps already occupy), merged into the named chain's own
+/// `SettlementChainEntry`. See `RequestFlowExtension`'s doc comment — same
+/// shape and same default-to-`V1`-forever rationale.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub enum SettlementChainFlowExtension<BlockNumber> {
+	V1,
+	V2(SettlementChainFlowExtensionV2<BlockNumber>),
+}
+
+impl<BlockNumber> Default for SettlementChainFlowExtension<BlockNumber> {
+	/// Same rationale as `RequestFlowExtension`'s own `Default` impl.
+	fn default() -> Self {
+		Self::V1
+	}
+}
+
+/// `FlowVersion::V2`'s chain-scoped *accumulated* extension state, persisted
+/// on `SettlementChainEntry::extension` — currently empty: no v2 flow has
+/// been designed yet. Fed by the same shared `SettlementExtraV2` input as
+/// `SettlementFlowExtensionV2` (routed here instead of there whenever
+/// `spoke_chain_id == Some(_)` — see that type's doc comment). Gains real
+/// fields, one per real `SettlementSubStepV2` variant that needs to leave
+/// chain-scoped evidence behind, once v2's actual pipeline is defined.
+#[derive(
+	Clone,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+	Default,
+)]
+pub struct SettlementChainFlowExtensionV2<BlockNumber> {
+	_phantom: PhantomData<BlockNumber>,
 }
 
 /// One spoke chain's full leg-by-leg registry entry within a
@@ -617,6 +946,11 @@ pub struct SettlementChainEntry<BlockNumber> {
 	/// order — same convention as `collect_bridge_attempts`.
 	pub finalize_bridge_attempts: BridgeAttempts<BlockNumber>,
 	pub settle_applied_tx: Option<TxRecord<BlockNumber>>,
+	/// This chain's `FlowVersion`-scoped extension state within this
+	/// settlement — `V1` (no data) for every settlement recorded under
+	/// `FlowVersion::V1`, which is every settlement today. See
+	/// `SettlementChainFlowExtension`'s doc comment.
+	pub extension: SettlementChainFlowExtension<BlockNumber>,
 }
 
 // ---------------------------------------------------------------------------

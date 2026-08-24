@@ -10,8 +10,8 @@ use sp_std::marker::PhantomData;
 /// Weight functions needed for `pallet_tranche_tx_registry`.
 pub trait WeightInfo {
 	fn set_tx_recorder() -> Weight;
-	fn record_request_tx() -> Weight;
-	fn record_settlement_tx(n: u32) -> Weight;
+	fn record_request_tx(extra_len: u32) -> Weight;
+	fn record_settlement_tx(n: u32, extra_len: u32) -> Weight;
 	fn record_receive_tx() -> Weight;
 	fn record_whitelist_tx() -> Weight;
 }
@@ -24,12 +24,17 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
-	fn record_request_tx() -> Weight {
+	fn record_request_tx(extra_len: u32) -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
+			// `RequestStep::Extended` additionally reads
+			// `pallet_tranche_system::RequestFlowVersion` (via `ProductInspect`)
+			// and decodes `extra` — `extra_len == 0` for every other step.
+			.saturating_add(T::DbWeight::get().reads(1_u64))
+			.saturating_add(Weight::from_parts(1_000, 0).saturating_mul(extra_len as u64))
 	}
-	fn record_settlement_tx(n: u32) -> Weight {
+	fn record_settlement_tx(n: u32, extra_len: u32) -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(3_u64))
 			.saturating_add(T::DbWeight::get().writes(3_u64))
@@ -37,6 +42,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			// `request_ids` element, on top of the fixed cost above — `n == 0` for
 			// every other step.
 			.saturating_add(T::DbWeight::get().reads_writes(n as u64, n as u64))
+			// `SettlementStep::Extended` additionally reads
+			// `pallet_tranche_system::SettlementFlowVersion` (via `ProductInspect`)
+			// and decodes `extra` — `extra_len == 0` for every other step.
+			.saturating_add(T::DbWeight::get().reads(1_u64))
+			.saturating_add(Weight::from_parts(1_000, 0).saturating_mul(extra_len as u64))
 	}
 	fn record_receive_tx() -> Weight {
 		Weight::from_parts(20_000_000, 0)
@@ -57,16 +67,20 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
-	fn record_request_tx() -> Weight {
+	fn record_request_tx(extra_len: u32) -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(Weight::from_parts(1_000, 0).saturating_mul(extra_len as u64))
 	}
-	fn record_settlement_tx(n: u32) -> Weight {
+	fn record_settlement_tx(n: u32, extra_len: u32) -> Weight {
 		Weight::from_parts(20_000_000, 0)
 			.saturating_add(RocksDbWeight::get().reads(3_u64))
 			.saturating_add(RocksDbWeight::get().writes(3_u64))
 			.saturating_add(RocksDbWeight::get().reads_writes(n as u64, n as u64))
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(Weight::from_parts(1_000, 0).saturating_mul(extra_len as u64))
 	}
 	fn record_receive_tx() -> Weight {
 		Weight::from_parts(20_000_000, 0)

@@ -596,6 +596,51 @@ pub enum ProductDetails<AccountId> {
 }
 
 // ---------------------------------------------------------------------------
+// FlowVersion
+// ---------------------------------------------------------------------------
+
+/// Which tx flow one of a product's pipelines (request or settlement — see
+/// `RequestFlowVersion`/`SettlementFlowVersion`, versioned independently of
+/// each other) follows. Fixed at product creation (`create_product`/
+/// `create_single_chain_product` register `V1` for both pipelines
+/// unconditionally — see those extrinsics' own notes) and never expected to
+/// change for that product's lifetime.
+///
+/// Owned by this pallet (not pallet-tranche-tx-registry, which only ever
+/// *reads* it, via `ProductInspect::request_flow_version`/
+/// `settlement_flow_version`) because it's fundamentally a product-level
+/// attribute, same category as `ProductDetails` itself — and because setting
+/// it is meant to be a `ProductAdminOrigin`-gated action, the same
+/// authorization model every other product-management call in this pallet
+/// already uses, rather than the Root-gated model pallet-tranche-tx-registry
+/// used for its own, unrelated `TxRecorder` config.
+///
+/// `V1` is every product created before this axis existed, and remains the
+/// only flow `RequestStep`'s/`SettlementStep`'s fixed core steps ever need to
+/// serve. `V2` (and any version after it) is reserved for a flow not yet
+/// designed — nothing currently emits or expects `V2` evidence;
+/// `set_request_flow_version`/`set_settlement_flow_version` exist as the
+/// eventual, `ProductAdminOrigin`-gated way to register a product under `V2`,
+/// but are deliberately stubbed to always fail for now (see those
+/// extrinsics' own doc comments) until a real `V2` pipeline is designed.
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub enum FlowVersion {
+	V1,
+	V2,
+}
+
+// ---------------------------------------------------------------------------
 // Traits
 // ---------------------------------------------------------------------------
 
@@ -670,6 +715,20 @@ pub trait ProductInspect {
 	/// chain its entire stack lives on. `None` if it's `Multichain` (there's no
 	/// single answer to "which chain" for that model).
 	fn single_chain_id(product_id: ProductId) -> Option<u64>;
+	/// `product_id`'s registered request-pipeline `FlowVersion` — see
+	/// `RequestFlowVersion`'s storage doc comment. `None` iff `product_id` isn't
+	/// registered at all (every registered product gets `Some(FlowVersion::V1)`
+	/// here at creation time — see `create_product`/`create_single_chain_product`).
+	/// Consumed by pallet-tranche-tx-registry's `record_request_tx`, for
+	/// `RequestStep::Extended` only — every other step is identical across every
+	/// `FlowVersion`.
+	fn request_flow_version(product_id: ProductId) -> Option<FlowVersion>;
+	/// `product_id`'s registered settlement-pipeline `FlowVersion` — independent
+	/// of `request_flow_version` (see `SettlementFlowVersion`'s storage doc
+	/// comment for why each pipeline versions separately). Same `None`
+	/// convention and same `record_settlement_tx`/`SettlementStep::Extended`
+	/// consumer as `request_flow_version`.
+	fn settlement_flow_version(product_id: ProductId) -> Option<FlowVersion>;
 }
 
 // ---------------------------------------------------------------------------

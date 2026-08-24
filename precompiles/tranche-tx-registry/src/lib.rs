@@ -177,6 +177,11 @@ where
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		// `extra` (pallet-side flow-version-scoped payload for
+		// `RequestStep::Extended`) isn't exposed through this Solidity interface yet
+		// — every product callable through this precompile is still `FlowVersion::V1`,
+		// which never uses `Extended`. See
+		// `pallet_tranche_tx_registry::RequestStep::Extended`'s doc comment.
 		let call = TxRegistryCall::<Runtime>::record_request_tx {
 			product_id,
 			request_id,
@@ -186,6 +191,7 @@ where
 			chain_id,
 			tx_hash,
 			bridge_status: decoded_bridge_status,
+			extra: None,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -278,6 +284,8 @@ where
 		let (chain_id, tx_hash) = attestation;
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		// `extra` isn't exposed through this Solidity interface yet — see
+		// `record_request_tx`'s own `extra: None` comment above.
 		let call = TxRegistryCall::<Runtime>::record_settlement_tx {
 			product_id,
 			settlement_id,
@@ -289,6 +297,7 @@ where
 			chain_id,
 			tx_hash,
 			bridge_status: decoded_bridge_status,
+			extra: None,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -1317,6 +1326,13 @@ fn encode_request_step(step: RequestStep) -> u8 {
 		RequestStep::AdapterBridgeExecuted => 4,
 		RequestStep::AdapterApplied => 5,
 		RequestStep::RequestCompleted => 6,
+		// Not reachable via this precompile yet — `decode_request_step` never
+		// accepts a `step` value that decodes to `Extended` (this Solidity
+		// interface has no `extra bytes` parameter to supply alongside it), so no
+		// stored `RequestEntry` this precompile can produce ever reaches this arm
+		// today. Handled anyway for exhaustiveness — this `match` is over the
+		// pallet's real `RequestStep` type, which already has the variant.
+		RequestStep::Extended => 7,
 	}
 }
 
@@ -1353,6 +1369,13 @@ fn encode_settlement_step(step: SettlementStep) -> u8 {
 		SettlementStep::FinalizeBridgeExecuted => 7,
 		SettlementStep::SettleApplied => 8,
 		SettlementStep::Settled => 9,
+		// Not reachable via this precompile yet — same rationale as
+		// `encode_request_step`'s own `RequestStep::Extended` arm: this
+		// interface's Solidity signature has no `extra bytes` parameter, and
+		// `decode_settlement_step` never produces `Extended`, so no stored
+		// evidence this precompile can produce ever reaches this arm today.
+		// Handled anyway for exhaustiveness.
+		SettlementStep::Extended => 10,
 	}
 }
 
