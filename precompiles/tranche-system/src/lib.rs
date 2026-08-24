@@ -10,8 +10,8 @@ use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
 	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
-	MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, U256};
@@ -27,10 +27,10 @@ pub(crate) const SELECTOR_LOG_PRODUCT_CREATED: [u8; 32] =
 pub(crate) const SELECTOR_LOG_TRANCHE_SET: [u8; 32] =
 	keccak256!("TrancheSet(uint64,uint8,uint8,uint256,uint64,address,address,address,uint8)");
 pub(crate) const SELECTOR_LOG_ADAPTERS_SET: [u8; 32] = keccak256!(
-	"AdaptersSet(uint64,address,uint64,(uint8,address,uint16,address,(address,uint256)[])[])"
+	"AdaptersSet(uint64,address,uint64,(uint8,address,uint16,address,(uint64,address,uint256)[])[])"
 );
 pub(crate) const SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET: [u8; 32] = keccak256!(
-	"MultichainAdaptersSet(uint64,(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
+	"MultichainAdaptersSet(uint64,(address,uint64,uint16,(uint8,address,uint16,address,(uint64,address,uint256)[])[])[])"
 );
 pub(crate) const SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET: [u8; 32] =
 	keccak256!("MultichainTrancheManagersSet(uint64,(uint64,address)[])");
@@ -49,8 +49,10 @@ type EvmValuationInput = (Address, Address, u64, u64, u64);
 type EvmVaultInput = (u64, Address);
 /// `TrancheInput` — (tranche_type, apr, vault, asset, shares, priority)
 type EvmTrancheInput = (u8, U256, EvmVaultInput, Address, Address, u8);
-/// `CollateralInput` — (nft_contract, nft_token_id)
-type EvmCollateralInput = (Address, U256);
+/// `CollateralInput` — (chain_id, nft_contract, nft_token_id). `chain_id` is
+/// the EVM chain the NFT contract is deployed on — not necessarily Bifrost
+/// itself (2026-08-24).
+type EvmCollateralInput = (u64, Address, U256);
 /// `AdapterInput` — (source_type, source_address, weightBps, borrower, collaterals)
 type EvmAdapterInput = (u8, Address, u16, Address, Vec<EvmCollateralInput>);
 /// `MultichainAdapterInput` — (adapter_address, chain_id, weightBps, adapters)
@@ -114,7 +116,7 @@ where
 	/// bindings (chain_id, tranche_manager_address); Hub included, if the product has a
 	/// Hub-deployed vault
 	#[precompile::public(
-		"create_product(uint64,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[],(uint64,address)[])"
+		"create_product(uint64,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(uint64,address,uint256)[])[])[],(uint64,address)[])"
 	)]
 	fn create_product(
 		handle: &mut impl PrecompileHandle,
@@ -201,7 +203,7 @@ where
 	/// @param ledger The Ledger contract address, on `chain_id` — mirrors
 	/// pallet-tranche-investments' interface locally for this product
 	#[precompile::public(
-		"create_single_chain_product(uint64,uint64,(address,address,(bool,uint64,uint64,uint64)),(uint8,uint256,(uint64,address),address,address,uint8)[],address,(uint8,address,uint16,address,(address,uint256)[])[],address)"
+		"create_single_chain_product(uint64,uint64,(address,address,(bool,uint64,uint64,uint64)),(uint8,uint256,(uint64,address),address,address,uint8)[],address,(uint8,address,uint16,address,(uint64,address,uint256)[])[],address)"
 	)]
 	fn create_single_chain_product(
 		handle: &mut impl PrecompileHandle,
@@ -348,7 +350,7 @@ where
 	/// @param parent_chain_id        The parent MultichainAdapter's chain ID
 	/// @param adapters               The full intended end-state list of nested adapters
 	#[precompile::public(
-		"set_adapters(uint64,address,uint64,(uint8,address,uint16,address,(address,uint256)[])[])"
+		"set_adapters(uint64,address,uint64,(uint8,address,uint16,address,(uint64,address,uint256)[])[])"
 	)]
 	fn set_adapters(
 		handle: &mut impl PrecompileHandle,
@@ -398,7 +400,7 @@ where
 	/// @param product_id          The product whose MultichainAdapter table is being replaced
 	/// @param multichain_adapters The full intended end-state list of routing entries
 	#[precompile::public(
-		"set_multichain_adapters(uint64,(address,uint64,uint16,(uint8,address,uint16,address,(address,uint256)[])[])[])"
+		"set_multichain_adapters(uint64,(address,uint64,uint16,(uint8,address,uint16,address,(uint64,address,uint256)[])[])[])"
 	)]
 	fn set_multichain_adapters(
 		handle: &mut impl PrecompileHandle,
@@ -738,7 +740,7 @@ fn encode_adapters<'a, AccountId: 'a + Into<H160> + Clone>(
 					Address(borrower.clone().into()),
 					collaterals
 						.iter()
-						.map(|c| (Address(c.nft_contract), c.nft_token_id))
+						.map(|c| (c.chain_id, Address(c.nft_contract), c.nft_token_id))
 						.collect::<Vec<EvmCollateralInput>>(),
 				),
 				SourceType::OnchainSource => (1u8, Address(H160::zero()), Vec::new()),
@@ -847,9 +849,13 @@ where
 		0 => {
 			let mut bounded_collaterals =
 				BoundedVec::<CollateralAsset, ConstU32<MAX_COLLATERALS>>::default();
-			for (nft_contract, nft_token_id) in collaterals.iter().cloned() {
+			for (chain_id, nft_contract, nft_token_id) in collaterals.iter().cloned() {
 				bounded_collaterals
-					.try_push(CollateralAsset { nft_contract: nft_contract.0, nft_token_id })
+					.try_push(CollateralAsset {
+						chain_id,
+						nft_contract: nft_contract.0,
+						nft_token_id,
+					})
 					.map_err(|_| revert("too many collaterals"))?;
 			}
 			let borrower_account = Runtime::AddressMapping::into_account_id(borrower.0);
