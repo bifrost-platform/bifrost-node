@@ -153,31 +153,44 @@ pub mod pallet {
 		/// `extra` failed to decode as the calling product's registered
 		/// `FlowVersion`'s extension payload.
 		BadRequestExtra,
-		/// `step` must be one of the eight recordable values — never
-		/// `SettlementStep::Queued`/`Settled`, both read-only sentinels.
+		/// `step` must be one of the nine recordable values — never
+		/// `SettlementStep::Queued`, the one read-only sentinel.
 		InvalidSettlementStep,
 		/// `collect_response_chain_ids` and `finalize_chain_ids` must both be `Some`
-		/// when `step == SettlementStep::Triggered` (each may independently be
+		/// when `step == SettlementStep::SettleStarted` (each may independently be
 		/// empty — a chain missing from both sets needs no leg at all for this
 		/// settlement; both empty means the settlement needs no cross-chain action
 		/// at all).
 		SpokeChainIdsRequired,
 		/// `collect_response_chain_ids` and `finalize_chain_ids` must both be `None`
-		/// for every step other than `Triggered`.
+		/// for every step other than `SettleStarted`.
 		UnexpectedSpokeChainIds,
 		/// `spoke_chain_id` must be `Some` for every leg step (every step other than
-		/// `Triggered`/`RequestsApproved`).
+		/// `SettleStarted`/`RequestsApproved`/`Settled`).
 		SpokeChainIdRequired,
-		/// `spoke_chain_id` must be `None` when `step == Triggered` or `RequestsApproved`.
+		/// `spoke_chain_id` must be `None` when `step == SettleStarted`,
+		/// `RequestsApproved`, or `Settled`.
 		UnexpectedSpokeChainId,
 		/// `request_ids` must be non-empty when `step == SettlementStep::RequestsApproved`.
 		RequestIdsRequired,
 		/// `request_ids` must be empty for every step other than `RequestsApproved`.
 		UnexpectedRequestIds,
-		/// Trigger has already been recorded for this (product_id, settlement_id).
+		/// `SettleStarted` has already been recorded for this (product_id, settlement_id)
+		/// — via `step == SettlementStep::SettleStarted` or, for a `SingleChain`
+		/// product's settlement, `step == SettlementStep::Settled` (see that
+		/// variant's doc comment).
 		SettlementAlreadyTriggered,
-		/// Trigger has not been recorded yet for this (product_id, settlement_id).
+		/// `SettleStarted` has not been recorded yet for this (product_id, settlement_id).
 		SettlementNotTriggered,
+		/// `step == SettlementStep::Settled` was recorded for a `product_id` that
+		/// isn't registered as `SingleChain` (`T::Products::single_chain_id`
+		/// returned `None`) — this step exists specifically for a `SingleChain`
+		/// product's Contract, which emits `Settled` as its pipeline's only event
+		/// (see that variant's doc comment). A `Multichain` product must always
+		/// reach `Settled` the ordinary way instead — as a *computed*
+		/// `get_settlement` status once every chain completes, never itself
+		/// recorded.
+		SettledStepNotSingleChain,
 		/// `spoke_chain_id` is not among the chains registered for the leg kind
 		/// being recorded — `collect_response_chain_ids` for a Collect/Response leg,
 		/// `finalize_chain_ids` for a Finalize leg.
@@ -301,9 +314,10 @@ pub mod pallet {
 			extra: Option<BoundedVec<u8, ConstU32<MAX_REQUEST_EXTRA_LEN>>>,
 		},
 		/// One tx in a settlement's pipeline was recorded — either the single
-		/// Trigger tx, one bridge/hooks half of a per-chain
-		/// Collect/Response/Finalize leg, or the (possibly batched)
-		/// `SettlementStep::RequestsApproved` tx.
+		/// SettleStarted tx (or, for a `SingleChain` product's settlement, that same
+		/// tx recorded as `Settled` instead — see that variant's doc comment), one
+		/// bridge/hooks half of a per-chain Collect/Response/Finalize leg, or the
+		/// (possibly batched) `SettlementStep::RequestsApproved` tx.
 		SettlementTxRecorded {
 			product_id: ProductId,
 			settlement_id: SettlementId,
@@ -454,7 +468,7 @@ pub mod pallet {
 	/// approved into the settlement, all at once, the moment
 	/// `SettlementCollectResponseChains` has been fully responded to (every chain
 	/// has reached `NavReceived` — vacuously true, and checked immediately, if
-	/// that set was declared empty at Trigger time — see
+	/// that set was declared empty at `SettleStarted` time — see
 	/// `try_close_local_requests`): at that point it
 	/// reads `SettlementRequests::<T>::get(product_id, settlement_id)` for every
 	/// request_id approved into that settlement, and removes the ones whose own
@@ -535,13 +549,15 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// A settlement's Trigger evidence. Keyed by `(product_id, settlement_id)`
-	/// — `settlement_id` is only unique within `product_id`'s own namespace,
-	/// same rationale as `RequestEntries`' key shape. Presence of an entry
-	/// here (rather than a `SettlementStep::Queued`-tagged value) is what
-	/// answers "has this settlement been triggered yet" — mirrors how
-	/// `RequestEntries` uses entry-presence rather than an explicit sentinel
-	/// step.
+	/// A settlement's SettleStarted evidence — written by `step ==
+	/// SettlementStep::SettleStarted`, or, for a `SingleChain` product's
+	/// settlement, `step == SettlementStep::Settled` (see that variant's doc
+	/// comment). Keyed by `(product_id, settlement_id)` — `settlement_id` is
+	/// only unique within `product_id`'s own namespace, same rationale as
+	/// `RequestEntries`' key shape. Presence of an entry here (rather than a
+	/// `SettlementStep::Queued`-tagged value) is what answers "has this
+	/// settlement started settling yet" — mirrors how `RequestEntries` uses
+	/// entry-presence rather than an explicit sentinel step.
 	pub type SettlementTriggers<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -568,14 +584,17 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// The chains registered for a settlement's Collect/Response legs at Trigger
-	/// time (those with a registered Adapter, excluding Hub itself — an Adapter
-	/// on Hub is queried locally, no Bridge&Call leg needed), in the order the
-	/// recorder supplied them. A chain never reaches `NavReceived`
-	/// unless it's in this set. Always written alongside `SettlementTriggers`
-	/// and `SettlementFinalizeChains` (all by the same `record_settlement_tx`
-	/// call for `step == Triggered`) — kept as separate storage items rather
-	/// than folded into one struct, same pattern already used by
+	/// The chains registered for a settlement's Collect/Response legs at
+	/// SettleStarted time (those with a registered Adapter, excluding Hub
+	/// itself — an Adapter on Hub is queried locally, no Bridge&Call leg
+	/// needed), in the order the recorder supplied them. A chain never
+	/// reaches `NavReceived` unless it's in this set. Always written
+	/// alongside `SettlementTriggers` and `SettlementFinalizeChains` (all by
+	/// the same `record_settlement_tx` call for `step ==
+	/// SettlementStep::SettleStarted`, or, for a `SingleChain` product's
+	/// settlement, `step == SettlementStep::Settled` with both recorded
+	/// empty) — kept as separate storage items rather than folded into one
+	/// struct, same pattern already used by
 	/// `pallet_tranche_investments`' `AdapterValuations`/`ProductNavs`/
 	/// `Settlements` (three separate maps written together by one
 	/// extrinsic).
@@ -589,7 +608,7 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	/// The chains registered for a settlement's Finalize leg at Trigger time
+	/// The chains registered for a settlement's Finalize leg at SettleStarted time
 	/// (those with a registered tranche vault, excluding Hub itself — a Hub
 	/// vault's result is delivered locally, no Bridge&Call leg needed), in the
 	/// order the recorder supplied them. A chain never reaches
@@ -988,15 +1007,20 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Attest to one tx in a settlement's pipeline: the single Trigger tx, the
+		/// Attest to one tx in a settlement's pipeline: the single SettleStarted tx
+		/// (or, for a `SingleChain` product's settlement, that same tx recorded
+		/// directly as `Settled` instead — see that variant's doc comment), the
 		/// (possibly batched) RequestsApproved tx, or one bridge/hooks half of a
 		/// Collect/Response/Finalize leg for one chain. Origin must be
 		/// `RecorderOrigin`. `collect_response_chain_ids` and `finalize_chain_ids`
-		/// MUST both be `Some` iff `step == SettlementStep::Triggered` (each may
-		/// independently be empty — see below); `request_ids` MUST be non-empty iff
-		/// `step == SettlementStep::RequestsApproved`; `spoke_chain_id` MUST be `Some` for
-		/// every leg step (every step other than `Triggered`/`RequestsApproved`, both of
-		/// which are settlement-wide rather than chain-scoped).
+		/// MUST both be `Some` iff `step == SettlementStep::SettleStarted` (each may
+		/// independently be empty — see below), and MUST both be `None` for
+		/// `step == SettlementStep::Settled` (its chain sets are always empty, so
+		/// there's nothing for the caller to supply); `request_ids` MUST be
+		/// non-empty iff `step == SettlementStep::RequestsApproved`; `spoke_chain_id`
+		/// MUST be `Some` for every leg step (every step other than
+		/// `SettleStarted`/`RequestsApproved`/`Settled`, all three of which are
+		/// settlement-wide rather than chain-scoped).
 		/// `bridge_status` MUST be `Some` iff `step` is one of the three
 		/// Bridge-phase leg steps (`CollectBridgeExecuted`/`ResponseBridgeExecuted`/
 		/// `FinalizeBridgeExecuted`), `None` otherwise — see interface.sol's
@@ -1010,9 +1034,14 @@ pub mod pallet {
 		/// `finalize_chain_ids` never blocks completion on a Finalize leg it was
 		/// never going to get — completion waits on `NavReceived` for it instead
 		/// (see `SettlementStep`'s doc comment). A settlement needing no
-		/// cross-chain action at all is recorded as `Triggered` with both sets
+		/// cross-chain action at all is recorded as `SettleStarted` with both sets
 		/// empty — every read path already reports this correctly via vacuous
-		/// truth, with no dedicated step needed for it.
+		/// truth, with no dedicated step needed for that case; a `SingleChain`
+		/// product's settlement whose Contract emits `Settled` as its only event
+		/// instead uses `step == SettlementStep::Settled` directly (same storage
+		/// writes, same immediate completion) — see that variant's doc comment for
+		/// why the two need separate step values despite doing the same thing
+		/// underneath.
 		///
 		/// `request_ids` records every `request_id` Valuation approved into this
 		/// settlement in one call — see `SettlementStep::RequestsApproved`'s doc comment
@@ -1026,18 +1055,19 @@ pub mod pallet {
 		/// for the full mechanism — `SettlementRequests` +
 		/// `ActiveRequestClosed`): `step == SettlementStep::SettleApplied`
 		/// closes every Spoke-vault request approved into this settlement whose own
-		/// origin chain is `spoke_chain_id`. `step == SettlementStep::Triggered` and
-		/// `step == SettlementStep::NavReceived` both additionally try to close every
-		/// request colocated with its product's own local chain
-		/// (`Pallet::local_chain_id` — a Hub-vault request in a `Multichain` product,
-		/// or *any* request in a `SingleChain` product) approved into this
-		/// settlement, via `try_close_local_requests` — such a request has no
-		/// Finalize leg of its own to trigger on (see `SettlementStep`'s doc
-		/// comment), so this runs instead every time `collect_response_chain_ids`
+		/// origin chain is `spoke_chain_id`. `step == SettlementStep::SettleStarted`,
+		/// `step == SettlementStep::Settled`, and `step == SettlementStep::NavReceived`
+		/// all additionally try to close every request colocated with its product's
+		/// own local chain (`Pallet::local_chain_id` — a Hub-vault request in a
+		/// `Multichain` product, or *any* request in a `SingleChain` product)
+		/// approved into this settlement, via `try_close_local_requests` — such a
+		/// request has no Finalize leg of its own to close on (see `SettlementStep`'s
+		/// doc comment), so this runs instead every time `collect_response_chain_ids`
 		/// might have just become fully responded (including vacuously, right at
-		/// Trigger, if it was declared empty — always the case for a `SingleChain`
-		/// product's own settlement, since its Adapters are colocated too and never
-		/// need a Collect/Response leg). `step == SettlementStep::RequestsApproved` tries to
+		/// `SettleStarted`/`Settled`, if it was declared empty — always the case for
+		/// a `SingleChain` product's own settlement, since its Adapters are
+		/// colocated too and never need a Collect/Response leg).
+		/// `step == SettlementStep::RequestsApproved` tries to
 		/// close each request in the batch individually right after linking it in,
 		/// same race-handling rationale as `SettlementStep::RequestsApproved`'s doc comment.
 		/// `extra` MUST be `Some` iff `step == SettlementStep::Extended`, `None`
@@ -1076,7 +1106,7 @@ pub mod pallet {
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
 
-			if step == SettlementStep::Triggered {
+			if step == SettlementStep::SettleStarted {
 				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
 				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
@@ -1114,6 +1144,53 @@ pub mod pallet {
 				// case for a `SingleChain` product), same as a leg-by-leg `NavReceived`
 				// reaching this state later would.
 				Self::try_close_local_requests(product_id, settlement_id);
+			} else if step == SettlementStep::Settled {
+				// The one case `SettlementStep::Settled` is valid as extrinsic input —
+				// see that variant's doc comment. Only ever valid for a `SingleChain`
+				// product, whose Contract emits `Settled` as its pipeline's only event,
+				// with no separate `SettleStarted` tx to record first. Same effect as
+				// `SettleStarted` with both chain sets empty (one-shot
+				// `SettlementTriggers` write, both chain sets recorded empty, and
+				// immediate vacuous completion via `try_close_local_requests`) — chain
+				// sets aren't parameters here (unlike `SettleStarted`) since they're
+				// always empty for this case, nothing for the caller to supply. Both
+				// `SettlementCollectResponseChains`/`SettlementFinalizeChains` are still
+				// written explicitly (not left absent) — `get_request`'s own `settled`
+				// computation (precompile-side) treats a *missing*
+				// `SettlementCollectResponseChains`/`SettlementFinalizeChains` entry as
+				// "not settled", not vacuously empty, unlike
+				// `try_close_local_requests`/`get_settlement`'s `unwrap_or_default`
+				// reads — so an absent entry here would leave a SingleChain request
+				// permanently reporting `settled == false` despite this settlement
+				// having completed.
+				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
+				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
+				ensure!(
+					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
+					Error::<T>::UnexpectedSpokeChainIds
+				);
+				ensure!(
+					T::Products::single_chain_id(product_id).is_some(),
+					Error::<T>::SettledStepNotSingleChain
+				);
+				ensure!(
+					!SettlementTriggers::<T>::contains_key(product_id, settlement_id),
+					Error::<T>::SettlementAlreadyTriggered
+				);
+				SettlementTriggers::<T>::insert(product_id, settlement_id, tx);
+				SettlementCollectResponseChains::<T>::insert(
+					product_id,
+					settlement_id,
+					BoundedVec::default(),
+				);
+				SettlementFinalizeChains::<T>::insert(
+					product_id,
+					settlement_id,
+					BoundedVec::default(),
+				);
+
+				Self::try_close_local_requests(product_id, settlement_id);
 			} else if step == SettlementStep::RequestsApproved {
 				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
@@ -1127,7 +1204,7 @@ pub mod pallet {
 				// No `SettlementTriggers` precondition here (unlike every other leg step) —
 				// a SingleChain SYNC product's Valuation Contract emits
 				// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so `RequestsApproved`
-				// can genuinely arrive before `Triggered` for the same settlement_id. The old
+				// can genuinely arrive before `SettleStarted` for the same settlement_id. The old
 				// per-request `RequestStep::SettlementApproved` this replaced never had this
 				// precondition either.
 				for request_id in approved_request_ids.iter() {
@@ -1266,7 +1343,7 @@ pub mod pallet {
 						entry.settle_applied_tx = Some(tx);
 					},
 					SettlementStep::Queued
-					| SettlementStep::Triggered
+					| SettlementStep::SettleStarted
 					| SettlementStep::RequestsApproved
 					| SettlementStep::Settled
 					| SettlementStep::Extended => {
