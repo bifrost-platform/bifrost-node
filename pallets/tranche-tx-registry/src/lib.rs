@@ -338,10 +338,15 @@ pub const MAX_REQUEST_EXTRA_LEN: u32 = 1024;
 )]
 pub enum RequestStep {
 	None,
+	/// Event: DepositRequested, RedeemRequested
 	Requested,
+	/// Event: Socket
 	RequestBridgeExecuted,
+	/// Event: DepositQueued, RedeemQueued
 	RequestQueued,
+	/// Event: Socket
 	AdapterBridgeExecuted,
+	/// Event: Supplied(Deposit), WithdrawRequested(Redeem)
 	AdapterApplied,
 	/// Renamed from `Completed` — see this enum's doc comment for why. Purely a
 	/// Rust/interface.sol identifier rename: enum variant *names* don't affect
@@ -515,15 +520,7 @@ pub struct RequestFlowExtensionV2<BlockNumber> {
 /// this) will always fail until this gains real variants, an accurate
 /// reflection of "v2 isn't usable yet" rather than a decodable-but-fake shape.
 #[derive(
-	Clone,
-	Copy,
-	Encode,
-	Decode,
-	DecodeWithMemTracking,
-	PartialEq,
-	Eq,
-	RuntimeDebug,
-	TypeInfo,
+	Clone, Copy, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo,
 )]
 pub enum RequestSubStepV2 {}
 
@@ -631,9 +628,9 @@ pub struct RequestChainEntry<BlockNumber> {
 // ---------------------------------------------------------------------------
 
 /// Step within the settlement pipeline. Mirrors interface.sol's
-/// `SettlementStep`. `Queued`/`Triggered`/`Settled` are the three states
+/// `SettlementStep`. `Queued`/`SettleStarted`/`Settled` are the three states
 /// `get_settlement`'s own `status` moves through —
-/// `Queued` (not yet triggered), `Triggered` (triggered, awaiting
+/// `Queued` (not yet started settling), `SettleStarted` (started, awaiting
 /// completion), `Settled` (every chain has reached *its own* terminal step —
 /// `SettleApplied` if it's in `SettlementFinalizeChains`, otherwise
 /// `NavReceived`, since a chain that's Collect/Response-only, i.e.
@@ -648,20 +645,46 @@ pub struct RequestChainEntry<BlockNumber> {
 /// is — `NavReported` (TrancheManager, Collect leg), `NavReceived`
 /// (Valuation, Response leg), `SettleApplied` (TrancheManager, Finalize
 /// leg) — same event-name-mirroring convention as `RequestStep`'s
-/// `RequestQueued`/`AdapterApplied`. `Queued` and `Settled` are read-only
-/// sentinels and must never be accepted as `record_settlement_tx`'s
-/// extrinsic input (rejected with `Error::InvalidSettlementStep`) — nine
-/// recordable values in total (`Triggered`, `RequestsApproved`, the six leg
-/// steps, plus `Extended` — see that variant's own doc comment).
+/// `RequestQueued`/`AdapterApplied`. `Queued` is the one read-only sentinel
+/// and must never be accepted as `record_settlement_tx`'s extrinsic input
+/// (rejected with `Error::InvalidSettlementStep`) — ten recordable values in
+/// total (`SettleStarted`, `RequestsApproved`, the six leg steps, `Extended`
+/// — see that variant's own doc comment — and `Settled` itself, in the one
+/// narrow case described below).
 ///
-/// A settlement that needs no cross-chain action at all is represented by
-/// `Triggered` with both `collect_response_chain_ids` and `finalize_chain_ids`
-/// empty — no separate step value needed for this: `Triggered` no longer
-/// requires either set to be non-empty (unlike an earlier version of this
-/// pallet, which had one combined `spoke_chain_ids`), so both empty alone
-/// unambiguously means "nothing to collect/respond/finalize" to every read
-/// path via vacuous truth — `get_settlement` already reports this correctly
-/// with no special-casing.
+/// A `Multichain` settlement that needs no cross-chain action at all is
+/// represented by `SettleStarted` with both `collect_response_chain_ids` and
+/// `finalize_chain_ids` empty — no separate step value needed for this:
+/// `SettleStarted` no longer requires either set to be non-empty (unlike an
+/// earlier version of this pallet, which had one combined `spoke_chain_ids`),
+/// so both empty alone unambiguously means "nothing to collect/respond/finalize"
+/// to every read path via vacuous truth — `get_settlement` already reports
+/// this correctly with no special-casing.
+///
+/// `Settled` (2026-08-25) is the one exception to "`Queued` is the only
+/// sentinel" above, and only for a `SingleChain` product
+/// (`Error::SettledStepNotSingleChain` otherwise — see
+/// `T::Products::single_chain_id`): its `SYNC` (or manually-settled)
+/// Valuation Contract never emits a separate `SettleStarted` — it emits
+/// `Settled` as the pipeline's only event, request and settlement completing
+/// in the same tx (see `docs/tranche-tx-registry/settlement-flow.md`'s §4).
+/// Recording that observed event as `SettleStarted`, as if a genuine
+/// `SettleStarted` had actually fired, would break this enum's own
+/// event-name-mirroring convention for exactly the one case where the
+/// recorder's evidence tx and the pipeline's terminal status happen to
+/// coincide — so `record_settlement_tx` accepts `Settled` directly instead,
+/// with the exact same effect `SettleStarted` (both chain sets empty)
+/// already has: a one-shot `SettlementTriggers` write, both
+/// `SettlementCollectResponseChains`/`SettlementFinalizeChains` recorded
+/// empty, and an immediate `try_close_local_requests` — just tagged with the
+/// step name that actually matches what was observed on-chain.
+/// `collect_response_chain_ids`/`finalize_chain_ids`/`spoke_chain_id`/
+/// `request_ids`/`bridge_status` must all be empty/`None`/zero for it, same
+/// as `RequestsApproved` — see `record_settlement_tx`'s dev notes for the
+/// full gating table. A `Multichain` settlement (or any settlement with at
+/// least one real cross-chain leg) must still reach `Settled` the ordinary
+/// way — as a *computed* `get_settlement` status once every chain completes,
+/// never itself recorded.
 ///
 /// `RequestsApproved` (2026-08-20) is declared right after `NavReceived` — where it
 /// actually fires in the real pipeline (see below) — rather than appended at
@@ -689,15 +712,15 @@ pub struct RequestChainEntry<BlockNumber> {
 /// `collect_response_chain_ids` has reported NAV, i.e. `NavReceived`), just
 /// batched — but for a `SingleChain` SYNC product, Valuation emits
 /// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so this step can
-/// genuinely land before `Triggered` for the same `settlement_id`.
+/// genuinely land before `SettleStarted` for the same `settlement_id`.
 /// Deliberately has **no** `SettlementTriggers` precondition (unlike every
 /// leg step) precisely because of that — the old per-request
-/// `RequestStep::SettlementApproved` this replaced never required Trigger to
-/// have landed first either, and adding that requirement here would have
-/// broken the SingleChain SYNC ordering. Like `Triggered`,
+/// `RequestStep::SettlementApproved` this replaced never required
+/// `SettleStarted` to have landed first either, and adding that requirement
+/// here would have broken the SingleChain SYNC ordering. Like `SettleStarted`,
 /// `RequestsApproved` is settlement-wide rather than chain-scoped: `spoke_chain_id`
 /// MUST be `0` and both `collect_response_chain_ids`/`finalize_chain_ids`
-/// MUST be empty for it, same as `Triggered` — but unlike `Triggered`, its own
+/// MUST be empty for it, same as `SettleStarted` — but unlike `SettleStarted`, its own
 /// dedicated `request_ids` parameter is what MUST be non-empty instead (see
 /// `record_settlement_tx`'s dev notes for the full sentinel-gating table).
 /// Per-entry amounts/price the underlying `ApprovedItem` array may carry
@@ -733,14 +756,26 @@ pub struct RequestChainEntry<BlockNumber> {
 )]
 pub enum SettlementStep {
 	Queued,
-	Triggered,
+	/// Event: SettleStarted
+	SettleStarted,
+	/// Event: Socket
 	CollectBridgeExecuted,
+	/// Event: NavReported
 	NavReported,
+	/// Event: Socket
 	ResponseBridgeExecuted,
+	/// Event: NavReceived
 	NavReceived,
+	/// Event: DepositsApproved, RedeemsApproved
 	RequestsApproved,
+	/// Event: Socket
 	FinalizeBridgeExecuted,
+	/// Event: SettleApplied
 	SettleApplied,
+	/// Event: Settled, `SingleChain` only. Every other product still only ever
+	/// sees this as a *computed* `get_settlement` status, never itself
+	/// recorded. See this enum's own doc comment for the narrow case and its
+	/// gating.
 	Settled,
 	/// 2026-08-24 — this pipeline's own escape hatch, same mechanism and same
 	/// "the only variant this enum will ever gain again" guarantee as
@@ -750,7 +785,7 @@ pub enum SettlementStep {
 	/// settlement-wide or chain-scoped, mirrored by the same
 	/// `spoke_chain_id`-presence convention every other step here already
 	/// uses: `spoke_chain_id == None` routes the decoded `extra` payload into
-	/// `SettlementExtension` (settlement-wide — the `Triggered`/
+	/// `SettlementExtension` (settlement-wide — the `SettleStarted`/
 	/// `RequestsApproved` role), `spoke_chain_id == Some` routes it into the
 	/// named chain's own `SettlementChainEntry::extension` (chain-scoped —
 	/// the six leg steps' role). `collect_response_chain_ids`/
@@ -776,7 +811,7 @@ pub const MAX_SETTLEMENT_EXTRA_LEN: u32 = 1024;
 
 /// A settlement's *settlement-wide* extension slot — `SettlementStep::Extended`
 /// calls with `spoke_chain_id == None` land here (the same scope
-/// `Triggered`/`RequestsApproved` already occupy), keyed by
+/// `SettleStarted`/`RequestsApproved` already occupy), keyed by
 /// `(product_id, settlement_id)` in `SettlementExtension`. Kept as its own
 /// storage item rather than a field folded into an existing struct, same
 /// rationale as `SettlementCollectResponseChains`/`SettlementFinalizeChains`
@@ -828,19 +863,11 @@ pub struct SettlementFlowExtensionV2<BlockNumber> {
 }
 
 /// v2's own settlement-wide step selector — the `FlowVersion::V2` analogue of
-/// `SettlementStep` for the settlement-wide scope (`Triggered`/
+/// `SettlementStep` for the settlement-wide scope (`SettleStarted`/
 /// `RequestsApproved`'s role). See `RequestSubStepV2`'s doc comment — same
 /// "genuinely uninhabited until v2 is designed" rationale.
 #[derive(
-	Clone,
-	Copy,
-	Encode,
-	Decode,
-	DecodeWithMemTracking,
-	PartialEq,
-	Eq,
-	RuntimeDebug,
-	TypeInfo,
+	Clone, Copy, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo,
 )]
 pub enum SettlementSubStepV2 {}
 

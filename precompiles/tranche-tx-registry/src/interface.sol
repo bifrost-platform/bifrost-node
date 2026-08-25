@@ -54,7 +54,7 @@ pragma solidity >=0.8.0;
  *    that linkage for the whole batch — deliberately named apart from RequestCompleted, which
  *    is about a request's own delivery pipeline finishing, not whether its settlement has (see
  *    SettlementStep's dev notes).
- *  - Settlement (per settlement_id, fanned out per chain): a single trigger_tx
+ *  - Settlement (per settlement_id, fanned out per chain): a single settle_started_tx
  *    (Hub-local tryUpdateNAV) that also declares two independent chain sets —
  *    collect_response_chain_ids (chains with a registered Adapter, excluding Hub
  *    itself) and finalize_chain_ids (chains with a registered vault, excluding Hub) —
@@ -65,7 +65,7 @@ pragma solidity >=0.8.0;
  *    own Contract event — NavReported/NavReceived/SettleApplied). Legs progress independently
  *    per chain;
  *    there is no cross-chain ordering constraint. A settlement needing no cross-chain
- *    action at all is Triggered with both sets empty.
+ *    action at all is SettleStarted with both sets empty.
  *  - Receive (per investor per vault): a plain local Spoke-chain receive() tx, not part of
  *    the Bridge&Call pipelines above. TrancheManager pools receivable amounts per
  *    (investor, vault) rather than per request_id, so receives are tracked separately
@@ -279,7 +279,7 @@ interface TrancheTxRegistry {
     ///
     ///      `None` and `RequestCompleted` are read-only sentinels, never valid
     ///      record_request_tx input. Unlike SettlementStep.Queued (which get_settlement
-    ///      genuinely returns for an untriggered settlement), `None` is never actually
+    ///      genuinely returns for a not-yet-started settlement), `None` is never actually
     ///      returned by get_request either — get_request reverts outright for a request_id
     ///      that was never opened, so there's no "not yet requested" state to report. Named
     ///      `None` rather than `Queued` specifically to avoid sitting next to
@@ -300,9 +300,9 @@ interface TrancheTxRegistry {
         RequestCompleted
     }
 
-    /// @dev Step within the settlement pipeline. `Queued`/`Triggered`/`Settled` are the
+    /// @dev Step within the settlement pipeline. `Queued`/`SettleStarted`/`Settled` are the
     ///      three overall states get_settlement's own `status` moves through —
-    ///      `Queued` (not yet triggered), `Triggered` (triggered, awaiting completion),
+    ///      `Queued` (not yet started settling), `SettleStarted` (started, awaiting completion),
     ///      `Settled` (every chain has reached *its own* terminal step — see below). The
     ///      middle six describe one chain's own progress instead — a
     ///      Collect/Response/Finalize leg crossed with a Bridge/Hooks phase, flattened into
@@ -313,12 +313,26 @@ interface TrancheTxRegistry {
     ///      is — `NavReported` (TrancheManager, Collect leg), `NavReceived` (Valuation,
     ///      Response leg), `SettleApplied` (TrancheManager, Finalize leg) — same
     ///      event-name-mirroring convention as RequestStep's `RequestQueued`/`AdapterApplied`.
-    ///      `Queued` and `Settled` are read-only sentinels — "nothing recorded yet" and
-    ///      "settlement fully complete", respectively — and must never be passed to
-    ///      record_settlement_tx (eight recordable values in total: `Triggered`,
-    ///      `RequestsApproved`, plus the six leg steps).
+    ///      `Queued` is the one read-only sentinel — "nothing recorded yet" — and must
+    ///      never be passed to record_settlement_tx (nine recordable values in total:
+    ///      `SettleStarted`, `RequestsApproved`, the six leg steps, and `Settled` itself
+    ///      in the one narrow case described below).
     ///
-    ///      Each chain's own terminal step depends on its role, declared at Trigger time
+    ///      `Settled` is a *computed* status for every Multichain settlement — "settlement
+    ///      fully complete" — never itself a valid record_settlement_tx input there. The
+    ///      one exception is a `SingleChain` product's settlement (reverts otherwise):
+    ///      its SYNC (or manually-settled) Valuation Contract never emits a separate
+    ///      SettleStarted — it emits `Settled` as the pipeline's only event, request and
+    ///      settlement completing in the same tx. Recording that observed event as
+    ///      `SettleStarted`, as if a genuine SettleStarted had actually fired, would break
+    ///      this enum's own event-name-mirroring convention for exactly the one case where
+    ///      the recorder's evidence tx and the pipeline's terminal status happen to
+    ///      coincide — so record_settlement_tx accepts `Settled` directly instead, with
+    ///      the exact same effect `SettleStarted` (both chain sets empty) already has.
+    ///      `spoke_chain_id` and both chain-set params MUST be 0/empty for it, same as
+    ///      RequestsApproved — see record_settlement_tx's dev notes for the full gating.
+    ///
+    ///      Each chain's own terminal step depends on its role, declared at SettleStarted time
     ///      (see record_settlement_tx's dev notes): `SettleApplied` if it's in
     ///      `finalize_chain_ids` (it has a vault to deliver a result to), otherwise
     ///      `NavReceived` (it only has an Adapter — Collect/Response-only chains
@@ -327,8 +341,8 @@ interface TrancheTxRegistry {
     ///      once every chain has reached its own terminal step.
     ///
     ///      A settlement that needs no cross-chain action at all is represented by
-    ///      `Triggered` with *both* `collect_response_chain_ids` and `finalize_chain_ids`
-    ///      empty — no separate step value needed: `Triggered` no longer requires either
+    ///      `SettleStarted` with *both* `collect_response_chain_ids` and `finalize_chain_ids`
+    ///      empty — no separate step value needed: `SettleStarted` no longer requires either
     ///      set to be non-empty, so both empty alone unambiguously means "nothing to
     ///      collect/respond/finalize" via vacuous truth (get_settlement's `spoke_chains`
     ///      array comes back empty, and `status` is `Settled` immediately).
@@ -350,14 +364,14 @@ interface TrancheTxRegistry {
     ///      after every one of the settlement's collect_response_chain_ids has reported
     ///      NAV), just batched — but for a SingleChain SYNC product, Valuation emits
     ///      DepositsApproved/RedeemsApproved *before* Settled, so this step can genuinely
-    ///      land before Triggered for the same settlement_id. Deliberately has NO Trigger
-    ///      precondition (unlike every leg step) precisely because of that — the old
-    ///      per-request SettlementApproved step this replaced never required Trigger to have
-    ///      landed first either. Like `Triggered`, `RequestsApproved` is settlement-wide
-    ///      rather than chain-scoped:
+    ///      land before SettleStarted for the same settlement_id. Deliberately has NO
+    ///      SettleStarted precondition (unlike every leg step) precisely because of that —
+    ///      the old per-request SettlementApproved step this replaced never required
+    ///      SettleStarted to have landed first either. Like `SettleStarted`, `RequestsApproved`
+    ///      is settlement-wide rather than chain-scoped:
     ///      `spoke_chain_id` MUST be 0 and both collect_response_chain_ids/
-    ///      finalize_chain_ids MUST be empty for it, same as `Triggered` — but unlike
-    ///      `Triggered`, its own dedicated `request_ids` parameter is what MUST be
+    ///      finalize_chain_ids MUST be empty for it, same as `SettleStarted` — but unlike
+    ///      `SettleStarted`, its own dedicated `request_ids` parameter is what MUST be
     ///      non-empty instead. Per-entry amounts/price the underlying approved-items array
     ///      may carry aren't recorded here — this contract only ever tracks tx evidence
     ///      and the request<->settlement linkage, never settlement financials. Because of
@@ -367,7 +381,7 @@ interface TrancheTxRegistry {
     ///      condition has already landed by the time this call runs.
     enum SettlementStep {
         Queued,
-        Triggered,
+        SettleStarted,
         CollectBridgeExecuted,
         NavReported,
         ResponseBridgeExecuted,
@@ -528,9 +542,9 @@ interface TrancheTxRegistry {
         uint8 bridge_status
     );
 
-    /// @dev `spoke_chain_id` is 0 only when `step == Triggered` or `RequestsApproved`
+    /// @dev `spoke_chain_id` is 0 only when `step == SettleStarted` or `RequestsApproved`
     ///      (`collect_response_chain_ids`/`finalize_chain_ids` are then meaningful, each
-    ///      independently possibly empty, only for `Triggered`; `request_ids` is meaningful,
+    ///      independently possibly empty, only for `SettleStarted`; `request_ids` is meaningful,
     ///      and non-empty, only for `RequestsApproved`); otherwise `spoke_chain_id`
     ///      identifies the chain and all three array params are empty — same sentinel
     ///      convention as record_settlement_tx's own parameters. `settlement_id` is
@@ -680,26 +694,32 @@ interface TrancheTxRegistry {
     ) external;
 
     /**
-     * @notice Attest to one tx in a settlement's pipeline: the single Trigger tx, the
-     *         (possibly batched) RequestsApproved tx, or one bridge/hooks half of a
-     *         Collect/Response/Finalize leg for one chain.
+     * @notice Attest to one tx in a settlement's pipeline: the single SettleStarted tx (or,
+     *         for a SingleChain product's settlement, that same tx recorded as `Settled`
+     *         instead — see SettlementStep's dev notes), the (possibly batched)
+     *         RequestsApproved tx, or one bridge/hooks half of a Collect/Response/Finalize
+     *         leg for one chain.
      * @dev Only callable by the pallet-registered tx recorder account. `attestation.tx_hash`
      *      MUST NOT be the zero hash (rejected otherwise) — same rationale as
      *      record_request_tx's own `tx_hash` check.
-     *      `step` MUST NOT be `SettlementStep.Queued` or `SettlementStep.Settled` — both are read-only
-     *      sentinels reserved for get_settlement's own `status`, never a
-     *      valid attestation to record. `settlement_id` is only unique within
+     *      `step` MUST NOT be `SettlementStep.Queued` — the one read-only sentinel,
+     *      reserved for get_settlement's own `status`, never a valid attestation to
+     *      record. `step == SettlementStep.Settled` IS otherwise valid here, but only for
+     *      a SingleChain product's settlement (reverts for Multichain — see
+     *      SettlementStep's dev notes). `settlement_id` is only unique within
      *      `product_id`'s own namespace — each product's Valuation
      *      Contract generates its own sequence, same scoping as every settlement_id use in
      *      the Investments precompile (e.g. record_settlement) — so all storage
      *      here is keyed by (product_id, settlement_id), never settlement_id alone.
      *      `spoke_chain_id` and the two chain-set params are sentinel-gated, mirroring
-     *      record_request_tx: for `step == Triggered`, `spoke_chain_id` MUST be 0 and both
+     *      record_request_tx: for `step == SettleStarted`, `spoke_chain_id` MUST be 0 and both
      *      `collect_response_chain_ids`/`finalize_chain_ids` are meaningful — each may
      *      independently be empty, and both empty means the settlement needs no cross-chain
-     *      action at all; for `step == RequestsApproved`, `spoke_chain_id` MUST also be 0 and
-     *      both chain-set params MUST be empty, but `request_ids` MUST be non-empty instead
-     *      (see below); for every leg step, `spoke_chain_id` MUST be non-zero and both
+     *      action at all; for `step == RequestsApproved` or `step == Settled`, `spoke_chain_id`
+     *      MUST also be 0 and both chain-set params MUST be empty — RequestsApproved has
+     *      `request_ids` instead (see below), Settled has nothing else to supply (its chain
+     *      sets are always empty by construction — see SettlementStep's dev notes); for every
+     *      leg step, `spoke_chain_id` MUST be non-zero and both
      *      chain-set params MUST be empty. Safe as a sentinel because no EVM chain in this
      *      protocol's supported set is ever assigned chain_id 0. `spoke_chain_id` identifies
      *      which chain a leg step is about — not necessarily the chain `attestation.chain_id`
@@ -713,12 +733,12 @@ interface TrancheTxRegistry {
      *      (excluding Hub) with a registered vault this settlement delivers a result to — a
      *      FinalizeBridgeExecuted/SettleApplied call is only valid for a chain in
      *      this set. A chain may appear in both (it has both a registered Adapter and a
-     *      registered vault) or just one. `step == Triggered` must be recorded exactly once
+     *      registered vault) or just one. `step == SettleStarted` must be recorded exactly once
      *      per (product_id, settlement_id), before any leg step for that settlement — but NOT
      *      necessarily before a `RequestsApproved` call for it: a SingleChain SYNC product's
      *      Valuation Contract emits DepositsApproved/RedeemsApproved before Settled, so
-     *      `RequestsApproved` can legitimately land before `Triggered` (unlike every leg
-     *      step, `RequestsApproved` has no Trigger precondition). Within a given
+     *      `RequestsApproved` can legitimately land before `SettleStarted` (unlike every leg
+     *      step, `RequestsApproved` has no SettleStarted precondition). Within a given
      *      (spoke_chain_id, leg) pair, Bridge must be recorded before Hooks, with no
      *      duplicates — this ordering is enforced only within that pair, not across chains
      *      or legs, since chains progress independently.
@@ -736,12 +756,12 @@ interface TrancheTxRegistry {
      *      Emits SettlementTxRecorded.
      * @param product_id     The product this settlement belongs to
      * @param settlement_id  The settlement cycle this attestation belongs to
-     * @param spoke_chain_id  The chain this leg step is for — 0 if step == Triggered or
-     *                        RequestsApproved (both settlement-wide, not chain-scoped)
+     * @param spoke_chain_id  The chain this leg step is for — 0 if step == SettleStarted,
+     *                        RequestsApproved, or Settled (all settlement-wide, not chain-scoped)
      * @param collect_response_chain_ids Chains needing a Collect/Response leg — meaningful
-     *                        (and may be empty) iff step == Triggered, empty otherwise
+     *                        (and may be empty) iff step == SettleStarted, empty otherwise
      * @param finalize_chain_ids Chains needing a Finalize leg — meaningful (and may be
-     *                        empty) iff step == Triggered, empty otherwise
+     *                        empty) iff step == SettleStarted, empty otherwise
      * @param request_ids     Every request_id Valuation approved into this settlement —
      *                        required (non-empty) iff step == RequestsApproved, empty
      *                        otherwise
@@ -897,7 +917,7 @@ interface TrancheTxRegistry {
      *      RequestEntries/SettlementTriggers do.
      *      Reverts if no such entry exists (investor/vault/tx_hash must exactly match a
      *      prior record_receive_tx call) — same convention as get_request, not
-     *      get_settlement's more lenient zeroed-response-for-not-yet-triggered behavior,
+     *      get_settlement's more lenient zeroed-response-for-not-yet-started behavior,
      *      since there's no meaningful "not yet" state for a receive: either the tx_hash
      *      was attested or it wasn't.
      * @param investor The controller whose request this receive() call settled
@@ -944,7 +964,7 @@ interface TrancheTxRegistry {
      *      (vault, who, nonce) — via WhitelistRequested (Multichain) or self-opened via
      *      WhitelistApplied (SingleChain, see that function's dev notes) — same
      *      convention as get_request, not get_settlement's more lenient
-     *      zeroed-response-for-not-yet-triggered behavior, since there's no meaningful
+     *      zeroed-response-for-not-yet-started behavior, since there's no meaningful
      *      "not yet" state to report: a whitelist action doesn't exist at all until
      *      some step has opened it.
      *      For a Multichain product's action: `steps[0]` is always
@@ -992,18 +1012,18 @@ interface TrancheTxRegistry {
         );
 
     /**
-     * @notice Read a settlement's full state in one call: Trigger evidence, the
+     * @notice Read a settlement's full state in one call: SettleStarted evidence, the
      *         settlement's own overall status, and every registered chain's ordered
      *         step-by-step history.
-     * @dev Does not revert for an untriggered (product_id, settlement_id) — returns a
-     *      zeroed `trigger_tx`, `status == Queued`, and empty `spoke_chains` instead, so
+     * @dev Does not revert for a not-yet-started (product_id, settlement_id) — returns a
+     *      zeroed `settle_started_tx`, `status == Queued`, and empty `spoke_chains` instead, so
      *      callers can poll a not-yet-started settlement_id without a revert.
      *      Chain IDs are not returned separately — read them off
      *      `spoke_chains[i].spoke_chain_id`. `spoke_chains` is the union of
-     *      `collect_response_chain_ids` and `finalize_chain_ids` declared at Trigger time
+     *      `collect_response_chain_ids` and `finalize_chain_ids` declared at SettleStarted time
      *      (collect_response-declared chains first, then any finalize-only chains not
-     *      already included; empty if Triggered with no cross-chain action needed, or if
-     *      not yet triggered at all).
+     *      already included; empty if SettleStarted with no cross-chain action needed, or if
+     *      not yet started at all).
      *      `spoke_chains[i].steps` only contains the step kinds that chain's role actually
      *      needs — see SettlementChainSteps' own dev notes — so a step's absence there means
      *      "does not apply," never "not yet reached"; within the array, each entry's own
@@ -1012,13 +1032,13 @@ interface TrancheTxRegistry {
      *      own completion condition internally; this call exists purely for external
      *      registry visibility).
      *      `status` only ever takes one of three values:
-     *      - `Queued` — Trigger not yet recorded (`trigger_tx` is then zeroed too).
-     *      - `Triggered` — Trigger recorded, but at least one chain hasn't yet reached its
-     *        own terminal step (last entry in its `steps` array).
+     *      - `Queued` — SettleStarted not yet recorded (`settle_started_tx` is then zeroed too).
+     *      - `SettleStarted` — SettleStarted recorded, but at least one chain hasn't yet reached
+     *        its own terminal step (last entry in its `steps` array).
      *      - `Settled` — every chain has reached its own terminal step (vacuously true, and
-     *        immediate, if Triggered with both chain sets empty, i.e. `spoke_chains` is
-     *        empty). `trigger_tx` itself never changes once Triggered — only `status` moves
-     *        from `Triggered` to `Settled` as chains complete.
+     *        immediate, if SettleStarted with both chain sets empty, i.e. `spoke_chains` is
+     *        empty). `settle_started_tx` itself never changes once recorded — only `status`
+     *        moves from `SettleStarted` to `Settled` as chains complete.
      *      `spoke_bridge_attempts` is each chain's full Bridge-phase attempt history
      *      across all three leg kinds — every attempt observed, `Executed` or `Reverted`
      *      alike, in order — as opposed to `spoke_chains[i].steps`' own Bridge-phase
@@ -1028,8 +1048,8 @@ interface TrancheTxRegistry {
      *      SettlementChainBridgeAttempts' own dev notes).
      * @param product_id    The product the settlement belongs to
      * @param settlement_id The settlement to look up
-     * @return trigger_tx   Evidence for the Trigger step
-     * @return status       The settlement's own overall status — `Queued`/`Triggered`/`Settled`
+     * @return settle_started_tx   Evidence for the SettleStarted step
+     * @return status       The settlement's own overall status — `Queued`/`SettleStarted`/`Settled`
      * @return spoke_chains Per-chain ordered step history, see above
      * @return spoke_bridge_attempts Per-chain full Bridge-phase attempt history, see above
      */
@@ -1040,7 +1060,7 @@ interface TrancheTxRegistry {
         external
         view
         returns (
-            TxRecord memory trigger_tx,
+            TxRecord memory settle_started_tx,
             SettlementStep status,
             SettlementChainSteps[] memory spoke_chains,
             SettlementChainBridgeAttempts[] memory spoke_bridge_attempts
@@ -1151,7 +1171,7 @@ interface TrancheTxRegistry {
      *        deposit.
      *      - Hub vault: true once every one of `settlement_id`'s `collect_response_chain_ids`
      *        has reached `NavReceived` (vacuously true, and immediate, if that set
-     *        was declared empty at Trigger) — NAV must be fully known before the Hub vault's
+     *        was declared empty at SettleStarted) — NAV must be fully known before the Hub vault's
      *        own payout/allocation can be computed, which then happens synchronously with no
      *        Finalize leg of its own.
      *      Named `settled` rather than `receivable` to read naturally against

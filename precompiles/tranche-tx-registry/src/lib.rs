@@ -223,28 +223,32 @@ where
 		Ok(())
 	}
 
-	/// Attest to one tx in a settlement's pipeline: the single Trigger tx, the
-	/// (possibly batched) RequestsApproved tx, or one bridge/hooks half of a
-	/// Collect/Response/Finalize leg for one chain. A settlement needing no
-	/// cross-chain action at all is recorded as `Triggered` with both chain sets
-	/// empty. See `pallet_tranche_tx_registry::record_settlement_tx`'s doc comment
-	/// for the full ordering/duplicate-recording contract this dispatches into;
-	/// this function's own job is only translating interface.sol's flat,
+	/// Attest to one tx in a settlement's pipeline: the single SettleStarted tx (or,
+	/// for a `SingleChain` product's settlement, that same tx recorded as `Settled`
+	/// instead — see `pallet_tranche_tx_registry::SettlementStep::Settled`'s doc
+	/// comment), the (possibly batched) RequestsApproved tx, or one bridge/hooks
+	/// half of a Collect/Response/Finalize leg for one chain. A `Multichain`
+	/// settlement needing no cross-chain action at all is recorded as
+	/// `SettleStarted` with both chain sets empty. See
+	/// `pallet_tranche_tx_registry::record_settlement_tx`'s doc comment for the
+	/// full ordering/duplicate-recording contract this dispatches into; this
+	/// function's own job is only translating interface.sol's flat,
 	/// sentinel-gated calldata into the pallet's
 	/// `Option<ChainId>`/`Option<BoundedVec<..>>` shapes.
 	///
 	/// @param spoke_chain_id  The spoke chain this leg step is for — 0 if step ==
-	/// Triggered or RequestsApproved (both settlement-wide, not chain-scoped)
+	/// SettleStarted, RequestsApproved, or Settled (all settlement-wide, not chain-scoped)
 	/// @param collect_response_chain_ids Chains needing a Collect/Response leg (have a
-	/// registered Adapter) — meaningful (and may be empty) iff step == Triggered
+	/// registered Adapter) — meaningful (and may be empty) iff step == SettleStarted
 	/// @param finalize_chain_ids Chains needing a Finalize leg (have a registered vault) —
-	/// meaningful (and may be empty) iff step == Triggered
+	/// meaningful (and may be empty) iff step == SettleStarted
 	/// @param request_ids Every request_id Valuation approved into this settlement —
 	/// required (non-empty) iff step == RequestsApproved, empty otherwise
-	/// @param step            0 = Queued (never valid here), 1 = Triggered,
+	/// @param step            0 = Queued (never valid here), 1 = SettleStarted,
 	/// 2 = CollectBridgeExecuted, 3 = NavReported, 4 = ResponseBridgeExecuted,
 	/// 5 = NavReceived, 6 = RequestsApproved, 7 = FinalizeBridgeExecuted, 8 = SettleApplied,
-	/// 9 = Settled (never valid here)
+	/// 9 = Settled (valid here only for a `SingleChain` product's settlement — reverts
+	/// otherwise)
 	/// @param bridge_status   3 = Executed, 4 = Reverted — meaningful iff step is one of
 	/// the three Bridge-phase leg steps, MUST be 0 otherwise
 	#[precompile::public(
@@ -450,11 +454,11 @@ where
 		Ok(())
 	}
 
-	/// Read a settlement's full state in one call: Trigger evidence, the settlement's
+	/// Read a settlement's full state in one call: SettleStarted evidence, the settlement's
 	/// own overall status, and every registered chain's ordered step-by-step history
 	/// (each entry only for the leg kind(s) that chain's role actually needs — no
-	/// zeroed-forever "not applicable" fields to interpret). Does not revert for an
-	/// untriggered (product_id, settlement_id) — returns a zeroed `trigger_tx`,
+	/// zeroed-forever "not applicable" fields to interpret). Does not revert for a
+	/// not-yet-started (product_id, settlement_id) — returns a zeroed `settle_started_tx`,
 	/// `status == Queued`, and empty `spoke_chains` instead.
 	///
 	/// `spoke_chains[i].steps` is exactly `[CollectBridgeExecuted, NavReported,
@@ -469,17 +473,17 @@ where
 	/// collect_response-declared chains first, then any finalize-only chains not
 	/// already included.
 	///
-	/// `status` only ever takes one of three values: `Queued` (Trigger not yet
-	/// recorded — `trigger_tx` is then zeroed too), `Triggered` (at least one chain's
+	/// `status` only ever takes one of three values: `Queued` (SettleStarted not yet
+	/// recorded — `settle_started_tx` is then zeroed too), `SettleStarted` (at least one chain's
 	/// last step hasn't landed), `Settled` (every chain's last step has — vacuously
-	/// true, and immediate, if Triggered with both chain sets empty, i.e.
-	/// `spoke_chains` itself is empty). `trigger_tx` itself never changes once
-	/// Triggered — only `status` moves from `Triggered` to `Settled` as chains
+	/// true, and immediate, if SettleStarted with both chain sets empty, i.e.
+	/// `spoke_chains` itself is empty). `settle_started_tx` itself never changes once
+	/// recorded — only `status` moves from `SettleStarted` to `Settled` as chains
 	/// complete.
 	/// @param product_id    The product the settlement belongs to
 	/// @param settlement_id The settlement to look up
-	/// @return trigger_tx   Evidence for the Trigger step
-	/// @return status       The settlement's own overall status — `Queued`/`Triggered`/`Settled`
+	/// @return settle_started_tx   Evidence for the SettleStarted step
+	/// @return status       The settlement's own overall status — `Queued`/`SettleStarted`/`Settled`
 	/// @return spoke_chains Per-chain ordered step history, see above
 	/// @return spoke_bridge_attempts Per-chain full Bridge-phase attempt history across all
 	/// three leg kinds — every attempt observed, Executed or Reverted alike, in order; a
@@ -498,10 +502,12 @@ where
 		Vec<EvmSettlementChainBridgeAttempts>,
 	)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let Some(trigger_tx) = pallet_tranche_tx_registry::SettlementTriggers::<Runtime>::get(
-			product_id,
-			settlement_id,
-		) else {
+		let Some(settle_started_tx) =
+			pallet_tranche_tx_registry::SettlementTriggers::<Runtime>::get(
+				product_id,
+				settlement_id,
+			)
+		else {
 			return Ok((
 				encode_tx_record::<BlockNumberFor<Runtime>>(None),
 				encode_settlement_step(SettlementStep::Queued),
@@ -595,9 +601,10 @@ where
 			));
 		}
 
-		let status = if all_complete { SettlementStep::Settled } else { SettlementStep::Triggered };
+		let status =
+			if all_complete { SettlementStep::Settled } else { SettlementStep::SettleStarted };
 		Ok((
-			encode_tx_record(Some(trigger_tx)),
+			encode_tx_record(Some(settle_started_tx)),
 			encode_settlement_step(status),
 			spoke_chains,
 			spoke_bridge_attempts,
@@ -1344,7 +1351,7 @@ fn encode_request_step(step: RequestStep) -> u8 {
 fn decode_settlement_step(step: u8) -> EvmResult<SettlementStep> {
 	match step {
 		0 => Ok(SettlementStep::Queued),
-		1 => Ok(SettlementStep::Triggered),
+		1 => Ok(SettlementStep::SettleStarted),
 		2 => Ok(SettlementStep::CollectBridgeExecuted),
 		3 => Ok(SettlementStep::NavReported),
 		4 => Ok(SettlementStep::ResponseBridgeExecuted),
@@ -1360,7 +1367,7 @@ fn decode_settlement_step(step: u8) -> EvmResult<SettlementStep> {
 fn encode_settlement_step(step: SettlementStep) -> u8 {
 	match step {
 		SettlementStep::Queued => 0,
-		SettlementStep::Triggered => 1,
+		SettlementStep::SettleStarted => 1,
 		SettlementStep::CollectBridgeExecuted => 2,
 		SettlementStep::NavReported => 3,
 		SettlementStep::ResponseBridgeExecuted => 4,
@@ -1504,9 +1511,10 @@ fn decode_request_adapter_chains(
 
 /// `record_settlement_tx`'s decoded `spoke_chain_id`/`collect_response_chain_ids`/
 /// `finalize_chain_ids` triple — either only `spoke_chain_id` is `Some` (a leg step),
-/// or both chain sets are (`step == Triggered`), or neither (`step ==
-/// RequestsApproved`, settlement-wide like `Triggered` but with no chain sets of
-/// its own — see `decode_settlement_request_ids`), matching
+/// or both chain sets are (`step == SettleStarted`), or neither (`step ==
+/// RequestsApproved` or `step == Settled`, both settlement-wide like
+/// `SettleStarted` but with no chain sets of their own — see
+/// `decode_settlement_request_ids`), matching
 /// `pallet_tranche_tx_registry::record_settlement_tx`'s own parameter shapes.
 /// The two chain sets carry different bounds — `collect_response_chain_ids` is
 /// an Adapter-chain concept (`MAX_MULTICHAIN_ADAPTERS`), `finalize_chain_ids` is
@@ -1524,24 +1532,27 @@ type DecodedSpokeChains = (
 );
 
 /// Translates `record_settlement_tx`'s flat, sentinel-gated calldata into the
-/// pallet's `Option<ChainId>`/`Option<BoundedVec<..>>` triple. Three cases:
-/// `step == Triggered` requires `spoke_chain_id == 0` and both
+/// pallet's `Option<ChainId>`/`Option<BoundedVec<..>>` triple. Four cases:
+/// `step == SettleStarted` requires `spoke_chain_id == 0` and both
 /// `collect_response_chain_ids`/`finalize_chain_ids` that may independently be
 /// empty (both empty means the settlement needs no cross-chain action at all);
 /// `step == RequestsApproved` also requires `spoke_chain_id == 0` but both chain
 /// sets empty (it has `request_ids` instead — see
-/// `decode_settlement_request_ids`); every leg step requires non-zero
-/// `spoke_chain_id` and both chain sets empty. Reverts on any other combination,
-/// matching interface.sol's documented contract.
+/// `decode_settlement_request_ids`); `step == Settled` (`SingleChain` only —
+/// see `pallet_tranche_tx_registry::SettlementStep::Settled`'s doc comment)
+/// likewise requires `spoke_chain_id == 0` and both chain sets empty, with
+/// nothing else to supply; every leg step requires non-zero `spoke_chain_id`
+/// and both chain sets empty. Reverts on any other combination, matching
+/// interface.sol's documented contract.
 fn decode_settlement_spoke_chains(
 	step: SettlementStep,
 	spoke_chain_id: u64,
 	collect_response_chain_ids: &[u64],
 	finalize_chain_ids: &[u64],
 ) -> EvmResult<DecodedSpokeChains> {
-	if step == SettlementStep::Triggered {
+	if step == SettlementStep::SettleStarted {
 		if spoke_chain_id != 0 {
-			return Err(revert("spoke_chain_id must be 0 when step == Triggered"));
+			return Err(revert("spoke_chain_id must be 0 when step == SettleStarted"));
 		}
 		let bounded_collect_response = BoundedVec::try_from(collect_response_chain_ids.to_vec())
 			.map_err(|_| revert("too many collect_response chains"))?;
@@ -1551,7 +1562,7 @@ fn decode_settlement_spoke_chains(
 	} else {
 		if !collect_response_chain_ids.is_empty() || !finalize_chain_ids.is_empty() {
 			return Err(revert(
-				"collect_response_chain_ids/finalize_chain_ids must be empty unless step == Triggered",
+				"collect_response_chain_ids/finalize_chain_ids must be empty unless step == SettleStarted",
 			));
 		}
 		if step == SettlementStep::RequestsApproved {
@@ -1560,9 +1571,15 @@ fn decode_settlement_spoke_chains(
 			}
 			return Ok((None, None, None));
 		}
+		if step == SettlementStep::Settled {
+			if spoke_chain_id != 0 {
+				return Err(revert("spoke_chain_id must be 0 when step == Settled"));
+			}
+			return Ok((None, None, None));
+		}
 		if spoke_chain_id == 0 {
 			return Err(revert(
-				"spoke_chain_id required unless step == Triggered or RequestsApproved",
+				"spoke_chain_id required unless step == SettleStarted, RequestsApproved, or Settled",
 			));
 		}
 		Ok((Some(spoke_chain_id), None, None))
