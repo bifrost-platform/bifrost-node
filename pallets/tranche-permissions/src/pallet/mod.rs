@@ -1,16 +1,19 @@
 mod impls;
 
-use crate::{Role, WeightInfo};
+use crate::{migrations, Role, WeightInfo};
 use pallet_tranche_system::{ProductId, VaultId, VaultInspect};
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{Hooks, OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -73,11 +76,39 @@ pub mod pallet {
 		StorageDoubleMap<_, Blake2_128Concat, ProductId, Blake2_128Concat, T::AccountId, ()>;
 
 	#[pallet::storage]
-	/// Whitelisted investors per tranche — many per tranche.
-	/// `VaultId` is globally unique (chain_id + vault_address, enforced by
-	/// pallet-tranche-system), so no product key is needed here.
-	pub type TrancheInvestors<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, VaultId, Blake2_128Concat, T::AccountId, ()>;
+	/// Whitelisted investors per `(product_id, vault)` — many per tranche.
+	/// Keyed by `product_id` in addition to `VaultId` (2026-08-26, `v1`) even
+	/// though `VaultId` is otherwise globally unique (chain_id +
+	/// vault_address, enforced by pallet-tranche-system) — that uniqueness
+	/// only holds while the vault is *currently registered*.
+	/// `pallet_tranche_system::set_tranche(Remove)` frees a `VaultId` for a
+	/// *different* product to register later (`Vaults::remove` there has no
+	/// memory of who used to own it), so keying on `VaultId` alone would let
+	/// a removed tranche's stale investor whitelist silently resurrect itself
+	/// for whatever new product reuses that same `(chain_id, vault_address)`.
+	/// Look up with `contains_key((product_id, vault, who))`; enumerate a
+	/// tranche's investors with `iter_prefix((product_id, vault))`. See
+	/// `migrations::v1` for the backfill this required.
+	pub type TrancheInvestors<T: Config> = StorageNMap<
+		_,
+		(
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, VaultId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+		),
+		(),
+	>;
+
+	// -----------------------------------------------------------------------
+	// Hooks
+	// -----------------------------------------------------------------------
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	// -----------------------------------------------------------------------
 	// Extrinsics

@@ -183,15 +183,18 @@ where
 		Ok(())
 	}
 
-	/// Read whether `who` currently holds the TrancheInvestor whitelist for `vault`.
+	/// Read whether `who` currently holds the TrancheInvestor whitelist for
+	/// `vault` under `product_id`.
 	///
-	/// `product_id` is accepted for signature symmetry with the rest of this
-	/// interface (mirrors `grant_permission`) but isn't part of the actual
-	/// check — `TrancheInvestors` is keyed by `vault` alone (globally unique,
-	/// enforced by pallet-tranche-system), same as
-	/// `pallet_tranche_permissions`'s own `has_role`'s TrancheInvestor arm.
+	/// `product_id` is part of the actual check (2026-08-26) — `TrancheInvestors`
+	/// is keyed by `(product_id, vault, who)`, not `vault` alone, precisely so a
+	/// `VaultId` freed by `pallet_tranche_system::set_tranche(Remove)` and later
+	/// reused by a *different* product can't resurrect the old product's stale
+	/// whitelist here. Pass the vault's current, actual `product_id` — a stale
+	/// or mismatched one simply reads back `false`, same as an investor who was
+	/// never granted at all.
 	///
-	/// @param product_id Accepted for signature symmetry; not used in the lookup itself
+	/// @param product_id The product `vault` currently belongs to
 	/// @param vault      (chain_id, vault_address) identifying the tranche whose whitelist
 	/// is being checked
 	/// @param who        EVM address to check
@@ -199,7 +202,7 @@ where
 	#[precompile::view]
 	fn is_tranche_investor(
 		handle: &mut impl PrecompileHandle,
-		_product_id: ProductId,
+		product_id: ProductId,
 		vault: EvmVaultInput,
 		who: Address,
 	) -> EvmResult<bool> {
@@ -207,10 +210,11 @@ where
 		let (vault_chain_id, vault_address) = vault;
 		let vault = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
-		Ok(pallet_tranche_permissions::TrancheInvestors::<Runtime>::contains_key(
+		Ok(pallet_tranche_permissions::TrancheInvestors::<Runtime>::contains_key((
+			product_id,
 			vault,
 			who_account,
-		))
+		)))
 	}
 
 	/// Read whether `who` holds `role` for `product_id`. Only `ProductAdmin` (0) and
