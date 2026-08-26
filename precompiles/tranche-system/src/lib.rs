@@ -303,6 +303,22 @@ where
 		let tranche_type = decode_tranche_type(tranche_type_byte, apr)?;
 		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
 
+		// `Update` can cascade an actual `tranche_type` change to every OTHER
+		// vault anywhere in the product that currently shares `vault_id`'s
+		// OLD type (see `pallet_tranche_system::set_tranche`'s own doc
+		// comment) — read that set from storage *before* dispatching, while
+		// it still reflects the pre-mutation state, so we can emit one EVM
+		// `TrancheSet` log per affected vault below, mirroring the pallet's
+		// own per-vault `Event::TrancheSet` emissions. Reading it after a
+		// successful dispatch would be too late — the pallet's own rename
+		// has already happened by then.
+		let cascaded = if decoded_action == CrudAction::Update {
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+			cascaded_tranche_targets::<Runtime>(product_id, &vault_id, &tranche_type)
+		} else {
+			Vec::new()
+		};
+
 		let call = TrancheSystemCall::<Runtime>::set_tranche {
 			product_id,
 			action: decoded_action,
@@ -336,6 +352,33 @@ where
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
+
+		for (
+			cascaded_vault_chain_id,
+			cascaded_vault_address,
+			cascaded_asset,
+			cascaded_shares,
+			cascaded_priority,
+		) in cascaded
+		{
+			let cascaded_event = log1(
+				handle.context().address,
+				SELECTOR_LOG_TRANCHE_SET,
+				solidity::encode_event_data((
+					product_id,
+					action,
+					tranche_type_byte,
+					apr,
+					cascaded_vault_chain_id,
+					cascaded_vault_address,
+					cascaded_asset,
+					cascaded_shares,
+					cascaded_priority,
+				)),
+			);
+			handle.record_log_costs(&[&cascaded_event])?;
+			cascaded_event.record(handle)?;
+		}
 
 		Ok(())
 	}
@@ -802,6 +845,75 @@ fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmTrancheInput {
 		Address(tranche.shares),
 		priority,
 	)
+}
+
+/// `set_tranche`'s `Update`-only helper: finds every OTHER vault anywhere in
+/// `product_id` that currently shares `vault`'s pre-update `tranche_type` —
+/// the exact set `pallet_tranche_system::cascade_tranche_type_rename` will
+/// rename to `new_type` if this update actually changes the type. Called
+/// from `set_tranche` *before* dispatching (this reads the pre-mutation
+/// storage snapshot) so the precompile can emit one EVM `TrancheSet` log per
+/// affected vault after a successful dispatch, mirroring the pallet's own
+/// per-vault `Event::TrancheSet` emissions — see that event's own doc
+/// comment for why each cascaded vault gets a separate event rather than
+/// being silently folded into the one for `vault` itself.
+///
+/// Read-only and safe to compute ahead of the actual mutation: a cascade
+/// only ever changes a tranche's `tranche_type` field, never its own
+/// `vault`/`asset`/`shares`/position, so those values read here are still
+/// accurate immediately after the dispatch succeeds. Returns `(vault_chain_id,
+/// vault_address, asset, shares, priority)` per affected vault — empty if
+/// `product_id` doesn't exist, `vault` isn't found in it, or `new_type`
+/// matches `vault`'s current type (nothing to cascade).
+fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
+	product_id: ProductId,
+	vault: &VaultId,
+	new_type: &TrancheType,
+) -> Vec<(u64, Address, Address, Address, u8)> {
+	let Some(product) = pallet_tranche_system::Products::<Runtime>::get(product_id) else {
+		return Vec::new();
+	};
+
+	let old_type = match &product {
+		ProductDetails::Multichain(product) => product
+			.tranches
+			.get(&vault.chain_id)
+			.and_then(|chain| chain.iter().find(|t| &t.vault == vault))
+			.map(|t| t.tranche_type.clone()),
+		ProductDetails::SingleChain(product) => product
+			.tranches
+			.iter()
+			.find(|t| &t.vault == vault)
+			.map(|t| t.tranche_type.clone()),
+	};
+	let Some(old_type) = old_type else {
+		return Vec::new();
+	};
+	if &old_type == new_type {
+		return Vec::new();
+	}
+
+	let mut targets = Vec::new();
+	let chain_groups: Vec<&[Tranche]> = match &product {
+		ProductDetails::Multichain(product) => {
+			product.tranches.values().map(|chain| chain.as_slice()).collect()
+		},
+		ProductDetails::SingleChain(product) => vec![product.tranches.as_slice()],
+	};
+	for chain_tranches in chain_groups {
+		for (idx, t) in chain_tranches.iter().enumerate() {
+			if &t.vault != vault && t.tranche_type == old_type {
+				targets.push((
+					t.vault.chain_id,
+					Address(t.vault.vault_address),
+					Address(t.asset),
+					Address(t.shares),
+					idx as u8,
+				));
+			}
+		}
+	}
+	targets
 }
 
 /// `create_product`-only: each entry's `priority` is passed straight through

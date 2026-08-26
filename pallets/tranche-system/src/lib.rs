@@ -106,8 +106,11 @@ pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
 // ---------------------------------------------------------------------------
 
 /// Identifies a tranche within a product: the EVM chain where its ERC-7540 vault
-/// is deployed, paired with the vault contract address on that chain.
-/// Globally unique across ALL products.
+/// is deployed, paired with the vault contract address on that chain. Once a
+/// `VaultId` is ever registered to a product (see `Vaults`/`VaultRegistration`),
+/// it's bound to that product permanently — removing it only tombstones the
+/// registration, it never frees the `VaultId` for a *different* product to
+/// claim.
 #[derive(
 	Clone,
 	Encode,
@@ -126,6 +129,32 @@ pub struct VaultId {
 	pub chain_id: u64,
 	/// ERC-7540 vault contract address on that chain.
 	pub vault_address: H160,
+}
+
+// ---------------------------------------------------------------------------
+// VaultRegistration
+// ---------------------------------------------------------------------------
+
+/// `Vaults`' value type (2026-08-26, `v6`) — a permanent record of which
+/// product a `VaultId` was ever registered to, plus whether it's currently an
+/// active tranche. `set_tranche(Remove)` only flips `removed` to `true`; it
+/// never removes the storage entry itself, so `product_id` stays discoverable
+/// (and, crucially, still occupies the key) forever. `set_tranche(Add)` on a
+/// `VaultId` already in this map only succeeds if `product_id` matches — the
+/// same product re-registering a vault it previously removed clears `removed`
+/// back to `false`; any other product attempting to claim it reverts with
+/// `Error::VaultBoundToDifferentProduct`. See `Vaults`' own storage doc
+/// comment (pallet/mod.rs) for the full rationale.
+#[derive(
+	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
+)]
+pub struct VaultRegistration {
+	/// The product this `VaultId` is permanently bound to — set once, at
+	/// first registration, and never changed afterward.
+	pub product_id: ProductId,
+	/// `true` if this vault was removed from its product's tranche list
+	/// (`set_tranche(Remove)`) and hasn't been re-added since.
+	pub removed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -651,8 +680,12 @@ pub enum FlowVersion {
 /// `Role::TrancheInvestor(vault)` for a vault that doesn't belong to the
 /// product the caller is ProductAdmin for.
 pub trait VaultInspect {
-	/// Returns `true` if `vault` is registered as one of `product_id`'s
-	/// tranches.
+	/// Returns `true` if `vault` is permanently bound to `product_id` (see
+	/// `VaultRegistration`) — regardless of whether it's currently an active
+	/// tranche or has been removed (`removed: true`). Ownership, once
+	/// established, never changes, so callers checking "does this vault
+	/// belong to this product" don't need to separately ask whether it's
+	/// still active.
 	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool;
 	/// Returns `true` if every id in `chain_ids` is a chain where `product_id` has at
 	/// least one tranche vault. Takes a slice (rather than one `chain_id` at a time) so

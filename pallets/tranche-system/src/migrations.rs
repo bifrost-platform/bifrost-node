@@ -734,3 +734,65 @@ pub mod v5 {
 		<T as frame_system::Config>::DbWeight,
 	>;
 }
+
+/// v5 -> v6: `Vaults`' value type changes from a bare `ProductId` to
+/// `VaultRegistration { product_id, removed }` — see `VaultRegistration`'s
+/// own doc comment for the new product-level protocol rule this backs:
+/// a `VaultId`, once registered, is bound to its product permanently, even
+/// after `set_tranche(Remove)`. Every entry that still exists in `Vaults` as
+/// of this upgrade is, by construction, a currently-active tranche (the
+/// pre-`v6` `Remove` deleted the entry outright, so a removed vault leaves no
+/// trace to migrate) — each is wrapped as `VaultRegistration { product_id,
+/// removed: false }` unchanged.
+///
+/// **Known limitation, not fixable by this migration**: any `VaultId`
+/// removed *before* this upgrade already had its ownership record destroyed
+/// under the old "delete on Remove" behavior — there is no on-chain trace
+/// left to recover, so such a `VaultId` remains free for any product to
+/// claim one more time after this upgrade, same as before it. Only vaults
+/// removed from `v6` onward get the permanent-binding guarantee.
+pub mod v6 {
+	use super::*;
+	use crate::{ProductId, VaultRegistration};
+
+	#[storage_alias]
+	type Vaults<T: Config> = StorageMap<Pallet<T>, Blake2_128Concat, crate::VaultId, ProductId>;
+
+	pub struct MigrateV5ToV6<T>(PhantomData<T>);
+
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV5ToV6<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut weight = Weight::zero();
+
+			let vaults = Vaults::<T>::drain().collect::<Vec<_>>();
+			// `drain()` removes each entry as it's iterated (1 read + 1 write per
+			// entry), separate from the reinsert-writes charged below.
+			weight = weight.saturating_add(
+				T::DbWeight::get().reads_writes(vaults.len() as u64, vaults.len() as u64),
+			);
+			let vaults_count = vaults.len();
+			for (vault, product_id) in vaults {
+				crate::Vaults::<T>::insert(vault, VaultRegistration { product_id, removed: false });
+			}
+			weight = weight.saturating_add(T::DbWeight::get().writes(vaults_count as u64));
+
+			log!(
+				info,
+				"tranche-system v5->v6: wrapped {} active Vaults entries in VaultRegistration{{removed: false}} — vaults removed before this upgrade have no recoverable ownership record, see this migration's own doc comment ✅",
+				vaults_count,
+			);
+
+			weight
+		}
+	}
+
+	/// Gated `on_chain == 5 && in_code == 6`, and bumps the on-chain version itself —
+	/// wire this (not `MigrateV5ToV6` directly) into the pallet's own hook.
+	pub type MigrateToV6<T> = VersionedMigration<
+		5,
+		6,
+		MigrateV5ToV6<T>,
+		Pallet<T>,
+		<T as frame_system::Config>::DbWeight,
+	>;
+}

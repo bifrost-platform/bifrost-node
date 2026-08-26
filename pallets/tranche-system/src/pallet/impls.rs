@@ -1,12 +1,19 @@
 use crate::{
 	AdapterInspect, AdapterKey, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
 	ProductDetails, ProductId, ProductInspect, Tranche, TrancheType, VaultId, VaultInspect,
+	VaultRegistration,
 };
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use sp_core::H160;
-use sp_std::collections::btree_set::BTreeSet;
+use sp_runtime::DispatchError;
+use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+
+/// One vault `set_tranche`'s `Update` cascade renamed alongside the vault the
+/// caller directly targeted — `(vault, new_type, asset, shares, priority)`.
+/// See `cascade_tranche_type_rename`'s own doc comment.
+pub(crate) type CascadedTrancheUpdate = (VaultId, TrancheType, H160, H160, u8);
 
 impl<T: Config> Pallet<T> {
 	/// Checks a `weightBps` set sums to exactly 10_000 (100%) — shared by
@@ -85,7 +92,8 @@ impl<T: Config> Pallet<T> {
 	/// directly) — this invariant is per-chain, not product-wide (see
 	/// `TrancheInput`'s doc comment for why cross-chain tranche ordering isn't
 	/// meaningful). Shared by `create_product`/`create_single_chain_product`
-	/// (on each chain's freshly-sorted input group) and `apply_tranche_action`
+	/// (on each chain's freshly-sorted input group) and
+	/// `apply_add_tranche`/`remove_tranche_from_chain`/`update_tranche_in_chain`
 	/// (re-checked on the resulting one-chain list after the mutation, since
 	/// `Add`/`Remove`/`Update` can all change relative order within it).
 	pub(crate) fn ensure_senior_precedes_junior(tranches: &[Tranche]) -> DispatchResult {
@@ -107,13 +115,25 @@ impl<T: Config> Pallet<T> {
 	/// the residual *of*) — same per-chain scope as
 	/// `ensure_senior_precedes_junior`, and shared by the exact same call
 	/// sites (`create_product`/`create_single_chain_product` on each chain's
-	/// freshly-sorted group, `apply_tranche_action` on the resulting list
-	/// after every mutation). Vacuously satisfied by an empty list —
+	/// freshly-sorted group,
+	/// `apply_add_tranche`/`remove_tranche_from_chain`/`update_tranche_in_chain`
+	/// on the resulting list after every mutation). Vacuously satisfied by an empty list —
 	/// `set_tranche`'s `Remove` is allowed to empty a chain's list out
 	/// entirely (e.g. retiring a Hub-deployed vault while keeping Spoke ones,
 	/// or vice versa); the *product-wide* "at least one tranche somewhere"
 	/// floor is enforced separately, once, by `set_tranche` itself — see
 	/// `Error::ProductMustHaveAtLeastOneTranche`.
+	///
+	/// Also checks no two tranches *on this one chain* share the exact same
+	/// `tranche_type` value (2026-08-26) — e.g. two `Senior { apr: 5% }`
+	/// vaults can't coexist on the same chain (`Junior` is already capped at
+	/// one above, so this only has real bite for `Senior`). This is
+	/// deliberately per-chain, not product-wide: the *same* type existing on
+	/// *different* chains is exactly the normal case `set_tranche`'s
+	/// `Update` cascade and `Error::TrancheTypeMustExistSomewhere` are built
+	/// around (see `set_tranche`'s own doc comment) — e.g. `Senior { apr: 5%
+	/// }` on both a Hub vault and a Spoke vault is fine, two `Senior { apr:
+	/// 5% }` vaults on the *same* chain is not.
 	pub(crate) fn ensure_valid_tranche_composition(tranches: &[Tranche]) -> DispatchResult {
 		if tranches.is_empty() {
 			return Ok(());
@@ -128,90 +148,349 @@ impl<T: Config> Pallet<T> {
 			.count();
 		ensure!(junior_count <= 1, Error::<T>::TooManyJuniorTranches);
 		ensure!(senior_count >= 1, Error::<T>::AtLeastOneSeniorTrancheRequired);
+		for (i, a) in tranches.iter().enumerate() {
+			for b in &tranches[i + 1..] {
+				ensure!(a.tranche_type != b.tranche_type, Error::<T>::DuplicateTrancheTypeOnChain);
+			}
+		}
 		Ok(())
 	}
 
-	/// Applies one `CrudAction` to a single chain's own `ChainTranches` list —
-	/// shared by `set_tranche`'s Multichain branch (called on the target
-	/// chain's own map entry, `product_id` threaded through only for the
-	/// `Vaults` index write/removal) and SingleChain branch (called on the
-	/// product's one and only list) — both use identical insert-and-shift
-	/// semantics once scoped down to "the one list this action's
-	/// `vault.chain_id` applies to." Re-validates `ensure_senior_precedes_junior`
-	/// and `ensure_valid_tranche_composition` on the resulting list after every
-	/// mutation (not just `Add`) since `Remove`/`Update` can all change relative
-	/// order and/or Junior/Senior counts.
-	pub(crate) fn apply_tranche_action(
+	/// After `set_tranche`'s `Update` changes `vault`'s own `tranche_type`
+	/// from `old_type` to `new_type`, renames every *other* tranche in this
+	/// one chain's own list that still carries `old_type` to `new_type` too
+	/// — a `tranche_type` (e.g. "Senior at 5%") is a class shared across the
+	/// whole product, not scoped to one vault, so an `apr` change moves every
+	/// vault at the old rate together. Only the `tranche_type` field changes
+	/// for each one — its own `asset`/`shares`/position are left exactly as
+	/// they were. Called once per chain by `apply_update_tranche` (looping
+	/// over every chain for a `Multichain` product, once for the product's
+	/// own flat list for `SingleChain`) — `old_type != new_type` is checked
+	/// by the caller before calling this at all. Returns `(vault, new_type,
+	/// asset, shares, priority)` for each tranche actually renamed, so
+	/// `set_tranche` can emit one `Event::TrancheSet` per affected vault (see
+	/// that event's own doc comment for why each gets a separate event
+	/// rather than being folded into the one for `vault` itself).
+	pub(crate) fn cascade_tranche_type_rename(
+		chain_tranches: &mut ChainTranches,
+		vault: &VaultId,
+		old_type: &TrancheType,
+		new_type: &TrancheType,
+	) -> Vec<CascadedTrancheUpdate> {
+		let mut affected = Vec::new();
+		for (idx, t) in chain_tranches.iter_mut().enumerate() {
+			if &t.vault != vault && &t.tranche_type == old_type {
+				t.tranche_type = new_type.clone();
+				affected.push((t.vault.clone(), new_type.clone(), t.asset, t.shares, idx as u8));
+			}
+		}
+		affected
+	}
+
+	/// `set_tranche`'s single entry point into `product` — dispatches by
+	/// `CrudAction` first (`Add`/`Remove`/`Update` below), each of which
+	/// handles both product topologies (Multichain/SingleChain) internally.
+	/// Split this way rather than by topology: the three actions differ far
+	/// more from each other (`Add` has no prior state to read at all;
+	/// `Remove` checks the two product-wide floors in `ensure_product_minimums_after_remove`;
+	/// `Update` can cascade a rename across every other chain) than
+	/// Multichain differs from SingleChain *within* one action (only how the
+	/// target chain's own list is located) — so following one action
+	/// straight through, across both topologies, reads more linearly than
+	/// following one topology across three unrelated actions.
+	pub(crate) fn apply_set_tranche(
 		product_id: ProductId,
-		tranches: &mut ChainTranches,
+		product: &mut ProductDetails<T::AccountId>,
 		action: CrudAction,
 		vault: &VaultId,
 		tranche_type: &TrancheType,
 		asset: H160,
 		shares: H160,
 		priority: u8,
-	) -> DispatchResult {
+	) -> Result<Vec<CascadedTrancheUpdate>, DispatchError> {
 		match action {
 			CrudAction::Add => {
-				ensure!(!Vaults::<T>::contains_key(vault), Error::<T>::VaultAlreadyRegistered);
-				let idx = priority as usize;
-				ensure!(idx <= tranches.len(), Error::<T>::InvalidPriority);
-				tranches
-					.try_insert(
-						idx,
-						Tranche {
-							tranche_type: tranche_type.clone(),
-							vault: vault.clone(),
-							asset,
-							shares,
-						},
-					)
-					.map_err(|_| Error::<T>::TooManyTranches)?;
-				Self::ensure_senior_precedes_junior(tranches)?;
-				Self::ensure_valid_tranche_composition(tranches)?;
-				Vaults::<T>::insert(vault, product_id);
+				Self::apply_add_tranche(
+					product_id,
+					product,
+					vault,
+					tranche_type,
+					asset,
+					shares,
+					priority,
+				)?;
+				Ok(Vec::new())
 			},
 			CrudAction::Remove => {
-				let idx = tranches
-					.iter()
-					.position(|t| &t.vault == vault)
-					.ok_or(Error::<T>::VaultNotFound)?;
-				tranches.remove(idx);
-				Self::ensure_senior_precedes_junior(tranches)?;
-				Self::ensure_valid_tranche_composition(tranches)?;
-				Vaults::<T>::remove(vault);
+				Self::apply_remove_tranche(product, vault)?;
+				Ok(Vec::new())
 			},
 			CrudAction::Update => {
-				let idx = tranches
-					.iter()
-					.position(|t| &t.vault == vault)
-					.ok_or(Error::<T>::VaultNotFound)?;
-				let type_matches = matches!(
-					(&tranches[idx].tranche_type, tranche_type),
-					(TrancheType::Junior, TrancheType::Junior)
-						| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
-				);
-				ensure!(type_matches, Error::<T>::TrancheTypeImmutable);
-
-				tranches.remove(idx);
-				let new_idx = priority as usize;
-				ensure!(new_idx <= tranches.len(), Error::<T>::InvalidPriority);
-				tranches
-					.try_insert(
-						new_idx,
-						Tranche {
-							tranche_type: tranche_type.clone(),
-							vault: vault.clone(),
-							asset,
-							shares,
-						},
-					)
-					.map_err(|_| Error::<T>::TooManyTranches)?;
-				Self::ensure_senior_precedes_junior(tranches)?;
-				Self::ensure_valid_tranche_composition(tranches)?;
+				Self::apply_update_tranche(product, vault, tranche_type, asset, shares, priority)
 			},
 		}
+	}
+
+	/// `set_tranche`'s `Add` — locates `vault.chain_id`'s own list (creating
+	/// a fresh per-chain entry on first use, Multichain only), then inserts
+	/// at `priority`, shifting everything at or after it down by one.
+	/// Registers `vault` in `Vaults` — see `VaultRegistration`'s doc comment
+	/// for the permanent-binding rule this enforces: a key already present
+	/// there only ever lets this succeed again for the SAME `product_id`,
+	/// re-adding a vault it previously removed.
+	fn apply_add_tranche(
+		product_id: ProductId,
+		product: &mut ProductDetails<T::AccountId>,
+		vault: &VaultId,
+		tranche_type: &TrancheType,
+		asset: H160,
+		shares: H160,
+		priority: u8,
+	) -> DispatchResult {
+		let chain_tranches = match product {
+			ProductDetails::Multichain(product) => {
+				let chain_id = vault.chain_id;
+				if !product.tranches.contains_key(&chain_id) {
+					product
+						.tranches
+						.try_insert(chain_id, ChainTranches::default())
+						.map_err(|_| Error::<T>::TooManyTranches)?;
+				}
+				product.tranches.get_mut(&chain_id).ok_or(Error::<T>::VaultNotFound)?
+			},
+			ProductDetails::SingleChain(product) => {
+				// A single-chain product has exactly one chain — every
+				// tranche's vault must live on it, same constraint
+				// `create_single_chain_product` enforces at creation time.
+				ensure!(
+					vault.chain_id == product.chain_id,
+					Error::<T>::SingleChainTranchesMustShareChain
+				);
+				&mut product.tranches
+			},
+		};
+
+		if let Some(reg) = Vaults::<T>::get(vault) {
+			ensure!(reg.product_id == product_id, Error::<T>::VaultBoundToDifferentProduct);
+			ensure!(reg.removed, Error::<T>::VaultAlreadyRegistered);
+		}
+		let idx = priority as usize;
+		ensure!(idx <= chain_tranches.len(), Error::<T>::InvalidPriority);
+		chain_tranches
+			.try_insert(
+				idx,
+				Tranche { tranche_type: tranche_type.clone(), vault: vault.clone(), asset, shares },
+			)
+			.map_err(|_| Error::<T>::TooManyTranches)?;
+		Self::ensure_senior_precedes_junior(chain_tranches)?;
+		Self::ensure_valid_tranche_composition(chain_tranches)?;
+		Vaults::<T>::insert(vault, VaultRegistration { product_id, removed: false });
 		Ok(())
+	}
+
+	/// `set_tranche`'s `Remove` — locates `vault.chain_id`'s own list, finds
+	/// and removes `vault`'s tranche from it (shifting everything after it
+	/// up by one), drops that chain's entry if now empty (Multichain only),
+	/// tombstones (never deletes — see `Vaults`' own storage doc comment)
+	/// its `Vaults` entry, then checks the two product-wide floors this
+	/// action alone can violate (see `ensure_product_minimums_after_remove`).
+	fn apply_remove_tranche(
+		product: &mut ProductDetails<T::AccountId>,
+		vault: &VaultId,
+	) -> DispatchResult {
+		let removed_type = match product {
+			ProductDetails::Multichain(product) => {
+				let chain_id = vault.chain_id;
+				let chain_tranches =
+					product.tranches.get_mut(&chain_id).ok_or(Error::<T>::VaultNotFound)?;
+				let removed_type = Self::remove_tranche_from_chain(chain_tranches, vault)?;
+				if chain_tranches.is_empty() {
+					product.tranches.remove(&chain_id);
+				}
+				removed_type
+			},
+			ProductDetails::SingleChain(product) => {
+				Self::remove_tranche_from_chain(&mut product.tranches, vault)?
+			},
+		};
+		Self::ensure_product_minimums_after_remove(product, removed_type)
+	}
+
+	/// `apply_remove_tranche`'s per-chain half: finds `vault` by position,
+	/// removes it, re-validates the resulting list, then tombstones its
+	/// `Vaults` entry. Returns the removed tranche's own `tranche_type`, for
+	/// `apply_remove_tranche`'s product-wide floor checks.
+	fn remove_tranche_from_chain(
+		chain_tranches: &mut ChainTranches,
+		vault: &VaultId,
+	) -> Result<TrancheType, DispatchError> {
+		let idx = chain_tranches
+			.iter()
+			.position(|t| &t.vault == vault)
+			.ok_or(Error::<T>::VaultNotFound)?;
+		let removed_type = chain_tranches[idx].tranche_type.clone();
+		chain_tranches.remove(idx);
+		Self::ensure_senior_precedes_junior(chain_tranches)?;
+		Self::ensure_valid_tranche_composition(chain_tranches)?;
+		Vaults::<T>::try_mutate(vault, |maybe_reg| -> DispatchResult {
+			let reg = maybe_reg.as_mut().ok_or(Error::<T>::VaultNotFound)?;
+			reg.removed = true;
+			Ok(())
+		})?;
+		Ok(removed_type)
+	}
+
+	/// `set_tranche`'s `Remove`-only product-wide floors, checked once here
+	/// rather than per-chain (`ensure_valid_tranche_composition` only ever
+	/// checks the one chain a mutation touched): a product must always
+	/// retain at least one tranche *somewhere*, and every `tranche_type` it
+	/// has ever carried must keep at least one live vault *somewhere*. `Add`
+	/// only ever grows the total, and `Update` renames a `tranche_type` as
+	/// one atomic product-wide group (see `cascade_tranche_type_rename`), so
+	/// neither can ever trip this — only `Remove` needs it.
+	fn ensure_product_minimums_after_remove(
+		product: &ProductDetails<T::AccountId>,
+		removed_type: TrancheType,
+	) -> DispatchResult {
+		let total_tranches: usize = match product {
+			ProductDetails::Multichain(product) => {
+				product.tranches.values().map(|chain| chain.len()).sum()
+			},
+			ProductDetails::SingleChain(product) => product.tranches.len(),
+		};
+		ensure!(total_tranches > 0, Error::<T>::ProductMustHaveAtLeastOneTranche);
+
+		let type_still_exists = match product {
+			ProductDetails::Multichain(product) => product
+				.tranches
+				.values()
+				.flat_map(|chain| chain.iter())
+				.any(|t| t.tranche_type == removed_type),
+			ProductDetails::SingleChain(product) => {
+				product.tranches.iter().any(|t| t.tranche_type == removed_type)
+			},
+		};
+		ensure!(type_still_exists, Error::<T>::TrancheTypeMustExistSomewhere);
+		Ok(())
+	}
+
+	/// `set_tranche`'s `Update` — locates `vault.chain_id`'s own list,
+	/// re-inserts `vault`'s tranche at `priority` with the new
+	/// `asset`/`shares`/`tranche_type`, then — only if `tranche_type`
+	/// actually changed — cascades that rename to every *other* chain still
+	/// carrying the OLD type (see `cascade_tranche_type_rename`),
+	/// re-validating any chain the cascade actually touched (a rename can
+	/// collide with a tranche that already carried the NEW type on that
+	/// chain for an unrelated reason — see `Error::DuplicateTrancheTypeOnChain`).
+	/// Returns every OTHER vault the cascade renamed, for `set_tranche` to
+	/// emit one `Event::TrancheSet` per affected vault.
+	fn apply_update_tranche(
+		product: &mut ProductDetails<T::AccountId>,
+		vault: &VaultId,
+		tranche_type: &TrancheType,
+		asset: H160,
+		shares: H160,
+		priority: u8,
+	) -> Result<Vec<CascadedTrancheUpdate>, DispatchError> {
+		match product {
+			ProductDetails::Multichain(product) => {
+				let chain_id = vault.chain_id;
+				let chain_tranches =
+					product.tranches.get_mut(&chain_id).ok_or(Error::<T>::VaultNotFound)?;
+				let old_type = Self::update_tranche_in_chain(
+					chain_tranches,
+					vault,
+					tranche_type,
+					asset,
+					shares,
+					priority,
+				)?;
+
+				let mut cascaded = Vec::new();
+				if &old_type != tranche_type {
+					for (_, chain_tranches) in product.tranches.iter_mut() {
+						let renamed = Self::cascade_tranche_type_rename(
+							chain_tranches,
+							vault,
+							&old_type,
+							tranche_type,
+						);
+						// A rename can collide with a tranche that already
+						// carried `tranche_type` on this same chain, for an
+						// entirely unrelated reason — re-check this chain's
+						// own composition rather than assuming a cascaded
+						// write is always safe.
+						if !renamed.is_empty() {
+							Self::ensure_valid_tranche_composition(chain_tranches)?;
+						}
+						cascaded.extend(renamed);
+					}
+				}
+				Ok(cascaded)
+			},
+			ProductDetails::SingleChain(product) => {
+				// Same chain-match constraint as `apply_add_tranche` — see
+				// its own comment.
+				ensure!(
+					vault.chain_id == product.chain_id,
+					Error::<T>::SingleChainTranchesMustShareChain
+				);
+				// No cascade here, unlike the Multichain arm above: a
+				// `SingleChain` product has exactly one chain, and that one
+				// chain can never hold a second live tranche at `old_type` to
+				// begin with (`Error::DuplicateTrancheTypeOnChain`) — there is
+				// structurally nothing else for a rename to ever propagate to.
+				Self::update_tranche_in_chain(
+					&mut product.tranches,
+					vault,
+					tranche_type,
+					asset,
+					shares,
+					priority,
+				)?;
+				Ok(Vec::new())
+			},
+		}
+	}
+
+	/// `apply_update_tranche`'s per-chain half: finds `vault` by position,
+	/// checks the Junior/Senior discriminant hasn't changed (`apr` may
+	/// still, for `Senior`), then re-inserts at `priority` with the new
+	/// `asset`/`shares`/`tranche_type`. Returns the tranche's own
+	/// `tranche_type` from *before* this update, for
+	/// `apply_update_tranche`'s cross-chain cascade.
+	fn update_tranche_in_chain(
+		chain_tranches: &mut ChainTranches,
+		vault: &VaultId,
+		tranche_type: &TrancheType,
+		asset: H160,
+		shares: H160,
+		priority: u8,
+	) -> Result<TrancheType, DispatchError> {
+		let idx = chain_tranches
+			.iter()
+			.position(|t| &t.vault == vault)
+			.ok_or(Error::<T>::VaultNotFound)?;
+		let previous_type = chain_tranches[idx].tranche_type.clone();
+		let type_matches = matches!(
+			(&previous_type, tranche_type),
+			(TrancheType::Junior, TrancheType::Junior)
+				| (TrancheType::Senior { .. }, TrancheType::Senior { .. })
+		);
+		ensure!(type_matches, Error::<T>::TrancheTypeImmutable);
+
+		chain_tranches.remove(idx);
+		let new_idx = priority as usize;
+		ensure!(new_idx <= chain_tranches.len(), Error::<T>::InvalidPriority);
+		chain_tranches
+			.try_insert(
+				new_idx,
+				Tranche { tranche_type: tranche_type.clone(), vault: vault.clone(), asset, shares },
+			)
+			.map_err(|_| Error::<T>::TooManyTranches)?;
+		Self::ensure_senior_precedes_junior(chain_tranches)?;
+		Self::ensure_valid_tranche_composition(chain_tranches)?;
+		Ok(previous_type)
 	}
 
 	/// `create_single_chain_product`-only: checks none of the incoming flat
@@ -285,7 +564,7 @@ impl<T: Config> Pallet<T> {
 
 impl<T: Config> VaultInspect for Pallet<T> {
 	fn vault_belongs_to_product(product_id: ProductId, vault: &VaultId) -> bool {
-		Vaults::<T>::get(vault) == Some(product_id)
+		Vaults::<T>::get(vault).is_some_and(|reg| reg.product_id == product_id)
 	}
 
 	fn vault_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
@@ -301,7 +580,7 @@ impl<T: Config> VaultInspect for Pallet<T> {
 	}
 
 	fn product_id_for_vault(vault: &VaultId) -> Option<ProductId> {
-		Vaults::<T>::get(vault)
+		Vaults::<T>::get(vault).map(|reg| reg.product_id)
 	}
 }
 

@@ -12,8 +12,14 @@ pragma solidity >=0.8.0;
  *     entitlement); Junior gets the residual/variable yield after the waterfall.
  *   - A tranche is identified by its `VaultInput` (chain_id, vault_address) — its
  *     ERC-7540 vault — not by `tranche_type`. A product can register more than one
- *     vault under the same `tranche_type` (e.g. Senior vaults on multiple Spoke
- *     chains feeding the same waterfall slot).
+ *     vault under the same `tranche_type`, but only across DIFFERENT chains (e.g.
+ *     Senior vaults on multiple Spoke chains feeding the same waterfall slot,
+ *     2026-08-26) — a single chain's own group can never hold two tranches at the
+ *     exact same `tranche_type` (see set_tranche's own notes).
+ *   - A `VaultInput` is bound to whichever product first registers it, PERMANENTLY
+ *     (2026-08-26) — `set_tranche`'s Remove never frees a vault for a *different*
+ *     product to claim, even long after removal; only the SAME product may re-add
+ *     it later. See set_tranche's own notes for the exact revert/success rules.
  *   - `priority` is an ordered sequence scoped to one chain at a time (2026-08-20 —
  *     rescoped from a single flat, product-wide sequence; not scoped per
  *     tranche_type either way) — each `VaultInput.chain_id` that has at least one
@@ -56,7 +62,15 @@ pragma solidity >=0.8.0;
  *     absolute last tranche (summed across every chain) — a product must always
  *     retain at least one tranche somewhere, even though any single chain's own
  *     group may be emptied out entirely (e.g. retiring a Hub-deployed vault while
- *     keeping Spoke ones, or vice versa).
+ *     keeping Spoke ones, or vice versa). Remove also can never take a
+ *     `tranche_type`'s absolute last LIVE instance anywhere in the product
+ *     (2026-08-26) — e.g. removing a product's only Senior-at-3%-rate vault
+ *     reverts even if plenty of other tranches remain, while removing one of two
+ *     Senior-at-5% vaults (on different chains) is fine. `set_tranche`'s Update
+ *     can never trip this, or the same-chain-duplicate rule above: changing a
+ *     tranche's `apr` moves every vault at the OLD rate, anywhere in the product,
+ *     to the NEW rate together, atomically, in the same call — see set_tranche's
+ *     own notes for the full cascade and its effect on emitted TrancheSet logs.
  *   - `AdapterInput.borrower`/`AdapterInput.collaterals` are only meaningful when
  *     `source_type == OffchainSource`, living per-adapter. Both should be left
  *     empty/zero for `OnchainSource` entries.
@@ -389,11 +403,17 @@ interface TrancheSystem {
      *      the SAME chain share a `priority` (different chains sharing one is fine),
      *      sorting a chain's own group by `priority` doesn't put every Senior tranche
      *      before every Junior one within that chain, any chain's own group has more
-     *      than one Junior tranche, any chain's own group has zero Senior tranches,
-     *      weightBps across `multichain_adapters` don't sum to 100% (10_000 bps), any
-     *      entry's nested `adapters` weightBps don't themselves sum to 100%, the same
-     *      nested Adapter (address, chain_id) appears under two different
-     *      `multichain_adapters` entries,
+     *      than one Junior tranche, any chain's own group has zero Senior tranches, any
+     *      chain's own group holds two entries at the exact same `tranche_type`
+     *      (2026-08-26 — see the top-level notes above), any entry's `vault` is already
+     *      registered — to any product, including one it was permanently bound to and
+     *      later removed from by a *different* call (2026-08-26 — see the top-level
+     *      notes above; `create_product` only ever registers brand-new vaults, so this
+     *      never has a legitimate "same product re-adding" exception the way
+     *      set_tranche's Add does), weightBps across `multichain_adapters` don't sum to
+     *      100% (10_000 bps), any entry's nested `adapters` weightBps don't themselves
+     *      sum to 100%, the same nested Adapter (address, chain_id) appears under two
+     *      different `multichain_adapters` entries,
      *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`,
      *      `valuation.settlement_start_timestamp` is not strictly after the current
      *      block time.
@@ -474,21 +494,28 @@ interface TrancheSystem {
      *      `tranche_type`/`apr`/`asset`/`shares`/`priority` on a `Remove` call). Every
      *      priority/shift-semantics below is scoped to `tranche.vault.chain_id`'s own
      *      ordering — tranches on other chains are never touched:
-     *        - Add:    `tranche.vault` becomes the new tranche's identity (reverts if
-     *                  a tranche with the same vault already exists for this product).
-     *                  `tranche_type`, `apr` (Senior-only), `asset`, `shares`, and
-     *                  `priority` are used. If `priority` is already occupied within
-     *                  `tranche.vault.chain_id`'s own ordering, the existing tranche at
-     *                  that slot (and everything after it, on that same chain) shifts
-     *                  down by one. For a Multichain product, `tranche.vault.chain_id`
-     *                  need not already have any tranches — a fresh per-chain group is
-     *                  created on first use.
+     *        - Add:    `tranche.vault` becomes the new tranche's identity. A `vault`
+     *                  is bound to whichever product first registers it, PERMANENTLY
+     *                  (2026-08-26) — removing it later (see Remove below) never frees
+     *                  it for a *different* product to claim; reverts if `vault`
+     *                  already belongs to a different product, even one it was removed
+     *                  from long ago. The one exception: the SAME product re-adding a
+     *                  `vault` it previously removed succeeds normally. `tranche_type`,
+     *                  `apr` (Senior-only), `asset`, `shares`, and `priority` are used.
+     *                  If `priority` is already occupied within `tranche.vault.chain_id`'s
+     *                  own ordering, the existing tranche at that slot (and everything
+     *                  after it, on that same chain) shifts down by one. For a
+     *                  Multichain product, `tranche.vault.chain_id` need not already
+     *                  have any tranches — a fresh per-chain group is created on first
+     *                  use.
      *        - Remove: only `tranche.vault` is used, to identify which tranche to
      *                  remove — searched within `tranche.vault.chain_id`'s own group
      *                  (reverts if not found there, or if it has outstanding
      *                  investments). Every tranche with a lower priority ranking
      *                  (higher numeric value) than the removed one, on that same chain,
-     *                  shifts up by one, closing the gap.
+     *                  shifts up by one, closing the gap. `vault` itself is NOT freed
+     *                  for reuse (see the permanent-binding note under Add) — it can
+     *                  only ever be re-added by the same product.
      *        - Update: `tranche.vault` identifies which tranche to update — searched
      *                  within `tranche.vault.chain_id`'s own group (reverts if not
      *                  found there); `apr`, `asset`, `shares`, and `priority` are
@@ -498,7 +525,15 @@ interface TrancheSystem {
      *                  Junior/Senior discriminant is immutable — reverts if it doesn't
      *                  match the existing tranche's (remove + re-add to actually
      *                  change it); `apr` may still change freely for a Senior tranche,
-     *                  since only the discriminant is checked.
+     *                  since only the discriminant is checked. Changing `apr` is
+     *                  PRODUCT-WIDE, not just this one vault (2026-08-26): a
+     *                  `tranche_type` (e.g. "Senior at 5%") is a class shared across
+     *                  every chain the product spans, so every OTHER vault anywhere in
+     *                  the product still carrying the OLD `apr` is renamed to the NEW
+     *                  one too — only that other vault's `tranche_type` changes, its
+     *                  own `asset`/`shares`/`priority` are untouched. If `tranche.vault`
+     *                  was the only one at the old rate, nothing else is renamed. See
+     *                  the TrancheSet note below for how this shows up in emitted logs.
      *                  If `priority` differs from the tranche's current priority, it
      *                  re-inserts (still within that same chain) using the same shift
      *                  semantics as Add.
@@ -506,15 +541,27 @@ interface TrancheSystem {
      *      `tranche.vault.chain_id` identifies, would put any Junior tranche before a
      *      Senior one on that same chain, would hold more than one Junior tranche, or
      *      would hold zero Senior tranches while still non-empty (see notes above) —
-     *      other chains' own lists are never affected. Emptying a chain's list
-     *      entirely via Remove (its last tranche) is fine — that chain's own group is
-     *      then dropped rather than left around violating the last rule vacuously
-     *      (e.g. retiring a Hub-deployed vault while keeping Spoke ones, or vice
-     *      versa). One additional check is product-wide rather than per-chain:
-     *      Remove reverts if it would take the PRODUCT's absolute last tranche,
-     *      summed across every chain — a product must always retain at least one
-     *      tranche somewhere, even though any single chain may be emptied out.
-     *      Emits TrancheSet on success.
+     *      other chains' own lists are never affected. A chain's own list also can
+     *      never hold two tranches with the exact same `tranche_type` (2026-08-26) —
+     *      e.g. two Senior-at-5% vaults can't coexist on one chain — but the SAME type
+     *      existing on DIFFERENT chains is expected and fine (that's exactly what the
+     *      Update cascade above and the per-type floor below are built around).
+     *      Emptying a chain's list entirely via Remove (its last tranche) is fine —
+     *      that chain's own group is then dropped rather than left around violating
+     *      the last rule vacuously (e.g. retiring a Hub-deployed vault while keeping
+     *      Spoke ones, or vice versa). Two additional checks are product-wide rather
+     *      than per-chain: Remove reverts if it would take the PRODUCT's absolute last
+     *      tranche, summed across every chain — a product must always retain at least
+     *      one tranche somewhere, even though any single chain may be emptied out.
+     *      Remove also reverts (2026-08-26) if `tranche.vault` held the product's LAST
+     *      live instance of that exact `tranche_type` anywhere — a Senior-at-5% vault
+     *      can be removed from one chain as long as another chain still carries a
+     *      vault at that same rate; Update can never trip this, since it moves a type
+     *      as one atomic product-wide group instead of ever reducing one to zero.
+     *      Emits TrancheSet on success — for Update, one event for `tranche.vault`
+     *      itself, PLUS one more per other vault the cascade above renamed (2026-08-26)
+     *      — a caller that only watches for a single event per call must be updated to
+     *      expect a variable number of TrancheSet logs from one Update.
      * @param product_id The product whose tranche is being mutated
      * @param action     Add, Remove, or Update
      * @param tranche    The tranche data; see field usage per `action` above
