@@ -10,7 +10,9 @@ impl<T: Config> Pallet<T> {
 		match role {
 			Role::ProductAdmin => ProductAdmins::<T>::get(product_id).as_ref() == Some(who),
 			Role::OracleFeeder => OracleFeeders::<T>::contains_key(product_id, who),
-			Role::TrancheInvestor(vault) => TrancheInvestors::<T>::contains_key(vault, who),
+			Role::TrancheInvestor(vault) => {
+				TrancheInvestors::<T>::contains_key((product_id, vault, who))
+			},
 		}
 	}
 
@@ -28,7 +30,9 @@ impl<T: Config> Pallet<T> {
 		match role {
 			Role::ProductAdmin => ProductAdmins::<T>::insert(product_id, who),
 			Role::OracleFeeder => OracleFeeders::<T>::insert(product_id, who, ()),
-			Role::TrancheInvestor(vault) => TrancheInvestors::<T>::insert(vault, who, ()),
+			Role::TrancheInvestor(vault) => {
+				TrancheInvestors::<T>::insert((product_id, vault, who), ())
+			},
 		}
 	}
 
@@ -36,7 +40,9 @@ impl<T: Config> Pallet<T> {
 		match role {
 			Role::ProductAdmin => ProductAdmins::<T>::remove(product_id),
 			Role::OracleFeeder => OracleFeeders::<T>::remove(product_id, who),
-			Role::TrancheInvestor(vault) => TrancheInvestors::<T>::remove(vault, who),
+			Role::TrancheInvestor(vault) => {
+				TrancheInvestors::<T>::remove((product_id, vault, who))
+			},
 		}
 	}
 }
