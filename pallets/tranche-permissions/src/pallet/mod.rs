@@ -133,27 +133,8 @@ pub mod pallet {
 			role: Role,
 			who: T::AccountId,
 		) -> DispatchResult {
-			match &role {
-				Role::ProductAdmin => {
-					ensure_root(origin)?;
-				},
-				_ => {
-					let caller = ensure_signed(origin)?;
-					ensure!(
-						ProductAdmins::<T>::get(product_id).as_ref() == Some(&caller),
-						Error::<T>::NotProductAdmin
-					);
-				},
-			}
-			// For TrancheInvestor, verify the vault belongs to this product before
-			// writing — otherwise a ProductAdmin could whitelist investors for a
-			// vault owned by a different product.
-			if let Role::TrancheInvestor(vault) = &role {
-				ensure!(
-					T::Vaults::vault_belongs_to_product(product_id, vault),
-					Error::<T>::ProductOrVaultNotFound
-				);
-			}
+			Self::ensure_role_authorized(origin, product_id, &role)?;
+			Self::ensure_tranche_investor_vault_registered(product_id, &role)?;
 
 			// ProductAdmin is 1:1: fail if the slot is already occupied by
 			// anyone. OracleFeeder and TrancheInvestor are 1:many, so check
@@ -180,24 +161,8 @@ pub mod pallet {
 			role: Role,
 			who: T::AccountId,
 		) -> DispatchResult {
-			match &role {
-				Role::ProductAdmin => {
-					ensure_root(origin)?;
-				},
-				_ => {
-					let caller = ensure_signed(origin)?;
-					ensure!(
-						ProductAdmins::<T>::get(product_id).as_ref() == Some(&caller),
-						Error::<T>::NotProductAdmin
-					);
-				},
-			}
-			if let Role::TrancheInvestor(vault) = &role {
-				ensure!(
-					T::Vaults::vault_belongs_to_product(product_id, vault),
-					Error::<T>::ProductOrVaultNotFound
-				);
-			}
+			Self::ensure_role_authorized(origin, product_id, &role)?;
+			Self::ensure_tranche_investor_vault_registered(product_id, &role)?;
 			ensure!(Self::has_role(product_id, &who, &role), Error::<T>::NotGranted);
 			Self::remove_role(product_id, &who, &role);
 			Self::deposit_event(Event::PermissionRevoked { product_id, role, who });
