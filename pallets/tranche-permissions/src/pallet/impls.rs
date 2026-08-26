@@ -1,6 +1,6 @@
 use crate::Role;
 
-use pallet_tranche_system::{ProductId, VaultInspect};
+use pallet_tranche_system::{ProductId, ProductInspect, VaultInspect};
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
@@ -47,6 +47,25 @@ impl<T: Config> Pallet<T> {
 			ensure!(
 				T::Vaults::vault_belongs_to_product(product_id, vault),
 				Error::<T>::ProductOrVaultNotFound
+			);
+		}
+		Ok(())
+	}
+
+	/// For `Role::TrancheInvestor`, checks `product_id` is a `Multichain`
+	/// product — shared by `grant_permission`/`revoke_permission`. A no-op for
+	/// every other role. A `SingleChain` product's own TrancheManager Contract
+	/// manages investor whitelisting directly; it never dispatches through
+	/// this pallet at all, so this storage should never gain an entry under a
+	/// `SingleChain` `product_id` in the first place.
+	pub(crate) fn ensure_tranche_investor_multichain_only(
+		product_id: ProductId,
+		role: &Role,
+	) -> DispatchResult {
+		if let Role::TrancheInvestor(_) = role {
+			ensure!(
+				T::Products::single_chain_id(product_id).is_none(),
+				Error::<T>::TrancheInvestorMultichainOnly
 			);
 		}
 		Ok(())
