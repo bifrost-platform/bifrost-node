@@ -1,7 +1,7 @@
 mod impls;
 
 use crate::{migrations, Role, WeightInfo};
-use pallet_tranche_system::{ProductId, VaultId, VaultInspect};
+use pallet_tranche_system::{ProductId, ProductInspect, VaultId, VaultInspect};
 
 use frame_support::{
 	pallet_prelude::*,
@@ -25,6 +25,11 @@ pub mod pallet {
 		/// `Vaults` reverse index). Used to verify a vault actually belongs to
 		/// `product_id` before granting `Role::TrancheInvestor` for it.
 		type Vaults: VaultInspect;
+		/// Product inspector — implemented by pallet-tranche-system (it owns
+		/// `Products`). Used to tell a `SingleChain` product apart from a
+		/// `Multichain` one before granting/revoking `Role::TrancheInvestor` —
+		/// see `Error::TrancheInvestorMultichainOnly`.
+		type Products: ProductInspect;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -43,6 +48,10 @@ pub mod pallet {
 		NotGranted,
 		/// The vault does not exist or does not belong to the given product.
 		ProductOrVaultNotFound,
+		/// `Role::TrancheInvestor` grants/revokes are `Multichain`-only — a
+		/// `SingleChain` product's own TrancheManager Contract manages investor
+		/// whitelisting directly, never through this pallet.
+		TrancheInvestorMultichainOnly,
 	}
 
 	// -----------------------------------------------------------------------
@@ -125,6 +134,9 @@ pub mod pallet {
 		///   special-casing needed at the precompile boundary.
 		/// - `Role::OracleFeeder` | `Role::TrancheInvestor` — caller must hold `ProductAdmin` for
 		///   the given product.
+		///
+		/// `Role::TrancheInvestor` additionally requires `product_id` to be
+		/// `Multichain` — see `Error::TrancheInvestorMultichainOnly`.
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::grant_permission())]
 		pub fn grant_permission(
@@ -135,6 +147,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			Self::ensure_role_authorized(origin, product_id, &role)?;
 			Self::ensure_tranche_investor_vault_registered(product_id, &role)?;
+			Self::ensure_tranche_investor_multichain_only(product_id, &role)?;
 
 			// ProductAdmin is 1:1: fail if the slot is already occupied by
 			// anyone. OracleFeeder and TrancheInvestor are 1:many, so check
@@ -163,6 +176,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			Self::ensure_role_authorized(origin, product_id, &role)?;
 			Self::ensure_tranche_investor_vault_registered(product_id, &role)?;
+			Self::ensure_tranche_investor_multichain_only(product_id, &role)?;
 			ensure!(Self::has_role(product_id, &who, &role), Error::<T>::NotGranted);
 			Self::remove_role(product_id, &who, &role);
 			Self::deposit_event(Event::PermissionRevoked { product_id, role, who });

@@ -1175,6 +1175,7 @@ impl pallet_tranche_system::Config for Runtime {
 
 impl pallet_tranche_permissions::Config for Runtime {
 	type Vaults = TrancheSystem;
+	type Products = TrancheSystem;
 	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
 }
 
