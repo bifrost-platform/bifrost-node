@@ -2,13 +2,13 @@ mod impls;
 
 use crate::{
 	migrations, BridgeStatus, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
-	RequestEntry, RequestExtraV2, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
-	SettlementExtraV2, SettlementFlowExtension, SettlementId, SettlementStep, TxRecord, WeightInfo,
-	WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
+	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
+	SettlementFlowExtension, SettlementId, SettlementStep, TxRecord, WeightInfo, WhitelistEntry,
+	WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
 	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
-	AdapterInspect, FlowVersion, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
+	AdapterInspect, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
 	MAX_TRANCHE_CHAINS,
 };
 
@@ -812,182 +812,58 @@ pub mod pallet {
 			let local_chain_id = Self::local_chain_id(product_id);
 
 			match step {
-				RequestStep::Requested => {
-					let opening = opening.clone().ok_or(Error::<T>::RequestOpeningRequired)?;
-					ensure!(
-						T::Vaults::vault_belongs_to_product(product_id, &opening.vault),
-						Error::<T>::VaultNotRegistered
-					);
-					ensure!(
-						!RequestEntries::<T>::contains_key(product_id, request_id),
-						Error::<T>::RequestAlreadyOpened
-					);
-					// `adapter_chain_ids` is never known yet at `Requested`, Hub-vault or
-					// Spoke-vault alike — that's `RequestQueued`'s job, one step later.
-					ensure!(
-						adapter_chain_ids.is_none(),
-						Error::<T>::UnexpectedRequestAdapterChains
-					);
-					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-					RequestEntries::<T>::insert(
-						product_id,
-						request_id,
-						RequestEntry {
-							product_id,
-							vault: opening.vault,
-							investor: opening.investor,
-							amount: opening.amount,
-							order_type: opening.order_type,
-							request_tx: Some(tx),
-							bridge_attempts: Default::default(),
-							queued_tx: None,
-							settlement_id: None,
-							approved_tx: None,
-							extension: Default::default(),
-						},
-					);
-					InvestorActiveRequests::<T>::mutate(opening.investor, |requests| {
-						requests.push((product_id, request_id));
-					});
-					InvestorRequestHistory::<T>::mutate(opening.investor, product_id, |history| {
-						history.push(request_id);
-					});
-				},
-				RequestStep::RequestBridgeExecuted => {
-					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(
-						adapter_chain_ids.is_none(),
-						Error::<T>::UnexpectedRequestAdapterChains
-					);
-					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-					let mut entry = RequestEntries::<T>::get(product_id, request_id)
-						.ok_or(Error::<T>::RequestNotOpened)?;
-					ensure!(
-						entry.vault.chain_id != local_chain_id,
-						Error::<T>::UnexpectedInboundLeg
-					);
-					Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
-					RequestEntries::<T>::insert(product_id, request_id, entry);
-				},
-				RequestStep::RequestQueued => {
-					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-					let mut entry = RequestEntries::<T>::get(product_id, request_id)
-						.ok_or(Error::<T>::RequestNotOpened)?;
-					if entry.vault.chain_id != local_chain_id {
-						// Spoke-vault — only reachable once the Inbound leg's own Bridge
-						// phase has landed with an `Executed` attempt.
-						ensure!(
-							Self::bridge_succeeded(&entry.bridge_attempts),
-							Error::<T>::RequestStepOutOfOrder
-						);
-					}
-					// A vault colocated with its own product's Valuation Contract — Hub
-					// itself for a Multichain product, or a SingleChain product's own
-					// chain — has no Inbound leg to wait on. RequestQueued can follow
-					// Requested immediately (typically the same tx, always a separate
-					// call) — though a SingleChain product's recorder never has a
-					// genuine `DepositQueued`/`RedeemQueued` event to observe in the
-					// first place, so it never calls this step at all (see
-					// `RequestStep`'s doc comment).
-					ensure!(entry.queued_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
-					// The request's arrival at the Valuation Contract — this is where the
-					// Adapter decision first becomes knowable, Hub-vault or Spoke-vault alike.
-					let chains = adapter_chain_ids
-						.clone()
-						.ok_or(Error::<T>::RequestAdapterChainsRequired)?;
-					ensure!(
-						T::Adapters::adapter_chains_belong_to_product(product_id, &chains),
-						Error::<T>::SpokeChainNotRegistered
-					);
-					// Merge, not overwrite: `AdapterBridgeExecuted`/`AdapterApplied` may
-					// already have self-declared a chain here (the origin vault's own
-					// chain, or Hub, self-fulfilling with no Bridge leg at all — see
-					// `Pallet::ensure_adapter_chain_declared`) before this step ever ran,
-					// since the recorder may observe events out of the order this
-					// pipeline model would otherwise assume. Overwriting would silently
-					// drop that already-recorded evidence's declaration.
-					let mut merged =
-						RequestAdapterChains::<T>::get(product_id, request_id).unwrap_or_default();
-					for declared_chain_id in chains.iter() {
-						if !merged.contains(declared_chain_id) {
-							merged
-								.try_push(*declared_chain_id)
-								.map_err(|_| Error::<T>::TooManyAdapterChains)?;
-						}
-					}
-					RequestAdapterChains::<T>::insert(product_id, request_id, merged);
-					entry.queued_tx = Some(tx);
-					RequestEntries::<T>::insert(product_id, request_id, entry);
-				},
-				RequestStep::AdapterBridgeExecuted => {
-					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(
-						adapter_chain_ids.is_none(),
-						Error::<T>::UnexpectedRequestAdapterChains
-					);
-					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
-					let mut entry =
-						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
-					Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
-					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
-				},
-				RequestStep::AdapterApplied => {
-					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(
-						adapter_chain_ids.is_none(),
-						Error::<T>::UnexpectedRequestAdapterChains
-					);
-					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-					Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
-					let mut entry =
-						RequestChainEntries::<T>::get((product_id, request_id, chain_id));
-					// No `Self::bridge_succeeded(&entry.bridge_attempts)` precondition here
-					// (unlike every other Bridge-then-Applied/Hooks pair in this pallet) —
-					// a chain that
-					// self-fulfills locally (origin vault's own chain, or Hub) never gets
-					// a Bridge leg at all, so `AdapterApplied` must be recordable on its
-					// own. See `Pallet::ensure_adapter_chain_declared`'s doc comment.
-					ensure!(entry.applied_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
-					entry.applied_tx = Some(tx);
-					RequestChainEntries::<T>::insert((product_id, request_id, chain_id), entry);
-				},
-				RequestStep::Extended => {
-					// The five core steps above are the only ones that ever gave
-					// `opening`/`adapter_chain_ids`/`bridge_status` meaning —
-					// `Extended`'s own payload lives entirely in `extra`, decoded
-					// below according to `product_id`'s registered `FlowVersion`.
-					ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
-					ensure!(
-						adapter_chain_ids.is_none(),
-						Error::<T>::UnexpectedRequestAdapterChains
-					);
-					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-					let flow_version = T::Products::request_flow_version(product_id)
-						.ok_or(Error::<T>::FlowVersionNotSet)?;
-					let extra_bytes = extra.clone().ok_or(Error::<T>::RequestExtraRequired)?;
-					ensure!(
-						RequestEntries::<T>::contains_key(product_id, request_id),
-						Error::<T>::RequestNotOpened
-					);
-					match flow_version {
-						// `V1`'s whole pipeline is the six core `RequestStep` values —
-						// it never has anything to route through `Extended`.
-						FlowVersion::V1 => return Err(Error::<T>::WrongFlowVersion.into()),
-						FlowVersion::V2 => {
-							let request_extra = RequestExtraV2::decode(&mut &extra_bytes[..])
-								.map_err(|_| Error::<T>::BadRequestExtra)?;
-							// No sub-steps exist yet — see `RequestSubStepV2`'s doc
-							// comment. Real arms go here, each fetching+mutating
-							// `RequestEntries`, updating the specific
-							// `RequestFlowExtensionV2` field(s) that sub-step owns,
-							// then inserting the entry back — same pattern the six
-							// core `RequestStep` arms above already use.
-							match request_extra.step {}
-						},
-					}
-				},
+				RequestStep::Requested => Self::handle_requested(
+					product_id,
+					request_id,
+					opening.clone(),
+					adapter_chain_ids.clone(),
+					bridge_status,
+					tx,
+				)?,
+				RequestStep::RequestBridgeExecuted => Self::handle_request_bridge_executed(
+					product_id,
+					request_id,
+					opening.clone(),
+					adapter_chain_ids.clone(),
+					bridge_status,
+					tx,
+					local_chain_id,
+				)?,
+				RequestStep::RequestQueued => Self::handle_request_queued(
+					product_id,
+					request_id,
+					opening.clone(),
+					adapter_chain_ids.clone(),
+					bridge_status,
+					tx,
+					local_chain_id,
+				)?,
+				RequestStep::AdapterBridgeExecuted => Self::handle_adapter_bridge_executed(
+					product_id,
+					request_id,
+					opening.clone(),
+					adapter_chain_ids.clone(),
+					bridge_status,
+					chain_id,
+					tx,
+				)?,
+				RequestStep::AdapterApplied => Self::handle_adapter_applied(
+					product_id,
+					request_id,
+					opening.clone(),
+					adapter_chain_ids.clone(),
+					bridge_status,
+					chain_id,
+					tx,
+				)?,
+				RequestStep::Extended => Self::handle_request_extended(
+					product_id,
+					request_id,
+					opening.clone(),
+					adapter_chain_ids.clone(),
+					bridge_status,
+					extra.clone(),
+				)?,
 				RequestStep::None | RequestStep::RequestCompleted => {
 					return Err(Error::<T>::InvalidRequestStep.into());
 				},
@@ -1107,259 +983,60 @@ pub mod pallet {
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
 
 			if step == SettlementStep::SettleStarted {
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
-				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
-				let collect_response_chains =
-					collect_response_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
-				let finalize_chains =
-					finalize_chain_ids.clone().ok_or(Error::<T>::SpokeChainIdsRequired)?;
-				ensure!(
-					T::Adapters::adapter_chains_belong_to_product(
-						product_id,
-						&collect_response_chains
-					),
-					Error::<T>::SpokeChainNotRegistered
-				);
-				ensure!(
-					T::Vaults::vault_chains_belong_to_product(product_id, &finalize_chains),
-					Error::<T>::SpokeChainNotRegistered
-				);
-				ensure!(
-					!SettlementTriggers::<T>::contains_key(product_id, settlement_id),
-					Error::<T>::SettlementAlreadyTriggered
-				);
-				SettlementTriggers::<T>::insert(product_id, settlement_id, tx);
-				SettlementCollectResponseChains::<T>::insert(
+				Self::handle_settle_started(
 					product_id,
 					settlement_id,
-					collect_response_chains.clone(),
-				);
-				SettlementFinalizeChains::<T>::insert(product_id, settlement_id, finalize_chains);
-
-				// Closes every request colocated with this product's own local chain
-				// approved into this settlement if `collect_response_chains` is already
-				// fully responded — vacuously true right away when it's empty (no Adapter
-				// anywhere off the local chain, or a fully local settlement — always the
-				// case for a `SingleChain` product), same as a leg-by-leg `NavReceived`
-				// reaching this state later would.
-				Self::try_close_local_requests(product_id, settlement_id);
+					spoke_chain_id,
+					collect_response_chain_ids.clone(),
+					finalize_chain_ids.clone(),
+					request_ids.clone(),
+					bridge_status,
+					tx,
+				)?;
 			} else if step == SettlementStep::Settled {
-				// The one case `SettlementStep::Settled` is valid as extrinsic input —
-				// see that variant's doc comment. Only ever valid for a `SingleChain`
-				// product, whose Contract emits `Settled` as its pipeline's only event,
-				// with no separate `SettleStarted` tx to record first. Same effect as
-				// `SettleStarted` with both chain sets empty (one-shot
-				// `SettlementTriggers` write, both chain sets recorded empty, and
-				// immediate vacuous completion via `try_close_local_requests`) — chain
-				// sets aren't parameters here (unlike `SettleStarted`) since they're
-				// always empty for this case, nothing for the caller to supply. Both
-				// `SettlementCollectResponseChains`/`SettlementFinalizeChains` are still
-				// written explicitly (not left absent) — `get_request`'s own `settled`
-				// computation (precompile-side) treats a *missing*
-				// `SettlementCollectResponseChains`/`SettlementFinalizeChains` entry as
-				// "not settled", not vacuously empty, unlike
-				// `try_close_local_requests`/`get_settlement`'s `unwrap_or_default`
-				// reads — so an absent entry here would leave a SingleChain request
-				// permanently reporting `settled == false` despite this settlement
-				// having completed.
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
-				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
-				ensure!(
-					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
-					Error::<T>::UnexpectedSpokeChainIds
-				);
-				ensure!(
-					T::Products::single_chain_id(product_id).is_some(),
-					Error::<T>::SettledStepNotSingleChain
-				);
-				ensure!(
-					!SettlementTriggers::<T>::contains_key(product_id, settlement_id),
-					Error::<T>::SettlementAlreadyTriggered
-				);
-				SettlementTriggers::<T>::insert(product_id, settlement_id, tx);
-				SettlementCollectResponseChains::<T>::insert(
+				Self::handle_settled(
 					product_id,
 					settlement_id,
-					BoundedVec::default(),
-				);
-				SettlementFinalizeChains::<T>::insert(
-					product_id,
-					settlement_id,
-					BoundedVec::default(),
-				);
-
-				Self::try_close_local_requests(product_id, settlement_id);
+					spoke_chain_id,
+					collect_response_chain_ids.clone(),
+					finalize_chain_ids.clone(),
+					request_ids.clone(),
+					bridge_status,
+					tx,
+				)?;
 			} else if step == SettlementStep::RequestsApproved {
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
-				ensure!(
-					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
-					Error::<T>::UnexpectedSpokeChainIds
-				);
-				let approved_request_ids =
-					request_ids.clone().ok_or(Error::<T>::RequestIdsRequired)?;
-				ensure!(!approved_request_ids.is_empty(), Error::<T>::RequestIdsRequired);
-				// No `SettlementTriggers` precondition here (unlike every other leg step) —
-				// a SingleChain SYNC product's Valuation Contract emits
-				// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so `RequestsApproved`
-				// can genuinely arrive before `SettleStarted` for the same settlement_id. The old
-				// per-request `RequestStep::SettlementApproved` this replaced never had this
-				// precondition either.
-				for request_id in approved_request_ids.iter() {
-					let mut entry = RequestEntries::<T>::get(product_id, *request_id)
-						.ok_or(Error::<T>::RequestNotOpened)?;
-					ensure!(entry.approved_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
-					entry.settlement_id = Some(settlement_id);
-					entry.approved_tx = Some(tx.clone());
-					RequestEntries::<T>::insert(product_id, *request_id, entry);
-				}
-				SettlementRequests::<T>::mutate(product_id, settlement_id, |requests| {
-					requests.extend(approved_request_ids.iter().copied());
-				});
-				// Opportunistically self-close each request individually: this can race
-				// with the settlement-side completion trigger
-				// (`try_close_local_requests`/`close_active_requests`) — see
-				// `SettlementStep::RequestsApproved`'s doc comment.
-				for request_id in approved_request_ids.iter() {
-					Self::try_close_request(product_id, settlement_id, *request_id);
-				}
+				Self::handle_requests_approved(
+					product_id,
+					settlement_id,
+					spoke_chain_id,
+					collect_response_chain_ids.clone(),
+					finalize_chain_ids.clone(),
+					request_ids.clone(),
+					bridge_status,
+					tx,
+				)?;
 			} else if step == SettlementStep::Extended {
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(
-					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
-					Error::<T>::UnexpectedSpokeChainIds
-				);
-				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
-				ensure!(
-					SettlementTriggers::<T>::contains_key(product_id, settlement_id),
-					Error::<T>::SettlementNotTriggered
-				);
-				let flow_version = T::Products::settlement_flow_version(product_id)
-					.ok_or(Error::<T>::SettlementFlowVersionNotSet)?;
-				let extra_bytes = extra.clone().ok_or(Error::<T>::SettlementExtraRequired)?;
-				match flow_version {
-					// `V1`'s whole pipeline is the nine core `SettlementStep` values —
-					// it never has anything to route through `Extended`.
-					FlowVersion::V1 => return Err(Error::<T>::WrongSettlementFlowVersion.into()),
-					FlowVersion::V2 => {
-						let settlement_extra = SettlementExtraV2::decode(&mut &extra_bytes[..])
-							.map_err(|_| Error::<T>::BadSettlementExtra)?;
-						// No sub-steps exist yet — see `SettlementSubStepV2`'s doc
-						// comment. Real arms go here: match `spoke_chain_id` (as
-						// every other step here already does) to decide whether
-						// this sub-step updates `SettlementExtension`
-						// (settlement-wide, `None`) or the named chain's own
-						// `SettlementChainEntry::extension` (chain-scoped,
-						// `Some(_)`), then fetch/mutate/insert the relevant
-						// storage, same pattern the leg steps above use.
-						match settlement_extra.step {}
-					},
-				}
+				Self::handle_settlement_extended(
+					product_id,
+					settlement_id,
+					collect_response_chain_ids.clone(),
+					finalize_chain_ids.clone(),
+					request_ids.clone(),
+					bridge_status,
+					extra.clone(),
+				)?;
 			} else {
-				ensure!(
-					collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
-					Error::<T>::UnexpectedSpokeChainIds
-				);
-				ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
-				let spoke_chain_id = spoke_chain_id.ok_or(Error::<T>::SpokeChainIdRequired)?;
-				let is_finalize_step = matches!(
+				Self::handle_settlement_leg_step(
+					product_id,
+					settlement_id,
+					spoke_chain_id,
+					collect_response_chain_ids.clone(),
+					finalize_chain_ids.clone(),
+					request_ids.clone(),
 					step,
-					SettlementStep::FinalizeBridgeExecuted | SettlementStep::SettleApplied
-				);
-				let chains = if is_finalize_step {
-					SettlementFinalizeChains::<T>::get(product_id, settlement_id)
-				} else {
-					SettlementCollectResponseChains::<T>::get(product_id, settlement_id)
-				}
-				.ok_or(Error::<T>::SettlementNotTriggered)?;
-				ensure!(chains.contains(&spoke_chain_id), Error::<T>::UnknownSpokeChain);
-
-				let mut entry =
-					SettlementChainEntries::<T>::get((product_id, settlement_id, spoke_chain_id));
-				match step {
-					SettlementStep::CollectBridgeExecuted => {
-						let bridge_status =
-							bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-						Self::push_bridge_attempt(
-							&mut entry.collect_bridge_attempts,
-							bridge_status,
-							tx,
-						)?;
-					},
-					SettlementStep::NavReported => {
-						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-						ensure!(
-							Self::bridge_succeeded(&entry.collect_bridge_attempts),
-							Error::<T>::SettlementStepOutOfOrder
-						);
-						ensure!(
-							entry.nav_reported_tx.is_none(),
-							Error::<T>::SettlementStepAlreadyRecorded
-						);
-						entry.nav_reported_tx = Some(tx);
-					},
-					SettlementStep::ResponseBridgeExecuted => {
-						let bridge_status =
-							bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-						Self::push_bridge_attempt(
-							&mut entry.response_bridge_attempts,
-							bridge_status,
-							tx,
-						)?;
-					},
-					SettlementStep::NavReceived => {
-						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-						ensure!(
-							Self::bridge_succeeded(&entry.response_bridge_attempts),
-							Error::<T>::SettlementStepOutOfOrder
-						);
-						ensure!(
-							entry.nav_received_tx.is_none(),
-							Error::<T>::SettlementStepAlreadyRecorded
-						);
-						entry.nav_received_tx = Some(tx);
-					},
-					SettlementStep::FinalizeBridgeExecuted => {
-						let bridge_status =
-							bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-						Self::push_bridge_attempt(
-							&mut entry.finalize_bridge_attempts,
-							bridge_status,
-							tx,
-						)?;
-					},
-					SettlementStep::SettleApplied => {
-						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-						ensure!(
-							Self::bridge_succeeded(&entry.finalize_bridge_attempts),
-							Error::<T>::SettlementStepOutOfOrder
-						);
-						ensure!(
-							entry.settle_applied_tx.is_none(),
-							Error::<T>::SettlementStepAlreadyRecorded
-						);
-						entry.settle_applied_tx = Some(tx);
-					},
-					SettlementStep::Queued
-					| SettlementStep::SettleStarted
-					| SettlementStep::RequestsApproved
-					| SettlementStep::Settled
-					| SettlementStep::Extended => {
-						return Err(Error::<T>::InvalidSettlementStep.into());
-					},
-				}
-				SettlementChainEntries::<T>::insert(
-					(product_id, settlement_id, spoke_chain_id),
-					entry,
-				);
-
-				if step == SettlementStep::SettleApplied {
-					Self::close_active_requests(product_id, settlement_id, Some(spoke_chain_id));
-				} else if step == SettlementStep::NavReceived {
-					Self::try_close_local_requests(product_id, settlement_id);
-				}
+					bridge_status,
+					tx,
+				)?;
 			}
 
 			Self::deposit_event(Event::SettlementTxRecorded {
@@ -1477,110 +1154,32 @@ pub mod pallet {
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
-			let key = (who, vault.clone(), nonce);
 
 			let product_id = match step {
-				WhitelistStep::WhitelistRequested => {
-					ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-					ensure!(
-						!WhitelistEntries::<T>::contains_key(key.clone()),
-						Error::<T>::WhitelistAlreadyTriggered
-					);
-					let product_id = T::Vaults::product_id_for_vault(&vault)
-						.ok_or(Error::<T>::VaultNotRegistered)?;
-					WhitelistEntries::<T>::insert(
-						key,
-						WhitelistEntry {
-							product_id,
-							vault: vault.clone(),
-							who,
-							grant,
-							request_tx: Some(tx),
-							bridge_attempts: Default::default(),
-							applied_tx: None,
-						},
-					);
-					let is_newer = match LatestWhitelistNonce::<T>::get(who, vault.clone()) {
-						Some(latest) => nonce > latest,
-						None => true,
-					};
-					if is_newer {
-						LatestWhitelistNonce::<T>::insert(who, vault.clone(), nonce);
-					}
-					product_id
-				},
-				WhitelistStep::BridgeExecuted => {
-					let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-					let mut entry = WhitelistEntries::<T>::get(key.clone())
-						.ok_or(Error::<T>::WhitelistNotTriggered)?;
-					ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
-					ensure!(
-						entry.vault.chain_id != Self::local_chain_id(entry.product_id),
-						Error::<T>::UnexpectedWhitelistBridgeLeg
-					);
-					Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
-					let product_id = entry.product_id;
-					WhitelistEntries::<T>::insert(key, entry);
-					product_id
-				},
-				WhitelistStep::WhitelistApplied => match WhitelistEntries::<T>::get(key.clone()) {
-					Some(mut entry) => {
-						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-						ensure!(entry.grant == grant, Error::<T>::UnexpectedWhitelistGrant);
-						if entry.vault.chain_id != Self::local_chain_id(entry.product_id) {
-							ensure!(
-								Self::bridge_succeeded(&entry.bridge_attempts),
-								Error::<T>::WhitelistStepOutOfOrder
-							);
-						}
-						ensure!(
-							entry.applied_tx.is_none(),
-							Error::<T>::WhitelistStepAlreadyRecorded
-						);
-						entry.applied_tx = Some(tx);
-						let product_id = entry.product_id;
-						WhitelistEntries::<T>::insert(key, entry);
-						product_id
-					},
-					// Self-open: a `SingleChain` product's TrancheManager manages
-					// `nonce` itself and applies the grant/revoke in one local step
-					// — there's no Orchestrator-driven `WhitelistRequested` to have
-					// opened this entry beforehand, unlike a `Multichain` product's
-					// Hub-vault/Spoke-vault action. Only valid if `vault` actually
-					// belongs to a `SingleChain` product — a `Multichain` product's
-					// vault reaching here via `WhitelistApplied` with no prior
-					// `WhitelistRequested` is a genuine ordering error, not a
-					// self-open case.
-					None => {
-						ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-						let product_id = T::Vaults::product_id_for_vault(&vault)
-							.ok_or(Error::<T>::VaultNotRegistered)?;
-						ensure!(
-							T::Products::single_chain_id(product_id).is_some(),
-							Error::<T>::WhitelistNotTriggered
-						);
-						WhitelistEntries::<T>::insert(
-							key,
-							WhitelistEntry {
-								product_id,
-								vault: vault.clone(),
-								who,
-								grant,
-								request_tx: None,
-								bridge_attempts: Default::default(),
-								applied_tx: Some(tx),
-							},
-						);
-						let is_newer = match LatestWhitelistNonce::<T>::get(who, vault.clone()) {
-							Some(latest) => nonce > latest,
-							None => true,
-						};
-						if is_newer {
-							LatestWhitelistNonce::<T>::insert(who, vault.clone(), nonce);
-						}
-						product_id
-					},
-				},
+				WhitelistStep::WhitelistRequested => Self::handle_whitelist_requested(
+					vault.clone(),
+					who,
+					grant,
+					nonce,
+					bridge_status,
+					tx,
+				)?,
+				WhitelistStep::BridgeExecuted => Self::handle_whitelist_bridge_executed(
+					vault.clone(),
+					who,
+					grant,
+					nonce,
+					bridge_status,
+					tx,
+				)?,
+				WhitelistStep::WhitelistApplied => Self::handle_whitelist_applied(
+					vault.clone(),
+					who,
+					grant,
+					nonce,
+					bridge_status,
+					tx,
+				)?,
 				WhitelistStep::None => {
 					return Err(Error::<T>::InvalidWhitelistStep.into());
 				},
