@@ -6,11 +6,19 @@ mod self_contained_call;
 
 pub mod extensions;
 
-use frame_support::traits::Get;
-use pallet_bifrost_evm_tx_payment::{AcceptedFeeTokens, LastFeeTokenUpdate, Pallet, UserFeeToken};
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	traits::Get,
+};
+use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_bifrost_evm_tx_payment::{
+	AcceptedFeeTokens, Call as TxPaymentCall, LastFeeTokenUpdate, Pallet, UserFeeToken,
+};
 use pallet_evm::AddressMapping;
+use precompile_bifrost_evm_tx_payment::BifrostTransactionPaymentPrecompileCall;
+use precompile_tranche_tx_registry::TrancheTxRegistryPrecompileCall;
 use sp_core::{H160, U256};
-use sp_runtime::traits::{Saturating, Zero};
+use sp_runtime::traits::{Dispatchable, Saturating, Zero};
 use sp_std::marker::PhantomData;
 
 /// Filter for feeless EVM calls.
@@ -52,6 +60,9 @@ pub struct BifrostFeelessCalls<T, R = ()>(PhantomData<(T, R)>);
 impl<T, R> pallet_evm::FeelessCallFilter for BifrostFeelessCalls<T, R>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
+	T::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+	<T::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<T::AccountId>>,
+	T::RuntimeCall: From<TxPaymentCall<T>>,
 	R: TxRegistryRecorderCheck,
 {
 	/// Returns `true` if the call can be submitted with zero native balance.
@@ -87,6 +98,9 @@ where
 impl<T, R> BifrostFeelessCalls<T, R>
 where
 	T: frame_system::Config + pallet_bifrost_evm_tx_payment::Config,
+	T::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+	<T::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<T::AccountId>>,
+	T::RuntimeCall: From<TxPaymentCall<T>>,
 	R: TxRegistryRecorderCheck,
 {
 	/// Validate that an ERC20 fee token user has sufficient balance to pay for the transaction.
@@ -158,68 +172,41 @@ where
 		const TX_REGISTRY_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
 
-		// Function selectors for pallet-tranche-tx-registry's record_* calls (keccak256 of the
-		// canonical signature in precompiles/tranche-tx-registry/src/lib.rs's
-		// `#[precompile::public(...)]` strings, first 4 bytes — verified against those exact
-		// strings via `cast sig`, not reconstructed from memory). Re-verified 2026-08-20 after
-		// record_request_tx dropped its `settlement_id` param (a request's link to a settlement
-		// moved to record_settlement_tx's new batched `RequestsApproved` step, replacing what
-		// used to be a per-request record_request_tx call — see SettlementStep::RequestsApproved
-		// in the pallet) and record_settlement_tx gained a `bytes32[] request_ids` param for
-		// that same step — that changes both of those two selectors; record_receive_tx/
-		// record_whitelist_tx are untouched by this change.
-		// record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint8) => 0x116de5e0
-		const RECORD_REQUEST_TX: [u8; 4] = [0x11, 0x6d, 0xe5, 0xe0];
-		// record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],bytes32[],uint8,(uint64,bytes32),uint8) => 0x1c62e124
-		const RECORD_SETTLEMENT_TX: [u8; 4] = [0x1c, 0x62, 0xe1, 0x24];
-		// record_receive_tx(uint64,(uint64,address),address,address,uint256,uint8,(uint64,bytes32)) => 0x8ef97ccd
-		const RECORD_RECEIVE_TX: [u8; 4] = [0x8e, 0xf9, 0x7c, 0xcd];
-		// record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32),uint8) => 0xcfb6fca5
-		const RECORD_WHITELIST_TX: [u8; 4] = [0xcf, 0xb6, 0xfc, 0xa5];
-
 		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
 		const TX_PAYMENT_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x10]);
 
-		// Function selectors for feeless calls (keccak256 of function signature, first 4 bytes)
-		// setUserFeeToken(address) => 0x47dee8ee
-		const SET_USER_FEE_TOKEN: [u8; 4] = [0x47, 0xde, 0xe8, 0xee];
-		// clearUserFeeToken() => 0xc1e1da08
-		const CLEAR_USER_FEE_TOKEN: [u8; 4] = [0xc1, 0xe1, 0xda, 0x08];
-
 		if let Some(target) = target {
 			if target == TX_REGISTRY_PRECOMPILE && input.len() >= 4 {
-				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
-				let is_record_call = matches!(
-					selector,
-					RECORD_REQUEST_TX
-						| RECORD_SETTLEMENT_TX
-						| RECORD_RECEIVE_TX
-						| RECORD_WHITELIST_TX
-				);
-				return is_record_call && R::is_tx_recorder(caller);
+				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
+				return R::is_record_call_selector(selector) && R::is_tx_recorder(caller);
 			}
 
 			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
-				let selector: [u8; 4] = [input[0], input[1], input[2], input[3]];
-				return match selector {
-					SET_USER_FEE_TOKEN => {
-						// Rate limit check first
-						if Self::is_rate_limited(caller) {
-							return false;
-						}
+				// Function selectors, derived the same way as the tx-registry ones
+				// above — computed by `precompile_utils`'s own macro straight from
+				// `precompile-bifrost-evm-tx-payment`'s `#[precompile::public("...")]`
+				// signature strings, not a hand-verified `cast sig` constant.
+				type Call<T> = BifrostTransactionPaymentPrecompileCall<T>;
+				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
+				return if Call::<T>::set_user_fee_token_selectors().contains(&selector) {
+					// Rate limit check first
+					if Self::is_rate_limited(caller) {
+						return false;
+					}
 
-						// Extract a token address from input and validate
-						if let Some(token) = Self::extract_token_from_input(input) {
-							// Check if the token is accepted and caller has minimum balance
-							return Self::validate_feeless_set_token(caller, token);
-						}
+					// Extract a token address from input and validate
+					if let Some(token) = Self::extract_token_from_input(input) {
+						// Check if the token is accepted and caller has minimum balance
+						return Self::validate_feeless_set_token(caller, token);
+					}
 
-						// Invalid input format
-						false
-					},
-					CLEAR_USER_FEE_TOKEN => !Self::is_rate_limited(caller),
-					_ => false,
+					// Invalid input format
+					false
+				} else if Call::<T>::clear_user_fee_token_selectors().contains(&selector) {
+					!Self::is_rate_limited(caller)
+				} else {
+					false
 				};
 			}
 		}
@@ -298,13 +285,32 @@ where
 /// this is its own trait/type parameter instead of a bound on `BifrostFeelessCalls`'s own `T`.
 pub trait TxRegistryRecorderCheck {
 	fn is_tx_recorder(caller: H160) -> bool;
+	/// `true` iff `selector` is one of pallet-tranche-tx-registry's four
+	/// `record_*` precompile functions. `TxRegistryRecorder<T>`'s impl derives
+	/// this from the actual precompile-generated selectors
+	/// (`TrancheTxRegistryPrecompileCall::{method}_selectors()`, computed by
+	/// `precompile_utils`'s own macro straight from the same
+	/// `#[precompile::public("...")]` signature strings the precompile
+	/// dispatches on) rather than a hand-verified `cast sig` constant — a
+	/// signature change there is now caught by the type system (the call
+	/// site simply recompiles against the new value) instead of silently
+	/// desyncing this filter from what the precompile actually accepts.
+	fn is_record_call_selector(selector: u32) -> bool;
 }
 
-/// Default: no caller is ever the tx recorder. Used as `BifrostFeelessCalls`'s default `R`, so
-/// runtimes that don't pass a concrete `R` get the pre-existing fee-token-setup-only behavior
-/// with the tx-registry branch permanently inert (falls straight through to `false`).
+/// Default: no caller is ever the tx recorder, and no selector is ever a
+/// record call. Used as `BifrostFeelessCalls`'s default `R`, so runtimes that
+/// don't pass a concrete `R` get the pre-existing fee-token-setup-only
+/// behavior with the tx-registry branch permanently inert (falls straight
+/// through to `false`) — and, not depending on
+/// `pallet_tranche_tx_registry`/`precompile_tranche_tx_registry`'s `Config`
+/// bounds at all here, aren't forced to wire up either just to keep using
+/// this filter (see `BifrostFeelessCalls`'s own doc comment).
 impl TxRegistryRecorderCheck for () {
 	fn is_tx_recorder(_caller: H160) -> bool {
+		false
+	}
+	fn is_record_call_selector(_selector: u32) -> bool {
 		false
 	}
 }
@@ -319,11 +325,25 @@ pub struct TxRegistryRecorder<T>(PhantomData<T>);
 
 impl<T> TxRegistryRecorderCheck for TxRegistryRecorder<T>
 where
-	T: pallet_evm::Config + pallet_tranche_tx_registry::Config,
+	T: pallet_evm::Config
+		+ pallet_tranche_tx_registry::Config
+		+ pallet_tranche_system::Config
+		+ frame_system::Config,
+	T::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+	T::RuntimeCall: From<pallet_tranche_tx_registry::Call<T>>,
+	BlockNumberFor<T>: Into<U256>,
 	<T as pallet_evm::Config>::AddressMapping: AddressMapping<T::AccountId>,
 {
 	fn is_tx_recorder(caller: H160) -> bool {
 		let caller_account = <T as pallet_evm::Config>::AddressMapping::into_account_id(caller);
 		pallet_tranche_tx_registry::TxRecorder::<T>::get() == Some(caller_account)
+	}
+
+	fn is_record_call_selector(selector: u32) -> bool {
+		type Call<T> = TrancheTxRegistryPrecompileCall<T>;
+		Call::<T>::record_request_tx_selectors().contains(&selector)
+			|| Call::<T>::record_settlement_tx_selectors().contains(&selector)
+			|| Call::<T>::record_receive_tx_selectors().contains(&selector)
+			|| Call::<T>::record_whitelist_tx_selectors().contains(&selector)
 	}
 }
