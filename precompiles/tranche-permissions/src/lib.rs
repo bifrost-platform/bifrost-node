@@ -7,7 +7,7 @@ use alloc::format;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::{AddressMapping, Context, ExitReason};
 use pallet_tranche_permissions::{Call as TranchePermissionsCall, Role};
-use pallet_tranche_system::{ProductId, VaultId};
+use pallet_tranche_system::{ProductId, ProductInspect, VaultId};
 use precompile_utils::prelude::*;
 use sp_core::{H160, U256};
 use sp_runtime::traits::Dispatchable;
@@ -83,7 +83,10 @@ where
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
 		let propagate_vault = match &decoded_role {
-			Role::TrancheInvestor(vault) => Some(vault.clone()),
+			Role::TrancheInvestor(vault) => {
+				ensure_multichain_product::<Runtime>(product_id)?;
+				Some(vault.clone())
+			},
 			_ => None,
 		};
 
@@ -140,7 +143,10 @@ where
 		let who_account = Runtime::AddressMapping::into_account_id(who.0);
 		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
 		let propagate_vault = match &decoded_role {
-			Role::TrancheInvestor(vault) => Some(vault.clone()),
+			Role::TrancheInvestor(vault) => {
+				ensure_multichain_product::<Runtime>(product_id)?;
+				Some(vault.clone())
+			},
 			_ => None,
 		};
 
@@ -259,19 +265,40 @@ fn decode_role(role: u8, vault: EvmVaultInput) -> EvmResult<(Role, u64, H160)> {
 	}
 }
 
-/// Propagates a `TrancheInvestor` grant/revoke to the Spoke chain `vault`
-/// lives on, by calling `Orchestrator.sendWhitelist(chainId, productId,
-/// vaultAddress, who, action)` as a subcall from this precompile's own
-/// address. Uses `handle.call`, never `Runner::call` — this precompile's own
-/// EVM execution is already inside pallet-evm's `forbid-evm-reentrancy`
-/// guard, so a fresh top-level `Runner::call` would trip
-/// `pallet_evm::Error::Reentrancy`. Requires this precompile's runtime
+/// `Role::TrancheInvestor` is `Multichain`-only — a `SingleChain` product has
+/// no OrchestratorHub/MultichainTrancheManager for `propagate_whitelist_change`
+/// to reach; that product's own TrancheManager Contract manages investor
+/// whitelisting directly, never through this precompile at all. Called before
+/// dispatching the pallet extrinsic so a `SingleChain` product's vault never
+/// even gets as far as an on-chain `TrancheInvestors` write.
+fn ensure_multichain_product<Runtime>(product_id: ProductId) -> EvmResult
+where
+	Runtime: pallet_tranche_system::Config,
+{
+	if pallet_tranche_system::Pallet::<Runtime>::single_chain_id(product_id).is_some() {
+		return Err(revert(
+			"TrancheInvestor grants/revokes are Multichain-only — a SingleChain product's TrancheManager manages whitelisting directly",
+		));
+	}
+	Ok(())
+}
+
+/// Propagates a `TrancheInvestor` grant/revoke to `vault`'s chain by calling
+/// `Orchestrator.sendWhitelist(chainId, productId, vaultAddress, who, action)`
+/// as a subcall from this precompile's own address. Called unconditionally
+/// for every `TrancheInvestor` grant/revoke — including a Hub-vault one — since
+/// OrchestratorHub is itself the single entry point for both cases: for a
+/// Hub-vault it applies the grant/revoke to MultichainTrancheManager locally
+/// (no bridge), for a Spoke-vault it relays over CCCP (see
+/// `whitelist-flow.md`'s 1.1/1.3). This is only ever reachable for a
+/// `Multichain` product — callers already reject `TrancheInvestor` for a
+/// `SingleChain` product before dispatching this far (see
+/// `ensure_multichain_product`). Uses `handle.call`, never `Runner::call` —
+/// this precompile's own EVM execution is already inside pallet-evm's
+/// `forbid-evm-reentrancy` guard, so a fresh top-level `Runner::call` would
+/// trip `pallet_evm::Error::Reentrancy`. Requires this precompile's runtime
 /// checks tuple to include `SubcallWithMaxNesting`, or the subcall is
 /// rejected before it ever reaches Orchestrator.
-///
-/// Skipped entirely if `vault`'s chain is this Hub chain's own EVM chain ID —
-/// a Hub-issued product's tranche needs no cross-chain propagation; it's
-/// registered locally by `grant_permission`/`revoke_permission` alone.
 ///
 /// Reverts (rolling back the permission grant/revoke too, atomically) if
 /// `OrchestratorAddress` isn't configured yet, or if the subcall itself
