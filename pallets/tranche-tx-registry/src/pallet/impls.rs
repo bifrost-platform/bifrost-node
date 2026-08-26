@@ -170,7 +170,26 @@ impl<T: Config> Pallet<T> {
 	/// The condition `try_close_local_requests` waits on, factored out so
 	/// `try_close_request` can check it for a single request without re-running
 	/// `close_active_requests`' settlement-wide scan.
+	///
+	/// Requires `SettlementTriggers` to actually exist first — without this,
+	/// `SettlementCollectResponseChains::get(..).unwrap_or_default()` below
+	/// can't tell "not yet triggered at all" from "triggered with an
+	/// intentionally empty set," since both read back as absent/empty the
+	/// same way, and would otherwise vacuously return `true` for either.
+	/// That distinction matters because `try_close_request` (unlike
+	/// `try_close_local_requests`'s other two call sites, both of which only
+	/// ever run once `SettlementTriggers` is already known to exist) can run
+	/// from `SettlementStep::RequestsApproved`, which is deliberately allowed
+	/// to land *before* `SettleStarted`/`Settled` for a `SingleChain` SYNC
+	/// product (see `SettlementStep::RequestsApproved`'s doc comment) — without
+	/// this check, that ordering would let a request be closed out of
+	/// `InvestorActiveRequests` before its settlement was ever recorded as
+	/// started at all, permanently so if the `SettleStarted`/`Settled` call
+	/// never follows.
 	fn local_settlement_complete(product_id: ProductId, settlement_id: SettlementId) -> bool {
+		if !SettlementTriggers::<T>::contains_key(product_id, settlement_id) {
+			return false;
+		}
 		let collect_response_chains =
 			SettlementCollectResponseChains::<T>::get(product_id, settlement_id)
 				.unwrap_or_default();
