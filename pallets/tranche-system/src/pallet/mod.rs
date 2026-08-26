@@ -4,7 +4,7 @@ use crate::{
 	migrations, AdapterInfo, AdapterKey, ChainTranches, CrudAction, FlowVersion,
 	MultichainAdapterInfo, MultichainProductDetails, ProductDetails, ProductId, SettlementMode,
 	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
-	ValuationInfo, VaultId, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	ValuationInfo, VaultId, VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
 	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
 	MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
@@ -21,7 +21,7 @@ use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(5);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(6);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -92,6 +92,11 @@ pub mod pallet {
 		/// The vault (chain_id, vault_address) is already registered — either
 		/// to this product or a different one.
 		VaultAlreadyRegistered,
+		/// `set_tranche(Add)` targeted a vault permanently bound to a
+		/// *different* product (see `VaultRegistration`) — a `VaultId`, once
+		/// registered, can never move to another product, even after being
+		/// removed from its original one.
+		VaultBoundToDifferentProduct,
 		/// No tranche with the given vault exists for this product.
 		VaultNotFound,
 		/// `priority` is beyond the current number of tranches on that
@@ -136,6 +141,12 @@ pub mod pallet {
 		/// has no entry — see `MultichainProductDetails::tranches`' doc
 		/// comment on empty chain groups never being left around).
 		AtLeastOneSeniorTrancheRequired,
+		/// A chain's own tranche list cannot hold two tranches with the exact
+		/// same `tranche_type` (e.g. two `Senior { apr: 5% }` vaults on the
+		/// same chain) — per-chain, not product-wide: the same type existing
+		/// on *different* chains is expected and fine (see
+		/// `Error::TrancheTypeMustExistSomewhere`'s doc comment).
+		DuplicateTrancheTypeOnChain,
 		/// `set_tranche`'s `Remove` cannot take a product's very last tranche
 		/// (summed across every chain for a `Multichain` product, or the
 		/// product's one flat list for a `SingleChain` one) — a product must
@@ -144,6 +155,20 @@ pub mod pallet {
 		/// doc comment) as long as at least one *other* chain still has a
 		/// tranche; only removing the product's absolute last one reverts.
 		ProductMustHaveAtLeastOneTranche,
+		/// `set_tranche`'s `Remove` cannot take a product's last remaining
+		/// instance of a given `tranche_type` (e.g. the only `Senior { apr }`
+		/// at that exact rate anywhere in the product, across every chain) —
+		/// every `tranche_type` a product has ever carried must keep at least
+		/// one live vault somewhere. Unlike `ProductMustHaveAtLeastOneTranche`
+		/// (which only cares about the total count), this is checked
+		/// per-`tranche_type` value — removing one of two `Senior { apr: 5% }`
+		/// vaults is fine as long as the other one still exists; removing the
+		/// product's only `Senior { apr: 3% }` is not, even if plenty of other
+		/// tranches remain. `set_tranche`'s `Update` can never trip this: it
+		/// renames a `tranche_type` product-wide in one atomic step (see
+		/// `Event::TrancheSet`'s doc comment), so a type is never silently
+		/// reduced to zero live vaults via `Update`.
+		TrancheTypeMustExistSomewhere,
 		/// `set_tranche`'s `Update` cannot change a tranche's Junior/Senior
 		/// discriminant (only `apr` and `priority` are mutable) — remove and
 		/// re-add to change it.
@@ -220,7 +245,14 @@ pub mod pallet {
 			settlement_length_secs: u64,
 			settlement_offset_secs: u64,
 		},
-		/// A tranche was added, removed, or updated.
+		/// A tranche was added, removed, or updated. For `Update`, this
+		/// reports the vault the caller directly targeted — see
+		/// `set_tranche`'s doc comment for the product-wide `tranche_type`
+		/// rename it can trigger; each other vault renamed alongside it gets
+		/// its own separate `TrancheSet` event (`action: Update`, that
+		/// vault's own `asset`/`shares`/`priority` unchanged) rather than
+		/// being folded silently into this one, so an indexer never has to
+		/// infer which other vaults were affected.
 		TrancheSet {
 			product_id: ProductId,
 			action: CrudAction,
@@ -277,11 +309,23 @@ pub mod pallet {
 
 	#[pallet::storage]
 	/// Reverse index: which product a tranche's vault (chain_id, vault_address)
-	/// belongs to. Globally unique across all products — enforces that the same
-	/// vault can't be registered to two different products, and lets other
-	/// pallets (tranche-investments, tranche-permissions) resolve a vault to its
-	/// product without the caller supplying `product_id` up front.
-	pub type Vaults<T: Config> = StorageMap<_, Blake2_128Concat, VaultId, ProductId>;
+	/// permanently belongs to, plus whether it's currently active (see
+	/// `VaultRegistration`). Lets other pallets (tranche-investments,
+	/// tranche-permissions) resolve a vault to its product without the caller
+	/// supplying `product_id` up front.
+	///
+	/// An entry is written once, at first registration, and never removed
+	/// afterward (2026-08-26, `v6`) — `set_tranche(Remove)` only flips
+	/// `removed` to `true`. A `VaultId` therefore can never move to a
+	/// *different* product: `set_tranche(Add)` on a key already present here
+	/// reverts with `Error::VaultBoundToDifferentProduct` unless
+	/// `product_id` matches the existing entry's, in which case it's treated
+	/// as that same product re-adding a vault it previously removed
+	/// (`removed` clears back to `false`). Before `v6`, `Remove` deleted the
+	/// entry outright, freeing the key for any product to claim — see
+	/// `migrations::v6` for why that history can't be reconstructed
+	/// retroactively for vaults already removed before this upgrade.
+	pub type Vaults<T: Config> = StorageMap<_, Blake2_128Concat, VaultId, VaultRegistration>;
 
 	#[pallet::storage]
 	/// Reverse index: which product an individual Adapter (source_address, chain_id)
@@ -318,18 +362,19 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV5` alone: each `VersionedMigration`
+			// Chained rather than just `MigrateToV6` alone: each `VersionedMigration`
 			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs all five, back to back, in the
-			// same upgrade), already at v1 (skips straight to v2 then v3 then v4 then v5 —
-			// the live testbed case, see `migrations::v2`'s doc comment for why v1 alone
-			// didn't get every chain to v2 on its own), or already at v4 (skips straight
-			// to v5).
+			// whether a given chain is still at v0 (runs all six, back to back, in the
+			// same upgrade), already at v1 (skips straight to v2 then v3 then v4 then v5
+			// then v6 — the live testbed case, see `migrations::v2`'s doc comment for why
+			// v1 alone didn't get every chain to v2 on its own), or already at v5 (skips
+			// straight to v6).
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v4::MigrateToV4::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v5::MigrateToV5::<T>::on_runtime_upgrade())
+				.saturating_add(migrations::v6::MigrateToV6::<T>::on_runtime_upgrade())
 		}
 	}
 
@@ -356,10 +401,18 @@ pub mod pallet {
 		/// Reverts if two entries on the *same* chain share a `priority`, if
 		/// sorting a chain's own group by `priority` doesn't put every
 		/// `Senior` tranche before every `Junior` one on that chain, if any
-		/// chain's own group holds more than one `Junior` tranche, or if any
-		/// chain's own group holds zero `Senior` tranches — all four checks
-		/// are per-chain, not product-wide (see `Error::TooManyJuniorTranches`/
-		/// `Error::AtLeastOneSeniorTrancheRequired`).
+		/// chain's own group holds more than one `Junior` tranche, if any
+		/// chain's own group holds zero `Senior` tranches, or if any chain's
+		/// own group holds two entries at the exact same `tranche_type`
+		/// (2026-08-26) — all five checks are per-chain, not product-wide
+		/// (see `Error::TooManyJuniorTranches`/
+		/// `Error::AtLeastOneSeniorTrancheRequired`/
+		/// `Error::DuplicateTrancheTypeOnChain`). Also reverts if any
+		/// tranche's `vault` is already registered to any product — including
+		/// one it's permanently bound to and was later removed from (see
+		/// `VaultRegistration`'s doc comment); `create_product` only ever
+		/// registers brand-new vaults, so unlike `set_tranche`'s `Add` there's
+		/// no "same product re-adding its own removed vault" exception here.
 		///
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::create_product())]
@@ -434,7 +487,10 @@ pub mod pallet {
 			Self::ensure_multichain_adapters_are_unregistered(multichain_adapters.iter())?;
 
 			for tranche in tranches.values().flat_map(|chain| chain.iter()) {
-				Vaults::<T>::insert(&tranche.vault, product_id);
+				Vaults::<T>::insert(
+					&tranche.vault,
+					VaultRegistration { product_id, removed: false },
+				);
 			}
 			Self::insert_multichain_adapter_index(product_id, multichain_adapters.iter());
 
@@ -479,14 +535,17 @@ pub mod pallet {
 		/// `tranches` uses the same `priority`-sort-and-validate rules
 		/// `create_product` applies within one chain's own group (sort by
 		/// `priority`, reject duplicates, require every `Senior` before every
-		/// `Junior`, at most one `Junior`, at least one `Senior`) — applied
-		/// directly to the whole flat input here, without `create_product`'s
+		/// `Junior`, at most one `Junior`, at least one `Senior`, no two
+		/// entries at the exact same `tranche_type`) — applied directly to
+		/// the whole flat input here, without `create_product`'s
 		/// chain-grouping step, since every entry's `vault.chain_id` must
 		/// equal `chain_id` anyway (reverts with
 		/// `SingleChainTranchesMustShareChain` otherwise) — there's only ever
-		/// the one chain to group by. `adapters`' `weight_bps` must sum to
-		/// exactly 10_000, same invariant as one `MultichainAdapterInfo`'s
-		/// nested `adapters`.
+		/// the one chain to group by. Same vault-registration rule as
+		/// `create_product` too — every entry's `vault` must be unclaimed by
+		/// any product (see `VaultRegistration`'s doc comment). `adapters`'
+		/// `weight_bps` must sum to exactly 10_000, same invariant as one
+		/// `MultichainAdapterInfo`'s nested `adapters`.
 		#[pallet::call_index(6)]
 		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product())]
 		pub fn create_single_chain_product(
@@ -555,7 +614,10 @@ pub mod pallet {
 			Self::ensure_single_chain_adapters_are_unregistered(chain_id, adapters.keys())?;
 
 			for tranche in tranches.iter() {
-				Vaults::<T>::insert(&tranche.vault, product_id);
+				Vaults::<T>::insert(
+					&tranche.vault,
+					VaultRegistration { product_id, removed: false },
+				);
 			}
 			for address in adapters.keys() {
 				AdapterIndex::<T>::insert(&AdapterKey { address: *address, chain_id }, product_id);
@@ -631,16 +693,20 @@ pub mod pallet {
 		/// removed) is fine — that chain's own entry is then dropped, not
 		/// left around violating the "at least one Senior" rule vacuously
 		/// (e.g. retiring a Hub-deployed vault while keeping Spoke ones, or
-		/// vice versa). One additional check IS product-wide, checked once
+		/// vice versa). Two additional checks ARE product-wide, checked once
 		/// here rather than per-chain: `Remove` reverts with
 		/// `Error::ProductMustHaveAtLeastOneTranche` if it would take the
 		/// product's absolute last tranche, summed across every chain — a
 		/// product must always retain at least one tranche *somewhere*, even
-		/// though any single chain may be emptied out entirely. For a
-		/// single-chain product, `Add`/`Update` additionally revert unless
-		/// `vault.chain_id` equals the product's own `chain_id` (same
-		/// constraint `create_single_chain_product` enforces at creation
-		/// time).
+		/// though any single chain may be emptied out entirely. `Remove` also
+		/// reverts with `Error::TrancheTypeMustExistSomewhere` if the removed
+		/// vault held the product's *last* live instance of that exact
+		/// `tranche_type` (see that error's own doc comment) — a `Senior { apr
+		/// }` tranche can be removed from one chain as long as another chain
+		/// still carries a vault at that same `apr`. For a single-chain
+		/// product, `Add`/`Update` additionally revert unless `vault.chain_id`
+		/// equals the product's own `chain_id` (same constraint
+		/// `create_single_chain_product` enforces at creation time).
 		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
 		///   any product). `tranche_type`, `asset`, `shares`, and `priority` are used. If
 		///   `priority` is already occupied within `vault.chain_id`'s own list, the existing
@@ -661,7 +727,16 @@ pub mod pallet {
 		///   chain, only `Remove` then `Add` can). `tranche_type`'s Junior/Senior discriminant is
 		///   immutable — reverts if it doesn't match the existing tranche's; `apr` (carried
 		///   inside `tranche_type` for `Senior`) may still change, since only the discriminant is
-		///   checked.
+		///   checked. Changing `apr` is product-wide, not just-this-vault: a `tranche_type` is a
+		///   shared class across the whole product (e.g. "Senior at 5%" spanning several chains'
+		///   vaults), so once `vault`'s own entry is updated, every *other* vault anywhere in the
+		///   product still carrying the OLD `tranche_type` is renamed to the NEW one too — only
+		///   that other vault's `tranche_type` field changes, its own `asset`/`shares`/`priority`
+		///   stay exactly as they were. If `vault` was the only one at the old rate, nothing else
+		///   is touched (this is also why `Update` can never trip
+		///   `Error::TrancheTypeMustExistSomewhere` — the type moves as one group, never drops to
+		///   zero). Each renamed vault gets its own `Event::TrancheSet` (see that event's doc
+		///   comment).
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_tranche())]
 		pub fn set_tranche(
@@ -676,75 +751,24 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::ProductAdminOrigin::ensure_origin(origin)?;
 
-			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
+			// See `apply_set_tranche`'s own doc comment for the full logic —
+			// Multichain-vs-SingleChain dispatch, the `Remove`-only
+			// product-wide floors, and the `Update` cross-chain
+			// `tranche_type` cascade all live there, kept out of this
+			// extrinsic body so it stays a thin origin-check-then-event
+			// wrapper, same shape as every other extrinsic in this pallet.
+			let cascaded = Products::<T>::try_mutate(product_id, |maybe_product| {
 				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-
-				match product {
-					ProductDetails::Multichain(product) => {
-						let chain_id = vault.chain_id;
-						if action == CrudAction::Add && !product.tranches.contains_key(&chain_id) {
-							product
-								.tranches
-								.try_insert(chain_id, ChainTranches::default())
-								.map_err(|_| Error::<T>::TooManyTranches)?;
-						}
-						let chain_tranches =
-							product.tranches.get_mut(&chain_id).ok_or(Error::<T>::VaultNotFound)?;
-						Self::apply_tranche_action(
-							product_id,
-							chain_tranches,
-							action,
-							&vault,
-							&tranche_type,
-							asset,
-							shares,
-							priority,
-						)?;
-						if chain_tranches.is_empty() {
-							product.tranches.remove(&chain_id);
-						}
-					},
-					ProductDetails::SingleChain(product) => {
-						// A single-chain product has exactly one chain — every
-						// tranche's vault must live on it, same constraint
-						// `create_single_chain_product` enforces at creation time.
-						if matches!(action, CrudAction::Add | CrudAction::Update) {
-							ensure!(
-								vault.chain_id == product.chain_id,
-								Error::<T>::SingleChainTranchesMustShareChain
-							);
-						}
-						Self::apply_tranche_action(
-							product_id,
-							&mut product.tranches,
-							action,
-							&vault,
-							&tranche_type,
-							asset,
-							shares,
-							priority,
-						)?;
-					},
-				}
-
-				// `apply_tranche_action`/`ensure_valid_tranche_composition` only ever
-				// check one chain's own list — emptying a chain entirely (Remove) is
-				// allowed there (e.g. retiring a Hub-deployed vault while keeping
-				// Spoke ones). What's checked here, once, at the product level, is
-				// the floor beneath that: a product must always retain at least one
-				// tranche *somewhere*. Only reachable via `Remove` — `Add` only ever
-				// grows the total, `Update` never changes it.
-				if action == CrudAction::Remove {
-					let total_tranches: usize = match &*product {
-						ProductDetails::Multichain(product) => {
-							product.tranches.values().map(|chain| chain.len()).sum()
-						},
-						ProductDetails::SingleChain(product) => product.tranches.len(),
-					};
-					ensure!(total_tranches > 0, Error::<T>::ProductMustHaveAtLeastOneTranche);
-				}
-
-				Ok(())
+				Self::apply_set_tranche(
+					product_id,
+					product,
+					action,
+					&vault,
+					&tranche_type,
+					asset,
+					shares,
+					priority,
+				)
 			})?;
 
 			Self::deposit_event(Event::TrancheSet {
@@ -756,6 +780,19 @@ pub mod pallet {
 				shares,
 				priority,
 			});
+			for (cascaded_vault, new_type, cascaded_asset, cascaded_shares, cascaded_priority) in
+				cascaded
+			{
+				Self::deposit_event(Event::TrancheSet {
+					product_id,
+					action: CrudAction::Update,
+					vault: cascaded_vault,
+					tranche_type: new_type,
+					asset: cascaded_asset,
+					shares: cascaded_shares,
+					priority: cascaded_priority,
+				});
+			}
 			Ok(())
 		}
 
