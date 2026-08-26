@@ -993,8 +993,8 @@ pub mod pallet {
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
 
-			if step == SettlementStep::SettleStarted {
-				Self::handle_settle_started(
+			match step {
+				SettlementStep::SettleStarted => Self::handle_settle_started(
 					product_id,
 					settlement_id,
 					spoke_chain_id,
@@ -1003,9 +1003,8 @@ pub mod pallet {
 					request_ids.clone(),
 					bridge_status,
 					tx,
-				)?;
-			} else if step == SettlementStep::Settled {
-				Self::handle_settled(
+				)?,
+				SettlementStep::Settled => Self::handle_settled(
 					product_id,
 					settlement_id,
 					spoke_chain_id,
@@ -1014,9 +1013,8 @@ pub mod pallet {
 					request_ids.clone(),
 					bridge_status,
 					tx,
-				)?;
-			} else if step == SettlementStep::RequestsApproved {
-				Self::handle_requests_approved(
+				)?,
+				SettlementStep::RequestsApproved => Self::handle_requests_approved(
 					product_id,
 					settlement_id,
 					spoke_chain_id,
@@ -1025,9 +1023,8 @@ pub mod pallet {
 					request_ids.clone(),
 					bridge_status,
 					tx,
-				)?;
-			} else if step == SettlementStep::Extended {
-				Self::handle_settlement_extended(
+				)?,
+				SettlementStep::Extended => Self::handle_settlement_extended(
 					product_id,
 					settlement_id,
 					collect_response_chain_ids.clone(),
@@ -1035,9 +1032,13 @@ pub mod pallet {
 					request_ids.clone(),
 					bridge_status,
 					extra.clone(),
-				)?;
-			} else {
-				Self::handle_settlement_leg_step(
+				)?,
+				SettlementStep::CollectBridgeExecuted
+				| SettlementStep::NavReported
+				| SettlementStep::ResponseBridgeExecuted
+				| SettlementStep::NavReceived
+				| SettlementStep::FinalizeBridgeExecuted
+				| SettlementStep::SettleApplied => Self::handle_settlement_leg_step(
 					product_id,
 					settlement_id,
 					spoke_chain_id,
@@ -1047,7 +1048,10 @@ pub mod pallet {
 					step,
 					bridge_status,
 					tx,
-				)?;
+				)?,
+				SettlementStep::Queued => {
+					return Err(Error::<T>::InvalidSettlementStep.into());
+				},
 			}
 
 			Self::deposit_event(Event::SettlementTxRecorded {
