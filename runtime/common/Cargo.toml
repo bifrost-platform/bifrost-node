@@ -25,10 +25,13 @@ pallet-bfc-utility = { workspace = true }
 pallet-evm = { workspace = true }
 
 # Bifrost
-pallet-bifrost-evm-tx-payment = { path = "../../pallets/bifrost-evm-tx-payment", default-features = false }
+pallet-bifrost-evm-tx-payment = { workspace = true }
+precompile-bifrost-evm-tx-payment = { workspace = true }
 
 # OmniFi tranche-system
+pallet-tranche-system = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
+precompile-tranche-tx-registry = { workspace = true }
 
 [features]
 default = ["std"]
@@ -44,6 +47,9 @@ std = [
 	"pallet-bfc-utility/std",
 	"pallet-evm/std",
 	"pallet-bifrost-evm-tx-payment/std",
+	"precompile-bifrost-evm-tx-payment/std",
+	"pallet-tranche-system/std",
 	"pallet-tranche-tx-registry/std",
+	"precompile-tranche-tx-registry/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
