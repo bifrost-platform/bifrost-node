@@ -191,6 +191,17 @@ pub mod pallet {
 		/// `get_settlement` status once every chain completes, never itself
 		/// recorded.
 		SettledStepNotSingleChain,
+		/// `step == SettlementStep::SettleStarted`'s `collect_response_chain_ids`
+		/// or `finalize_chain_ids` included the product's own local chain
+		/// (`Pallet::local_chain_id` — Hub for a `Multichain` product, or the
+		/// product's own chain for a `SingleChain` product). That chain's
+		/// completion is tracked via `SettlementStep::NavReceived`/
+		/// `try_close_local_requests` instead — it never gets a Spoke-chain leg
+		/// of its own (see `SettlementCollectResponseChains`/
+		/// `SettlementFinalizeChains`'s doc comments), so a chain declared here
+		/// could never reach `SettleApplied`/its own `NavReceived` entry and
+		/// would leave the settlement stuck at `SettleStarted` forever.
+		LocalChainAsSpokeChain,
 		/// `spoke_chain_id` is not among the chains registered for the leg kind
 		/// being recorded — `collect_response_chain_ids` for a Collect/Response leg,
 		/// `finalize_chain_ids` for a Finalize leg.

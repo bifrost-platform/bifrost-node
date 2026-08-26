@@ -444,6 +444,12 @@ impl<T: Config> Pallet<T> {
 	/// `SettlementStep::SettleStarted` — declares `collect_response_chain_ids`/
 	/// `finalize_chain_ids` and opens the settlement. A settlement needing no
 	/// cross-chain action at all is recorded this way with both sets empty.
+	/// Neither set may include the product's own local chain
+	/// (`Error::LocalChainAsSpokeChain` otherwise) — that chain never gets a
+	/// Spoke-chain leg of its own (see `SettlementCollectResponseChains`/
+	/// `SettlementFinalizeChains`'s doc comments), so declaring it here would
+	/// leave the settlement stuck at `SettleStarted` forever (no path to
+	/// `SettleApplied`/its own `NavReceived` entry).
 	pub(crate) fn handle_settle_started(
 		product_id: ProductId,
 		settlement_id: SettlementId,
@@ -460,6 +466,12 @@ impl<T: Config> Pallet<T> {
 		let collect_response_chains =
 			collect_response_chain_ids.ok_or(Error::<T>::SpokeChainIdsRequired)?;
 		let finalize_chains = finalize_chain_ids.ok_or(Error::<T>::SpokeChainIdsRequired)?;
+		let local_chain_id = Self::local_chain_id(product_id);
+		ensure!(
+			!collect_response_chains.contains(&local_chain_id)
+				&& !finalize_chains.contains(&local_chain_id),
+			Error::<T>::LocalChainAsSpokeChain
+		);
 		ensure!(
 			T::Adapters::adapter_chains_belong_to_product(product_id, &collect_response_chains),
 			Error::<T>::SpokeChainNotRegistered
