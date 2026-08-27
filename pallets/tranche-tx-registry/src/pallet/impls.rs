@@ -493,6 +493,13 @@ impl<T: Config> Pallet<T> {
 		ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 		ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
 		ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
+		// The `belong_to_product` checks below are vacuously satisfied when both
+		// chain sets are empty, and nothing else here reads product state — so
+		// without this, `SettleStarted` with empty chain sets would happily open
+		// a settlement (and orphan `SettlementTriggers`/chain-set entries) for a
+		// `product_id` that was never registered. Every other `record_*` path is
+		// gated on an existing product transitively; this step is the exception.
+		ensure!(T::Products::is_registered(product_id), Error::<T>::ProductNotRegistered);
 		let collect_response_chains =
 			collect_response_chain_ids.ok_or(Error::<T>::SpokeChainIdsRequired)?;
 		let finalize_chains = finalize_chain_ids.ok_or(Error::<T>::SpokeChainIdsRequired)?;

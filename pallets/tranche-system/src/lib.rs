@@ -746,6 +746,14 @@ pub trait AdapterInspect {
 /// literal Hub chain ID, rather than adding a second, parallel set of
 /// single-chain-only branches.
 pub trait ProductInspect {
+	/// `true` iff `product_id` refers to a product that actually exists (either
+	/// model). Distinct from `single_chain_id`, which returns `None` for both a
+	/// `Multichain` product *and* an unregistered `product_id` — a caller that
+	/// needs to reject an unknown `product_id` outright (e.g.
+	/// pallet-tranche-tx-registry's `SettlementStep::SettleStarted`, whose other
+	/// validation is vacuously satisfied when both chain sets are empty) can't
+	/// tell the two apart from `single_chain_id` alone.
+	fn is_registered(product_id: ProductId) -> bool;
 	/// `Some(chain_id)` if `product_id` is a `SingleChain` product — the one
 	/// chain its entire stack lives on. `None` if it's `Multichain` (there's no
 	/// single answer to "which chain" for that model).
