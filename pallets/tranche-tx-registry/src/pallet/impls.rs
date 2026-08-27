@@ -113,6 +113,23 @@ impl<T: Config> Pallet<T> {
 		Ok(())
 	}
 
+	/// Rejects a declared chain set (`adapter_chain_ids` /
+	/// `collect_response_chain_ids` / `finalize_chain_ids`) that repeats a
+	/// `chain_id` within itself — each is meant to be a set. A repeat would
+	/// inflate `get_settlement`'s per-chain output (via `union_chain_ids` in the
+	/// precompile, which preserves duplicates within its first argument) and
+	/// waste re-checks in `local_settlement_complete`. Cross-set repeats
+	/// (`collect_response` and `finalize` sharing a chain) are fine and expected
+	/// — a chain with both an Adapter and a vault needs both legs. O(n^2) over a
+	/// set bounded at `MAX_MULTICHAIN_ADAPTERS`/`MAX_TRANCHE_CHAINS` (10), same
+	/// shape as `pallet_tranche_system`'s own small-slice dup checks.
+	fn ensure_no_duplicate_chain(chain_ids: &[ChainId]) -> DispatchResult {
+		for (i, id) in chain_ids.iter().enumerate() {
+			ensure!(!chain_ids[i + 1..].contains(id), Error::<T>::DuplicateDeclaredChain);
+		}
+		Ok(())
+	}
+
 	/// Removes `(product_id, request_id)` from `investor`'s
 	/// `InvestorActiveRequests` list and emits `ActiveRequestClosed`, if it's
 	/// still there — a no-op otherwise (already closed by an earlier call).
@@ -376,6 +393,7 @@ impl<T: Config> Pallet<T> {
 		// The request's arrival at the Valuation Contract — this is where the
 		// Adapter decision first becomes knowable, Hub-vault or Spoke-vault alike.
 		let chains = adapter_chain_ids.ok_or(Error::<T>::RequestAdapterChainsRequired)?;
+		Self::ensure_no_duplicate_chain(&chains)?;
 		ensure!(
 			T::Adapters::adapter_chains_belong_to_product(product_id, &chains),
 			Error::<T>::SpokeChainNotRegistered
@@ -530,6 +548,10 @@ impl<T: Config> Pallet<T> {
 		let collect_response_chains =
 			collect_response_chain_ids.ok_or(Error::<T>::SpokeChainIdsRequired)?;
 		let finalize_chains = finalize_chain_ids.ok_or(Error::<T>::SpokeChainIdsRequired)?;
+		// Each set must be dup-free on its own (a chain in both sets is fine —
+		// it needs both a Collect/Response and a Finalize leg).
+		Self::ensure_no_duplicate_chain(&collect_response_chains)?;
+		Self::ensure_no_duplicate_chain(&finalize_chains)?;
 		let local_chain_id = Self::local_chain_id(product_id);
 		ensure!(
 			!collect_response_chains.contains(&local_chain_id)

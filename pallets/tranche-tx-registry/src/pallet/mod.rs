@@ -127,6 +127,12 @@ pub mod pallet {
 		/// declared `adapter_chain_ids` and by `AdapterBridgeExecuted`/`AdapterApplied`
 		/// self-declaring a not-yet-seen chain (see `Pallet::ensure_adapter_chain_declared`).
 		TooManyAdapterChains,
+		/// A declared chain set repeated a `chain_id` within itself —
+		/// `adapter_chain_ids` (`RequestQueued`), or `collect_response_chain_ids`/
+		/// `finalize_chain_ids` (`SettleStarted`). Each is a set; a chain
+		/// appearing in *both* the collect/response and finalize sets is fine (it
+		/// needs both legs), a chain listed twice in the *same* set is not.
+		DuplicateDeclaredChain,
 		/// `step == RequestStep::RequestBridgeExecuted` was recorded for a request whose
 		/// vault is on its product's own local chain (`Pallet::local_chain_id`) — such a
 		/// request has no Inbound leg at all (there's nothing to bridge when the vault is
