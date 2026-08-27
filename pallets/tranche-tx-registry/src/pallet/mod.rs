@@ -89,6 +89,13 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// `product_id` does not refer to a registered product. Most `record_*`
+		/// paths reject an unknown `product_id` transitively (a request/receive/
+		/// whitelist can only exist against a vault bound to a real product; a
+		/// leg step needs `SettleStarted` to have run first), but
+		/// `SettlementStep::SettleStarted` with both chain sets empty has no such
+		/// transitive gate — this is its explicit check.
+		ProductNotRegistered,
 		/// The vault does not belong to `product_id`.
 		VaultNotRegistered,
 		/// One of the declared chains doesn't have the role required for the set it

@@ -611,6 +611,10 @@ impl<T: Config> AdapterInspect for Pallet<T> {
 }
 
 impl<T: Config> ProductInspect for Pallet<T> {
+	fn is_registered(product_id: ProductId) -> bool {
+		Products::<T>::contains_key(product_id)
+	}
+
 	fn single_chain_id(product_id: ProductId) -> Option<u64> {
 		match Products::<T>::get(product_id)? {
 			ProductDetails::Multichain(_) => None,
