@@ -190,13 +190,13 @@ pub mod pallet {
 		/// — every tranche's `vault.chain_id` must equal the product's
 		/// declared `chain_id`.
 		SingleChainTranchesMustShareChain,
-		/// `set_multichain_tranche_managers`'s input carried a `chain_id` with
-		/// no tranche registered on it for this product — a TrancheManager
-		/// binding only makes sense for a chain one of the product's vaults
-		/// is actually deployed on (see
-		/// `MultichainProductDetails::multichain_tranche_managers`'s doc
-		/// comment). Register a tranche on that chain first (`set_tranche`),
-		/// then bind its TrancheManager.
+		/// `create_product`'s or `set_multichain_tranche_managers`'s
+		/// `multichain_tranche_managers` input carried a `chain_id` with no
+		/// tranche on it for this product — a TrancheManager binding only makes
+		/// sense for a chain one of the product's vaults is actually deployed on
+		/// (see `MultichainProductDetails::multichain_tranche_managers`'s doc
+		/// comment). For `set_multichain_tranche_managers`, register a tranche
+		/// on that chain first (`set_tranche`), then bind its TrancheManager.
 		TrancheManagerChainHasNoTranche,
 		/// `set_request_flow_version`/`set_settlement_flow_version` are stubbed
 		/// to always reject for now — no `FlowVersion` beyond `V1` has a real
@@ -479,6 +479,20 @@ pub mod pallet {
 				tranches
 					.try_insert(chain_id, chain_tranches)
 					.map_err(|_| Error::<T>::TooManyTranches)?;
+			}
+
+			// Same rule `set_multichain_tranche_managers` enforces — a
+			// TrancheManager binding only makes sense for a chain this product
+			// actually has a tranche on. Checked here too so the two entry
+			// points agree (this half; completeness — every tranche chain
+			// having a manager — is deliberately not required, see
+			// `MultichainProductDetails::multichain_tranche_managers`'s doc
+			// comment).
+			for chain_id in multichain_tranche_managers.keys() {
+				ensure!(
+					tranches.contains_key(chain_id),
+					Error::<T>::TrancheManagerChainHasNoTranche
+				);
 			}
 
 			Self::ensure_tranches_are_unregistered(
