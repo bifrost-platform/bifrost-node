@@ -153,7 +153,7 @@ pub mod pallet {
 		/// `extra` failed to decode as the calling product's registered
 		/// `FlowVersion`'s extension payload.
 		BadRequestExtra,
-		/// `step` must be one of the nine recordable values — never
+		/// `step` must be one of the ten recordable values — never
 		/// `SettlementStep::Queued`, the one read-only sentinel.
 		InvalidSettlementStep,
 		/// `collect_response_chain_ids` and `finalize_chain_ids` must both be `Some`
