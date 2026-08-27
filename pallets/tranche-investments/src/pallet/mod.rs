@@ -76,6 +76,10 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// The vault does not belong to `product_id`.
 		VaultNotRegistered,
+		/// `record_investment_request` was called with `amount == 0`.
+		ZeroAmount,
+		/// `record_investment_request` was called with a zero `investor_address`.
+		ZeroInvestorAddress,
 		/// `request_id` is already in use (pending or approved) for this product.
 		DuplicateRequestId,
 		/// No pending request exists for `request_id` on this product.
@@ -296,6 +300,8 @@ pub mod pallet {
 				T::Vaults::vault_belongs_to_product(product_id, &vault),
 				Error::<T>::VaultNotRegistered
 			);
+			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
+			ensure!(!investor_address.is_zero(), Error::<T>::ZeroInvestorAddress);
 			ensure!(
 				!RequestedInvestments::<T>::contains_key(product_id, request_id)
 					&& !ApprovedInvestments::<T>::contains_key(product_id, request_id),
