@@ -774,12 +774,28 @@ impl<T: Config> Pallet<T> {
 				bridge_status,
 				tx,
 			)?,
-			SettlementStep::NavReceived => Self::record_hooks_leg_tx(
-				&entry.response_bridge_attempts,
-				&mut entry.nav_received_tx,
-				bridge_status,
-				tx,
-			)?,
+			SettlementStep::NavReceived => {
+				// The Response leg's Hooks phase (ValuationHub recording this
+				// chain's NAV) is only meaningful once the Collect leg's own
+				// Hooks phase — `NavReported`, the MultichainTrancheManager that
+				// produced that NAV — has landed. Checked here, on the
+				// completion step, rather than as an ordering gate on
+				// `ResponseBridgeExecuted`: `NavReported` (Spoke) and the
+				// Response Bridge phase (Hub) are cross-chain, so the recorder
+				// may legitimately observe them in either order, but this
+				// chain's own completion marker (`nav_received_tx`) must never
+				// be set without `NavReported` — otherwise the chain reads as
+				// "done" in `get_settlement` with `NavReported` permanently
+				// zeroed (see `close_active_requests`/`local_settlement_complete`,
+				// which key completion off `nav_received_tx.is_some()`).
+				ensure!(entry.nav_reported_tx.is_some(), Error::<T>::SettlementStepOutOfOrder);
+				Self::record_hooks_leg_tx(
+					&entry.response_bridge_attempts,
+					&mut entry.nav_received_tx,
+					bridge_status,
+					tx,
+				)?
+			},
 			SettlementStep::FinalizeBridgeExecuted => Self::record_bridge_leg_attempt(
 				&mut entry.finalize_bridge_attempts,
 				bridge_status,
