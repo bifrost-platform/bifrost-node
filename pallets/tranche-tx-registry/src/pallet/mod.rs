@@ -206,7 +206,10 @@ pub mod pallet {
 		/// being recorded — `collect_response_chain_ids` for a Collect/Response leg,
 		/// `finalize_chain_ids` for a Finalize leg.
 		UnknownSpokeChain,
-		/// The leg step being recorded skips over its Bridge phase.
+		/// The leg step being recorded skips over an earlier, not-yet-recorded
+		/// step in its own leg — its Bridge phase (for a Hooks step), or, for
+		/// `NavReceived`, the Collect leg's `NavReported` that produced the NAV
+		/// it delivers.
 		SettlementStepOutOfOrder,
 		/// This leg step has already been recorded for this chain.
 		SettlementStepAlreadyRecorded,
