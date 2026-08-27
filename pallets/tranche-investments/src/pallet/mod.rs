@@ -250,6 +250,14 @@ pub mod pallet {
 	/// `get_last_settlement` on the precompile). It plays no role in
 	/// `record_settlement`'s own duplicate-write check, which still
 	/// keys off `Settlements::contains_key` directly.
+	///
+	/// `record_settlement` only ever advances this — it writes `settlement_id`
+	/// iff it's strictly greater than what's already stored (or nothing is).
+	/// The Valuation Contract assigns settlement_ids monotonically, but a cycle
+	/// recorded out of order (a stuck/retried settlement tx landing after a
+	/// later cycle's, a reorg) must not drag "the latest settlement" backwards
+	/// — same guard and rationale as
+	/// `pallet_tranche_tx_registry::LatestWhitelistNonce`.
 	pub type LastSettlementId<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, SettlementId>;
 
 	#[pallet::hooks]
@@ -556,7 +564,14 @@ pub mod pallet {
 				},
 			);
 			ProductNavs::<T>::insert(product_id, settlement_id, product_nav);
-			LastSettlementId::<T>::insert(product_id, settlement_id);
+			// Advance only — never let an out-of-order (stuck/retried/reorged)
+			// cycle drag "the latest settlement" backwards. See
+			// `LastSettlementId`'s storage doc comment.
+			LastSettlementId::<T>::mutate(product_id, |last| {
+				if last.map_or(true, |current| settlement_id > current) {
+					*last = Some(settlement_id);
+				}
+			});
 
 			Self::deposit_event(Event::TrancheSettlementRecorded {
 				product_id,
