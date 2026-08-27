@@ -218,16 +218,27 @@ impl<T: Config> Pallet<T> {
 	/// no-op if the condition isn't met yet — the settlement-side trigger will
 	/// close this request once it is (this request is now linked into
 	/// `SettlementRequests`, so it'll be found).
+	///
+	/// `local_chain_id`/`local_settlement_complete` are passed in rather than
+	/// recomputed here: this runs once per `request_id` in a `RequestsApproved`
+	/// batch (up to `MAX_SETTLEMENT_REQUESTS`), and both values are invariant
+	/// across that whole loop while each is expensive to recompute —
+	/// `Self::local_chain_id(product_id)` decodes the entire `ProductDetails`
+	/// just to read one field, and `Self::local_settlement_complete(product_id,
+	/// settlement_id)` scans up to `MAX_MULTICHAIN_ADAPTERS` `SettlementChainEntries`.
+	/// `handle_requests_approved` computes each once, before the loop.
 	pub(crate) fn try_close_request(
 		product_id: ProductId,
 		settlement_id: SettlementId,
 		request_id: RequestId,
+		local_chain_id: ChainId,
+		local_settlement_complete: bool,
 	) {
 		let Some(request_entry) = RequestEntries::<T>::get(product_id, request_id) else {
 			return;
 		};
-		let complete = if request_entry.vault.chain_id == Self::local_chain_id(product_id) {
-			Self::local_settlement_complete(product_id, settlement_id)
+		let complete = if request_entry.vault.chain_id == local_chain_id {
+			local_settlement_complete
 		} else {
 			SettlementChainEntries::<T>::get((
 				product_id,
@@ -610,9 +621,22 @@ impl<T: Config> Pallet<T> {
 		// Opportunistically self-close each request individually: this can race
 		// with the settlement-side completion trigger
 		// (`try_close_local_requests`/`close_active_requests`) — see
-		// `SettlementStep::RequestsApproved`'s doc comment.
+		// `SettlementStep::RequestsApproved`'s doc comment. `local_chain_id` and
+		// `local_settlement_complete` are hoisted out of the loop: both are
+		// invariant across the batch and each is expensive (`local_chain_id`
+		// decodes the whole `ProductDetails`; `local_settlement_complete` scans
+		// every collect/response chain), and this loop runs once per approved
+		// `request_id`, up to `MAX_SETTLEMENT_REQUESTS`.
+		let local_chain_id = Self::local_chain_id(product_id);
+		let local_settlement_complete = Self::local_settlement_complete(product_id, settlement_id);
 		for request_id in approved_request_ids.iter() {
-			Self::try_close_request(product_id, settlement_id, *request_id);
+			Self::try_close_request(
+				product_id,
+				settlement_id,
+				*request_id,
+				local_chain_id,
+				local_settlement_complete,
+			);
 		}
 		Ok(())
 	}
