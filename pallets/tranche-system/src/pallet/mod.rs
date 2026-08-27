@@ -181,6 +181,14 @@ pub mod pallet {
 		/// `settlement_start_timestamp` must be strictly after the current
 		/// block time.
 		SettlementStartMustBeInFuture,
+		/// A required contract address in a `create_product`/
+		/// `create_single_chain_product` input was the zero address —
+		/// `base_asset`/`valuation_address` (both models), plus
+		/// `tranche_manager`/`ledger` for a single-chain product. (Per-chain
+		/// TrancheManager entries in `multichain_tranche_managers` may still be
+		/// zero — that's the "not bound yet" placeholder, see
+		/// `MultichainProductDetails::multichain_tranche_managers`'s doc comment.)
+		ZeroAddress,
 		/// This extrinsic only applies to one `ProductDetails` variant
 		/// (`Multichain` or `SingleChain`) — `product_id` refers to a product
 		/// of the other kind.
@@ -433,6 +441,10 @@ pub mod pallet {
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
 			ensure!(
+				!valuation.base_asset.is_zero() && !valuation.valuation_address.is_zero(),
+				Error::<T>::ZeroAddress
+			);
+			ensure!(
 				valuation.settlement_offset_secs < valuation.settlement_length_secs,
 				Error::<T>::SettlementOffsetMustBeShorterThanLength
 			);
@@ -580,6 +592,13 @@ pub mod pallet {
 
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
+			ensure!(
+				!valuation.base_asset.is_zero()
+					&& !valuation.valuation_address.is_zero()
+					&& !tranche_manager.is_zero()
+					&& !ledger.is_zero(),
+				Error::<T>::ZeroAddress
+			);
 			if let SettlementMode::Async {
 				settlement_start_timestamp,
 				settlement_length_secs,
