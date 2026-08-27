@@ -198,6 +198,17 @@ pub mod pallet {
 		/// `get_settlement` status once every chain completes, never itself
 		/// recorded.
 		SettledStepNotSingleChain,
+		/// A `record_*` step that only exists in a `Multichain` product's
+		/// pipeline was recorded against a `SingleChain` `product_id` —
+		/// `RequestStep::RequestQueued`/`AdapterBridgeExecuted`/`AdapterApplied`
+		/// (a `SingleChain` request is `Requested` alone; Vault, Valuation and
+		/// Adapters are all colocated, so there's no queue step and no Adapter
+		/// leg), or `WhitelistStep::WhitelistRequested` (a `SingleChain`
+		/// whitelist action is `WhitelistApplied` alone; there's no
+		/// Orchestrator-driven trigger). The mirror of
+		/// `SettledStepNotSingleChain`. See `RequestStep`'s/`WhitelistStep`'s
+		/// doc comments and the flow docs.
+		MultichainOnlyStep,
 		/// `step == SettlementStep::SettleStarted`'s `collect_response_chain_ids`
 		/// or `finalize_chain_ids` included the product's own local chain
 		/// (`Pallet::local_chain_id` — Hub for a `Multichain` product, or the

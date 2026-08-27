@@ -95,6 +95,24 @@ impl<T: Config> Pallet<T> {
 			.unwrap_or_else(<T as pallet_evm::Config>::ChainId::get)
 	}
 
+	/// Rejects a `record_*` step that only exists in a `Multichain` product's
+	/// pipeline (`RequestStep::RequestQueued`/`AdapterBridgeExecuted`/
+	/// `AdapterApplied`, `WhitelistStep::WhitelistRequested`). A `SingleChain`
+	/// product's request flow is `Requested` alone and its whitelist flow is
+	/// `WhitelistApplied` alone — everything is colocated, so there's no
+	/// Valuation-Contract queue step, no Adapter leg, and no Orchestrator-driven
+	/// trigger (see `RequestStep`'s/`WhitelistStep`'s doc comments). The mirror
+	/// of `Error::SettledStepNotSingleChain`.
+	///
+	/// `single_chain_id(product_id).is_none()` is also true for an unregistered
+	/// `product_id` — harmless here: every call site that reaches this already
+	/// rejects a nonexistent product downstream (`RequestNotOpened` /
+	/// `SpokeChainNotRegistered` / `VaultNotRegistered`).
+	fn ensure_multichain_product(product_id: ProductId) -> DispatchResult {
+		ensure!(T::Products::single_chain_id(product_id).is_none(), Error::<T>::MultichainOnlyStep);
+		Ok(())
+	}
+
 	/// Removes `(product_id, request_id)` from `investor`'s
 	/// `InvestorActiveRequests` list and emits `ActiveRequestClosed`, if it's
 	/// still there — a no-op otherwise (already closed by an earlier call).
@@ -341,6 +359,9 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
 		ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+		// A `SingleChain` product's request is `Requested` alone — no
+		// Valuation-Contract queue step (everything is colocated).
+		Self::ensure_multichain_product(product_id)?;
 		let mut entry =
 			RequestEntries::<T>::get(product_id, request_id).ok_or(Error::<T>::RequestNotOpened)?;
 		if entry.vault.chain_id != local_chain_id {
@@ -394,6 +415,9 @@ impl<T: Config> Pallet<T> {
 		ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
 		ensure!(adapter_chain_ids.is_none(), Error::<T>::UnexpectedRequestAdapterChains);
 		let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
+		// A `SingleChain` product has no Adapter leg — its Adapters are
+		// colocated with the vault.
+		Self::ensure_multichain_product(product_id)?;
 		Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 		let mut entry = RequestChainEntries::<T>::get((product_id, request_id, chain_id));
 		Self::push_bridge_attempt(&mut entry.bridge_attempts, bridge_status, tx)?;
@@ -418,6 +442,9 @@ impl<T: Config> Pallet<T> {
 		ensure!(opening.is_none(), Error::<T>::UnexpectedRequestOpening);
 		ensure!(adapter_chain_ids.is_none(), Error::<T>::UnexpectedRequestAdapterChains);
 		ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+		// A `SingleChain` product has no Adapter leg — see
+		// `handle_adapter_bridge_executed`.
+		Self::ensure_multichain_product(product_id)?;
 		Self::ensure_adapter_chain_declared(product_id, request_id, chain_id)?;
 		let mut entry = RequestChainEntries::<T>::get((product_id, request_id, chain_id));
 		ensure!(entry.applied_tx.is_none(), Error::<T>::RequestStepAlreadyRecorded);
@@ -868,6 +895,10 @@ impl<T: Config> Pallet<T> {
 		);
 		let product_id =
 			T::Vaults::product_id_for_vault(&vault).ok_or(Error::<T>::VaultNotRegistered)?;
+		// A `SingleChain` product has no Orchestrator-driven trigger — its
+		// whitelist action is `WhitelistApplied` alone (self-opening — see
+		// `handle_whitelist_applied`).
+		Self::ensure_multichain_product(product_id)?;
 		WhitelistEntries::<T>::insert(
 			key,
 			WhitelistEntry {
