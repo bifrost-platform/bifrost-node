@@ -134,11 +134,15 @@ interface TranchePermissions {
     ) external;
 
     /**
-     * @notice Read whether `who` currently holds the TrancheInvestor whitelist for `vault`.
-     * @dev `product_id` is accepted for signature symmetry with grant_permission/
-     *      revoke_permission but isn't part of the actual check — the whitelist is keyed
-     *      by `vault` alone (globally unique across all products).
-     * @param product_id Accepted for signature symmetry; not used in the lookup itself
+     * @notice Read whether `who` currently holds the TrancheInvestor whitelist for `vault`
+     *         under `product_id`.
+     * @dev `product_id` IS part of the actual lookup key (2026-08-26) — the whitelist is
+     *      keyed by `(product_id, vault, who)`, not `vault` alone. This matters because a
+     *      `vault` is now permanently bound to whichever product first registered it (see
+     *      set_tranche's own notes in the tranche-system interface): pass `vault`'s real,
+     *      currently-bound `product_id` here, not a placeholder — a stale or mismatched one
+     *      simply reads back `false`, the same as an investor who was never granted at all.
+     * @param product_id The product `vault` is bound to
      * @param vault      Identifies the tranche whose whitelist is being checked
      * @param who        EVM address to check
      */
