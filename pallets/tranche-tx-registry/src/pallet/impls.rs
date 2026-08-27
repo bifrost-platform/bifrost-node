@@ -475,7 +475,7 @@ impl<T: Config> Pallet<T> {
 		spoke_chain_id: Option<ChainId>,
 		collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
 		finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
-		request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
+		request_ids: &Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		bridge_status: Option<BridgeStatus>,
 		tx: TxRecord<BlockNumberFor<T>>,
 	) -> DispatchResult {
@@ -525,10 +525,18 @@ impl<T: Config> Pallet<T> {
 	/// extrinsic input, only for a `SingleChain` product (see that variant's
 	/// doc comment). Same effect as `SettleStarted` with both chain sets
 	/// empty — chain sets aren't parameters here since they're always empty
-	/// for this case. Both `SettlementCollectResponseChains`/
-	/// `SettlementFinalizeChains` are still written explicitly (not left
-	/// absent) — `get_request`'s own `settled` computation (precompile-side)
-	/// treats a *missing* entry as "not settled", not vacuously empty, unlike
+	/// for this case, so after this function's own two `Settled`-specific
+	/// checks (below), it delegates the rest entirely to
+	/// `handle_settle_started` with `Some(BoundedVec::default())` for both —
+	/// every one of that function's own checks (bridge_status/spoke_chain_id/
+	/// request_ids all `None`, no double-trigger, local-chain-as-spoke-chain,
+	/// adapter/vault chain ownership) is either identical to what `Settled`
+	/// itself requires, or vacuously satisfied by an empty chain set, so
+	/// there's nothing left here for this function to re-check by hand. Both
+	/// `SettlementCollectResponseChains`/`SettlementFinalizeChains` still end
+	/// up written explicitly (not left absent) via that same shared path —
+	/// `get_request`'s own `settled` computation (precompile-side) treats a
+	/// *missing* entry as "not settled", not vacuously empty, unlike
 	/// `try_close_local_requests`/`get_settlement`'s `unwrap_or_default`
 	/// reads — so an absent entry here would leave a SingleChain request
 	/// permanently reporting `settled == false` despite this settlement
@@ -537,15 +545,12 @@ impl<T: Config> Pallet<T> {
 		product_id: ProductId,
 		settlement_id: SettlementId,
 		spoke_chain_id: Option<ChainId>,
-		collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
-		finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
-		request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
+		collect_response_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
+		finalize_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
+		request_ids: &Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		bridge_status: Option<BridgeStatus>,
 		tx: TxRecord<BlockNumberFor<T>>,
 	) -> DispatchResult {
-		ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-		ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
-		ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
 		ensure!(
 			collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
 			Error::<T>::UnexpectedSpokeChainIds
@@ -554,20 +559,16 @@ impl<T: Config> Pallet<T> {
 			T::Products::single_chain_id(product_id).is_some(),
 			Error::<T>::SettledStepNotSingleChain
 		);
-		ensure!(
-			!SettlementTriggers::<T>::contains_key(product_id, settlement_id),
-			Error::<T>::SettlementAlreadyTriggered
-		);
-		SettlementTriggers::<T>::insert(product_id, settlement_id, tx);
-		SettlementCollectResponseChains::<T>::insert(
+		Self::handle_settle_started(
 			product_id,
 			settlement_id,
-			BoundedVec::default(),
-		);
-		SettlementFinalizeChains::<T>::insert(product_id, settlement_id, BoundedVec::default());
-
-		Self::try_close_local_requests(product_id, settlement_id);
-		Ok(())
+			spoke_chain_id,
+			Some(BoundedVec::default()),
+			Some(BoundedVec::default()),
+			request_ids,
+			bridge_status,
+			tx,
+		)
 	}
 
 	/// `SettlementStep::RequestsApproved` — records evidence for every
@@ -581,8 +582,8 @@ impl<T: Config> Pallet<T> {
 		product_id: ProductId,
 		settlement_id: SettlementId,
 		spoke_chain_id: Option<ChainId>,
-		collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
-		finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
+		collect_response_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
+		finalize_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
 		request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		bridge_status: Option<BridgeStatus>,
 		tx: TxRecord<BlockNumberFor<T>>,
@@ -622,9 +623,9 @@ impl<T: Config> Pallet<T> {
 	pub(crate) fn handle_settlement_extended(
 		product_id: ProductId,
 		settlement_id: SettlementId,
-		collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
-		finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
-		request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
+		collect_response_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
+		finalize_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
+		request_ids: &Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		bridge_status: Option<BridgeStatus>,
 		extra: Option<BoundedVec<u8, ConstU32<MAX_SETTLEMENT_EXTRA_LEN>>>,
 	) -> DispatchResult {
@@ -661,6 +662,40 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	/// One Bridge-phase leg arm of `handle_settlement_leg_step`
+	/// (`CollectBridgeExecuted`/`ResponseBridgeExecuted`/`FinalizeBridgeExecuted`)
+	/// — shared since all three differ only in which leg's own
+	/// `bridge_attempts` list this attempt is appended to.
+	fn record_bridge_leg_attempt(
+		bridge_attempts: &mut BridgeAttempts<BlockNumberFor<T>>,
+		bridge_status: Option<BridgeStatus>,
+		tx: TxRecord<BlockNumberFor<T>>,
+	) -> DispatchResult {
+		let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
+		Self::push_bridge_attempt(bridge_attempts, bridge_status, tx)
+	}
+
+	/// One Hooks-phase leg arm of `handle_settlement_leg_step`
+	/// (`NavReported`/`NavReceived`/`SettleApplied`) — shared since all three
+	/// differ only in which *preceding* leg's `bridge_attempts` must have
+	/// already succeeded, and which of `SettlementChainEntry`'s own `_tx`
+	/// fields records this step.
+	fn record_hooks_leg_tx(
+		preceding_bridge_attempts: &BridgeAttempts<BlockNumberFor<T>>,
+		tx_field: &mut Option<TxRecord<BlockNumberFor<T>>>,
+		bridge_status: Option<BridgeStatus>,
+		tx: TxRecord<BlockNumberFor<T>>,
+	) -> DispatchResult {
+		ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
+		ensure!(
+			Self::bridge_succeeded(preceding_bridge_attempts),
+			Error::<T>::SettlementStepOutOfOrder
+		);
+		ensure!(tx_field.is_none(), Error::<T>::SettlementStepAlreadyRecorded);
+		*tx_field = Some(tx);
+		Ok(())
+	}
+
 	/// The six chain-scoped `SettlementStep` leg steps
 	/// (`CollectBridgeExecuted`/`NavReported`/`ResponseBridgeExecuted`/
 	/// `NavReceived`/`FinalizeBridgeExecuted`/`SettleApplied`) — a
@@ -673,9 +708,9 @@ impl<T: Config> Pallet<T> {
 		product_id: ProductId,
 		settlement_id: SettlementId,
 		spoke_chain_id: Option<ChainId>,
-		collect_response_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
-		finalize_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
-		request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
+		collect_response_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
+		finalize_chain_ids: &Option<BoundedVec<ChainId, ConstU32<MAX_TRANCHE_CHAINS>>>,
+		request_ids: &Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		step: SettlementStep,
 		bridge_status: Option<BridgeStatus>,
 		tx: TxRecord<BlockNumberFor<T>>,
@@ -699,48 +734,39 @@ impl<T: Config> Pallet<T> {
 		let mut entry =
 			SettlementChainEntries::<T>::get((product_id, settlement_id, spoke_chain_id));
 		match step {
-			SettlementStep::CollectBridgeExecuted => {
-				let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-				Self::push_bridge_attempt(&mut entry.collect_bridge_attempts, bridge_status, tx)?;
-			},
-			SettlementStep::NavReported => {
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(
-					Self::bridge_succeeded(&entry.collect_bridge_attempts),
-					Error::<T>::SettlementStepOutOfOrder
-				);
-				ensure!(entry.nav_reported_tx.is_none(), Error::<T>::SettlementStepAlreadyRecorded);
-				entry.nav_reported_tx = Some(tx);
-			},
-			SettlementStep::ResponseBridgeExecuted => {
-				let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-				Self::push_bridge_attempt(&mut entry.response_bridge_attempts, bridge_status, tx)?;
-			},
-			SettlementStep::NavReceived => {
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(
-					Self::bridge_succeeded(&entry.response_bridge_attempts),
-					Error::<T>::SettlementStepOutOfOrder
-				);
-				ensure!(entry.nav_received_tx.is_none(), Error::<T>::SettlementStepAlreadyRecorded);
-				entry.nav_received_tx = Some(tx);
-			},
-			SettlementStep::FinalizeBridgeExecuted => {
-				let bridge_status = bridge_status.ok_or(Error::<T>::BridgeStatusRequired)?;
-				Self::push_bridge_attempt(&mut entry.finalize_bridge_attempts, bridge_status, tx)?;
-			},
-			SettlementStep::SettleApplied => {
-				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				ensure!(
-					Self::bridge_succeeded(&entry.finalize_bridge_attempts),
-					Error::<T>::SettlementStepOutOfOrder
-				);
-				ensure!(
-					entry.settle_applied_tx.is_none(),
-					Error::<T>::SettlementStepAlreadyRecorded
-				);
-				entry.settle_applied_tx = Some(tx);
-			},
+			SettlementStep::CollectBridgeExecuted => Self::record_bridge_leg_attempt(
+				&mut entry.collect_bridge_attempts,
+				bridge_status,
+				tx,
+			)?,
+			SettlementStep::NavReported => Self::record_hooks_leg_tx(
+				&entry.collect_bridge_attempts,
+				&mut entry.nav_reported_tx,
+				bridge_status,
+				tx,
+			)?,
+			SettlementStep::ResponseBridgeExecuted => Self::record_bridge_leg_attempt(
+				&mut entry.response_bridge_attempts,
+				bridge_status,
+				tx,
+			)?,
+			SettlementStep::NavReceived => Self::record_hooks_leg_tx(
+				&entry.response_bridge_attempts,
+				&mut entry.nav_received_tx,
+				bridge_status,
+				tx,
+			)?,
+			SettlementStep::FinalizeBridgeExecuted => Self::record_bridge_leg_attempt(
+				&mut entry.finalize_bridge_attempts,
+				bridge_status,
+				tx,
+			)?,
+			SettlementStep::SettleApplied => Self::record_hooks_leg_tx(
+				&entry.finalize_bridge_attempts,
+				&mut entry.settle_applied_tx,
+				bridge_status,
+				tx,
+			)?,
 			SettlementStep::Queued
 			| SettlementStep::SettleStarted
 			| SettlementStep::RequestsApproved

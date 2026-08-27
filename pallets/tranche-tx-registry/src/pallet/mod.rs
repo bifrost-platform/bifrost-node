@@ -993,6 +993,16 @@ pub mod pallet {
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
 
+			// `collect_response_chain_ids`/`finalize_chain_ids`/`request_ids` are
+			// only ever genuinely *owned* by one handler each
+			// (`handle_settle_started` for the first two, `handle_requests_approved`
+			// for the third) — every other handler below only checks `.is_none()`
+			// on them and takes a reference instead, so this router only pays for
+			// a real clone where the value is actually about to be moved into
+			// storage. `request_ids` is the one worth avoiding: it's bounded at
+			// `MAX_SETTLEMENT_REQUESTS` (1000), unlike the two chain-id sets
+			// (bounded at 10) — cloning it for a call that's just going to reject
+			// it with `Error::UnexpectedRequestIds` wastes real work.
 			match step {
 				SettlementStep::SettleStarted => Self::handle_settle_started(
 					product_id,
@@ -1000,7 +1010,7 @@ pub mod pallet {
 					spoke_chain_id,
 					collect_response_chain_ids.clone(),
 					finalize_chain_ids.clone(),
-					request_ids.clone(),
+					&request_ids,
 					bridge_status,
 					tx,
 				)?,
@@ -1008,9 +1018,9 @@ pub mod pallet {
 					product_id,
 					settlement_id,
 					spoke_chain_id,
-					collect_response_chain_ids.clone(),
-					finalize_chain_ids.clone(),
-					request_ids.clone(),
+					&collect_response_chain_ids,
+					&finalize_chain_ids,
+					&request_ids,
 					bridge_status,
 					tx,
 				)?,
@@ -1018,8 +1028,8 @@ pub mod pallet {
 					product_id,
 					settlement_id,
 					spoke_chain_id,
-					collect_response_chain_ids.clone(),
-					finalize_chain_ids.clone(),
+					&collect_response_chain_ids,
+					&finalize_chain_ids,
 					request_ids.clone(),
 					bridge_status,
 					tx,
@@ -1027,9 +1037,9 @@ pub mod pallet {
 				SettlementStep::Extended => Self::handle_settlement_extended(
 					product_id,
 					settlement_id,
-					collect_response_chain_ids.clone(),
-					finalize_chain_ids.clone(),
-					request_ids.clone(),
+					&collect_response_chain_ids,
+					&finalize_chain_ids,
+					&request_ids,
 					bridge_status,
 					extra.clone(),
 				)?,
@@ -1042,9 +1052,9 @@ pub mod pallet {
 					product_id,
 					settlement_id,
 					spoke_chain_id,
-					collect_response_chain_ids.clone(),
-					finalize_chain_ids.clone(),
-					request_ids.clone(),
+					&collect_response_chain_ids,
+					&finalize_chain_ids,
+					&request_ids,
 					step,
 					bridge_status,
 					tx,
