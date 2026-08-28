@@ -51,6 +51,14 @@ type EvmVaultInput = (u64, Address);
 /// product-wide, in `pallet-tranche-system` — see `TrancheInput`'s doc comment there).
 type EvmChainSettlement = (u64, Vec<U256>, Vec<U256>);
 
+/// Upper bound on `get_pending_requests`'s `limit` — caps the page size so a
+/// single `eth_call` can't be asked to serialize an unbounded response.
+/// Rejected (not silently clamped) if exceeded, matching
+/// `precompile-tranche-tx-registry`'s `get_investor_request_history`/
+/// `get_investor_receive_history` (same value, same "catch caller bugs early"
+/// convention).
+const MAX_HISTORY_PAGE_SIZE: u64 = 50;
+
 // ---------------------------------------------------------------------------
 // Precompile
 // ---------------------------------------------------------------------------
@@ -342,7 +350,9 @@ where
 	/// @param product_id    The product to look up
 	/// @param settlement_id Only requests recorded against this settlement cycle are returned
 	/// @param offset        Number of matching entries to skip
-	/// @param limit         Maximum number of entries to return
+	/// @param limit         Maximum number of entries to return — MUST NOT exceed
+	/// MAX_HISTORY_PAGE_SIZE (rejected, not clamped), same as
+	/// TrancheTxRegistry's get_investor_request_history/get_investor_receive_history
 	#[precompile::public("get_pending_requests(uint64,uint256,uint256,uint256)")]
 	#[precompile::view]
 	fn get_pending_requests(
@@ -353,6 +363,9 @@ where
 		limit: U256,
 	) -> EvmResult<Vec<H256>> {
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
+		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		}
 		let offset = to_u64(offset)?;
 		let limit = to_u64(limit)?;
 
