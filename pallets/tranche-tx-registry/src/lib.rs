@@ -33,9 +33,14 @@ pub type RequestId = H256;
 /// reason as `RequestId` above.
 pub type SettlementId = U256;
 
-/// EVM chain ID. Bare `u64`, matching `pallet_tranche_system::VaultId::chain_id`
-/// — no dedicated newtype exists elsewhere in this pallet family.
-pub type ChainId = u64;
+/// EVM chain ID + stored tx evidence. Lifted verbatim to the shared
+/// `bp-tranche` crate when `pallet-tranche-custom-flows` (which needs the same
+/// two types) was added — re-exported here so every `crate::ChainId` /
+/// `crate::TxRecord` reference in this pallet keeps working. The move is
+/// SCALE-encoding-neutral (crate path only affects `TypeInfo` metadata), so
+/// this pallet's existing storage needs no migration — see `bp_tranche`'s
+/// module docs.
+pub use bp_tranche::{ChainId, TxRecord};
 
 /// Maximum number of `request_id`s a single `record_settlement_tx` call can batch
 /// into one `SettlementStep::RequestsApproved` attestation. Re-exported here
@@ -46,38 +51,6 @@ pub type ChainId = u64;
 /// no hard dependency on tranche-investments itself (see `RequestId`'s doc
 /// comment).
 pub use pallet_tranche_system::MAX_SETTLEMENT_REQUESTS;
-
-// ---------------------------------------------------------------------------
-// TxRecord
-// ---------------------------------------------------------------------------
-
-/// Stored off-chain tx evidence, accepted from the tx recorder's attestation.
-/// Mirrors interface.sol's `TxRecord`, except `recorded_at == 0` is not used as
-/// an unset sentinel here — that was a Solidity-only workaround for the lack of
-/// an `Option` type; on this side, "not yet recorded" is represented directly
-/// as `Option<TxRecord<BlockNumber>>` at every storage/query site instead. The
-/// precompile boundary (`precompiles/tranche-tx-registry`) is responsible for
-/// translating `None` back into a zeroed struct with `recorded_at == 0` when it
-/// encodes a response for a Solidity caller.
-#[derive(
-	Clone,
-	Encode,
-	Decode,
-	DecodeWithMemTracking,
-	PartialEq,
-	Eq,
-	RuntimeDebug,
-	TypeInfo,
-	MaxEncodedLen,
-)]
-pub struct TxRecord<BlockNumber> {
-	/// EVM chain ID the tx occurred on.
-	pub chain_id: ChainId,
-	/// Transaction hash on that chain.
-	pub tx_hash: H256,
-	/// This chain's own block number when the attestation was accepted.
-	pub recorded_at: BlockNumber,
-}
 
 // ---------------------------------------------------------------------------
 // Bridge attempts (retry tracking)

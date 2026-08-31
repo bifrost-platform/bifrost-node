@@ -1194,6 +1194,13 @@ impl pallet_tranche_tx_registry::Config for Runtime {
 	type WeightInfo = pallet_tranche_tx_registry::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_tranche_custom_flows::Config for Runtime {
+	// Shares one recorder identity with pallet-tranche-tx-registry.
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type GovernanceOrigin = EnsureRoot<AccountId>;
+	type WeightInfo = pallet_tranche_custom_flows::weights::SubstrateWeight<Runtime>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -1336,6 +1343,9 @@ mod runtime {
 
 	#[runtime::pallet_index(83)]
 	pub type TrancheTxRegistry = pallet_tranche_tx_registry;
+
+	#[runtime::pallet_index(84)]
+	pub type TrancheCustomFlows = pallet_tranche_custom_flows;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;

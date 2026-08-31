@@ -17,8 +17,12 @@ use sp_std::marker::PhantomData;
 // Primitive type aliases / constants
 // ---------------------------------------------------------------------------
 
-/// Product identifier.
-pub type ProductId = u64;
+/// Product identifier. Defined in the shared `bp-tranche` crate (so the
+/// tx-evidence pallets can key storage by it without depending on this pallet)
+/// and re-exported here as the canonical `pallet_tranche_system::ProductId`.
+/// The move is SCALE-encoding-neutral (crate path only affects `TypeInfo`
+/// metadata) — this pallet's existing storage needs no migration.
+pub use bp_tranche::ProductId;
 
 /// Maximum number of tranches a single chain within a product can have.
 /// Originally a flat, product-wide cap; rescoped (2026-08-20) to apply per

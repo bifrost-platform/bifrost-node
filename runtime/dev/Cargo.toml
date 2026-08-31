@@ -98,6 +98,7 @@ pallet-tranche-system = { workspace = true }
 pallet-tranche-permissions = { workspace = true }
 pallet-tranche-investments = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
+pallet-tranche-custom-flows = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -119,6 +120,7 @@ precompile-tranche-system = { workspace = true }
 precompile-tranche-permissions = { workspace = true }
 precompile-tranche-investments = { workspace = true }
 precompile-tranche-tx-registry = { workspace = true }
+precompile-tranche-custom-flows = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -167,6 +169,7 @@ std = [
 	"pallet-tranche-permissions/std",
 	"pallet-tranche-investments/std",
 	"pallet-tranche-tx-registry/std",
+	"pallet-tranche-custom-flows/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
 	"pallet-identity/std",
@@ -210,6 +213,7 @@ std = [
 	"precompile-tranche-permissions/std",
 	"precompile-tranche-investments/std",
 	"precompile-tranche-tx-registry/std",
+	"precompile-tranche-custom-flows/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
