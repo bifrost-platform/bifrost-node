@@ -31,7 +31,9 @@ precompile-bifrost-evm-tx-payment = { workspace = true }
 # OmniFi tranche-system
 pallet-tranche-system = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
+pallet-tranche-custom-flows = { workspace = true }
 precompile-tranche-tx-registry = { workspace = true }
+precompile-tranche-custom-flows = { workspace = true }
 
 [features]
 default = ["std"]
@@ -50,6 +52,8 @@ std = [
 	"precompile-bifrost-evm-tx-payment/std",
 	"pallet-tranche-system/std",
 	"pallet-tranche-tx-registry/std",
+	"pallet-tranche-custom-flows/std",
 	"precompile-tranche-tx-registry/std",
+	"precompile-tranche-custom-flows/std",
 ]
 try-runtime = ["frame-support/try-runtime"]

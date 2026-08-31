@@ -954,10 +954,12 @@ dependencies = [
  "pallet-bfc-utility",
  "pallet-bifrost-evm-tx-payment",
  "pallet-evm",
+ "pallet-tranche-custom-flows",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
  "parity-scale-codec",
  "precompile-bifrost-evm-tx-payment",
+ "precompile-tranche-custom-flows",
  "precompile-tranche-tx-registry",
  "scale-info",
  "sp-core",
@@ -1088,6 +1090,7 @@ dependencies = [
  "pallet-session",
  "pallet-sudo",
  "pallet-timestamp",
+ "pallet-tranche-custom-flows",
  "pallet-tranche-investments",
  "pallet-tranche-permissions",
  "pallet-tranche-system",
@@ -1108,6 +1111,7 @@ dependencies = [
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
+ "precompile-tranche-custom-flows",
  "precompile-tranche-investments",
  "precompile-tranche-permissions",
  "precompile-tranche-system",
@@ -1752,6 +1756,16 @@ dependencies = [
  "sp-runtime",
  "sp-staking",
  "sp-std",
+]
+
+[[package]]
+name = "bp-tranche"
+version = "0.0.1"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -8409,6 +8423,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-tranche-custom-flows"
+version = "1.0.0"
+dependencies = [
+ "bp-tranche",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-tranche-investments"
 version = "1.0.0"
 dependencies = [
@@ -8449,6 +8481,7 @@ dependencies = [
 name = "pallet-tranche-system"
 version = "1.0.0"
 dependencies = [
+ "bp-tranche",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -8468,6 +8501,7 @@ dependencies = [
 name = "pallet-tranche-tx-registry"
 version = "1.0.0"
 dependencies = [
+ "bp-tranche",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -9503,6 +9537,21 @@ dependencies = [
  "frame-system",
  "pallet-evm",
  "pallet-relay-manager",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-custom-flows"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-custom-flows",
  "precompile-utils",
  "sp-core",
  "sp-runtime",

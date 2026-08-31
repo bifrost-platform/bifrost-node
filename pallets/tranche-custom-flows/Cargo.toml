@@ -1,7 +1,7 @@
 [package]
-name = "pallet-tranche-tx-registry"
+name = "pallet-tranche-custom-flows"
 version = "1.0.0"
-description = "A pallet registering off-chain tx evidence for the OmniFi tranche-system's request/settlement/receive pipelines, attested by a single trusted recorder account"
+description = "An append-only registry for product-specific extra tx flows in the OmniFi tranche-system, attested by the same trusted recorder as pallet-tranche-tx-registry. Step topology is defined by an on-chain descriptor, not pallet code."
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
@@ -24,12 +24,8 @@ sp-core = { workspace = true }
 sp-std = { workspace = true }
 sp-io = { workspace = true }
 
-# Frontier
-pallet-evm = { workspace = true }
-
 # OmniFi tranche-system
 bp-tranche = { workspace = true }
-pallet-tranche-system = { workspace = true }
 
 [features]
 default = ["std"]
@@ -43,9 +39,7 @@ std = [
 	"sp-std/std",
 	"sp-core/std",
 	"sp-io/std",
-	"pallet-evm/std",
 	"bp-tranche/std",
-	"pallet-tranche-system/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [

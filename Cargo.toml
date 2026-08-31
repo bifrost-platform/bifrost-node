@@ -38,11 +38,14 @@ members = [
 	"precompiles/tranche-system",
 	"precompiles/tranche-investments",
 	"precompiles/tranche-tx-registry",
+	"precompiles/tranche-custom-flows",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
 	"primitives/oracle",
 	"primitives/cccp",
+	"primitives/tranche",
+	"pallets/tranche-custom-flows",
 ]
 [profile.release]
 panic = "unwind"
@@ -91,6 +94,7 @@ bp-core = { default-features = false, path = "primitives/core" }
 bp-oracle = { default-features = false, path = "primitives/oracle" }
 bp-staking = { default-features = false, path = "primitives/bfc-staking" }
 bp-cccp = { default-features = false, path = "primitives/cccp" }
+bp-tranche = { default-features = false, path = "primitives/tranche" }
 
 # Bifrost Runtime
 bifrost-common-constants = { default-features = false, path = "runtime/common/constants" }
@@ -125,6 +129,7 @@ pallet-tranche-system = { default-features = false, path = "pallets/tranche-syst
 pallet-tranche-investments = { default-features = false, path = "pallets/tranche-investments" }
 pallet-tranche-permissions = { default-features = false, path = "pallets/tranche-permissions" }
 pallet-tranche-tx-registry = { default-features = false, path = "pallets/tranche-tx-registry" }
+pallet-tranche-custom-flows = { default-features = false, path = "pallets/tranche-custom-flows" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -143,6 +148,7 @@ precompile-tranche-permissions = { default-features = false, path = "precompiles
 precompile-tranche-system = { default-features = false, path = "precompiles/tranche-system" }
 precompile-tranche-investments = { default-features = false, path = "precompiles/tranche-investments" }
 precompile-tranche-tx-registry = { default-features = false, path = "precompiles/tranche-tx-registry" }
+precompile-tranche-custom-flows = { default-features = false, path = "precompiles/tranche-custom-flows" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

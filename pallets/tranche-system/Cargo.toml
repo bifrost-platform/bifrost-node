@@ -28,6 +28,9 @@ sp-io = { workspace = true }
 # Frontier
 pallet-evm = { workspace = true }
 
+# OmniFi tranche-system
+bp-tranche = { workspace = true }
+
 [features]
 default = ["std"]
 std = [
@@ -42,6 +45,7 @@ std = [
 	"sp-core/std",
 	"sp-io/std",
 	"pallet-evm/std",
+	"bp-tranche/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [

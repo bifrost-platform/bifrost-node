@@ -18,6 +18,7 @@ use precompile_relay_manager::RelayManagerPrecompile;
 use precompile_tranche_investments::TrancheInvestmentsPrecompile;
 use precompile_tranche_permissions::TranchePermissionsPrecompile;
 use precompile_tranche_system::TrancheSystemPrecompile;
+use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompile;
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
 
 use precompile_utils::precompile_set::*;
@@ -82,6 +83,7 @@ pub type BifrostPrecompilesAt<R> = (
 		TranchePermissionsPrecompilesChecks,
 	>,
 	PrecompileAt<AddressU64<515>, TrancheTxRegistryPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<516>, TrancheCustomFlowsPrecompile<R>, BifrostPrecompilesChecks>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<

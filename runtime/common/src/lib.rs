@@ -16,6 +16,7 @@ use pallet_bifrost_evm_tx_payment::{
 };
 use pallet_evm::AddressMapping;
 use precompile_bifrost_evm_tx_payment::BifrostTransactionPaymentPrecompileCall;
+use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompileCall;
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompileCall;
 use sp_core::{H160, U256};
 use sp_runtime::traits::{Dispatchable, Saturating, Zero};
@@ -40,14 +41,14 @@ use sp_std::marker::PhantomData;
 /// - DoS is prevented by checking token balance at pool validation time
 ///
 /// Also covers a third, unrelated feeless case: `pallet-tranche-tx-registry`'s
-/// `record_request_tx`/`record_settlement_tx`/`record_receive_tx`/`record_whitelist_tx`, but
+/// `record_request_tx`/`record_settlement_tx`/`record_receive_tx`/`record_whitelist_tx` and
+/// `pallet-tranche-custom-flows`'s `record_flow_tx` (which share one recorder account), but
 /// only when called by the account currently registered as that pallet's tx recorder
 /// (`TxRecorder`) — see the `R` type parameter and `TxRegistryRecorderCheck`. Unlike the
 /// fee-token-setup calls above, this isn't rate-limited: the set of callers who can ever reach
-/// these four functions at all is already limited to one account
-/// (`pallet_tranche_tx_registry::EnsureTxRecorder` rejects everyone else at the dispatch
-/// level), so there's no spam surface here the way there would be for a call any EOA can
-/// trigger.
+/// these functions at all is already limited to one account
+/// (`EnsureTxRecorder` rejects everyone else at the dispatch level), so there's no spam
+/// surface here the way there would be for a call any EOA can trigger.
 ///
 /// `R` is a second, independently-parametrized type (default `()`) rather than folding the
 /// tx-recorder check straight into `T`'s own bounds, specifically so runtimes that don't wire up
@@ -172,6 +173,10 @@ where
 		const TX_REGISTRY_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
 
+		// TrancheCustomFlows precompile address: 0x0000000000000000000000000000000000000204
+		const CUSTOM_FLOWS_PRECOMPILE: H160 =
+			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x04]);
+
 		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
 		const TX_PAYMENT_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x10]);
@@ -180,6 +185,14 @@ where
 			if target == TX_REGISTRY_PRECOMPILE && input.len() >= 4 {
 				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
 				return R::is_record_call_selector(selector) && R::is_tx_recorder(caller);
+			}
+
+			// Same recorder account, same "only one caller can ever reach it"
+			// property as the tx-registry branch above — `pallet-tranche-custom-flows`'s
+			// `RecorderOrigin` rejects everyone else at dispatch.
+			if target == CUSTOM_FLOWS_PRECOMPILE && input.len() >= 4 {
+				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
+				return R::is_custom_flow_record_selector(selector) && R::is_tx_recorder(caller);
 			}
 
 			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
@@ -296,6 +309,12 @@ pub trait TxRegistryRecorderCheck {
 	/// site simply recompiles against the new value) instead of silently
 	/// desyncing this filter from what the precompile actually accepts.
 	fn is_record_call_selector(selector: u32) -> bool;
+	/// `true` iff `selector` is `pallet-tranche-custom-flows`'s single
+	/// `record_flow_tx` precompile function — the custom-flows analogue of
+	/// `is_record_call_selector`, checked against the custom-flows precompile
+	/// address. The recorder identity is the same account for both pallets, so
+	/// `is_tx_recorder` is reused for it.
+	fn is_custom_flow_record_selector(selector: u32) -> bool;
 }
 
 /// Default: no caller is ever the tx recorder, and no selector is ever a
@@ -313,11 +332,15 @@ impl TxRegistryRecorderCheck for () {
 	fn is_record_call_selector(_selector: u32) -> bool {
 		false
 	}
+	fn is_custom_flow_record_selector(_selector: u32) -> bool {
+		false
+	}
 }
 
 /// Concrete `TxRegistryRecorderCheck` for a runtime that actually wires up
-/// `pallet-tranche-tx-registry` — checks `caller` (an EVM address) against that pallet's
-/// `TxRecorder` storage. That pallet's own `EnsureTxRecorder`/`RecorderOrigin` already rejects
+/// `pallet-tranche-tx-registry` (and `pallet-tranche-custom-flows`, which shares its
+/// recorder account) — checks `caller` (an EVM address) against `pallet-tranche-tx-registry`'s
+/// `TxRecorder` storage. Both pallets' `EnsureTxRecorder`/`RecorderOrigin` already reject
 /// every other caller at the dispatch level for `record_*`, so this only needs to mirror that
 /// same comparison to know whether a `record_*` call is *eligible* to be feeless in the first
 /// place. Pass as `BifrostFeelessCalls<Runtime, TxRegistryRecorder<Runtime>>`.
@@ -328,9 +351,11 @@ where
 	T: pallet_evm::Config
 		+ pallet_tranche_tx_registry::Config
 		+ pallet_tranche_system::Config
+		+ pallet_tranche_custom_flows::Config
 		+ frame_system::Config,
 	T::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	T::RuntimeCall: From<pallet_tranche_tx_registry::Call<T>>,
+	T::RuntimeCall: From<pallet_tranche_custom_flows::Call<T>>,
 	BlockNumberFor<T>: Into<U256>,
 	<T as pallet_evm::Config>::AddressMapping: AddressMapping<T::AccountId>,
 {
@@ -345,5 +370,9 @@ where
 			|| Call::<T>::record_settlement_tx_selectors().contains(&selector)
 			|| Call::<T>::record_receive_tx_selectors().contains(&selector)
 			|| Call::<T>::record_whitelist_tx_selectors().contains(&selector)
+	}
+
+	fn is_custom_flow_record_selector(selector: u32) -> bool {
+		TrancheCustomFlowsPrecompileCall::<T>::record_flow_tx_selectors().contains(&selector)
 	}
 }
