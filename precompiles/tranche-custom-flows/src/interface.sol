@@ -136,12 +136,17 @@ interface TrancheCustomFlows {
     /// Emitted by `record_flow_tx` for every accepted attestation — mirrors the pallet's
     /// own `FlowTxRecorded` event so EVM-side indexers can follow a flow via `eth_getLogs`.
     /// `FlowOpened` / `FlowClosed` are surfaced only as native runtime events for now.
+    ///
+    /// `chain_id` / `tx_hash` are the attested tx (the chain it actually landed on + its
+    /// hash) — not matched against `track_chain_id`, which is the lane the record belongs to.
     event FlowTxRecorded(
         uint64 indexed product_id,
         bytes16 indexed flow_id,
         bytes32 indexed instance_key,
         uint64 track_chain_id,
         uint8 slot_id,
+        uint64 chain_id,
+        bytes32 tx_hash,
         bool success
     );
 

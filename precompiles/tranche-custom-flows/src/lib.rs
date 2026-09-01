@@ -117,11 +117,12 @@ type EvmSubLaneGroup = (u8, Vec<EvmSubLaneView>);
 /// main_lane, sub_tracks), NOT a single wrapping struct (see `EvmFlowDescriptorView`).
 type EvmFlowInstanceView = (Address, bool, u16, u64, Vec<EvmSlotView>, Vec<EvmSubLaneGroup>);
 
-/// `keccak256("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,bool)")` — mirrors the
-/// pallet's own `FlowTxRecorded` event so EVM-side indexers can follow attestations via
-/// `eth_getLogs` on the precompile address (parity with `precompile-tranche-tx-registry`).
+/// `keccak256("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes32,bool)")` —
+/// mirrors the pallet's own `FlowTxRecorded` event so EVM-side indexers can follow
+/// attestations (incl. the attested `chain_id` / `tx_hash`) via `eth_getLogs` on the
+/// precompile address (parity with `precompile-tranche-tx-registry`).
 pub(crate) const SELECTOR_LOG_FLOW_TX_RECORDED: [u8; 32] =
-	keccak256!("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,bool)");
+	keccak256!("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes32,bool)");
 
 /// Upper bound on `get_investor_flow_history`'s `limit` — bounds the response
 /// size regardless of how large the underlying history `Vec` has grown.
@@ -245,7 +246,7 @@ where
 			topic_u256(U256::from(product_id)),
 			flow_id_topic(flow_id),
 			instance_key,
-			solidity::encode_event_data((track_chain_id, slot_id, success)),
+			solidity::encode_event_data((track_chain_id, slot_id, chain_id, tx_hash, success)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
