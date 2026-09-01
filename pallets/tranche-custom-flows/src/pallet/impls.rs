@@ -286,6 +286,8 @@ impl<T: Config> Pallet<T> {
 			instance_key,
 			lane: resolved.lane,
 			slot_id,
+			chain_id,
+			tx_hash,
 			success,
 		});
 		if instance.closed && !was_closed {

@@ -118,13 +118,16 @@ pub mod pallet {
 			instance_key: InstanceKey,
 			investor: Option<H160>,
 		},
-		/// One attestation was appended.
+		/// One attestation was appended. `chain_id` / `tx_hash` are the attested tx
+		/// (the chain it landed on + its hash), independent of `lane`.
 		FlowTxRecorded {
 			product_id: ProductId,
 			flow_id: FlowId,
 			instance_key: InstanceKey,
 			lane: Lane,
 			slot_id: SlotId,
+			chain_id: ChainId,
+			tx_hash: H256,
 			success: bool,
 		},
 		/// Every required lane completed — the instance is now closed.
