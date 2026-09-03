@@ -217,15 +217,15 @@ interface TrancheCustomFlows {
      *         empty array rather than reverting, so a caller can page forward until it gets
      *         one back.
      *
-     *         `limit` MUST NOT exceed 50 (reverts otherwise). This bounds the response, not
-     *         the read cost: the product's whole history `Vec` is read and decoded, then
-     *         filtered to `flow_id` and sliced in memory.
+     *         `limit` MUST NOT exceed HISTORY_PAGE_SIZE (128; reverts otherwise). History is
+     *         stored paged per `(investor, product, flow)`, so a call reads only the length
+     *         header plus the one or two pages the requested slice falls in.
      *
      * @param investor   The investor address to look up.
      * @param product_id The product the flow belongs to.
      * @param flow_id     The flow slug (`bytes16`) to filter history by.
      * @param offset     How many of the most-recent matching entries to skip.
-     * @param limit      Max entries to return — MUST NOT exceed 50.
+     * @param limit      Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE (128).
      * @return instance_keys Up to `limit` `instance_key`s, most-recent first.
      * @return total         Total number of completed instances for this `(investor, product_id, flow_id)`.
      */

@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	migrations, BridgeStatus, ChainId, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
-	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
+	migrations, BridgeStatus, ChainId, HistoryPage, ProductId, ReceiveEntry, ReceiveKind,
+	RequestChainEntry, RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
 	SettlementFlowExtension, SettlementId, SettlementStep, TxRecord, WeightInfo, WhitelistEntry,
 	WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
 	MAX_SETTLEMENT_REQUESTS,
@@ -24,7 +24,7 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -42,6 +42,7 @@ pub mod pallet {
 			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
 				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
 				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
+				.saturating_add(migrations::v4::MigrateToV4::<T>::on_runtime_upgrade())
 		}
 	}
 
@@ -322,6 +323,13 @@ pub mod pallet {
 		/// `step` must be one of the three recordable values — never
 		/// `WhitelistStep::None`, a read-only sentinel.
 		InvalidWhitelistStep,
+		/// This `RequestsApproved` batch would push `SettlementRequests` for the
+		/// `(product_id, settlement_id)` past `MAX_SETTLEMENT_REQUESTS` — the same
+		/// ceiling `pallet_tranche_investments` enforces on one settlement cycle.
+		/// (Appended here, not grouped with the other `request_ids` errors, to
+		/// keep every pre-existing `Error` discriminant index stable across the
+		/// upgrade that introduced it.)
+		TooManySettlementRequests,
 	}
 
 	// -----------------------------------------------------------------------
@@ -523,39 +531,35 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, H160, Vec<(ProductId, RequestId)>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::unbounded]
-	/// Every `request_id` an investor has ever opened for a given product, in the
-	/// order opened — written once, at `RequestStep::Requested`, alongside
-	/// `InvestorActiveRequests`, but (unlike that storage) **never removed from**.
-	/// A request's presence here says nothing about whether it's still in
-	/// flight — cross-reference against `InvestorActiveRequests` (or
-	/// `get_request`'s own `status`/`settled`) for that; this storage exists
-	/// purely so a completed request's `request_id` isn't lost once it drops out
-	/// of `InvestorActiveRequests`, giving `get_investor_request_history` (see
-	/// the precompile) something to page through for a "past requests" screen.
-	///
-	/// Deliberately unbounded and never pruned, same `#[pallet::unbounded]`
-	/// rationale as `InvestorActiveRequests` — growth is bounded in practice by
-	/// how many real Requested calls a genuine investor generates over a
-	/// product's lifetime (each one traces back to a real on-chain Vault
-	/// request, itself gas-costed on its own origin chain), not by anything
-	/// this pallet caps directly. Keyed by `(H160, ProductId)` rather than
-	/// folding `product_id` into the value alongside every other investor's
-	/// products (unlike `InvestorActiveRequests`'s cross-product `Vec`) so a
-	/// single-product history read never has to decode entries for products
-	/// the caller doesn't care about.
-	pub type InvestorRequestHistory<T: Config> = StorageDoubleMap<
+	/// Logical length of `(investor, product)`'s request history — total
+	/// `request_id`s ever opened for it (`RequestStep::Requested`), the count
+	/// `get_investor_request_history` pages through. `ValueQuery` — `0` for an
+	/// investor/product with no requests. Paired with `InvestorRequestHistoryPage`;
+	/// see [`bp_tranche::history`] for the paged-list design (append touches only
+	/// the tail page, reads only the pages they return). Replaced the old
+	/// unbounded `Vec<RequestId>` in `STORAGE_VERSION` 4 (`migrations::v4`).
+	pub type InvestorRequestHistoryLen<T: Config> =
+		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, ProductId, u32, ValueQuery>;
+
+	#[pallet::storage]
+	/// One page of `(investor, product)`'s request history, append-only and
+	/// never pruned, in the order opened. Page `i` holds logical indices
+	/// `i * HISTORY_PAGE_SIZE .. (i + 1) * HISTORY_PAGE_SIZE`. A request's
+	/// presence here says nothing about whether it's still in flight —
+	/// cross-reference `InvestorActiveRequests` (or `get_request`'s
+	/// `status`/`settled`). Bounded (`HistoryPage`), so no `#[pallet::unbounded]`.
+	pub type InvestorRequestHistoryPage<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		H160,
-		Blake2_128Concat,
-		ProductId,
-		Vec<RequestId>,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, u32>,
+		),
+		HistoryPage<RequestId>,
 		ValueQuery,
 	>;
 
 	#[pallet::storage]
-	#[pallet::unbounded]
 	/// Every `request_id` approved into a given `(product_id, settlement_id)`,
 	/// in the order `record_settlement_tx`'s `SettlementStep::RequestsApproved` arm
 	/// recorded them (possibly several at once, from one batch call) — this
@@ -571,18 +575,22 @@ pub mod pallet {
 	/// keeping an independent, event-sourced copy here removes the hard
 	/// dependency entirely rather than just hiding it behind a trait.
 	///
-	/// Deliberately unbounded, same `#[pallet::unbounded]` rationale as
-	/// `InvestorActiveRequests` — growth is bounded in practice by how many
-	/// requests a single settlement cycle can genuinely batch (and, per
-	/// `RequestsApproved` call, by `MAX_SETTLEMENT_REQUESTS`), not by anything this
-	/// pallet caps directly here.
+	/// Bounded at `MAX_SETTLEMENT_REQUESTS` — the same ceiling
+	/// `pallet_tranche_investments::SettlementRequests` (the authoritative copy,
+	/// sourced from the same `DepositsApproved`/`RedeemsApproved` events) already
+	/// enforces on "investors settled together in one cycle". A
+	/// `RequestsApproved` batch that would overflow it is rejected with
+	/// `TooManySettlementRequests`. Was an unbounded `Vec<RequestId>` before
+	/// `STORAGE_VERSION` 4 (`migrations::v4`, which `defensive_truncate`s any
+	/// pre-existing over-long entry — expected to be a no-op given the upstream
+	/// invariant).
 	pub type SettlementRequests<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		ProductId,
 		Blake2_128Concat,
 		SettlementId,
-		Vec<RequestId>,
+		BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>,
 		ValueQuery,
 	>;
 
@@ -714,27 +722,31 @@ pub mod pallet {
 	>;
 
 	#[pallet::storage]
-	#[pallet::unbounded]
-	/// Every `(vault, tx_hash)` an investor has ever had recorded via
-	/// `record_receive_tx` for a given product, in the order recorded —
-	/// append-only, never pruned. Written alongside `ReceiveEntries` by
-	/// `record_receive_tx`. Mirrors `InvestorRequestHistory`'s shape/rationale
-	/// exactly (see that storage's own doc comment) — the parallel structure is
-	/// deliberate: a receive isn't linked to a specific `request_id`
-	/// (TrancheManager pools receivable amounts per (investor, vault) rather
-	/// than per request), so this is the receive-side equivalent of "give me
-	/// this investor's history for this product" that `InvestorRequestHistory`
-	/// provides for requests. `vault` has to travel alongside `tx_hash` here
-	/// (unlike `InvestorRequestHistory`'s bare `Vec<RequestId>`) since
-	/// `ReceiveEntries`' own key needs `vault` too — see that storage's doc
-	/// comment for why `tx_hash` alone isn't a safe enough identifier.
-	pub type InvestorReceiveHistory<T: Config> = StorageDoubleMap<
+	/// Logical length of `(investor, product)`'s receive history — total
+	/// `(vault, tx_hash)` pairs ever recorded via `record_receive_tx` for it.
+	/// The count `get_investor_receive_history` pages through. `ValueQuery` —
+	/// `0` if none. Paired with `InvestorReceiveHistoryPage`; the receive-side
+	/// mirror of `InvestorRequestHistoryLen` (see it, and [`bp_tranche::history`],
+	/// for the paged-list design). Replaced the old unbounded
+	/// `Vec<(VaultId, H256)>` in `STORAGE_VERSION` 4 (`migrations::v4`).
+	pub type InvestorReceiveHistoryLen<T: Config> =
+		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, ProductId, u32, ValueQuery>;
+
+	#[pallet::storage]
+	/// One page of `(investor, product)`'s receive history, append-only and
+	/// never pruned, in the order recorded. Page `i` holds logical indices
+	/// `i * HISTORY_PAGE_SIZE .. (i + 1) * HISTORY_PAGE_SIZE`. `vault` travels
+	/// alongside `tx_hash` (unlike the request history's bare `RequestId`) since
+	/// `ReceiveEntries`' own key needs `vault` too. Bounded (`HistoryPage`), so
+	/// no `#[pallet::unbounded]`.
+	pub type InvestorReceiveHistoryPage<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		H160,
-		Blake2_128Concat,
-		ProductId,
-		Vec<(VaultId, H256)>,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, u32>,
+		),
+		HistoryPage<(VaultId, H256)>,
 		ValueQuery,
 	>;
 
@@ -1142,9 +1154,7 @@ pub mod pallet {
 				(investor, vault.clone(), tx_hash),
 				ReceiveEntry { investor, vault: vault.clone(), receiver, amount, tx, kind },
 			);
-			InvestorReceiveHistory::<T>::mutate(investor, product_id, |history| {
-				history.push((vault.clone(), tx_hash));
-			});
+			Self::push_receive_history(investor, product_id, (vault.clone(), tx_hash));
 
 			Self::deposit_event(Event::ReceiveTxRecorded {
 				product_id,

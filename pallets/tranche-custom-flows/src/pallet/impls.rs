@@ -1,8 +1,10 @@
 use crate::{
-	Attempt, ChainId, FlowDescriptor, FlowId, FlowInstance, InstanceKey, Lane, ProductId, SlotId,
-	TrackKey, MAX_ATTEMPT_METADATA, MAX_SLOT_METADATA,
+	history, Attempt, ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey,
+	Lane, PagedInvestorHistory, ProductId, SlotId, TrackKey, MAX_ATTEMPT_METADATA,
+	MAX_SLOT_METADATA,
 };
 use bp_tranche::TxRecord;
+use core::marker::PhantomData;
 
 use super::pallet::*;
 use frame_support::{
@@ -251,9 +253,7 @@ impl<T: Config> Pallet<T> {
 		if let Some(investor_addr) = instance.investor {
 			if is_open {
 				if instance.closed {
-					InvestorFlowHistory::<T>::mutate(investor_addr, product_id, |history| {
-						history.push((flow_id, instance_key))
-					});
+					Self::push_flow_history(investor_addr, product_id, flow_id, instance_key);
 				} else {
 					InvestorActiveFlows::<T>::mutate(investor_addr, |active| {
 						active.push((product_id, flow_id, instance_key))
@@ -265,9 +265,7 @@ impl<T: Config> Pallet<T> {
 						!(entry.0 == product_id && entry.1 == flow_id && entry.2 == instance_key)
 					})
 				});
-				InvestorFlowHistory::<T>::mutate(investor_addr, product_id, |history| {
-					history.push((flow_id, instance_key))
-				});
+				Self::push_flow_history(investor_addr, product_id, flow_id, instance_key);
 			}
 		}
 
@@ -346,6 +344,62 @@ impl<T: Config> Pallet<T> {
 			chain_optional: track_chain.optional,
 			target_count: track_chain.required_count,
 		})
+	}
+
+	// ---------------------------------------------------------------------
+	// investor flow history (paged — see `bp_tranche::history`)
+	// ---------------------------------------------------------------------
+
+	/// Append one completed instance to `(investor, product_id, flow_id)`'s
+	/// paged history.
+	pub fn push_flow_history(
+		investor: H160,
+		product_id: ProductId,
+		flow_id: FlowId,
+		instance_key: InstanceKey,
+	) {
+		history::history_push::<FlowHistoryIndex<T>>((investor, product_id, flow_id), instance_key);
+	}
+
+	/// Read a page of `(investor, product_id, flow_id)`'s completed-instance
+	/// history, most-recent-first: up to `limit` entries after skipping the
+	/// newest `offset`, plus the full history length. `offset >= total` ⇒ empty.
+	pub fn read_flow_history(
+		investor: H160,
+		product_id: ProductId,
+		flow_id: FlowId,
+		offset: u32,
+		limit: u32,
+	) -> (Vec<InstanceKey>, u32) {
+		history::history_read::<FlowHistoryIndex<T>>((investor, product_id, flow_id), offset, limit)
+	}
+}
+
+/// Wires this pallet's `InvestorFlowHistoryLen` / `InvestorFlowHistoryPage`
+/// storage onto the shared paged-history logic in [`bp_tranche::history`].
+pub struct FlowHistoryIndex<T>(PhantomData<T>);
+
+impl<T: Config> PagedInvestorHistory for FlowHistoryIndex<T> {
+	type Key = (H160, ProductId, FlowId);
+	type Entry = InstanceKey;
+
+	fn len((investor, product_id, flow_id): Self::Key) -> u32 {
+		InvestorFlowHistoryLen::<T>::get((investor, product_id, flow_id))
+	}
+
+	fn set_len((investor, product_id, flow_id): Self::Key, len: u32) {
+		InvestorFlowHistoryLen::<T>::insert((investor, product_id, flow_id), len);
+	}
+
+	fn page((investor, product_id, flow_id): Self::Key, page: u32) -> HistoryPage<Self::Entry> {
+		InvestorFlowHistoryPage::<T>::get((investor, product_id, flow_id, page))
+	}
+
+	fn append_to_page((investor, product_id, flow_id): Self::Key, page: u32, entry: Self::Entry) {
+		InvestorFlowHistoryPage::<T>::mutate((investor, product_id, flow_id, page), |entries| {
+			// Caller guarantees `page` is the tail page and not full.
+			let _ = entries.try_push(entry);
+		});
 	}
 }
 
