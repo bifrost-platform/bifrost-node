@@ -53,10 +53,10 @@ type EvmChainSettlement = (u64, Vec<U256>, Vec<U256>);
 
 /// Upper bound on `get_pending_requests`'s `limit` — caps the page size so a
 /// single `eth_call` can't be asked to serialize an unbounded response.
-/// Rejected (not silently clamped) if exceeded, matching
-/// `precompile-tranche-tx-registry`'s `get_investor_request_history`/
-/// `get_investor_receive_history` (same value, same "catch caller bugs early"
-/// convention).
+/// Rejected (not silently clamped) if exceeded, same "catch caller bugs early"
+/// convention as the sentinel-gated params in `precompile-tranche-tx-registry`.
+/// (Unrelated to `bp_tranche::history::HISTORY_PAGE_SIZE` — this pages pending
+/// requests, not the paged-history storage.)
 const MAX_HISTORY_PAGE_SIZE: u64 = 50;
 
 // ---------------------------------------------------------------------------

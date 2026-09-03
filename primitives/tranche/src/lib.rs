@@ -20,6 +20,8 @@ use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::RuntimeDebug;
 
+pub mod history;
+
 /// EVM chain ID. Bare `u64`, matching `pallet_tranche_system::VaultId::chain_id`.
 pub type ChainId = u64;
 

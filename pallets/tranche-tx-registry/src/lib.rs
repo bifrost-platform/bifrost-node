@@ -40,7 +40,10 @@ pub type SettlementId = U256;
 /// SCALE-encoding-neutral (crate path only affects `TypeInfo` metadata), so
 /// this pallet's existing storage needs no migration — see `bp_tranche`'s
 /// module docs.
-pub use bp_tranche::{ChainId, TxRecord};
+pub use bp_tranche::{
+	history::{self, HistoryPage, PagedInvestorHistory},
+	ChainId, TxRecord,
+};
 
 /// Maximum number of `request_id`s a single `record_settlement_tx` call can batch
 /// into one `SettlementStep::RequestsApproved` attestation. Re-exported here

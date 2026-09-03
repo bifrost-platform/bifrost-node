@@ -889,12 +889,13 @@ interface TrancheTxRegistry {
      *      receive isn't linked to a specific request_id the way a request's own history is.
      *      Each returned (vault, tx_hash) pair is exactly what get_receive needs (together
      *      with this same investor) to resolve the full ReceiveEntry.
-     *      `limit` MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50) — rejected, not silently
-     *      clamped.
+     *      `limit` MUST NOT exceed HISTORY_PAGE_SIZE (128) — rejected, not silently clamped.
+     *      History is stored paged; a call reads only the length header plus the one or two
+     *      pages the requested slice falls in.
      * @param investor   The investor (controller) address to look up
      * @param product_id The product to page history for
      * @param offset     How many of the most-recent entries to skip
-     * @param limit      Max entries to return — MUST NOT exceed 50
+     * @param limit      Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE (128)
      * @return receives Up to `limit` (vault, tx_hash) pairs, most-recent first
      * @return total    Total history length for this (investor, product_id)
      */
@@ -1087,17 +1088,15 @@ interface TrancheTxRegistry {
      *      history length for this (investor, product_id), so a caller can compute page
      *      count without a separate call; `offset >= total` returns an empty array rather
      *      than reverting, so a caller can page forward until it gets one back.
-     *      `limit` MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50) — rejected, not silently
-     *      clamped, same "catch caller bugs early" convention as every other sentinel-gated
-     *      parameter in this interface. This bounds the response size, but does NOT bound
-     *      the underlying storage read cost: the full per-(investor, product_id) history is
-     *      always read and decoded from storage first, then sliced down to the requested
-     *      page — a very long history costs the same gas as a short one despite doing more
-     *      real work under the hood.
+     *      `limit` MUST NOT exceed HISTORY_PAGE_SIZE (128) — rejected, not silently clamped,
+     *      same "catch caller bugs early" convention as every other sentinel-gated parameter
+     *      in this interface. History is stored paged (page size HISTORY_PAGE_SIZE), so a
+     *      call reads only the length header plus the one or two pages the requested slice
+     *      falls in, regardless of how long the full history has grown.
      * @param investor    The investor address to look up
      * @param product_id  The product to page history for
      * @param offset      How many of the most-recent entries to skip
-     * @param limit       Max entries to return — MUST NOT exceed 50
+     * @param limit       Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE (128)
      * @return request_ids Up to `limit` request_ids, most-recent first
      * @return total       Total history length for this (investor, product_id)
      */

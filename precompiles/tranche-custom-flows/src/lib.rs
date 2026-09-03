@@ -27,8 +27,8 @@ use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::AddressMapping;
 use pallet_tranche_custom_flows::{
-	Attempt, Call as CustomFlowsCall, ChainId, FlowDescriptor, FlowId, Lane, ProductId, SlotId,
-	SlotRecord, TrackKey,
+	history::HISTORY_PAGE_SIZE, Attempt, Call as CustomFlowsCall, ChainId, FlowDescriptor, FlowId,
+	Lane, ProductId, SlotId, SlotRecord, TrackKey,
 };
 use precompile_utils::{
 	prelude::*,
@@ -123,12 +123,6 @@ type EvmFlowInstanceView = (Address, bool, u16, u64, Vec<EvmSlotView>, Vec<EvmSu
 /// precompile address (parity with `precompile-tranche-tx-registry`).
 pub(crate) const SELECTOR_LOG_FLOW_TX_RECORDED: [u8; 32] =
 	keccak256!("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes32,bool)");
-
-/// Upper bound on `get_investor_flow_history`'s `limit` — bounds the response
-/// size regardless of how large the underlying history `Vec` has grown.
-/// Rejected (not silently clamped) if exceeded — same "catch caller bugs early"
-/// convention as `precompile-tranche-tx-registry`.
-const MAX_HISTORY_PAGE_SIZE: usize = 50;
 
 /// Ceiling on the size of an investor's `InvestorActiveFlows` `Vec` (across all
 /// products/flows) that `get_investor_active_flows` will decode+scan. An
@@ -288,12 +282,13 @@ where
 	/// Page through the `instance_key`s an `investor` has completed for one
 	/// `(product_id, flow_id)`, most-recent first. `offset`/`limit` index into
 	/// that order; `offset >= total` returns an empty array. `limit` MUST NOT
-	/// exceed `MAX_HISTORY_PAGE_SIZE`.
+	/// exceed `HISTORY_PAGE_SIZE`.
 	///
-	/// History for a product is one `Vec<(flow_id, instance_key)>` in storage,
-	/// read and decoded whole, then filtered to `flow_id` and sliced in memory —
-	/// pagination bounds the response, not the read cost (same as
-	/// `precompile-tranche-tx-registry`).
+	/// History is stored paged per `(investor, product, flow)`
+	/// (`InvestorFlowHistoryLen` + `…Page`, page size `HISTORY_PAGE_SIZE` — see
+	/// `bp_tranche::history`), so this reads only the length header plus the one
+	/// or two pages the requested slice falls in, regardless of how long the
+	/// history has grown.
 	#[precompile::public("get_investor_flow_history(address,uint64,bytes16,uint256,uint256)")]
 	#[precompile::view]
 	fn get_investor_flow_history(
@@ -304,32 +299,20 @@ where
 		offset: U256,
 		limit: U256,
 	) -> EvmResult<(Vec<H256>, U256)> {
-		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
-			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		if limit > U256::from(HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds HISTORY_PAGE_SIZE"));
 		}
-		let limit = limit.as_usize();
-		let flow_id = flow_id.0;
+		let limit = limit.as_usize() as u32; // bounded by HISTORY_PAGE_SIZE above
+		let offset = if offset > U256::from(u32::MAX) { u32::MAX } else { offset.low_u32() };
 
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let history = pallet_tranche_custom_flows::InvestorFlowHistory::<Runtime>::get(
-			investor.0, product_id,
-		);
-
-		let total = U256::from(history.iter().filter(|(fid, _)| *fid == flow_id).count());
-		if offset >= total {
-			return Ok((Vec::new(), total));
-		}
-		let offset = offset.as_usize();
-
-		let instance_keys = history
-			.iter()
-			.rev()
-			.filter(|(fid, _)| *fid == flow_id)
-			.map(|(_, instance_key)| *instance_key)
-			.skip(offset)
-			.take(limit)
-			.collect();
-		Ok((instance_keys, total))
+		// `read_flow_history` reads the length header + at most two pages
+		// (`limit <= HISTORY_PAGE_SIZE`).
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost().saturating_mul(3))?;
+		let (instance_keys, total) =
+			pallet_tranche_custom_flows::Pallet::<Runtime>::read_flow_history(
+				investor.0, product_id, flow_id.0, offset, limit,
+			);
+		Ok((instance_keys, U256::from(total)))
 	}
 
 	/// The flow's step topology. Returns a zeroed view (`version == 0`) if no

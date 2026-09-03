@@ -1,11 +1,15 @@
 mod impls;
 
 use crate::{
-	ChainId, FlowDescriptor, FlowId, FlowInstance, InstanceKey, Lane, ProductId, SlotId,
-	SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA, MAX_SLOTS, MAX_SLOT_METADATA,
+	migrations, ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey, Lane,
+	ProductId, SlotId, SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA, MAX_SLOTS,
+	MAX_SLOT_METADATA,
 };
 
-use frame_support::pallet_prelude::*;
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, H256};
 use sp_std::vec::Vec;
@@ -14,13 +18,24 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	// No `#[pallet::storage_version]` / `on_runtime_upgrade` hook yet: this pallet
-	// is added to a live chain (not genesis), so nothing would write an on-chain
-	// version anyway — the in-code and on-chain versions are both the implicit 0.
-	// The first storage migration adds `#[pallet::storage_version(V1)]` plus a
-	// `VersionedMigration` and reconciles it then.
+	/// The pallet shipped to a live chain with no `#[pallet::storage_version]`
+	/// (on-chain version = implicit `0`). `V1` is the first migration —
+	/// `migrations::v1`, which pages `InvestorFlowHistory` (see
+	/// `bp_tranche::history`).
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
 	#[pallet::pallet]
+	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			// `VersionedMigration` self-gates on the exact on-chain version, so
+			// this is inert once the chain is already at v1.
+			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -213,16 +228,37 @@ pub mod pallet {
 		StorageMap<_, Blake2_128Concat, H160, Vec<(ProductId, FlowId, InstanceKey)>, ValueQuery>;
 
 	#[pallet::storage]
-	#[pallet::unbounded]
-	/// An investor's completed flows for one product — append-only, never
-	/// pruned. Mirrors `pallet_tranche_tx_registry::InvestorRequestHistory`.
-	pub type InvestorFlowHistory<T: Config> = StorageDoubleMap<
+	/// Logical length of an investor's completed-instance history for one
+	/// `(product, flow)` — total entries ever appended to the paged list below.
+	/// `ValueQuery` — `0` for a `(investor, product, flow)` with no completed
+	/// instances. Keyed by `flow_id` too (unlike the tx-registry mirrors) because
+	/// `get_investor_flow_history` is always flow-scoped, so each flow gets its
+	/// own cleanly-paginated list. See [`bp_tranche::history`] for the design.
+	pub type InvestorFlowHistoryLen<T: Config> = StorageNMap<
 		_,
-		Blake2_128Concat,
-		H160,
-		Blake2_128Concat,
-		ProductId,
-		Vec<(FlowId, InstanceKey)>,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, FlowId>,
+		),
+		u32,
+		ValueQuery,
+	>;
+
+	#[pallet::storage]
+	/// One page of an investor's completed-instance history for one
+	/// `(product, flow)`, append-only and never pruned, in the order closed.
+	/// Page `i` holds logical indices `i * HISTORY_PAGE_SIZE .. (i + 1) *
+	/// HISTORY_PAGE_SIZE`. Bounded (`HistoryPage`), so no `#[pallet::unbounded]`.
+	pub type InvestorFlowHistoryPage<T: Config> = StorageNMap<
+		_,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, FlowId>,
+			NMapKey<Blake2_128Concat, u32>,
+		),
+		HistoryPage<InstanceKey>,
 		ValueQuery,
 	>;
 

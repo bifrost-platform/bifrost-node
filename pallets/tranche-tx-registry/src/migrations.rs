@@ -1,7 +1,8 @@
 use crate::{
-	BridgeAttempt, BridgeAttempts, BridgeStatus, ChainId, Config, OrderType, Pallet,
-	RequestChainEntry, RequestEntry, RequestId, SettlementChainEntry, SettlementId, TxRecord,
-	WhitelistEntry, WhitelistNonce,
+	history::HISTORY_PAGE_SIZE, BridgeAttempt, BridgeAttempts, BridgeStatus, ChainId, Config,
+	HistoryPage, OrderType, Pallet, RequestChainEntry, RequestEntry, RequestId,
+	SettlementChainEntry, SettlementId, TxRecord, WhitelistEntry, WhitelistNonce,
+	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{ProductId, VaultId};
 
@@ -12,9 +13,9 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{H160, U256};
+use sp_core::{H160, H256, U256};
 use sp_runtime::RuntimeDebug;
-use sp_std::marker::PhantomData;
+use sp_std::{marker::PhantomData, vec::Vec};
 
 pub(crate) const LOG_TARGET: &str = "runtime::tranche-tx-registry";
 
@@ -597,6 +598,159 @@ pub mod v3 {
 		2,
 		3,
 		MigrateV2ToV3<T>,
+		Pallet<T>,
+		<T as frame_system::Config>::DbWeight,
+	>;
+}
+
+/// v3 -> v4: split the two unbounded per-`(investor, product)` history `Vec`s
+/// (`InvestorRequestHistory`, `InvestorReceiveHistory`) into the paged
+/// `…HistoryLen` + `…HistoryPage` storages (see `bp_tranche::history`), and
+/// re-encode `SettlementRequests` from `Vec<RequestId>` to a
+/// `BoundedVec<_, MAX_SETTLEMENT_REQUESTS>` (`defensive_truncate` — a no-op
+/// given `pallet_tranche_investments` already enforces that ceiling on the same
+/// linkage).
+pub mod v4 {
+	use super::*;
+
+	#[storage_alias]
+	type InvestorRequestHistory<T: Config> = StorageDoubleMap<
+		Pallet<T>,
+		Blake2_128Concat,
+		H160,
+		Blake2_128Concat,
+		ProductId,
+		Vec<RequestId>,
+		ValueQuery,
+	>;
+
+	#[storage_alias]
+	type InvestorReceiveHistory<T: Config> = StorageDoubleMap<
+		Pallet<T>,
+		Blake2_128Concat,
+		H160,
+		Blake2_128Concat,
+		ProductId,
+		Vec<(VaultId, H256)>,
+		ValueQuery,
+	>;
+
+	#[storage_alias]
+	type SettlementRequests<T: Config> = StorageDoubleMap<
+		Pallet<T>,
+		Blake2_128Concat,
+		ProductId,
+		Blake2_128Concat,
+		SettlementId,
+		Vec<RequestId>,
+		ValueQuery,
+	>;
+
+	/// Chunk `entries` into `HISTORY_PAGE_SIZE` pages under `write_page` and set
+	/// the length header via `write_len`. Returns the number of pages written.
+	fn paginate<Entry: Clone>(
+		entries: Vec<Entry>,
+		mut write_page: impl FnMut(u32, HistoryPage<Entry>),
+		mut write_len: impl FnMut(u32),
+	) -> u64 {
+		let len = entries.len() as u32;
+		let mut pages = 0u64;
+		for (page_idx, chunk) in entries.chunks(HISTORY_PAGE_SIZE as usize).enumerate() {
+			// `chunk.len() <= HISTORY_PAGE_SIZE` — never truncates.
+			write_page(page_idx as u32, HistoryPage::truncate_from(chunk.to_vec()));
+			pages += 1;
+		}
+		write_len(len);
+		pages
+	}
+
+	pub struct MigrateV3ToV4<T>(PhantomData<T>);
+
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV3ToV4<T> {
+		fn on_runtime_upgrade() -> Weight {
+			let mut reads = 0u64;
+			let mut writes = 0u64;
+
+			// ---- InvestorRequestHistory -> paged ----
+			let request_lists = InvestorRequestHistory::<T>::drain().collect::<Vec<_>>();
+			let request_list_count = request_lists.len() as u64;
+			for (investor, product_id, entries) in request_lists {
+				let entry_total = entries.len() as u64;
+				let pages = paginate(
+					entries,
+					|page_idx, page| {
+						crate::InvestorRequestHistoryPage::<T>::insert(
+							(investor, product_id, page_idx),
+							page,
+						)
+					},
+					|len| crate::InvestorRequestHistoryLen::<T>::insert(investor, product_id, len),
+				);
+				reads = reads.saturating_add(entry_total);
+				writes = writes.saturating_add(pages).saturating_add(1); // pages + len header
+			}
+			reads = reads.saturating_add(request_list_count);
+			writes = writes.saturating_add(request_list_count); // drained keys removed
+
+			// ---- InvestorReceiveHistory -> paged ----
+			let receive_lists = InvestorReceiveHistory::<T>::drain().collect::<Vec<_>>();
+			let receive_list_count = receive_lists.len() as u64;
+			for (investor, product_id, entries) in receive_lists {
+				let entry_total = entries.len() as u64;
+				let pages = paginate(
+					entries,
+					|page_idx, page| {
+						crate::InvestorReceiveHistoryPage::<T>::insert(
+							(investor, product_id, page_idx),
+							page,
+						)
+					},
+					|len| crate::InvestorReceiveHistoryLen::<T>::insert(investor, product_id, len),
+				);
+				reads = reads.saturating_add(entry_total);
+				writes = writes.saturating_add(pages).saturating_add(1);
+			}
+			reads = reads.saturating_add(receive_list_count);
+			writes = writes.saturating_add(receive_list_count);
+
+			// ---- SettlementRequests -> BoundedVec ----
+			let settlement_lists = SettlementRequests::<T>::drain().collect::<Vec<_>>();
+			let settlement_list_count = settlement_lists.len() as u64;
+			let mut truncated = 0u64;
+			for (product_id, settlement_id, entries) in settlement_lists {
+				let original = entries.len();
+				let bounded =
+					BoundedVec::<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>::truncate_from(
+						entries,
+					);
+				if bounded.len() < original {
+					truncated = truncated.saturating_add(1);
+				}
+				crate::SettlementRequests::<T>::insert(product_id, settlement_id, bounded);
+			}
+			reads = reads.saturating_add(settlement_list_count);
+			writes = writes.saturating_add(settlement_list_count.saturating_mul(2)); // remove + insert
+
+			log!(
+				info,
+				"tranche-tx-registry v3->v4: paged {} request-history + {} receive-history lists, \
+				 re-encoded {} SettlementRequests entries ({} truncated to MAX_SETTLEMENT_REQUESTS) ✅",
+				request_list_count,
+				receive_list_count,
+				settlement_list_count,
+				truncated,
+			);
+
+			T::DbWeight::get().reads_writes(reads, writes)
+		}
+	}
+
+	/// Gated `on_chain == 3 && in_code == 4`; bumps the on-chain version. Wire
+	/// this (not `MigrateV3ToV4` directly) into `Pallet::on_runtime_upgrade`.
+	pub type MigrateToV4<T> = VersionedMigration<
+		3,
+		4,
+		MigrateV3ToV4<T>,
 		Pallet<T>,
 		<T as frame_system::Config>::DbWeight,
 	>;

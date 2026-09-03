@@ -8,8 +8,9 @@ use pallet_tranche_system::{
 	ProductId, ProductInspect, VaultId, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHE_CHAINS,
 };
 use pallet_tranche_tx_registry::{
-	BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType, ReceiveKind, RequestOpening,
-	RequestStep, SettlementStep, TxRecord, WhitelistStep, MAX_SETTLEMENT_REQUESTS,
+	history::HISTORY_PAGE_SIZE, BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType,
+	ReceiveKind, RequestOpening, RequestStep, SettlementStep, TxRecord, WhitelistStep,
+	MAX_SETTLEMENT_REQUESTS,
 };
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, Get, H160, H256, U256};
@@ -67,13 +68,6 @@ type EvmChainBridgeAttempts = (u64, Vec<EvmBridgeAttempt>);
 /// finalize_attempts)
 type EvmSettlementChainBridgeAttempts =
 	(u64, Vec<EvmBridgeAttempt>, Vec<EvmBridgeAttempt>, Vec<EvmBridgeAttempt>);
-
-/// Upper bound on `get_investor_request_history`'s `limit` — caps the page size
-/// so a single `eth_call` can't be asked to serialize an unbounded response,
-/// independent of how large the underlying `InvestorRequestHistory` entry has
-/// grown. Rejected (not silently clamped) if exceeded, same "catch caller bugs
-/// early" convention as every other sentinel-gated parameter in this file.
-const MAX_HISTORY_PAGE_SIZE: usize = 50;
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -641,25 +635,17 @@ where
 	/// call; `offset >= total` returns an empty array rather than reverting, so a
 	/// caller can page forward until it gets one back.
 	///
-	/// `limit` MUST NOT exceed `MAX_HISTORY_PAGE_SIZE` (rejected otherwise) — this
-	/// bounds the response size regardless of how large the underlying history has
-	/// grown, but does NOT bound the underlying storage read cost: `InvestorRequestHistory`
-	/// is stored as one `Vec` per (investor, product_id), and Substrate has no way to
-	/// read/decode only a slice of a stored `Vec` — the full history is always read and
-	/// decoded from storage first, then sliced down to the requested page in memory.
-	/// `record_cost` below still only charges for one DB read (this pallet's existing
-	/// convention — see e.g. `get_request`'s per-loop-iteration charging elsewhere in
-	/// this file for the pattern this deliberately does NOT need here, since this is a
-	/// single read of a single storage entry, not one read per loop iteration), so a
-	/// very long history is charged the same gas as a short one despite doing more
-	/// real work — accepted for now since growth is bounded by real, gas-costed
-	/// on-chain requests, not something this precompile can be tricked into inflating
-	/// for free. See `InvestorRequestHistory`'s own doc comment for the full rationale.
+	/// `limit` MUST NOT exceed `HISTORY_PAGE_SIZE` (rejected otherwise). The
+	/// history is stored paged (`InvestorRequestHistoryLen` + `…Page`, page size
+	/// `HISTORY_PAGE_SIZE` — see `bp_tranche::history`), so this reads only the
+	/// length header plus the one or two pages the requested slice falls in,
+	/// regardless of how long the full history has grown — `record_cost` below
+	/// charges for that bounded read (three DB reads).
 	///
 	/// @param investor    The investor address to look up
 	/// @param product_id  The product to page history for
 	/// @param offset      How many of the most-recent entries to skip
-	/// @param limit       Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+	/// @param limit       Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE
 	/// @return request_ids Up to `limit` request_ids, most-recent first
 	/// @return total       Total history length for this (investor, product_id)
 	#[precompile::public("get_investor_request_history(address,uint64,uint256,uint256)")]
@@ -671,33 +657,28 @@ where
 		offset: U256,
 		limit: U256,
 	) -> EvmResult<(Vec<H256>, U256)> {
-		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
-			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		if limit > U256::from(HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds HISTORY_PAGE_SIZE"));
 		}
-		let limit = limit.as_usize();
+		let limit = limit.as_usize() as u32; // bounded by HISTORY_PAGE_SIZE above
+		let offset = if offset > U256::from(u32::MAX) { u32::MAX } else { offset.low_u32() };
 
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let history = pallet_tranche_tx_registry::InvestorRequestHistory::<Runtime>::get(
-			investor.0, product_id,
-		);
-		let total = U256::from(history.len());
-		if offset >= total {
-			return Ok((Vec::new(), total));
-		}
-		// Safe: offset < total, and total was itself built from a real `usize`
-		// (`history.len()`) above, so offset necessarily fits in a `usize` too.
-		let offset = offset.as_usize();
-
-		let request_ids = history.iter().rev().skip(offset).take(limit).copied().collect();
-		Ok((request_ids, total))
+		// `read_request_history` reads the length header + at most two pages
+		// (`limit <= HISTORY_PAGE_SIZE`).
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost().saturating_mul(3))?;
+		let (request_ids, total) =
+			pallet_tranche_tx_registry::Pallet::<Runtime>::read_request_history(
+				investor.0, product_id, offset, limit,
+			);
+		Ok((request_ids, U256::from(total)))
 	}
 
 	/// Page through an investor's full receive() history for one product — every
 	/// `(vault, tx_hash)` ever recorded via `record_receive_tx`. Same
 	/// most-recent-first/`offset`/`limit`/`total` contract as
-	/// `get_investor_request_history` (see that function's own doc comment for the
-	/// full rationale, including why pagination bounds the response size but not
-	/// the underlying storage read cost) — this is its receive-side equivalent,
+	/// `get_investor_request_history`, and the same paged storage (only the
+	/// length header + one or two pages are read) — this is its receive-side
+	/// equivalent,
 	/// since a receive isn't linked to a specific `request_id` the way a request's
 	/// own history is (TrancheManager pools receivable amounts per (investor,
 	/// vault), not per request). Each returned `(vault, tx_hash)` pair is exactly
@@ -708,7 +689,7 @@ where
 	/// @param investor    The investor (controller) address to look up
 	/// @param product_id  The product to page history for
 	/// @param offset      How many of the most-recent entries to skip
-	/// @param limit       Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+	/// @param limit       Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE
 	/// @return receives Up to `limit` (vault, tx_hash) pairs, most-recent first
 	/// @return total    Total history length for this (investor, product_id)
 	#[precompile::public("get_investor_receive_history(address,uint64,uint256,uint256)")]
@@ -720,31 +701,23 @@ where
 		offset: U256,
 		limit: U256,
 	) -> EvmResult<(Vec<EvmReceiveHistoryEntry>, U256)> {
-		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
-			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		if limit > U256::from(HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds HISTORY_PAGE_SIZE"));
 		}
-		let limit = limit.as_usize();
+		let limit = limit.as_usize() as u32; // bounded by HISTORY_PAGE_SIZE above
+		let offset = if offset > U256::from(u32::MAX) { u32::MAX } else { offset.low_u32() };
 
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let history = pallet_tranche_tx_registry::InvestorReceiveHistory::<Runtime>::get(
-			investor.0, product_id,
+		// `read_receive_history` reads the length header + at most two pages
+		// (`limit <= HISTORY_PAGE_SIZE`).
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost().saturating_mul(3))?;
+		let (raw, total) = pallet_tranche_tx_registry::Pallet::<Runtime>::read_receive_history(
+			investor.0, product_id, offset, limit,
 		);
-		let total = U256::from(history.len());
-		if offset >= total {
-			return Ok((Vec::new(), total));
-		}
-		// Safe: offset < total, and total was itself built from a real `usize`
-		// (`history.len()`) above, so offset necessarily fits in a `usize` too.
-		let offset = offset.as_usize();
-
-		let receives = history
-			.iter()
-			.rev()
-			.skip(offset)
-			.take(limit)
-			.map(|(vault, tx_hash)| ((vault.chain_id, Address(vault.vault_address)), *tx_hash))
+		let receives = raw
+			.into_iter()
+			.map(|(vault, tx_hash)| ((vault.chain_id, Address(vault.vault_address)), tx_hash))
 			.collect();
-		Ok((receives, total))
+		Ok((receives, U256::from(total)))
 	}
 
 	/// Resolve one `(investor, vault, tx_hash)` entry from `get_investor_receive_history`

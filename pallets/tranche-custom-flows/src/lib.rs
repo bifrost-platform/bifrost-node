@@ -16,6 +16,7 @@
 //! `metadata`, or enforces step ordering. See
 //! `docs/tranche-custom-flows/design-minimal.md` for the full rationale.
 
+pub mod migrations;
 pub mod weights;
 
 mod pallet;
@@ -23,7 +24,10 @@ mod pallet;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
-pub use bp_tranche::{ChainId, ProductId, TxRecord};
+pub use bp_tranche::{
+	history::{self, HistoryPage, PagedInvestorHistory},
+	ChainId, ProductId, TxRecord,
+};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, H256};

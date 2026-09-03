@@ -1,8 +1,8 @@
 use crate::{
-	BridgeAttempt, BridgeAttempts, BridgeStatus, ChainId, ProductId, RequestEntry, RequestExtraV2,
-	RequestId, RequestOpening, SettlementExtraV2, SettlementId, SettlementStep, TxRecord,
-	WhitelistEntry, WhitelistNonce, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
-	MAX_SETTLEMENT_REQUESTS,
+	history, BridgeAttempt, BridgeAttempts, BridgeStatus, ChainId, HistoryPage,
+	PagedInvestorHistory, ProductId, RequestEntry, RequestExtraV2, RequestId, RequestOpening,
+	SettlementExtraV2, SettlementId, SettlementStep, TxRecord, WhitelistEntry, WhitelistNonce,
+	MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN, MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
 	AdapterInspect, FlowVersion, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
@@ -10,13 +10,15 @@ use pallet_tranche_system::{
 };
 
 use super::pallet::*;
+use core::marker::PhantomData;
 use frame_support::{
 	ensure,
 	pallet_prelude::{BoundedVec, Decode, DispatchError, DispatchResult},
 	traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_core::{ConstU32, H160};
+use sp_core::{ConstU32, H160, H256};
+use sp_std::vec::Vec;
 
 // Private, non-extrinsic helpers — kept in their own `impl` block, separate from
 // `#[pallet::call]`, so they don't become part of the `Call` enum.
@@ -334,9 +336,7 @@ impl<T: Config> Pallet<T> {
 		InvestorActiveRequests::<T>::mutate(opening.investor, |requests| {
 			requests.push((product_id, request_id));
 		});
-		InvestorRequestHistory::<T>::mutate(opening.investor, product_id, |history| {
-			history.push(request_id);
-		});
+		Self::push_request_history(opening.investor, product_id, request_id);
 		Ok(())
 	}
 
@@ -671,9 +671,14 @@ impl<T: Config> Pallet<T> {
 			entry.approved_tx = Some(tx.clone());
 			RequestEntries::<T>::insert(product_id, *request_id, entry);
 		}
-		SettlementRequests::<T>::mutate(product_id, settlement_id, |requests| {
-			requests.extend(approved_request_ids.iter().copied());
-		});
+		SettlementRequests::<T>::try_mutate(product_id, settlement_id, |requests| {
+			for request_id in approved_request_ids.iter() {
+				requests
+					.try_push(*request_id)
+					.map_err(|_| Error::<T>::TooManySettlementRequests)?;
+			}
+			Ok::<(), Error<T>>(())
+		})?;
 		// Opportunistically self-close each request individually: this can race
 		// with the settlement-side completion trigger
 		// (`try_close_local_requests`/`close_active_requests`) — see
@@ -1021,5 +1026,100 @@ impl<T: Config> Pallet<T> {
 				Ok(product_id)
 			},
 		}
+	}
+
+	// ---------------------------------------------------------------------
+	// investor request / receive history (paged — see `bp_tranche::history`)
+	// ---------------------------------------------------------------------
+
+	/// Append one `request_id` to `(investor, product_id)`'s paged request
+	/// history (`RequestStep::Requested`).
+	pub fn push_request_history(investor: H160, product_id: ProductId, request_id: RequestId) {
+		history::history_push::<RequestHistoryIndex<T>>((investor, product_id), request_id);
+	}
+
+	/// Read a page of `(investor, product_id)`'s request history,
+	/// most-recent-first: up to `limit` entries after skipping the newest
+	/// `offset`, plus the full history length. `offset >= total` ⇒ empty.
+	pub fn read_request_history(
+		investor: H160,
+		product_id: ProductId,
+		offset: u32,
+		limit: u32,
+	) -> (Vec<RequestId>, u32) {
+		history::history_read::<RequestHistoryIndex<T>>((investor, product_id), offset, limit)
+	}
+
+	/// Append one `(vault, tx_hash)` to `(investor, product_id)`'s paged receive
+	/// history (`record_receive_tx`).
+	pub fn push_receive_history(investor: H160, product_id: ProductId, entry: (VaultId, H256)) {
+		history::history_push::<ReceiveHistoryIndex<T>>((investor, product_id), entry);
+	}
+
+	/// Read a page of `(investor, product_id)`'s receive history,
+	/// most-recent-first. Same contract as [`Self::read_request_history`].
+	pub fn read_receive_history(
+		investor: H160,
+		product_id: ProductId,
+		offset: u32,
+		limit: u32,
+	) -> (Vec<(VaultId, H256)>, u32) {
+		history::history_read::<ReceiveHistoryIndex<T>>((investor, product_id), offset, limit)
+	}
+}
+
+/// Wires `InvestorRequestHistoryLen` / `InvestorRequestHistoryPage` onto the
+/// shared paged-history logic in [`bp_tranche::history`].
+pub struct RequestHistoryIndex<T>(PhantomData<T>);
+
+impl<T: Config> PagedInvestorHistory for RequestHistoryIndex<T> {
+	type Key = (H160, ProductId);
+	type Entry = RequestId;
+
+	fn len((investor, product_id): Self::Key) -> u32 {
+		InvestorRequestHistoryLen::<T>::get(investor, product_id)
+	}
+
+	fn set_len((investor, product_id): Self::Key, len: u32) {
+		InvestorRequestHistoryLen::<T>::insert(investor, product_id, len);
+	}
+
+	fn page((investor, product_id): Self::Key, page: u32) -> HistoryPage<Self::Entry> {
+		InvestorRequestHistoryPage::<T>::get((investor, product_id, page))
+	}
+
+	fn append_to_page((investor, product_id): Self::Key, page: u32, entry: Self::Entry) {
+		InvestorRequestHistoryPage::<T>::mutate((investor, product_id, page), |entries| {
+			// Caller guarantees `page` is the tail page and not full.
+			let _ = entries.try_push(entry);
+		});
+	}
+}
+
+/// Wires `InvestorReceiveHistoryLen` / `InvestorReceiveHistoryPage` onto the
+/// shared paged-history logic in [`bp_tranche::history`].
+pub struct ReceiveHistoryIndex<T>(PhantomData<T>);
+
+impl<T: Config> PagedInvestorHistory for ReceiveHistoryIndex<T> {
+	type Key = (H160, ProductId);
+	type Entry = (VaultId, H256);
+
+	fn len((investor, product_id): Self::Key) -> u32 {
+		InvestorReceiveHistoryLen::<T>::get(investor, product_id)
+	}
+
+	fn set_len((investor, product_id): Self::Key, len: u32) {
+		InvestorReceiveHistoryLen::<T>::insert(investor, product_id, len);
+	}
+
+	fn page((investor, product_id): Self::Key, page: u32) -> HistoryPage<Self::Entry> {
+		InvestorReceiveHistoryPage::<T>::get((investor, product_id, page))
+	}
+
+	fn append_to_page((investor, product_id): Self::Key, page: u32, entry: Self::Entry) {
+		InvestorReceiveHistoryPage::<T>::mutate((investor, product_id, page), |entries| {
+			// Caller guarantees `page` is the tail page and not full.
+			let _ = entries.try_push(entry);
+		});
 	}
 }
