@@ -466,14 +466,24 @@ impl<T: Config> Pallet<T> {
 					);
 					<BottomNominations<T>>::insert(&c.new, bottom_nominations);
 				}
-				// replace `AwardedPts`
-				let current_points = <AwardedPts<T>>::take(now, &c.old);
-				<AwardedPts<T>>::insert(now, &c.new, current_points);
-				let previous_points = <AwardedPts<T>>::take(delayed_round, &c.old);
-				<AwardedPts<T>>::insert(delayed_round, &c.new, previous_points);
-				// replace `AtStake`
-				let at_stake = <AtStake<T>>::take(now, &c.old);
-				<AtStake<T>>::insert(now, &c.new, at_stake);
+				// replace `AwardedPts` and `AtStake` for every round whose payout is still
+				// pending (`now - RewardPaymentDelay ..= now`). Both must be migrated in
+				// lockstep: `pay_one_validator_reward` looks up the points and the stake
+				// snapshot under the same key, so migrating only `now` would leave the
+				// delayed round(s) with points under `c.new` but the snapshot stranded
+				// under `c.old`, causing the validator to be paid out as a solo validator
+				// and the nominators' share to be redirected to the validator stash.
+				let oldest_pending_round = now.saturating_sub(T::RewardPaymentDelay::get());
+				for round in oldest_pending_round..=now {
+					if <AwardedPts<T>>::contains_key(round, &c.old) {
+						let points = <AwardedPts<T>>::take(round, &c.old);
+						<AwardedPts<T>>::insert(round, &c.new, points);
+					}
+					if <AtStake<T>>::contains_key(round, &c.old) {
+						let at_stake = <AtStake<T>>::take(round, &c.old);
+						<AtStake<T>>::insert(round, &c.new, at_stake);
+					}
+				}
 			}
 		});
 	}
