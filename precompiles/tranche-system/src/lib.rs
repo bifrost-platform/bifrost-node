@@ -68,6 +68,28 @@ type EvmSettlementModeInput = (bool, u64, u64, u64);
 type EvmSingleChainValuationInput = (Address, Address, EvmSettlementModeInput);
 /// `AdaptersByChain` — (chain_id, adapters)
 type EvmAdaptersByChain = (u64, Vec<EvmAdapterInput>);
+/// `MultichainProductDetails` (return-only) — (valuation, tranches, multichain_adapters,
+/// multichain_tranche_managers), the same four fields `create_product` takes as input
+/// (see that function's signature), echoed back as a single bundle by
+/// `get_multichain_product_details`.
+type EvmMultichainProductDetails = (
+	EvmValuationInput,
+	Vec<EvmTrancheInput>,
+	Vec<EvmMultichainAdapterInput>,
+	Vec<EvmMultichainTrancheManagerInput>,
+);
+/// `SingleChainProductDetails` (return-only) — (chain_id, valuation, tranches,
+/// tranche_manager, adapters, ledger), the same fields `create_single_chain_product`
+/// takes as input (minus `product_id`, which the caller already supplies), echoed back
+/// as a single bundle by `get_singlechain_product_details`.
+type EvmSingleChainProductDetails = (
+	u64,
+	EvmSingleChainValuationInput,
+	Vec<EvmTrancheInput>,
+	Address,
+	Vec<EvmAdapterInput>,
+	Address,
+);
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -750,6 +772,148 @@ where
 			.iter()
 			.map(|(chain_id, address)| (*chain_id, Address(*address)))
 			.collect())
+	}
+
+	/// Read a Multichain product's entire configuration in one call — the same four
+	/// fields `create_product` takes as input (`valuation`/`tranches`/
+	/// `multichain_adapters`/`multichain_tranche_managers`), bundled together instead
+	/// of requiring separate `get_product`/`get_tranches`/`get_multichain_adapters`/
+	/// `get_multichain_tranche_managers` calls. Reads `Products` exactly once (unlike
+	/// calling all four of those separately, which reads it four times) and builds
+	/// every field from that single decoded value.
+	///
+	/// Each field is built exactly the way its own dedicated getter builds it (see
+	/// `get_product`, `get_tranches`, `get_multichain_adapters`,
+	/// `get_multichain_tranche_managers` for the full field-by-field contract on each)
+	/// — this function adds no new semantics, only bundling.
+	///
+	/// @param product_id The product to look up; reverts if it doesn't exist or is a
+	/// single-chain product (see get_singlechain_product_details for that case)
+	/// @return details `(valuation, tranches, multichain_adapters, multichain_tranche_managers)`
+	#[precompile::public("get_multichain_product_details(uint64)")]
+	#[precompile::view]
+	fn get_multichain_product_details(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<EvmMultichainProductDetails> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			ProductDetails::Multichain(product) => product,
+			ProductDetails::SingleChain(_) => {
+				return Err(revert(
+					"product is a single-chain product; use get_singlechain_product_details",
+				))
+			},
+		};
+
+		let valuation = (
+			Address(product.valuation.base_asset),
+			Address(product.valuation.valuation_address),
+			product.valuation.settlement_start_timestamp,
+			product.valuation.settlement_length_secs,
+			product.valuation.settlement_offset_secs,
+		);
+		let tranches = product
+			.tranches
+			.values()
+			.flat_map(|chain_tranches| chain_tranches.iter().enumerate())
+			.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+			.collect();
+		let multichain_adapters = product
+			.multichain_adapters
+			.iter()
+			.map(|(key, info)| {
+				(
+					Address(key.address),
+					key.chain_id,
+					info.weight_bps,
+					encode_adapters(&info.adapters),
+				)
+			})
+			.collect();
+		let multichain_tranche_managers = product
+			.multichain_tranche_managers
+			.iter()
+			.map(|(chain_id, address)| (*chain_id, Address(*address)))
+			.collect();
+
+		Ok((valuation, tranches, multichain_adapters, multichain_tranche_managers))
+	}
+
+	/// Read a single-chain product's entire configuration in one call — the same
+	/// fields `create_single_chain_product` takes as input (`chain_id`/`valuation`/
+	/// `tranches`/`tranche_manager`/`adapters`/`ledger`, minus `product_id` itself),
+	/// bundled together instead of requiring separate `get_product`/`get_tranches`/
+	/// `get_adapters`/`get_tranche_manager`/`get_ledger` calls. Reads `Products`
+	/// exactly once (unlike calling all of those separately) and builds every field
+	/// from that single decoded value.
+	///
+	/// Each field is built exactly the way its own dedicated getter builds it (see
+	/// `get_product`, `get_tranches`, `get_adapters`, `get_tranche_manager`,
+	/// `get_ledger` for the full field-by-field contract on each) — this function
+	/// adds no new semantics, only bundling. In particular, `valuation`'s nested
+	/// `settlement_mode.is_sync` is what `get_product`'s "all-zero settlement fields
+	/// means SYNC" convention exists to work around — this function doesn't need
+	/// that workaround, since `SettlementModeInput` carries `is_sync` explicitly.
+	///
+	/// @param product_id The product to look up; reverts if it doesn't exist or is a
+	/// Multichain product (see get_multichain_product_details for that case)
+	/// @return details `(chain_id, valuation, tranches, tranche_manager, adapters, ledger)`
+	#[precompile::public("get_singlechain_product_details(uint64)")]
+	#[precompile::view]
+	fn get_singlechain_product_details(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<EvmSingleChainProductDetails> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			ProductDetails::SingleChain(product) => product,
+			ProductDetails::Multichain(_) => {
+				return Err(revert(
+					"product is a Multichain product; use get_multichain_product_details",
+				))
+			},
+		};
+
+		let (is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs) =
+			match product.valuation.settlement_mode {
+				SettlementMode::Sync => (true, 0, 0, 0),
+				SettlementMode::Async {
+					settlement_start_timestamp,
+					settlement_length_secs,
+					settlement_offset_secs,
+				} => (
+					false,
+					settlement_start_timestamp,
+					settlement_length_secs,
+					settlement_offset_secs,
+				),
+			};
+		let valuation = (
+			Address(product.valuation.base_asset),
+			Address(product.valuation.valuation_address),
+			(is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs),
+		);
+		let tranches = product
+			.tranches
+			.iter()
+			.enumerate()
+			.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+			.collect();
+		let adapters = encode_adapters(&product.adapters);
+
+		Ok((
+			product.chain_id,
+			valuation,
+			tranches,
+			Address(product.tranche_manager),
+			adapters,
+			Address(product.ledger),
+		))
 	}
 
 	/// Read the single, global Hub-chain Orchestrator contract address — see

@@ -68,6 +68,38 @@ type EvmChainBridgeAttempts = (u64, Vec<EvmBridgeAttempt>);
 /// finalize_attempts)
 type EvmSettlementChainBridgeAttempts =
 	(u64, Vec<EvmBridgeAttempt>, Vec<EvmBridgeAttempt>, Vec<EvmBridgeAttempt>);
+/// `SettlementInfo` — `get_settlement`'s full return tuple with `settlement_id`
+/// prepended, since `get_settlements`' batch of them needs each entry to say which
+/// settlement it's for.
+type EvmSettlementInfo =
+	(U256, EvmTxRecord, u8, Vec<EvmSettlementChainSteps>, Vec<EvmSettlementChainBridgeAttempts>);
+/// `RequestDetails` — `get_request`'s full return tuple with `request_id` and a
+/// `found` flag prepended, since `get_requests`' batch of them needs each entry to
+/// say which request it's for and whether it exists at all (unlike `get_request`
+/// itself, which reverts instead — see `get_requests`' doc comment for why the
+/// batch form can't do the same).
+#[allow(clippy::type_complexity)]
+type EvmRequestDetails = (
+	H256,
+	bool,
+	EvmRequestInfo,
+	Vec<EvmRequestTxStep>,
+	Vec<EvmAdapterLeg>,
+	u8,
+	U256,
+	bool,
+	Vec<EvmBridgeAttempt>,
+	Vec<EvmChainBridgeAttempts>,
+);
+
+/// Upper bound on `get_settlements`/`get_requests`' input array length — tighter
+/// than `HISTORY_PAGE_SIZE` (128, used by the plain-ID-list history getters)
+/// because each entry these two batch functions build does its own bounded but
+/// nontrivial amount of work internally (up to `MAX_TRANCHE_CHAINS` +
+/// `MAX_MULTICHAIN_ADAPTERS` chain reads per entry), not just one storage read.
+/// Rejected (not silently truncated) if exceeded, same "catch caller bugs early"
+/// convention as `MAX_HISTORY_PAGE_SIZE` in `precompile-tranche-investments`.
+const MAX_BATCH_SIZE: usize = 50;
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -495,114 +527,57 @@ where
 		Vec<EvmSettlementChainSteps>,
 		Vec<EvmSettlementChainBridgeAttempts>,
 	)> {
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let Some(settle_started_tx) =
-			pallet_tranche_tx_registry::SettlementTriggers::<Runtime>::get(
-				product_id,
+		build_settlement::<Runtime>(handle, product_id, settlement_id)
+	}
+
+	/// Batch form of `get_settlement` — looks up every `settlement_id` in
+	/// `settlement_ids` for `product_id` and returns one `SettlementInfo` per entry,
+	/// in the same order, so a caller that already knows which settlements it wants
+	/// (e.g. from `get_request`'s own `settlement_id` field across a batch of
+	/// requests, `TrancheInvestments`' `get_settlement_id`/`get_last_settlement`, or
+	/// simply a small consecutive range it's tracking off its own state) can fetch
+	/// all of them in one `eth_call` instead of one `get_settlement` per ID.
+	///
+	/// Each entry is built exactly the way `get_settlement` builds its own return
+	/// value (see that function's doc comment for the full field-by-field contract)
+	/// with `settlement_id` prepended — including its lenient "not yet started"
+	/// behavior, so **this never reverts for an individual missing settlement_id**,
+	/// it just comes back with a zeroed `settle_started_tx`, `status == Queued`, and
+	/// empty `spoke_chains`/`spoke_bridge_attempts` for that entry.
+	///
+	/// `settlement_ids` MUST NOT exceed `MAX_BATCH_SIZE` entries (rejected, not
+	/// truncated) — tighter than `HISTORY_PAGE_SIZE` (128, used by the plain-ID-list
+	/// history getters) because each entry here does its own bounded-but-nontrivial
+	/// amount of work internally (up to `MAX_TRANCHE_CHAINS` +
+	/// `MAX_MULTICHAIN_ADAPTERS` chain reads), not just one storage read.
+	///
+	/// @param product_id     The product every settlement_id belongs to
+	/// @param settlement_ids The settlements to look up, in the order to return them
+	/// @return entries One SettlementInfo per input ID, same order, never reverts per-entry
+	#[precompile::public("get_settlements(uint64,uint256[])")]
+	#[precompile::view]
+	#[allow(clippy::type_complexity)]
+	fn get_settlements(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		settlement_ids: Vec<U256>,
+	) -> EvmResult<Vec<EvmSettlementInfo>> {
+		if settlement_ids.len() > MAX_BATCH_SIZE {
+			return Err(revert("settlement_ids exceeds MAX_BATCH_SIZE"));
+		}
+		let mut entries = Vec::with_capacity(settlement_ids.len());
+		for settlement_id in settlement_ids {
+			let (settle_started_tx, status, spoke_chains, spoke_bridge_attempts) =
+				build_settlement::<Runtime>(handle, product_id, settlement_id)?;
+			entries.push((
 				settlement_id,
-			)
-		else {
-			return Ok((
-				encode_tx_record::<BlockNumberFor<Runtime>>(None),
-				encode_settlement_step(SettlementStep::Queued),
-				Vec::new(),
-				Vec::new(),
-			));
-		};
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let collect_response_chain_ids =
-			pallet_tranche_tx_registry::SettlementCollectResponseChains::<Runtime>::get(
-				product_id,
-				settlement_id,
-			)
-			.unwrap_or_default();
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let finalize_chain_ids =
-			pallet_tranche_tx_registry::SettlementFinalizeChains::<Runtime>::get(
-				product_id,
-				settlement_id,
-			)
-			.unwrap_or_default();
-		let chain_ids = union_chain_ids(&collect_response_chain_ids, &finalize_chain_ids);
-
-		let mut spoke_chains = Vec::with_capacity(chain_ids.len());
-		let mut spoke_bridge_attempts = Vec::with_capacity(chain_ids.len());
-		let mut all_complete = true;
-		for chain_id in chain_ids.iter() {
-			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			let entry = pallet_tranche_tx_registry::SettlementChainEntries::<Runtime>::get((
-				product_id,
-				settlement_id,
-				*chain_id,
-			));
-
-			let needs_collect_response = collect_response_chain_ids.contains(chain_id);
-			let needs_finalize = finalize_chain_ids.contains(chain_id);
-
-			// A chain in `finalize_chain_ids` isn't complete until its Finalize leg
-			// lands; a Collect/Response-only chain (no vault, never gets a Finalize
-			// leg — see `SettlementStep`'s doc comment) is complete once Response does.
-			let complete = if needs_finalize {
-				entry.settle_applied_tx.is_some()
-			} else {
-				entry.nav_received_tx.is_some()
-			};
-			if !complete {
-				all_complete = false;
-			}
-
-			let collect_tx = select_executed(&entry.collect_bridge_attempts);
-			let response_tx = select_executed(&entry.response_bridge_attempts);
-			let finalize_tx = select_executed(&entry.finalize_bridge_attempts);
-
-			let mut steps = Vec::with_capacity(
-				if needs_collect_response { 4 } else { 0 } + if needs_finalize { 2 } else { 0 },
-			);
-			if needs_collect_response {
-				steps.push((
-					encode_settlement_step(SettlementStep::CollectBridgeExecuted),
-					encode_tx_record(collect_tx),
-				));
-				steps.push((
-					encode_settlement_step(SettlementStep::NavReported),
-					encode_tx_record(entry.nav_reported_tx),
-				));
-				steps.push((
-					encode_settlement_step(SettlementStep::ResponseBridgeExecuted),
-					encode_tx_record(response_tx),
-				));
-				steps.push((
-					encode_settlement_step(SettlementStep::NavReceived),
-					encode_tx_record(entry.nav_received_tx),
-				));
-			}
-			if needs_finalize {
-				steps.push((
-					encode_settlement_step(SettlementStep::FinalizeBridgeExecuted),
-					encode_tx_record(finalize_tx),
-				));
-				steps.push((
-					encode_settlement_step(SettlementStep::SettleApplied),
-					encode_tx_record(entry.settle_applied_tx),
-				));
-			}
-			spoke_chains.push((*chain_id, steps));
-			spoke_bridge_attempts.push((
-				*chain_id,
-				encode_bridge_attempts(entry.collect_bridge_attempts),
-				encode_bridge_attempts(entry.response_bridge_attempts),
-				encode_bridge_attempts(entry.finalize_bridge_attempts),
+				settle_started_tx,
+				status,
+				spoke_chains,
+				spoke_bridge_attempts,
 			));
 		}
-
-		let status =
-			if all_complete { SettlementStep::Settled } else { SettlementStep::SettleStarted };
-		Ok((
-			encode_tx_record(Some(settle_started_tx)),
-			encode_settlement_step(status),
-			spoke_chains,
-			spoke_bridge_attempts,
-		))
+		Ok(entries)
 	}
 
 	/// Enumerate an investor's currently in-flight requests. An empty array means the
@@ -985,195 +960,429 @@ where
 		Vec<EvmBridgeAttempt>,
 		Vec<EvmChainBridgeAttempts>,
 	)> {
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let entry =
-			pallet_tranche_tx_registry::RequestEntries::<Runtime>::get(product_id, request_id)
-				.ok_or_else(|| revert("request not found"))?;
+		build_request::<Runtime>(handle, product_id, request_id)?
+			.ok_or_else(|| revert("request not found"))
+	}
 
-		let info: EvmRequestInfo = (
-			Address(entry.investor),
-			(entry.vault.chain_id, Address(entry.vault.vault_address)),
-			entry.amount,
-			encode_request_order_type(entry.order_type),
-		);
-
-		// A request colocated with its product's own local chain — Hub for a
-		// `Multichain` product's Hub-vault request, or a `SingleChain` product's own
-		// chain — has no Inbound leg at all (nothing to bridge when the vault is
-		// already colocated with Valuation). `has_inbound_leg` still matters below
-		// for the `settled` computation, which asks a different question (Finalize
-		// leg vs. Collect/Response completion) than `request_steps`/`queued_done` do.
-		let single_chain_id = pallet_tranche_system::Pallet::<Runtime>::single_chain_id(product_id);
-		let local_chain_id =
-			single_chain_id.unwrap_or_else(<Runtime as pallet_evm::Config>::ChainId::get);
-		let has_inbound_leg = entry.vault.chain_id != local_chain_id;
-		// A `SingleChain` product's recorder never has a genuine `DepositQueued`/
-		// `RedeemQueued` event to observe (no such event exists for that model — see
-		// `RequestStep`'s doc comment), so `RequestQueued` is permanently
-		// inapplicable for it, not merely pending — omit it entirely (same "absent
-		// means not applicable" convention `has_inbound_leg` already uses above) and
-		// treat completion as needing only the `Requested` step.
-		let is_single_chain = single_chain_id.is_some();
-		let queued_done = is_single_chain || entry.queued_tx.is_some();
-		let request_bridge_tx = select_executed(&entry.bridge_attempts);
-		let request_bridge_attempts = encode_bridge_attempts(entry.bridge_attempts.clone());
-		let mut request_steps =
-			vec![(encode_request_step(RequestStep::Requested), encode_tx_record(entry.request_tx))];
-		if has_inbound_leg {
-			request_steps.push((
-				encode_request_step(RequestStep::RequestBridgeExecuted),
-				encode_tx_record(request_bridge_tx),
-			));
+	/// Batch form of `get_request` — looks up every `request_id` in `request_ids`
+	/// for `product_id` and returns one `RequestDetails` per entry, in the same
+	/// order, so a caller that already has a batch of IDs on hand (e.g. from
+	/// `get_investor_request_history`/`get_pending_requests`, or straight off
+	/// `RequestTxRecorded` events it's indexed) can fetch all of their details in
+	/// one `eth_call` instead of one `get_request` per ID.
+	///
+	/// Unlike `get_request` itself, **this never reverts for an individual missing
+	/// request_id** — reverting the whole batch over one bad ID would defeat the
+	/// point of batching when the caller isn't 100% sure every ID still exists (or
+	/// ever did). Instead, a missing `request_id` comes back with `found == false`
+	/// and every other field zeroed/empty; `found == true` means the rest of the
+	/// entry is exactly what `get_request` would have returned for that ID.
+	///
+	/// Each `found == true` entry is built exactly the way `get_request` builds its
+	/// own return value (see that function's doc comment for the full field-by-field
+	/// contract) with `request_id`/`found` prepended.
+	///
+	/// `request_ids` MUST NOT exceed `MAX_BATCH_SIZE` entries (rejected, not
+	/// truncated) — tighter than `HISTORY_PAGE_SIZE` (128, used by the plain-ID-list
+	/// history getters) because each entry here does its own bounded but nontrivial
+	/// amount of work internally (up to `MAX_MULTICHAIN_ADAPTERS` chain reads, plus
+	/// more for the `settled` computation), not just one storage read.
+	///
+	/// @param product_id  The product every request_id belongs to
+	/// @param request_ids The requests to look up, in the order to return them
+	/// @return entries One RequestDetails per input ID, same order, `found == false`
+	/// for any ID with no `Requested` step ever recorded
+	#[precompile::public("get_requests(uint64,bytes32[])")]
+	#[precompile::view]
+	#[allow(clippy::type_complexity)]
+	fn get_requests(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		request_ids: Vec<H256>,
+	) -> EvmResult<Vec<EvmRequestDetails>> {
+		if request_ids.len() > MAX_BATCH_SIZE {
+			return Err(revert("request_ids exceeds MAX_BATCH_SIZE"));
 		}
-		if !is_single_chain {
-			request_steps.push((
-				encode_request_step(RequestStep::RequestQueued),
-				encode_tx_record(entry.queued_tx),
-			));
-		}
-
-		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let adapter_chain_ids = pallet_tranche_tx_registry::RequestAdapterChains::<Runtime>::get(
-			product_id, request_id,
-		)
-		.unwrap_or_default();
-
-		let mut adapter_legs = Vec::with_capacity(adapter_chain_ids.len());
-		let mut adapter_bridge_attempts = Vec::with_capacity(adapter_chain_ids.len());
-		let mut all_adapter_done = true;
-		for chain_id in adapter_chain_ids.iter() {
-			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			let leg = pallet_tranche_tx_registry::RequestChainEntries::<Runtime>::get((
-				product_id, request_id, *chain_id,
-			));
-			if leg.applied_tx.is_none() {
-				all_adapter_done = false;
-			}
-			// This product's own local chain (Hub) always fulfills an Adapter leg
-			// synchronously — capital is already there, so there's no Bridge phase at
-			// all, and `AdapterBridgeExecuted` is permanently inapplicable for it, not
-			// merely pending — omit it entirely rather than showing a zeroed entry,
-			// same "absent means not applicable" convention `request_steps` uses for a
-			// colocated request's Inbound leg above. A Spoke chain otherwise needs a
-			// real Bridge phase — its Adapter allocation is only decided once capital
-			// has reached the Hub (at `RequestQueued`), so it can't be pre-applied
-			// locally the way `Requested` itself can — EXCEPT for a Redeem whose
-			// Adapter chain is the request's own origin vault chain: unlike a Deposit
-			// (whose capital must reach the Hub before any allocation, even back to the
-			// origin chain, can be decided), a Redeem collects its share out of that
-			// same chain's own Adapter at request time, before anything reaches the
-			// Hub, so that leg is still self-fulfilling exactly as before (see
-			// `docs/tranche-tx-registry/request-flow.md`'s 2026-08-21 changelog entry).
-			let is_self_fulfilling = *chain_id == local_chain_id
-				|| (*chain_id == entry.vault.chain_id && entry.order_type == OrderType::Redeem);
-			let leg_bridge_tx = select_executed(&leg.bridge_attempts);
-			let steps = if is_self_fulfilling {
-				vec![(
-					encode_request_step(RequestStep::AdapterApplied),
-					encode_tx_record(leg.applied_tx),
-				)]
-			} else {
-				vec![
-					(
-						encode_request_step(RequestStep::AdapterBridgeExecuted),
-						encode_tx_record(leg_bridge_tx),
-					),
-					(
-						encode_request_step(RequestStep::AdapterApplied),
-						encode_tx_record(leg.applied_tx),
-					),
-				]
-			};
-			adapter_legs.push((*chain_id, steps));
-			adapter_bridge_attempts.push((*chain_id, encode_bridge_attempts(leg.bridge_attempts)));
-		}
-		let status = if queued_done && all_adapter_done {
-			RequestStep::RequestCompleted
-		} else {
-			RequestStep::Requested
-		};
-
-		let Some(settlement_id) = entry.settlement_id else {
-			return Ok((
-				info,
-				request_steps,
-				adapter_legs,
-				encode_request_step(status),
-				U256::zero(),
-				false,
-				request_bridge_attempts,
-				adapter_bridge_attempts,
-			));
-		};
-
-		// A Hub-vault request has no Finalize leg of its own to wait on (mirrors
-		// `inbound_done` above) — it's settled once every one of
-		// `SettlementCollectResponseChains` has reached `NavReceived`
-		// (vacuously true, including if that set is empty), same criterion
-		// `try_close_local_requests` uses pallet-side. A Spoke-vault request
-		// instead waits on its own chain's `SettleApplied`, via
-		// `SettlementFinalizeChains`.
-		let settled =
-			if !has_inbound_leg {
-				handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-				match pallet_tranche_tx_registry::SettlementCollectResponseChains::<Runtime>::get(
-					product_id,
+		let mut entries = Vec::with_capacity(request_ids.len());
+		for request_id in request_ids {
+			let entry = match build_request::<Runtime>(handle, product_id, request_id)? {
+				Some((
+					info,
+					request_steps,
+					adapter_legs,
+					status,
 					settlement_id,
-				) {
-					Some(chains) => {
-						let mut all_responded = true;
-						for chain_id in chains.iter() {
-							handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-							let responded = pallet_tranche_tx_registry::SettlementChainEntries::<
-								Runtime,
-							>::get((product_id, settlement_id, *chain_id))
-							.nav_received_tx
-							.is_some();
-							if !responded {
-								all_responded = false;
-								break;
-							}
-						}
-						all_responded
-					},
-					None => false,
-				}
-			} else {
-				handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-				match pallet_tranche_tx_registry::SettlementFinalizeChains::<Runtime>::get(
-					product_id,
+					settled,
+					request_bridge_attempts,
+					adapter_bridge_attempts,
+				)) => (
+					request_id,
+					true,
+					info,
+					request_steps,
+					adapter_legs,
+					status,
 					settlement_id,
-				) {
-					Some(_) => {
-						handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-						pallet_tranche_tx_registry::SettlementChainEntries::<Runtime>::get((
-							product_id,
-							settlement_id,
-							entry.vault.chain_id,
-						))
-						.settle_applied_tx
-						.is_some()
-					},
-					None => false,
-				}
+					settled,
+					request_bridge_attempts,
+					adapter_bridge_attempts,
+				),
+				None => (
+					request_id,
+					false,
+					(Address(H160::zero()), (0u64, Address(H160::zero())), U256::zero(), 0u8),
+					Vec::new(),
+					Vec::new(),
+					0u8,
+					U256::zero(),
+					false,
+					Vec::new(),
+					Vec::new(),
+				),
 			};
-
-		Ok((
-			info,
-			request_steps,
-			adapter_legs,
-			encode_request_step(status),
-			settlement_id,
-			settled,
-			request_bridge_attempts,
-			adapter_bridge_attempts,
-		))
+			entries.push(entry);
+		}
+		Ok(entries)
 	}
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Shared body behind `get_settlement`/`get_settlements` — see `get_settlement`'s
+/// own doc comment for the full field-by-field contract this builds. Never
+/// reverts (a not-yet-started settlement comes back zeroed with `status ==
+/// Queued`), so unlike `build_request` below there's no `Option`/not-found case to
+/// thread through to callers.
+#[allow(clippy::type_complexity)]
+fn build_settlement<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+	settlement_id: U256,
+) -> EvmResult<(EvmTxRecord, u8, Vec<EvmSettlementChainSteps>, Vec<EvmSettlementChainBridgeAttempts>)>
+where
+	Runtime: pallet_tranche_tx_registry::Config + pallet_evm::Config,
+	BlockNumberFor<Runtime>: Into<U256>,
+{
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let Some(settle_started_tx) =
+		pallet_tranche_tx_registry::SettlementTriggers::<Runtime>::get(product_id, settlement_id)
+	else {
+		return Ok((
+			encode_tx_record::<BlockNumberFor<Runtime>>(None),
+			encode_settlement_step(SettlementStep::Queued),
+			Vec::new(),
+			Vec::new(),
+		));
+	};
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let collect_response_chain_ids = pallet_tranche_tx_registry::SettlementCollectResponseChains::<
+		Runtime,
+	>::get(product_id, settlement_id)
+	.unwrap_or_default();
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let finalize_chain_ids = pallet_tranche_tx_registry::SettlementFinalizeChains::<Runtime>::get(
+		product_id,
+		settlement_id,
+	)
+	.unwrap_or_default();
+	let chain_ids = union_chain_ids(&collect_response_chain_ids, &finalize_chain_ids);
+
+	let mut spoke_chains = Vec::with_capacity(chain_ids.len());
+	let mut spoke_bridge_attempts = Vec::with_capacity(chain_ids.len());
+	let mut all_complete = true;
+	for chain_id in chain_ids.iter() {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let entry = pallet_tranche_tx_registry::SettlementChainEntries::<Runtime>::get((
+			product_id,
+			settlement_id,
+			*chain_id,
+		));
+
+		let needs_collect_response = collect_response_chain_ids.contains(chain_id);
+		let needs_finalize = finalize_chain_ids.contains(chain_id);
+
+		// A chain in `finalize_chain_ids` isn't complete until its Finalize leg
+		// lands; a Collect/Response-only chain (no vault, never gets a Finalize
+		// leg — see `SettlementStep`'s doc comment) is complete once Response does.
+		let complete = if needs_finalize {
+			entry.settle_applied_tx.is_some()
+		} else {
+			entry.nav_received_tx.is_some()
+		};
+		if !complete {
+			all_complete = false;
+		}
+
+		let collect_tx = select_executed(&entry.collect_bridge_attempts);
+		let response_tx = select_executed(&entry.response_bridge_attempts);
+		let finalize_tx = select_executed(&entry.finalize_bridge_attempts);
+
+		let mut steps = Vec::with_capacity(
+			if needs_collect_response { 4 } else { 0 } + if needs_finalize { 2 } else { 0 },
+		);
+		if needs_collect_response {
+			steps.push((
+				encode_settlement_step(SettlementStep::CollectBridgeExecuted),
+				encode_tx_record(collect_tx),
+			));
+			steps.push((
+				encode_settlement_step(SettlementStep::NavReported),
+				encode_tx_record(entry.nav_reported_tx),
+			));
+			steps.push((
+				encode_settlement_step(SettlementStep::ResponseBridgeExecuted),
+				encode_tx_record(response_tx),
+			));
+			steps.push((
+				encode_settlement_step(SettlementStep::NavReceived),
+				encode_tx_record(entry.nav_received_tx),
+			));
+		}
+		if needs_finalize {
+			steps.push((
+				encode_settlement_step(SettlementStep::FinalizeBridgeExecuted),
+				encode_tx_record(finalize_tx),
+			));
+			steps.push((
+				encode_settlement_step(SettlementStep::SettleApplied),
+				encode_tx_record(entry.settle_applied_tx),
+			));
+		}
+		spoke_chains.push((*chain_id, steps));
+		spoke_bridge_attempts.push((
+			*chain_id,
+			encode_bridge_attempts(entry.collect_bridge_attempts),
+			encode_bridge_attempts(entry.response_bridge_attempts),
+			encode_bridge_attempts(entry.finalize_bridge_attempts),
+		));
+	}
+
+	let status = if all_complete { SettlementStep::Settled } else { SettlementStep::SettleStarted };
+	Ok((
+		encode_tx_record(Some(settle_started_tx)),
+		encode_settlement_step(status),
+		spoke_chains,
+		spoke_bridge_attempts,
+	))
+}
+
+/// Shared body behind `get_request`/`get_requests` — see `get_request`'s own doc
+/// comment for the full field-by-field contract this builds. Returns `Ok(None)`
+/// (rather than reverting) if `request_id` has no `Requested` step ever recorded,
+/// so callers can choose their own not-found behavior: `get_request` still reverts
+/// on `None` (unchanged, existing behavior), while `get_requests` instead reports
+/// `found == false` for that entry — see `get_requests`' doc comment for why.
+#[allow(clippy::type_complexity)]
+fn build_request<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+	request_id: H256,
+) -> EvmResult<
+	Option<(
+		EvmRequestInfo,
+		Vec<EvmRequestTxStep>,
+		Vec<EvmAdapterLeg>,
+		u8,
+		U256,
+		bool,
+		Vec<EvmBridgeAttempt>,
+		Vec<EvmChainBridgeAttempts>,
+	)>,
+>
+where
+	Runtime:
+		pallet_tranche_tx_registry::Config + pallet_tranche_system::Config + pallet_evm::Config,
+	BlockNumberFor<Runtime>: Into<U256>,
+{
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let Some(entry) =
+		pallet_tranche_tx_registry::RequestEntries::<Runtime>::get(product_id, request_id)
+	else {
+		return Ok(None);
+	};
+
+	let info: EvmRequestInfo = (
+		Address(entry.investor),
+		(entry.vault.chain_id, Address(entry.vault.vault_address)),
+		entry.amount,
+		encode_request_order_type(entry.order_type),
+	);
+
+	// A request colocated with its product's own local chain — Hub for a
+	// `Multichain` product's Hub-vault request, or a `SingleChain` product's own
+	// chain — has no Inbound leg at all (nothing to bridge when the vault is
+	// already colocated with Valuation). `has_inbound_leg` still matters below
+	// for the `settled` computation, which asks a different question (Finalize
+	// leg vs. Collect/Response completion) than `request_steps`/`queued_done` do.
+	let single_chain_id = pallet_tranche_system::Pallet::<Runtime>::single_chain_id(product_id);
+	let local_chain_id =
+		single_chain_id.unwrap_or_else(<Runtime as pallet_evm::Config>::ChainId::get);
+	let has_inbound_leg = entry.vault.chain_id != local_chain_id;
+	// A `SingleChain` product's recorder never has a genuine `DepositQueued`/
+	// `RedeemQueued` event to observe (no such event exists for that model — see
+	// `RequestStep`'s doc comment), so `RequestQueued` is permanently
+	// inapplicable for it, not merely pending — omit it entirely (same "absent
+	// means not applicable" convention `has_inbound_leg` already uses above) and
+	// treat completion as needing only the `Requested` step.
+	let is_single_chain = single_chain_id.is_some();
+	let queued_done = is_single_chain || entry.queued_tx.is_some();
+	let request_bridge_tx = select_executed(&entry.bridge_attempts);
+	let request_bridge_attempts = encode_bridge_attempts(entry.bridge_attempts.clone());
+	let mut request_steps =
+		vec![(encode_request_step(RequestStep::Requested), encode_tx_record(entry.request_tx))];
+	if has_inbound_leg {
+		request_steps.push((
+			encode_request_step(RequestStep::RequestBridgeExecuted),
+			encode_tx_record(request_bridge_tx),
+		));
+	}
+	if !is_single_chain {
+		request_steps.push((
+			encode_request_step(RequestStep::RequestQueued),
+			encode_tx_record(entry.queued_tx),
+		));
+	}
+
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let adapter_chain_ids =
+		pallet_tranche_tx_registry::RequestAdapterChains::<Runtime>::get(product_id, request_id)
+			.unwrap_or_default();
+
+	let mut adapter_legs = Vec::with_capacity(adapter_chain_ids.len());
+	let mut adapter_bridge_attempts = Vec::with_capacity(adapter_chain_ids.len());
+	let mut all_adapter_done = true;
+	for chain_id in adapter_chain_ids.iter() {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let leg = pallet_tranche_tx_registry::RequestChainEntries::<Runtime>::get((
+			product_id, request_id, *chain_id,
+		));
+		if leg.applied_tx.is_none() {
+			all_adapter_done = false;
+		}
+		// This product's own local chain (Hub) always fulfills an Adapter leg
+		// synchronously — capital is already there, so there's no Bridge phase at
+		// all, and `AdapterBridgeExecuted` is permanently inapplicable for it, not
+		// merely pending — omit it entirely rather than showing a zeroed entry,
+		// same "absent means not applicable" convention `request_steps` uses for a
+		// colocated request's Inbound leg above. A Spoke chain otherwise needs a
+		// real Bridge phase — its Adapter allocation is only decided once capital
+		// has reached the Hub (at `RequestQueued`), so it can't be pre-applied
+		// locally the way `Requested` itself can — EXCEPT for a Redeem whose
+		// Adapter chain is the request's own origin vault chain: unlike a Deposit
+		// (whose capital must reach the Hub before any allocation, even back to the
+		// origin chain, can be decided), a Redeem collects its share out of that
+		// same chain's own Adapter at request time, before anything reaches the
+		// Hub, so that leg is still self-fulfilling exactly as before (see
+		// `docs/tranche-tx-registry/request-flow.md`'s 2026-08-21 changelog entry).
+		let is_self_fulfilling = *chain_id == local_chain_id
+			|| (*chain_id == entry.vault.chain_id && entry.order_type == OrderType::Redeem);
+		let leg_bridge_tx = select_executed(&leg.bridge_attempts);
+		let steps = if is_self_fulfilling {
+			vec![(
+				encode_request_step(RequestStep::AdapterApplied),
+				encode_tx_record(leg.applied_tx),
+			)]
+		} else {
+			vec![
+				(
+					encode_request_step(RequestStep::AdapterBridgeExecuted),
+					encode_tx_record(leg_bridge_tx),
+				),
+				(
+					encode_request_step(RequestStep::AdapterApplied),
+					encode_tx_record(leg.applied_tx),
+				),
+			]
+		};
+		adapter_legs.push((*chain_id, steps));
+		adapter_bridge_attempts.push((*chain_id, encode_bridge_attempts(leg.bridge_attempts)));
+	}
+	let status = if queued_done && all_adapter_done {
+		RequestStep::RequestCompleted
+	} else {
+		RequestStep::Requested
+	};
+
+	let Some(settlement_id) = entry.settlement_id else {
+		return Ok(Some((
+			info,
+			request_steps,
+			adapter_legs,
+			encode_request_step(status),
+			U256::zero(),
+			false,
+			request_bridge_attempts,
+			adapter_bridge_attempts,
+		)));
+	};
+
+	// A Hub-vault request has no Finalize leg of its own to wait on (mirrors
+	// `inbound_done` above) — it's settled once every one of
+	// `SettlementCollectResponseChains` has reached `NavReceived`
+	// (vacuously true, including if that set is empty), same criterion
+	// `try_close_local_requests` uses pallet-side. A Spoke-vault request
+	// instead waits on its own chain's `SettleApplied`, via
+	// `SettlementFinalizeChains`.
+	let settled = if !has_inbound_leg {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		match pallet_tranche_tx_registry::SettlementCollectResponseChains::<Runtime>::get(
+			product_id,
+			settlement_id,
+		) {
+			Some(chains) => {
+				let mut all_responded = true;
+				for chain_id in chains.iter() {
+					handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+					let responded =
+						pallet_tranche_tx_registry::SettlementChainEntries::<Runtime>::get((
+							product_id,
+							settlement_id,
+							*chain_id,
+						))
+						.nav_received_tx
+						.is_some();
+					if !responded {
+						all_responded = false;
+						break;
+					}
+				}
+				all_responded
+			},
+			None => false,
+		}
+	} else {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		match pallet_tranche_tx_registry::SettlementFinalizeChains::<Runtime>::get(
+			product_id,
+			settlement_id,
+		) {
+			Some(_) => {
+				handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+				pallet_tranche_tx_registry::SettlementChainEntries::<Runtime>::get((
+					product_id,
+					settlement_id,
+					entry.vault.chain_id,
+				))
+				.settle_applied_tx
+				.is_some()
+			},
+			None => false,
+		}
+	};
+
+	Ok(Some((
+		info,
+		request_steps,
+		adapter_legs,
+		encode_request_step(status),
+		settlement_id,
+		settled,
+		request_bridge_attempts,
+		adapter_bridge_attempts,
+	)))
+}
 
 /// `uint256` topic encoding — left-padded big-endian, matching Solidity's ABI
 /// encoding of an indexed `uint256`/`uint64` event parameter.

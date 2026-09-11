@@ -499,6 +499,111 @@
                 "internalType": "uint64",
                 "name": "product_id",
                 "type": "uint64"
+            },
+            {
+                "internalType": "uint256",
+                "name": "offset",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "limit",
+                "type": "uint256"
+            }
+        ],
+        "name": "get_settlement_adapter_valuations",
+        "outputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "settlement_id",
+                        "type": "uint256"
+                    },
+                    {
+                        "components": [
+                            {
+                                "internalType": "uint64",
+                                "name": "chainId",
+                                "type": "uint64"
+                            },
+                            {
+                                "internalType": "address",
+                                "name": "adapter",
+                                "type": "address"
+                            },
+                            {
+                                "internalType": "uint256",
+                                "name": "epochId",
+                                "type": "uint256"
+                            },
+                            {
+                                "internalType": "uint64",
+                                "name": "valuationCutoff",
+                                "type": "uint64"
+                            },
+                            {
+                                "internalType": "uint256",
+                                "name": "principal",
+                                "type": "uint256"
+                            },
+                            {
+                                "components": [
+                                    {
+                                        "internalType": "address",
+                                        "name": "asset",
+                                        "type": "address"
+                                    },
+                                    {
+                                        "internalType": "uint256",
+                                        "name": "amount",
+                                        "type": "uint256"
+                                    },
+                                    {
+                                        "internalType": "uint256",
+                                        "name": "priceUsd",
+                                        "type": "uint256"
+                                    },
+                                    {
+                                        "internalType": "uint256",
+                                        "name": "usdValue",
+                                        "type": "uint256"
+                                    },
+                                    {
+                                        "internalType": "bool",
+                                        "name": "counted",
+                                        "type": "bool"
+                                    }
+                                ],
+                                "internalType": "struct Investments.AssetPosition[]",
+                                "name": "positions",
+                                "type": "tuple[]"
+                            }
+                        ],
+                        "internalType": "struct Investments.AdapterValuation[]",
+                        "name": "valuations",
+                        "type": "tuple[]"
+                    }
+                ],
+                "internalType": "struct Investments.AdapterValuationsEntry[]",
+                "name": "entries",
+                "type": "tuple[]"
+            },
+            {
+                "internalType": "uint256",
+                "name": "total",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
             }
         ],
         "name": "get_settlement_id",
@@ -582,6 +687,104 @@
             {
                 "internalType": "uint256",
                 "name": "timestamp",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "internalType": "uint256",
+                "name": "offset",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "limit",
+                "type": "uint256"
+            }
+        ],
+        "name": "get_settlement_states",
+        "outputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "settlement_id",
+                        "type": "uint256"
+                    },
+                    {
+                        "components": [
+                            {
+                                "internalType": "uint64",
+                                "name": "vault_chain_id",
+                                "type": "uint64"
+                            },
+                            {
+                                "internalType": "address",
+                                "name": "vault_address",
+                                "type": "address"
+                            },
+                            {
+                                "internalType": "uint256",
+                                "name": "tranche_nav",
+                                "type": "uint256"
+                            },
+                            {
+                                "internalType": "uint256",
+                                "name": "share_price",
+                                "type": "uint256"
+                            },
+                            {
+                                "internalType": "uint256",
+                                "name": "units_outstanding",
+                                "type": "uint256"
+                            },
+                            {
+                                "internalType": "uint256",
+                                "name": "principal",
+                                "type": "uint256"
+                            }
+                        ],
+                        "internalType": "struct Investments.TrancheSettle[]",
+                        "name": "tranches",
+                        "type": "tuple[]"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "pending_deposit_assets",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "product_nav",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "recorded_at",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "timestamp",
+                        "type": "uint256"
+                    }
+                ],
+                "internalType": "struct Investments.SettlementStateEntry[]",
+                "name": "entries",
+                "type": "tuple[]"
+            },
+            {
+                "internalType": "uint256",
+                "name": "total",
                 "type": "uint256"
             }
         ],

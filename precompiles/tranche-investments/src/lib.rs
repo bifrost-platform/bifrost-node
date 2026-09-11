@@ -50,6 +50,14 @@ type EvmVaultInput = (u64, Address);
 /// rather than one flat pair of arrays (tranche priority became chain-scoped, not
 /// product-wide, in `pallet-tranche-system` — see `TrancheInput`'s doc comment there).
 type EvmChainSettlement = (u64, Vec<U256>, Vec<U256>);
+/// `SettlementStateEntry` — (settlement_id, tranches, pending_deposit_assets, product_nav,
+/// recorded_at, timestamp), the `get_settlement_state` tuple with `settlement_id` prepended
+/// so `get_settlement_states`' batch of them is self-describing.
+type EvmSettlementStateEntry = (U256, Vec<EvmTrancheSettle>, U256, U256, U256, U256);
+/// `AdapterValuationsEntry` — (settlement_id, valuations), the `get_adapter_valuations` return
+/// value with `settlement_id` prepended so `get_settlement_adapter_valuations`' batch of them
+/// is self-describing.
+type EvmAdapterValuationsEntry = (U256, Vec<EvmAdapterValuation>);
 
 /// Upper bound on `get_pending_requests`'s `limit` — caps the page size so a
 /// single `eth_call` can't be asked to serialize an unbounded response.
@@ -619,6 +627,106 @@ where
 		))
 	}
 
+	/// Page through a product's recorded settlements, most-recent first — batches what
+	/// would otherwise be one `get_settlement_state` call per `settlement_id` into a
+	/// single `eth_call`, for the same reason `get_investor_request_history`/
+	/// `get_investor_receive_history` exist on `precompile-tranche-tx-registry`.
+	///
+	/// Unlike those, this isn't backed by a separate paged-history storage list —
+	/// `settlement_id` is itself a monotonically increasing counter the Valuation
+	/// Contract assigns (see `LastSettlementId`'s doc comment), so this walks
+	/// `settlement_id` directly downward from the product's latest to `1`. A
+	/// `settlement_id` with nothing recorded for it is examined (gas charged) but not
+	/// counted against `offset`/`limit` — same "filter mismatch" convention as
+	/// `get_pending_requests`. This also covers the (should-never-happen, since
+	/// `record_settlement` writes `Settlements`/`ProductNavs` together atomically) case
+	/// where a `settlement_id` has tranche data recorded but no `product_nav`: it's
+	/// skipped rather than reported with a fabricated zero NAV — same defensive
+	/// treatment `get_settlement_state` gives the same condition by reverting.
+	///
+	/// `limit` MUST NOT exceed `MAX_HISTORY_PAGE_SIZE` (rejected, not clamped) — same
+	/// convention as `get_pending_requests`. `offset` has no upper bound; gas is charged
+	/// per `settlement_id` actually examined, not per entry returned — same tradeoff as
+	/// `get_pending_requests`'s `offset`. Returns an empty array (not a revert) if the
+	/// product has never settled, or if `offset` walks past `settlement_id` `1`.
+	///
+	/// @param product_id The product to look up
+	/// @param offset     How many of the most-recent recorded settlements to skip
+	/// @param limit      Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+	/// @return entries Up to `limit` settlements, most-recent first
+	/// @return total   The product's latest settlement_id (0 if never settled) — an upper
+	/// bound on how many settlements could exist, not a count of how many `entries` this
+	/// call (or any single call) actually returns
+	#[precompile::public("get_settlement_states(uint64,uint256,uint256)")]
+	#[precompile::view]
+	fn get_settlement_states(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		offset: U256,
+		limit: U256,
+	) -> EvmResult<(Vec<EvmSettlementStateEntry>, U256)> {
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
+		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		}
+		let offset = to_u64(offset)?;
+		let limit = to_u64(limit)?;
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let Some(last_id) =
+			pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
+		else {
+			return Ok((Vec::new(), U256::zero()));
+		};
+
+		let entries = walk_recent_settlements(handle, last_id, offset, limit, |handle, id| {
+			// One charge per `settlement_id` examined, not per entry returned — see
+			// `get_pending_requests`'s identical rationale.
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+			let Some(settlement) =
+				pallet_tranche_investments::Settlements::<Runtime>::get(product_id, id)
+			else {
+				return Ok(None);
+			};
+			// `record_settlement` always writes `Settlements`/`ProductNavs`/
+			// `LastSettlementId` together — see that extrinsic's doc comment — so this
+			// should never actually miss for any settlement recorded through it. Still
+			// treated as "no match" rather than defaulting to zero (`get_settlement_state`
+			// reverts on the same condition): fabricating a `0` NAV here would be
+			// indistinguishable from a genuinely recorded zero NAV.
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+			let Some(product_nav) =
+				pallet_tranche_investments::ProductNavs::<Runtime>::get(product_id, id)
+			else {
+				return Ok(None);
+			};
+			let tranches = settlement
+				.tranches
+				.iter()
+				.map(|settle| {
+					(
+						settle.vault.chain_id,
+						Address(settle.vault.vault_address),
+						settle.tranche_nav,
+						settle.share_price,
+						settle.units_outstanding,
+						settle.principal,
+					)
+				})
+				.collect();
+			Ok(Some((
+				id,
+				tranches,
+				settlement.pending_deposit_assets,
+				product_nav,
+				settlement.recorded_at.into(),
+				settlement.timestamp.into(),
+			)))
+		})?;
+
+		Ok((entries, last_id))
+	}
+
 	/// Read one settlement's full per-Adapter NAV breakdown, as recorded by
 	/// `record_adapter_valuations` — one entry per Adapter, each with its own
 	/// per-asset position breakdown. No other function exposes this; it's only
@@ -649,6 +757,66 @@ where
 		Ok(valuations.iter().map(encode_adapter_valuation).collect())
 	}
 
+	/// Page through a product's recorded per-Adapter NAV breakdowns across settlements,
+	/// most-recent first — batches what would otherwise be one `get_adapter_valuations`
+	/// call per `settlement_id` into a single `eth_call`. Same walk-`settlement_id`
+	/// -downward strategy as `get_settlement_states` (see its doc comment for why there's
+	/// no separate paged-history storage backing this).
+	///
+	/// Not every `settlement_id` up to `total` necessarily has Adapter valuations recorded
+	/// — `record_adapter_valuations` is a separate call from `record_settlement`, so a
+	/// `settlement_id` missing one is examined (gas charged) but not counted against
+	/// `offset`/`limit`, same "filter mismatch" convention as `get_pending_requests`/
+	/// `get_settlement_states`.
+	///
+	/// `limit` MUST NOT exceed `MAX_HISTORY_PAGE_SIZE` (rejected, not clamped). `offset`
+	/// has no upper bound; gas is charged per `settlement_id` examined, not per entry
+	/// returned. Returns an empty array (not a revert) if the product has never settled,
+	/// or if `offset` walks past `settlement_id` `1`.
+	///
+	/// @param product_id The product to look up
+	/// @param offset     How many of the most-recent recorded entries to skip
+	/// @param limit      Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+	/// @return entries Up to `limit` (settlement_id, valuations) pairs, most-recent first
+	/// @return total   The product's latest settlement_id (0 if never settled) — an upper
+	/// bound on how many entries could exist, not a count of how many actually have
+	/// Adapter valuations recorded
+	#[precompile::public("get_settlement_adapter_valuations(uint64,uint256,uint256)")]
+	#[precompile::view]
+	fn get_settlement_adapter_valuations(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		offset: U256,
+		limit: U256,
+	) -> EvmResult<(Vec<EvmAdapterValuationsEntry>, U256)> {
+		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
+		if limit > U256::from(MAX_HISTORY_PAGE_SIZE) {
+			return Err(revert("limit exceeds MAX_HISTORY_PAGE_SIZE"));
+		}
+		let offset = to_u64(offset)?;
+		let limit = to_u64(limit)?;
+
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let Some(last_id) =
+			pallet_tranche_investments::LastSettlementId::<Runtime>::get(product_id)
+		else {
+			return Ok((Vec::new(), U256::zero()));
+		};
+
+		let entries = walk_recent_settlements(handle, last_id, offset, limit, |handle, id| {
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+			let Some(valuations) =
+				pallet_tranche_investments::AdapterValuations::<Runtime>::get(product_id, id)
+			else {
+				return Ok(None);
+			};
+			let encoded = valuations.iter().map(encode_adapter_valuation).collect();
+			Ok(Some((id, encoded)))
+		})?;
+
+		Ok((entries, last_id))
+	}
+
 	/// Read a request's approval details.
 	///
 	/// @param product_id The product the request belongs to
@@ -674,6 +842,45 @@ where
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Shared walk-`settlement_id`-downward-with-offset/limit skeleton behind
+/// `get_settlement_states`/`get_settlement_adapter_valuations` — both walk a
+/// product's `settlement_id` space from `last_id` down to `1`, skipping `offset`
+/// matches and then collecting up to `limit` of them, most-recent first.
+///
+/// `try_build` does the actual per-`settlement_id` lookup/encoding and decides what
+/// "matches": `Ok(Some(item))` counts against `offset`/`limit`, `Ok(None)` means this
+/// `settlement_id` was examined but doesn't count (no data recorded for it, or data
+/// inconsistent in a way the caller has decided to treat as absent) — same "filter
+/// mismatch" convention `get_pending_requests` uses. This helper does no storage
+/// reads or gas charging of its own; `try_build` is responsible for both.
+fn walk_recent_settlements<H, T>(
+	handle: &mut H,
+	last_id: U256,
+	offset: u64,
+	limit: u64,
+	mut try_build: impl FnMut(&mut H, U256) -> EvmResult<Option<T>>,
+) -> EvmResult<Vec<T>>
+where
+	H: PrecompileHandle,
+{
+	let mut entries = Vec::new();
+	let mut skipped = 0u64;
+	let mut collected = 0u64;
+	let mut id = last_id;
+	while !id.is_zero() && collected < limit {
+		if let Some(item) = try_build(handle, id)? {
+			if skipped < offset {
+				skipped += 1;
+			} else {
+				entries.push(item);
+				collected += 1;
+			}
+		}
+		id -= U256::one();
+	}
+	Ok(entries)
+}
 
 /// Reverts if `product_id` is a registered single-chain product — this whole
 /// precompile only ever tracks Multichain products (a single-chain product's

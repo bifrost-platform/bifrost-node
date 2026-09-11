@@ -295,6 +295,21 @@ interface TrancheSystem {
         address tranche_manager_address;
     }
 
+    /// @dev Return-only bundle for get_multichain_product_details — the same four
+    ///      fields create_product takes as input, echoed back together instead of
+    ///      requiring separate get_product/get_tranches/get_multichain_adapters/
+    ///      get_multichain_tranche_managers calls.
+    /// @param valuation                   See ValuationInput
+    /// @param tranches                    See get_tranches' own notes on ordering/grouping
+    /// @param multichain_adapters         See MultichainAdapterInput
+    /// @param multichain_tranche_managers See MultichainTrancheManagerInput
+    struct MultichainProductDetails {
+        ValuationInput valuation;
+        TrancheInput[] tranches;
+        MultichainAdapterInput[] multichain_adapters;
+        MultichainTrancheManagerInput[] multichain_tranche_managers;
+    }
+
     /// @param is_sync                      True = settle atomically in the same transaction as
     ///                                     the request, no settlement cycle at all. Only valid
     ///                                     for single-chain products, see notes above. False =
@@ -324,6 +339,25 @@ interface TrancheSystem {
         address base_asset;
         address valuation_address;
         SettlementModeInput settlement_mode;
+    }
+
+    /// @dev Return-only bundle for get_singlechain_product_details — the same
+    ///      fields create_single_chain_product takes as input (minus product_id
+    ///      itself), echoed back together instead of requiring separate
+    ///      get_product/get_tranches/get_adapters/get_tranche_manager/get_ledger calls.
+    /// @param chain_id       The single EVM chain every contract in this product lives on
+    /// @param valuation      See SingleChainValuationInput
+    /// @param tranches       See get_tranches' own notes on ordering
+    /// @param tranche_manager The single TrancheManager contract address, on chain_id
+    /// @param adapters       Flat individual-Adapter registrations, see AdapterInput
+    /// @param ledger         The Ledger contract address, on chain_id
+    struct SingleChainProductDetails {
+        uint64 chain_id;
+        SingleChainValuationInput valuation;
+        TrancheInput[] tranches;
+        address tranche_manager;
+        AdapterInput[] adapters;
+        address ledger;
     }
 
     /// @dev `product_admin` is not a function input on create_product (see below) —
@@ -790,6 +824,46 @@ interface TrancheSystem {
     function get_ledger(
         uint64 product_id
     ) external view returns (address ledger);
+
+    /**
+     * @notice Read a Multichain product's entire configuration in one call — the same
+     *         four fields create_product takes as input (valuation/tranches/
+     *         multichain_adapters/multichain_tranche_managers), bundled together
+     *         instead of requiring separate get_product/get_tranches/
+     *         get_multichain_adapters/get_multichain_tranche_managers calls.
+     * @dev Reverts if product_id doesn't exist or is a single-chain product (see
+     *      get_singlechain_product_details for that case). Each field is built exactly
+     *      the way its own dedicated getter builds it — see get_product/get_tranches/
+     *      get_multichain_adapters/get_multichain_tranche_managers for the full
+     *      field-by-field contract on each; this function adds no new semantics, only
+     *      bundling (and reads the product's storage once instead of four times).
+     * @param product_id The product to look up
+     * @return details The product's full configuration — see MultichainProductDetails
+     */
+    function get_multichain_product_details(
+        uint64 product_id
+    ) external view returns (MultichainProductDetails memory details);
+
+    /**
+     * @notice Read a single-chain product's entire configuration in one call — the
+     *         same fields create_single_chain_product takes as input (chain_id/
+     *         valuation/tranches/tranche_manager/adapters/ledger, minus product_id
+     *         itself), bundled together instead of requiring separate get_product/
+     *         get_tranches/get_adapters/get_tranche_manager/get_ledger calls.
+     * @dev Reverts if product_id doesn't exist or is a Multichain product (see
+     *      get_multichain_product_details for that case). Each field is built exactly
+     *      the way its own dedicated getter builds it — see get_product/get_tranches/
+     *      get_adapters/get_tranche_manager/get_ledger for the full field-by-field
+     *      contract on each; this function adds no new semantics, only bundling (and
+     *      reads the product's storage once instead of five times). Unlike
+     *      get_product's "all-zero settlement fields means SYNC" convention,
+     *      valuation.settlement_mode.is_sync here says so explicitly.
+     * @param product_id The product to look up
+     * @return details The product's full configuration — see SingleChainProductDetails
+     */
+    function get_singlechain_product_details(
+        uint64 product_id
+    ) external view returns (SingleChainProductDetails memory details);
 
     /**
      * @notice Read the single, global Hub-chain Orchestrator contract address.

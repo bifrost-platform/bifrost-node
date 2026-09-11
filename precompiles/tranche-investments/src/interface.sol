@@ -114,6 +114,36 @@ interface Investments {
         uint256[] tranche_navs;
     }
 
+    /// @dev One entry of get_settlement_states' batch response — get_settlement_state's
+    ///      return tuple with settlement_id prepended, since a batch spans several
+    ///      settlement_ids and each entry needs to say which one it is.
+    /// @param settlement_id          The settlement this entry is for
+    /// @param tranches               Per-tranche breakdown, one entry per tranche settled
+    /// @param pending_deposit_assets Product-level pending/unconfirmed deposit total as of
+    ///                               this settlement
+    /// @param product_nav            Product's finalized aggregate NAV as of this settlement
+    /// @param recorded_at            This chain's own block number when this settlement was recorded
+    /// @param timestamp              This chain's pallet_timestamp value (ms since Unix epoch)
+    ///                               at the same moment as recorded_at
+    struct SettlementStateEntry {
+        uint256 settlement_id;
+        TrancheSettle[] tranches;
+        uint256 pending_deposit_assets;
+        uint256 product_nav;
+        uint256 recorded_at;
+        uint256 timestamp;
+    }
+
+    /// @dev One entry of get_settlement_adapter_valuations' batch response —
+    ///      get_adapter_valuations' return value with settlement_id prepended, since a
+    ///      batch spans several settlement_ids and each entry needs to say which one it is.
+    /// @param settlement_id The settlement this entry is for
+    /// @param valuations    Per-Adapter NAV breakdown for this settlement, one entry per Adapter
+    struct AdapterValuationsEntry {
+        uint256 settlement_id;
+        AdapterValuation[] valuations;
+    }
+
     event InvestmentRequested(
         uint64 product_id,
         bytes32 request_id,
@@ -450,6 +480,41 @@ interface Investments {
         );
 
     /**
+     * @notice Page through a product's recorded settlements, most-recent first —
+     *         batches what would otherwise be one get_settlement_state call per
+     *         settlement_id into a single eth_call.
+     * @dev Not backed by a separate paged-history storage list — settlement_id is
+     *      itself a monotonically increasing counter the Valuation Contract assigns
+     *      (get_settlement_id/get_last_settlement), so this walks settlement_id
+     *      directly downward from the product's latest to 1. A settlement_id with
+     *      nothing recorded for it is examined (gas charged) but not counted against
+     *      offset/limit, same "filter mismatch" convention as get_pending_requests —
+     *      this also covers the (should-never-happen, since record_settlement writes
+     *      both atomically) case where a settlement_id has tranche data but no
+     *      recorded product_nav: it's skipped rather than reported with a fabricated
+     *      zero NAV, matching get_settlement_state's revert on the same condition.
+     *      limit MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50, rejected not clamped).
+     *      offset has no upper bound; gas is charged per settlement_id examined, not
+     *      per entry returned. Returns an empty array (not a revert) if the product
+     *      has never settled, or if offset walks past settlement_id 1.
+     * @param product_id The product to look up
+     * @param offset     How many of the most-recent recorded settlements to skip
+     * @param limit      Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+     * @return entries Up to limit settlements, most-recent first
+     * @return total   The product's latest settlement_id (0 if never settled) — an
+     *                 upper bound on how many settlements could exist, not a count
+     *                 of how many entries this call actually returns
+     */
+    function get_settlement_states(
+        uint64 product_id,
+        uint256 offset,
+        uint256 limit
+    )
+        external
+        view
+        returns (SettlementStateEntry[] memory entries, uint256 total);
+
+    /**
      * @notice Read one settlement's full per-Adapter NAV breakdown, as recorded by
      *         record_adapter_valuations — one entry per Adapter, each with its own
      *         per-asset position breakdown.
@@ -464,6 +529,38 @@ interface Investments {
         uint64 product_id,
         uint256 settlement_id
     ) external view returns (AdapterValuation[] memory valuations);
+
+    /**
+     * @notice Page through a product's recorded per-Adapter NAV breakdowns across
+     *         settlements, most-recent first — batches what would otherwise be one
+     *         get_adapter_valuations call per settlement_id into a single eth_call.
+     * @dev Same walk-settlement_id-downward strategy as get_settlement_states (see
+     *      its dev notes for why there's no separate paged-history storage backing
+     *      this). Not every settlement_id up to total necessarily has Adapter
+     *      valuations recorded — record_adapter_valuations is a separate call from
+     *      record_settlement, so a settlement_id missing one is examined (gas
+     *      charged) but not counted against offset/limit, same "filter mismatch"
+     *      convention as get_pending_requests/get_settlement_states.
+     *      limit MUST NOT exceed MAX_HISTORY_PAGE_SIZE (50, rejected not clamped).
+     *      offset has no upper bound; gas is charged per settlement_id examined,
+     *      not per entry returned. Returns an empty array (not a revert) if the
+     *      product has never settled, or if offset walks past settlement_id 1.
+     * @param product_id The product to look up
+     * @param offset     How many of the most-recent recorded entries to skip
+     * @param limit      Max entries to return — MUST NOT exceed MAX_HISTORY_PAGE_SIZE
+     * @return entries Up to limit (settlement_id, valuations) pairs, most-recent first
+     * @return total   The product's latest settlement_id (0 if never settled) — an
+     *                 upper bound on how many entries could exist, not a count of
+     *                 how many actually have Adapter valuations recorded
+     */
+    function get_settlement_adapter_valuations(
+        uint64 product_id,
+        uint256 offset,
+        uint256 limit
+    )
+        external
+        view
+        returns (AdapterValuationsEntry[] memory entries, uint256 total);
 
     /**
      * @notice Read a request's approval details.
