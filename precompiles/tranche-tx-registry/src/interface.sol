@@ -517,6 +517,41 @@ interface TrancheTxRegistry {
         BridgeAttempt[] finalize_attempts;
     }
 
+    /// @dev One entry of get_settlements' batch response — get_settlement's full
+    ///      return tuple with settlement_id prepended, since a batch spans several
+    ///      settlement_ids and each entry needs to say which one it is. Built the
+    ///      same lenient way get_settlement builds its own return value (see that
+    ///      function's dev notes) — a not-yet-started settlement_id comes back with
+    ///      settle_started_tx zeroed, status == Queued (0), and empty arrays, same
+    ///      as calling get_settlement directly would, never as a revert.
+    struct SettlementInfo {
+        uint256 settlement_id;
+        TxRecord settle_started_tx;
+        SettlementStep status;
+        SettlementChainSteps[] spoke_chains;
+        SettlementChainBridgeAttempts[] spoke_bridge_attempts;
+    }
+
+    /// @dev One entry of get_requests' batch response — get_request's full return
+    ///      tuple with request_id and a found flag prepended. Unlike get_request
+    ///      itself (which reverts if request_id doesn't exist), a batch can't afford
+    ///      an all-or-nothing revert over one bad ID, so a missing request_id comes
+    ///      back with found == false and every other field zeroed/empty instead;
+    ///      found == true means the rest of this entry is exactly what get_request
+    ///      would have returned for that request_id.
+    struct RequestDetails {
+        bytes32 request_id;
+        bool found;
+        RequestInfo info;
+        RequestTxStep[] request_steps;
+        AdapterLeg[] adapter_legs;
+        RequestStep status;
+        uint256 settlement_id;
+        bool settled;
+        BridgeAttempt[] request_bridge_attempts;
+        ChainBridgeAttempts[] adapter_bridge_attempts;
+    }
+
     /// @dev `investor`/`vault_chain_id`/`vault_address`/`amount`/`order_type` are only
     ///      meaningful when `step == Requested` (zero/empty otherwise) — same sentinel
     ///      convention as record_request_tx's own parameters. `adapter_chain_ids` is
@@ -1068,6 +1103,31 @@ interface TrancheTxRegistry {
         );
 
     /**
+     * @notice Batch form of get_settlement — looks up every settlement_id in
+     *         settlement_ids for product_id and returns one SettlementInfo per entry, in
+     *         the same order, so a caller that already knows which settlements it wants
+     *         can fetch all of them in one eth_call instead of one get_settlement per ID.
+     * @dev Each entry is built exactly the way get_settlement builds its own return value
+     *      (see that function's dev notes for the full field-by-field contract) with
+     *      settlement_id prepended — including its lenient "not yet started" behavior, so
+     *      this never reverts for an individual missing settlement_id; it just comes back
+     *      with a zeroed settle_started_tx, status == Queued, and empty
+     *      spoke_chains/spoke_bridge_attempts for that entry.
+     *      settlement_ids MUST NOT exceed MAX_BATCH_SIZE (50, rejected not truncated) —
+     *      tighter than HISTORY_PAGE_SIZE (128, used by the plain-ID-list history getters)
+     *      because each entry here does its own bounded but nontrivial amount of internal
+     *      work (up to MAX_TRANCHE_CHAINS + MAX_MULTICHAIN_ADAPTERS chain reads), not just
+     *      one storage read.
+     * @param product_id     The product every settlement_id belongs to
+     * @param settlement_ids The settlements to look up, in the order to return them
+     * @return entries One SettlementInfo per input ID, same order, never reverts per-entry
+     */
+    function get_settlements(
+        uint64 product_id,
+        uint256[] calldata settlement_ids
+    ) external view returns (SettlementInfo[] memory entries);
+
+    /**
      * @notice Enumerate an investor's currently in-flight requests — those whose registry
      *         entry has been opened (record_request_tx, step == Requested) but whose
      *         settlement hasn't fully completed yet (see get_request's `settled`).
@@ -1223,4 +1283,32 @@ interface TrancheTxRegistry {
             BridgeAttempt[] memory request_bridge_attempts,
             ChainBridgeAttempts[] memory adapter_bridge_attempts
         );
+
+    /**
+     * @notice Batch form of get_request — looks up every request_id in request_ids for
+     *         product_id and returns one RequestDetails per entry, in the same order, so
+     *         a caller that already has a batch of IDs on hand (e.g. from
+     *         get_investor_request_history/get_pending_requests, or straight off
+     *         RequestTxRecorded events it's indexed) can fetch all of their details in one
+     *         eth_call instead of one get_request per ID.
+     * @dev Unlike get_request itself, this never reverts for an individual missing
+     *      request_id — reverting the whole batch over one bad ID would defeat the point
+     *      of batching when the caller isn't 100% sure every ID still exists (or ever
+     *      did). Instead, a missing request_id comes back with found == false and every
+     *      other field zeroed/empty (status == RequestStep.None); found == true means the
+     *      rest of the entry is exactly what get_request would have returned for that ID.
+     *      request_ids MUST NOT exceed MAX_BATCH_SIZE (50, rejected not truncated) —
+     *      tighter than HISTORY_PAGE_SIZE (128, used by the plain-ID-list history getters)
+     *      because each entry here does its own bounded but nontrivial amount of internal
+     *      work (up to MAX_MULTICHAIN_ADAPTERS chain reads, plus more for the settled
+     *      computation), not just one storage read.
+     * @param product_id  The product every request_id belongs to
+     * @param request_ids The requests to look up, in the order to return them
+     * @return entries One RequestDetails per input ID, same order, found == false for any
+     * ID with no Requested step ever recorded
+     */
+    function get_requests(
+        uint64 product_id,
+        bytes32[] calldata request_ids
+    ) external view returns (RequestDetails[] memory entries);
 }
