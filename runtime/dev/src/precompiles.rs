@@ -18,7 +18,6 @@ use precompile_relay_manager::RelayManagerPrecompile;
 use precompile_tranche_investments::TrancheInvestmentsPrecompile;
 use precompile_tranche_investments_v2::TrancheInvestmentsV2Precompile;
 use precompile_tranche_permissions::TranchePermissionsPrecompile;
-use precompile_tranche_permissions_v2::TranchePermissionsV2Precompile;
 use precompile_tranche_system::TrancheSystemPrecompile;
 use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompile;
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
@@ -33,9 +32,6 @@ type BifrostPrecompilesChecks = (CallableByContract, CallableByPrecompile);
 // grant/revoke to a Spoke chain — needs `SubcallWithMaxNesting` or
 // `handle.call` is rejected before it ever reaches Orchestrator.
 type TranchePermissionsPrecompilesChecks =
-	(CallableByContract, CallableByPrecompile, SubcallWithMaxNesting<0>);
-// v2 does the same Orchestrator.sendWhitelist subcall as v1 — same checks tuple.
-type TranchePermissionsV2PrecompilesChecks =
 	(CallableByContract, CallableByPrecompile, SubcallWithMaxNesting<0>);
 
 #[precompile_utils::precompile_name_from_address]
@@ -96,14 +92,10 @@ pub type BifrostPrecompilesAt<R> = (
 	// a fresh, independent address for a pallet with its own storage/extrinsics, not an
 	// addition to the existing v1 contract.
 	PrecompileAt<AddressU64<768>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
-	// v2 — accurately weight-benchmarked forks of Investments/Permissions, new products
-	// only, same 0x0300 block as TrancheTxRegistryV2.
+	// v2 — accurately weight-benchmarked fork of Investments, new products only, same
+	// 0x0300 block as TrancheTxRegistryV2. Permissions is not forked (see
+	// `TranchePermissionsPrecompile` above, same address as always) — 0x0302 stays free.
 	PrecompileAt<AddressU64<769>, TrancheInvestmentsV2Precompile<R>, BifrostPrecompilesChecks>,
-	PrecompileAt<
-		AddressU64<770>,
-		TranchePermissionsV2Precompile<R>,
-		TranchePermissionsV2PrecompilesChecks,
-	>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<

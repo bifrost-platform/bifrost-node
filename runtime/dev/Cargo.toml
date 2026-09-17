@@ -64,6 +64,7 @@ sp-block-builder = { workspace = true }
 sp-consensus-aura = { workspace = true, features = ["serde"] }
 sp-core = { workspace = true, features = ["serde"] }
 sp-inherents = { workspace = true }
+sp-io = { workspace = true }
 sp-offchain = { workspace = true }
 sp-runtime = { workspace = true, features = ["serde"] }
 sp-session = { workspace = true }
@@ -96,7 +97,6 @@ pallet-oracle-registry = { workspace = true }
 pallet-cccp-relay-queue = { workspace = true }
 pallet-tranche-system = { workspace = true }
 pallet-tranche-permissions = { workspace = true }
-pallet-tranche-permissions-v2 = { workspace = true }
 pallet-tranche-investments = { workspace = true }
 pallet-tranche-investments-v2 = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
@@ -121,7 +121,6 @@ precompile-blaze = { workspace = true }
 precompile-bifrost-evm-tx-payment = { workspace = true }
 precompile-tranche-system = { workspace = true }
 precompile-tranche-permissions = { workspace = true }
-precompile-tranche-permissions-v2 = { workspace = true }
 precompile-tranche-investments = { workspace = true }
 precompile-tranche-investments-v2 = { workspace = true }
 precompile-tranche-tx-registry = { workspace = true }
@@ -173,7 +172,6 @@ std = [
 	"pallet-cccp-relay-queue/std",
 	"pallet-tranche-system/std",
 	"pallet-tranche-permissions/std",
-	"pallet-tranche-permissions-v2/std",
 	"pallet-tranche-investments/std",
 	"pallet-tranche-investments-v2/std",
 	"pallet-tranche-tx-registry/std",
@@ -194,6 +192,7 @@ std = [
 	"sp-block-builder/std",
 	"sp-core/std",
 	"sp-inherents/std",
+	"sp-io/std",
 	"sp-offchain/std",
 	"sp-runtime/std",
 	"sp-session/std",
@@ -220,7 +219,6 @@ std = [
 	"precompile-bifrost-evm-tx-payment/std",
 	"precompile-tranche-system/std",
 	"precompile-tranche-permissions/std",
-	"precompile-tranche-permissions-v2/std",
 	"precompile-tranche-investments/std",
 	"precompile-tranche-investments-v2/std",
 	"precompile-tranche-tx-registry/std",
@@ -282,7 +280,9 @@ runtime-benchmarks = [
 	# doesn't add v1 to `benches!`, doesn't touch v1's declared weights.
 	"pallet-tranche-investments/runtime-benchmarks",
 	"pallet-tranche-tx-registry/runtime-benchmarks",
-	"pallet-tranche-permissions-v2/runtime-benchmarks",
+	# permissions is shared (not forked) and genuinely benchmarked here — see
+	# pallet-tranche-system's comment above for the same rationale.
+	"pallet-tranche-permissions/runtime-benchmarks",
 	"pallet-tranche-investments-v2/runtime-benchmarks",
 	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
 	"pallet-tranche-custom-flows/runtime-benchmarks",
