@@ -69,6 +69,9 @@ pub mod pallet {
 		type Products: ProductInspect;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
+		/// Benchmark-only setup hook — see [`crate::BenchmarkHelper`].
+		#[cfg(feature = "runtime-benchmarks")]
+		type BenchmarkHelper: crate::BenchmarkHelper;
 	}
 
 	// -----------------------------------------------------------------------
@@ -856,9 +859,7 @@ pub mod pallet {
 		/// own dispatch logic directly. See `RequestStep::Extended`'s doc
 		/// comment for the full mechanism.
 		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx(
-			extra.as_ref().map_or(0, |bytes| bytes.len() as u32)
-		))]
+		#[pallet::weight(<T as Config>::WeightInfo::record_request_tx())]
 		pub fn record_request_tx(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -1051,7 +1052,6 @@ pub mod pallet {
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx(
 			request_ids.as_ref().map_or(0, |ids| ids.len() as u32),
-			extra.as_ref().map_or(0, |bytes| bytes.len() as u32),
 		))]
 		pub fn record_settlement_tx(
 			origin: OriginFor<T>,

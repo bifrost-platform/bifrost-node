@@ -1094,7 +1094,9 @@ dependencies = [
  "pallet-timestamp",
  "pallet-tranche-custom-flows",
  "pallet-tranche-investments",
+ "pallet-tranche-investments-v2",
  "pallet-tranche-permissions",
+ "pallet-tranche-permissions-v2",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
  "pallet-tranche-tx-registry-v2",
@@ -1116,7 +1118,9 @@ dependencies = [
  "precompile-relay-manager",
  "precompile-tranche-custom-flows",
  "precompile-tranche-investments",
+ "precompile-tranche-investments-v2",
  "precompile-tranche-permissions",
+ "precompile-tranche-permissions-v2",
  "precompile-tranche-system",
  "precompile-tranche-tx-registry",
  "precompile-tranche-tx-registry-v2",
@@ -8465,7 +8469,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-tranche-investments-v2"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-timestamp",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-tranche-permissions"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-permissions-v2"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -9600,6 +9641,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-tranche-investments-v2"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-investments-v2",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-tranche-permissions"
 version = "1.0.0"
 dependencies = [
@@ -9608,6 +9665,22 @@ dependencies = [
  "frame-system",
  "pallet-evm",
  "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-permissions-v2"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-permissions-v2",
  "pallet-tranche-system",
  "precompile-utils",
  "sp-core",

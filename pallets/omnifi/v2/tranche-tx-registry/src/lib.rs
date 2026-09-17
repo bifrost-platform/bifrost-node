@@ -1,10 +1,32 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 mod pallet;
 pub mod weights;
 
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
+
+/// Benchmark-only setup hook — seeds pallet-tranche-system's `Vaults` reverse
+/// index that this pallet reads through `T::Vaults` (both
+/// `vault_belongs_to_product` and `product_id_for_vault`). Runtime wires it to
+/// a direct insert; `()` is a no-op for mocks.
+#[cfg(feature = "runtime-benchmarks")]
+pub trait BenchmarkHelper {
+	fn register_vault(product_id: bp_tranche::ProductId, vault: pallet_tranche_system::VaultId);
+	/// Seeds the shared recorder identity this pallet's `RecorderOrigin`
+	/// actually checks — v1's `pallet_tranche_tx_registry::TxRecorder`, not
+	/// this pallet's own (dead-for-authorization) `TxRecorder` storage. See
+	/// `Config::RecorderOrigin`'s doc comment in the runtime.
+	fn seed_recorder();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl BenchmarkHelper for () {
+	fn register_vault(_: bp_tranche::ProductId, _: pallet_tranche_system::VaultId) {}
+	fn seed_recorder() {}
+}
 
 use pallet_tranche_system::{ProductId, VaultId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
@@ -551,6 +573,16 @@ pub struct RequestFlowExtensionV2<BlockNumber> {
 /// placeholder variant: decoding `extra` into `RequestExtraV2` (which embeds
 /// this) will always fail until this gains real variants, an accurate
 /// reflection of "v2 isn't usable yet" rather than a decodable-but-fake shape.
+///
+/// Weight note: because decoding always fails here, `record_request_tx`'s
+/// benchmark (see `benchmarking.rs`) only exercises `RequestStep::Requested`
+/// — `Extended`'s decode-failure path is genuinely O(1) today (the derived
+/// `Decode` for a 0-variant enum errors on the first byte, never touching the
+/// rest of `extra`), so `WeightInfo::record_request_tx()` correctly has no
+/// `extra`-length term. Once this gains real variants, `Extended`'s
+/// decode+apply cost becomes real and *must* get its own benchmarked
+/// scenario (with a length-scaling component if the new variant's payload
+/// does) — don't assume the existing flat weight still covers it.
 #[derive(
 	Clone, Copy, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo,
 )]
@@ -911,7 +943,10 @@ pub struct SettlementFlowExtensionV2<BlockNumber> {
 /// v2's own settlement-wide step selector — the `FlowVersion::V2` analogue of
 /// `SettlementStep` for the settlement-wide scope (`SettleStarted`/
 /// `RequestsApproved`'s role). See `RequestSubStepV2`'s doc comment — same
-/// "genuinely uninhabited until v2 is designed" rationale.
+/// "genuinely uninhabited until v2 is designed" rationale, including the
+/// weight note: `record_settlement_tx`'s `extra`-length term was dropped for
+/// the same reason (decode-failure here is O(1)) and must come back once this
+/// gains real variants.
 #[derive(
 	Clone, Copy, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo,
 )]

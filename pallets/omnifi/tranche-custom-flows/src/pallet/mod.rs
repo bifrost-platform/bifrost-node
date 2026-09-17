@@ -2,8 +2,8 @@ mod impls;
 
 use crate::{
 	migrations, ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey, Lane,
-	ProductId, SlotId, SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA, MAX_SLOTS,
-	MAX_SLOT_METADATA,
+	ProductId, SlotId, SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA,
+	MAX_DESCRIPTOR_SLOTS, MAX_SLOT_METADATA,
 };
 
 use frame_support::{
@@ -51,6 +51,10 @@ pub mod pallet {
 
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
+
+		/// Benchmark-only setup hook — see [`crate::BenchmarkHelper`].
+		#[cfg(feature = "runtime-benchmarks")]
+		type BenchmarkHelper: crate::BenchmarkHelper;
 	}
 
 	// -----------------------------------------------------------------------
@@ -283,9 +287,9 @@ pub mod pallet {
 		/// registration and edits made while no instance is open are unrestricted.
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_flow_descriptor(
-			descriptor.main_track.slots.len().saturating_add(
+			(descriptor.main_track.slots.len().saturating_add(
 				descriptor.sub_tracks.iter().map(|sub_track| sub_track.slots.len()).sum::<usize>()
-			) as u32
+			) as u32).min(MAX_DESCRIPTOR_SLOTS)
 		))]
 		pub fn set_flow_descriptor(
 			origin: OriginFor<T>,
@@ -326,7 +330,10 @@ pub mod pallet {
 		/// `descriptor.investor_scoped`), ignored otherwise.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_flow_tx(
-			2 * MAX_SLOTS,
+			// worst-case `resolve_lane` scan — every slot of the main track plus
+			// every slot of every sub track, capped by the disjoint-`u8`-id
+			// ceiling (security-review H1)
+			MAX_DESCRIPTOR_SLOTS,
 			attempt_metadata.as_ref().map_or(0, |metadata| metadata.len() as u32),
 		))]
 		pub fn record_flow_tx(

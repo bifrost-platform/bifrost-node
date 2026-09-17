@@ -1,7 +1,7 @@
 [package]
-name = "pallet-tranche-custom-flows"
+name = "pallet-tranche-investments-v2"
 version = "1.0.0"
-description = "An append-only registry for product-specific extra tx flows in the OmniFi tranche-system, attested by the same trusted recorder as pallet-tranche-tx-registry. Step topology is defined by an on-chain descriptor, not pallet code."
+description = "v2 (see docs/tranche-tx-registry/settlement-leg-chunking-design.md && sibling pallet-tranche-investments v1) - accurately weight-benchmarked fork of pallet-tranche-investments, new products only"
 authors = { workspace = true }
 homepage = { workspace = true }
 edition = { workspace = true }
@@ -19,13 +19,14 @@ parity-scale-codec = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+pallet-timestamp = { workspace = true }
 sp-runtime = { workspace = true }
 sp-core = { workspace = true }
 sp-std = { workspace = true }
 sp-io = { workspace = true }
 
 # OmniFi tranche-system
-bp-tranche = { workspace = true }
+pallet-tranche-system = { workspace = true }
 
 [features]
 default = ["std"]
@@ -36,11 +37,12 @@ std = [
 	"frame-support/std",
 	"frame-benchmarking?/std",
 	"frame-system/std",
+	"pallet-timestamp/std",
 	"sp-runtime/std",
 	"sp-std/std",
 	"sp-core/std",
 	"sp-io/std",
-	"bp-tranche/std",
+	"pallet-tranche-system/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [
@@ -48,4 +50,6 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"pallet-tranche-system/runtime-benchmarks",
+	"pallet-timestamp/runtime-benchmarks",
 ]
