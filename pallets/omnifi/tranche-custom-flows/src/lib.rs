@@ -16,6 +16,8 @@
 //! `metadata`, or enforces step ordering. See
 //! `docs/tranche-custom-flows/design-minimal.md` for the full rationale.
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 pub mod migrations;
 pub mod weights;
 
@@ -23,6 +25,20 @@ mod pallet;
 
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
+
+/// Benchmark-only setup hook. `record_flow_tx`'s `RecorderOrigin` is
+/// `pallet-tranche-tx-registry`'s `EnsureTxRecorder`, whose
+/// `try_successful_origin` needs that pallet's `TxRecorder` storage set — the
+/// runtime does it; `()` is a no-op for mocks.
+#[cfg(feature = "runtime-benchmarks")]
+pub trait BenchmarkHelper {
+	fn seed_recorder();
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl BenchmarkHelper for () {
+	fn seed_recorder() {}
+}
 
 pub use bp_tranche::{
 	history::{self, HistoryPage, PagedInvestorHistory},
@@ -78,6 +94,13 @@ pub const MAX_SLOTS: u32 = 32;
 pub const MAX_SUB_TRACKS: u32 = 10;
 /// Max chains allowed in one sub track.
 pub const MAX_TRACK_CHAINS: u32 = 10;
+/// Max total slots across `main_track` ∪ every `sub_tracks[*]`, and hence the
+/// upper bound on the `resolve_lane` slot scan (the `s` weight component of
+/// `set_flow_descriptor` / `record_flow_tx`). Structurally the containers hold
+/// `MAX_SLOTS * (1 + MAX_SUB_TRACKS)` = 352, but slot ids are [`SlotId`] (`u8`)
+/// and `validate_and_finalize_descriptor` requires them globally disjoint and
+/// strictly ascending, so a valid descriptor can carry at most 256 of them.
+pub const MAX_DESCRIPTOR_SLOTS: u32 = 256;
 /// Max bytes of `SlotRecord::metadata` (per-slot, last-write-wins). Ceiling
 /// sized to hold a full CCCP socket message (~20 KB) plus overhead — typical
 /// entries are far smaller. `FlowSlots` is `#[pallet::unbounded]`, so this bound

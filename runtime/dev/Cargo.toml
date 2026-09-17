@@ -96,7 +96,9 @@ pallet-oracle-registry = { workspace = true }
 pallet-cccp-relay-queue = { workspace = true }
 pallet-tranche-system = { workspace = true }
 pallet-tranche-permissions = { workspace = true }
+pallet-tranche-permissions-v2 = { workspace = true }
 pallet-tranche-investments = { workspace = true }
+pallet-tranche-investments-v2 = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
 pallet-tranche-tx-registry-v2 = { workspace = true }
 pallet-tranche-custom-flows = { workspace = true }
@@ -119,7 +121,9 @@ precompile-blaze = { workspace = true }
 precompile-bifrost-evm-tx-payment = { workspace = true }
 precompile-tranche-system = { workspace = true }
 precompile-tranche-permissions = { workspace = true }
+precompile-tranche-permissions-v2 = { workspace = true }
 precompile-tranche-investments = { workspace = true }
+precompile-tranche-investments-v2 = { workspace = true }
 precompile-tranche-tx-registry = { workspace = true }
 precompile-tranche-tx-registry-v2 = { workspace = true }
 precompile-tranche-custom-flows = { workspace = true }
@@ -169,7 +173,9 @@ std = [
 	"pallet-cccp-relay-queue/std",
 	"pallet-tranche-system/std",
 	"pallet-tranche-permissions/std",
+	"pallet-tranche-permissions-v2/std",
 	"pallet-tranche-investments/std",
+	"pallet-tranche-investments-v2/std",
 	"pallet-tranche-tx-registry/std",
 	"pallet-tranche-tx-registry-v2/std",
 	"pallet-tranche-custom-flows/std",
@@ -214,7 +220,9 @@ std = [
 	"precompile-bifrost-evm-tx-payment/std",
 	"precompile-tranche-system/std",
 	"precompile-tranche-permissions/std",
+	"precompile-tranche-permissions-v2/std",
 	"precompile-tranche-investments/std",
+	"precompile-tranche-investments-v2/std",
 	"precompile-tranche-tx-registry/std",
 	"precompile-tranche-tx-registry-v2/std",
 	"precompile-tranche-custom-flows/std",
@@ -229,9 +237,55 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system-benchmarking",
 	"frame-system/runtime-benchmarks",
+	"frame-system-benchmarking/runtime-benchmarks",
+	"bifrost-common-runtime/runtime-benchmarks",
+	# Every FRAME pallet the runtime composes that carries a `runtime-benchmarks`
+	# feature must forward it here — `frame-support/runtime-benchmarks` removes the
+	# defaulted `try_successful_origin` / adds benchmark-only trait items, so a
+	# pallet left un-forwarded fails to compile against it.
 	"pallet-balances/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-utility/runtime-benchmarks",
+	"pallet-collective/runtime-benchmarks",
+	"pallet-democracy/runtime-benchmarks",
+	"pallet-identity/runtime-benchmarks",
+	"pallet-im-online/runtime-benchmarks",
+	"pallet-membership/runtime-benchmarks",
+	"pallet-preimage/runtime-benchmarks",
+	"pallet-scheduler/runtime-benchmarks",
+	"pallet-session/runtime-benchmarks",
+	"pallet-sudo/runtime-benchmarks",
+	"pallet-treasury/runtime-benchmarks",
+	"pallet-safe-mode/runtime-benchmarks",
+	"pallet-tx-pause/runtime-benchmarks",
+	"pallet-migrations/runtime-benchmarks",
+	"pallet-grandpa/runtime-benchmarks",
+	"pallet-offences/runtime-benchmarks",
+	"pallet-transaction-payment/runtime-benchmarks",
+	"pallet-ethereum/runtime-benchmarks",
+	"pallet-evm/runtime-benchmarks",
+	# Bifrost pallets
+	"bp-btc-relay/runtime-benchmarks",
+	"pallet-relay-manager/runtime-benchmarks",
+	"pallet-blaze/runtime-benchmarks",
+	"pallet-btc-registration-pool/runtime-benchmarks",
+	"pallet-btc-socket-queue/runtime-benchmarks",
+	"pallet-tranche-system/runtime-benchmarks",
+	# v1's own `runtime-benchmarks` feature must also be forwarded — NOT to
+	# benchmark v1 (it's deliberately absent from the `benches!` list below,
+	# and its weights.rs is untouched), but because `frame-support/runtime-
+	# benchmarks` above is a single, workspace-unified feature: once it's on,
+	# `EnsureOrigin::try_successful_origin` becomes a required (not defaulted)
+	# trait method for every `EnsureOrigin` impl in the whole build graph,
+	# including v1's `EnsureValuation`/`EnsureTxRecorder` — which only define
+	# it under their own crate's `runtime-benchmarks` cfg. Compile-time only:
+	# doesn't add v1 to `benches!`, doesn't touch v1's declared weights.
+	"pallet-tranche-investments/runtime-benchmarks",
+	"pallet-tranche-tx-registry/runtime-benchmarks",
+	"pallet-tranche-permissions-v2/runtime-benchmarks",
+	"pallet-tranche-investments-v2/runtime-benchmarks",
+	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
+	"pallet-tranche-custom-flows/runtime-benchmarks",
 ]
 
 # Enable the metadata hash generation.

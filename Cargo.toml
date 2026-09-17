@@ -21,9 +21,11 @@ members = [
 	"pallets/oracle-registry",
 	"pallets/cccp-relay-queue",
 	"pallets/omnifi/tranche-system",
-	"pallets/omnifi/tranche-investments",
-	"pallets/omnifi/tranche-permissions",
 	"pallets/omnifi/tranche-custom-flows",
+	"pallets/omnifi/v1/tranche-investments",
+	"pallets/omnifi/v2/tranche-investments",
+	"pallets/omnifi/v1/tranche-permissions",
+	"pallets/omnifi/v2/tranche-permissions",
 	"pallets/omnifi/v1/tranche-tx-registry",
 	"pallets/omnifi/v2/tranche-tx-registry",
 	"precompiles/bfc-staking",
@@ -36,10 +38,12 @@ members = [
 	"precompiles/btc-socket-queue",
 	"precompiles/blaze",
 	"precompiles/bifrost-evm-tx-payment",
-	"precompiles/omnifi/tranche-permissions",
 	"precompiles/omnifi/tranche-system",
-	"precompiles/omnifi/tranche-investments",
 	"precompiles/omnifi/tranche-custom-flows",
+	"precompiles/omnifi/v1/tranche-investments",
+	"precompiles/omnifi/v2/tranche-investments",
+	"precompiles/omnifi/v1/tranche-permissions",
+	"precompiles/omnifi/v2/tranche-permissions",
 	"precompiles/omnifi/v1/tranche-tx-registry",
 	"precompiles/omnifi/v2/tranche-tx-registry",
 	"primitives/core",
@@ -137,13 +141,16 @@ pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay
 
 # OmniFi tranche-system Pallets
 pallet-tranche-system = { default-features = false, path = "pallets/omnifi/tranche-system" }
-pallet-tranche-investments = { default-features = false, path = "pallets/omnifi/tranche-investments" }
-pallet-tranche-permissions = { default-features = false, path = "pallets/omnifi/tranche-permissions" }
 pallet-tranche-custom-flows = { default-features = false, path = "pallets/omnifi/tranche-custom-flows" }
-# v1 (legacy) — unchanged pre-chunking settlement pipeline, existing products only.
+# v1 (legacy) — unchanged, existing products only.
+pallet-tranche-investments = { default-features = false, path = "pallets/omnifi/v1/tranche-investments" }
+pallet-tranche-permissions = { default-features = false, path = "pallets/omnifi/v1/tranche-permissions" }
 pallet-tranche-tx-registry = { default-features = false, path = "pallets/omnifi/v1/tranche-tx-registry" }
-# v2 — chunked settlement pipeline (Collect/Response/Finalize), new products only. See
+# v2 — accurately weight-benchmarked forks, new products only. Separate pallets/crates so
+# v2's real benchmarked weights never perturb v1's already-live gas costs. See
 # docs/tranche-tx-registry/settlement-leg-chunking-design.md.
+pallet-tranche-investments-v2 = { default-features = false, path = "pallets/omnifi/v2/tranche-investments" }
+pallet-tranche-permissions-v2 = { default-features = false, path = "pallets/omnifi/v2/tranche-permissions" }
 pallet-tranche-tx-registry-v2 = { default-features = false, path = "pallets/omnifi/v2/tranche-tx-registry" }
 
 # Bifrost Precompile
@@ -159,13 +166,15 @@ precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
 
 # OmniFi tranche-system Precompiles
-precompile-tranche-permissions = { default-features = false, path = "precompiles/omnifi/tranche-permissions" }
 precompile-tranche-system = { default-features = false, path = "precompiles/omnifi/tranche-system" }
-precompile-tranche-investments = { default-features = false, path = "precompiles/omnifi/tranche-investments" }
 precompile-tranche-custom-flows = { default-features = false, path = "precompiles/omnifi/tranche-custom-flows" }
 # v1 (legacy)
+precompile-tranche-investments = { default-features = false, path = "precompiles/omnifi/v1/tranche-investments" }
+precompile-tranche-permissions = { default-features = false, path = "precompiles/omnifi/v1/tranche-permissions" }
 precompile-tranche-tx-registry = { default-features = false, path = "precompiles/omnifi/v1/tranche-tx-registry" }
-# v2 — chunked settlement pipeline precompile.
+# v2 — accurately weight-benchmarked forks, new products only.
+precompile-tranche-investments-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-investments" }
+precompile-tranche-permissions-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-permissions" }
 precompile-tranche-tx-registry-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-tx-registry" }
 
 # Substrate Client

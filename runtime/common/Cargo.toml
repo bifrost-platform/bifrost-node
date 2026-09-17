@@ -61,3 +61,13 @@ std = [
 	"precompile-tranche-custom-flows/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
+runtime-benchmarks = [
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+	"pallet-evm/runtime-benchmarks",
+	"pallet-tranche-system/runtime-benchmarks",
+	"pallet-tranche-tx-registry/runtime-benchmarks",
+	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
+	"pallet-tranche-custom-flows/runtime-benchmarks",
+]
