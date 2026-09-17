@@ -1,20 +1,19 @@
 mod impls;
 
-use crate::{Role, WeightInfo};
+use crate::{migrations, Role, WeightInfo};
 use pallet_tranche_system::{ProductId, ProductInspect, VaultId, VaultInspect};
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{Hooks, OnRuntimeUpgrade, StorageVersion},
+};
 use frame_system::pallet_prelude::*;
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 
-	// v2 is a brand-new pallet with no prior on-chain history to migrate from — it starts
-	// fresh at genesis with the shape this file already declares. No `#[pallet::hooks]`/
-	// `on_runtime_upgrade` needed for that reason — see
-	// `docs/tranche-tx-registry/settlement-leg-chunking-design.md`.
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -111,6 +110,17 @@ pub mod pallet {
 		),
 		(),
 	>;
+
+	// -----------------------------------------------------------------------
+	// Hooks
+	// -----------------------------------------------------------------------
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
+		}
+	}
 
 	// -----------------------------------------------------------------------
 	// Extrinsics

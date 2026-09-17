@@ -1096,7 +1096,6 @@ dependencies = [
  "pallet-tranche-investments",
  "pallet-tranche-investments-v2",
  "pallet-tranche-permissions",
- "pallet-tranche-permissions-v2",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
  "pallet-tranche-tx-registry-v2",
@@ -1120,7 +1119,6 @@ dependencies = [
  "precompile-tranche-investments",
  "precompile-tranche-investments-v2",
  "precompile-tranche-permissions",
- "precompile-tranche-permissions-v2",
  "precompile-tranche-system",
  "precompile-tranche-tx-registry",
  "precompile-tranche-tx-registry-v2",
@@ -1132,6 +1130,7 @@ dependencies = [
  "sp-core",
  "sp-genesis-builder",
  "sp-inherents",
+ "sp-io",
  "sp-offchain",
  "sp-runtime",
  "sp-session",
@@ -8489,24 +8488,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-tranche-permissions-v2"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "pallet-tranche-system",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
 name = "pallet-tranche-system"
 version = "1.0.0"
 dependencies = [
@@ -9642,22 +9623,6 @@ dependencies = [
  "frame-system",
  "pallet-evm",
  "pallet-tranche-permissions",
- "pallet-tranche-system",
- "precompile-utils",
- "sp-core",
- "sp-runtime",
- "sp-std",
-]
-
-[[package]]
-name = "precompile-tranche-permissions-v2"
-version = "1.0.0"
-dependencies = [
- "fp-evm",
- "frame-support",
- "frame-system",
- "pallet-evm",
- "pallet-tranche-permissions-v2",
  "pallet-tranche-system",
  "precompile-utils",
  "sp-core",

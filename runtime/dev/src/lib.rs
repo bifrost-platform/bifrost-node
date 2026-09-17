@@ -8,6 +8,10 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 extern crate alloc;
+// `sp_io` is only used (qualified, no `use`) inside `IdentityBenchmarkHelper`, which is
+// entirely `#[cfg(feature = "runtime-benchmarks")]` — without this, a normal build (that
+// feature off) flags it as an unused dependency.
+use sp_io as _;
 
 pub use bifrost_dev_constants::{
 	currency::{GWEI, UNITS as BFC, *},
@@ -1216,34 +1220,30 @@ impl pallet_tranche_system::Config for Runtime {
 	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
 }
 
+// Shared, not forked — `grant_permission`/`revoke_permission` are ordinary paid
+// EVM calls (unlike custom-flows' feeless recorder-only calls), but they're
+// called by product admins granting/revoking access, not on every investor
+// tx, so accurately benchmarking this in place doesn't carry the same "must
+// not perturb an already-live per-tx gas cost" risk that justified forking
+// investments/tx-registry/permissions-v2 (now merged back) — see
+// docs/precompile-gas-changes-2026-09-17.md §6.
 impl pallet_tranche_permissions::Config for Runtime {
 	type Vaults = TrancheSystem;
 	type Products = TrancheSystem;
 	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
-}
-
-// v2 — same extrinsics/storage shape as v1, but accurately weight-benchmarked (v1's
-// weights are dev placeholders), new products only. A separate pallet/crate so v2's real
-// weights never perturb v1's already-live gas costs — same rationale and pattern as
-// `pallet_tranche_tx_registry_v2::Config` below. Shares `TrancheSystem` with v1, same as
-// every other tranche-* pallet.
-impl pallet_tranche_permissions_v2::Config for Runtime {
-	type Vaults = TrancheSystem;
-	type Products = TrancheSystem;
-	type WeightInfo = pallet_tranche_permissions_v2::weights::SubstrateWeight<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = TranchePermissionsV2BenchmarkHelper;
+	type BenchmarkHelper = TranchePermissionsBenchmarkHelper;
 }
 
-/// Seeds the pallet-tranche-system state that `pallet-tranche-permissions-v2`
+/// Seeds the pallet-tranche-system state that `pallet-tranche-permissions`
 /// inspects (through `type Vaults`/`type Products`) so the `TrancheInvestor`
 /// grant/revoke benchmarks reach their storage write instead of bailing out in
 /// `ensure_tranche_investor_vault_registered`. Only compiled for benchmarks.
 #[cfg(feature = "runtime-benchmarks")]
-pub struct TranchePermissionsV2BenchmarkHelper;
+pub struct TranchePermissionsBenchmarkHelper;
 
 #[cfg(feature = "runtime-benchmarks")]
-impl pallet_tranche_permissions_v2::BenchmarkHelper for TranchePermissionsV2BenchmarkHelper {
+impl pallet_tranche_permissions::BenchmarkHelper for TranchePermissionsBenchmarkHelper {
 	fn setup_multichain_vault(
 		product_id: pallet_tranche_system::ProductId,
 		vault: pallet_tranche_system::VaultId,
@@ -1262,8 +1262,9 @@ impl pallet_tranche_investments::Config for Runtime {
 	type WeightInfo = pallet_tranche_investments::weights::SubstrateWeight<Runtime>;
 }
 
-// v2 — same rationale as `pallet_tranche_permissions_v2::Config` above: accurately
-// weight-benchmarked fork, new products only. Shares one Valuation-contract identity with
+// v2 — same rationale: accurately weight-benchmarked fork, new products only, since
+// investments' `record_*` calls ARE called on every investor tx (unlike permissions
+// above). Shares one Valuation-contract identity with
 // v1 (single place to manage that address — same pattern
 // `pallet_tranche_tx_registry_v2::Config::RecorderOrigin` below already uses for the
 // recorder identity) and shares `TrancheSystem` with v1.
@@ -1521,9 +1522,6 @@ mod runtime {
 	#[runtime::pallet_index(86)]
 	pub type TrancheInvestmentsV2 = pallet_tranche_investments_v2;
 
-	#[runtime::pallet_index(87)]
-	pub type TranchePermissionsV2 = pallet_tranche_permissions_v2;
-
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
 
@@ -1539,14 +1537,18 @@ mod benches {
 		[pallet_blaze, Blaze]
 		[pallet_btc_registration_pool, BtcRegistrationPool]
 		[pallet_btc_socket_queue, BtcSocketQueue]
-		// v1 tranche-* pallets deliberately excluded — their weights.rs stays
+		// v1 tx-registry/investments deliberately excluded — their weights.rs stays
 		// untouched (dev placeholders), see
-		// docs/tranche-tx-registry/settlement-leg-chunking-design.md. Only v2
-		// (accurately weight-benchmarked, new products only) and
-		// pallet-tranche-custom-flows (never forked — feeless calls, so its
-		// weight only affects block-weight accounting, not v1 gas costs) are
-		// benchmarked here.
-		[pallet_tranche_permissions_v2, TranchePermissionsV2]
+		// docs/tranche-tx-registry/settlement-leg-chunking-design.md (their `record_*`
+		// calls run on every investor tx, so accurate weights would perturb an
+		// already-live per-tx gas cost). tx-registry-v2/investments-v2 (accurately
+		// weight-benchmarked forks, new products only), and pallet-tranche-system/
+		// -permissions/-custom-flows (none forked — their calls are either infrequent
+		// per-product admin actions or feeless, so accurate weights there don't
+		// perturb any live per-tx gas cost — see
+		// docs/precompile-gas-changes-2026-09-17.md §6) are benchmarked here.
+		[pallet_tranche_system, TrancheSystem]
+		[pallet_tranche_permissions, TranchePermissions]
 		[pallet_tranche_investments_v2, TrancheInvestmentsV2]
 		[pallet_tranche_tx_registry_v2, TrancheTxRegistryV2]
 		[pallet_tranche_custom_flows, TrancheCustomFlows]

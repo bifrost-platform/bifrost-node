@@ -7,7 +7,7 @@
 //! benchmarks characterise the real storage cost against the dev runtime, not
 //! this mock.
 
-use crate as pallet_tranche_permissions_v2;
+use crate as pallet_tranche_permissions;
 
 use frame_support::{construct_runtime, parameter_types, traits::Everything};
 use pallet_tranche_system::{FlowVersion, ProductId, ProductInspect, VaultId, VaultInspect};
@@ -22,7 +22,7 @@ type Block = frame_system::mocking::MockBlock<Test>;
 construct_runtime!(
 	pub enum Test {
 		System: frame_system,
-		TranchePermissions: pallet_tranche_permissions_v2,
+		TranchePermissions: pallet_tranche_permissions,
 	}
 );
 
@@ -98,7 +98,7 @@ impl ProductInspect for MockProducts {
 	}
 }
 
-impl pallet_tranche_permissions_v2::Config for Test {
+impl pallet_tranche_permissions::Config for Test {
 	type Vaults = MockVaults;
 	type Products = MockProducts;
 	type WeightInfo = ();
