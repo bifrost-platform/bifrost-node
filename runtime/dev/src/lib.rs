@@ -1194,6 +1194,20 @@ impl pallet_tranche_tx_registry::Config for Runtime {
 	type WeightInfo = pallet_tranche_tx_registry::weights::SubstrateWeight<Runtime>;
 }
 
+// v2 — chunked Collect/Response/Finalize settlement pipeline, new products only (see
+// docs/tranche-tx-registry/settlement-leg-chunking-design.md). Shares one recorder
+// identity with v1 (single place to manage the recorder address — same pattern
+// `pallet_tranche_custom_flows::Config` below already uses) and shares `TrancheSystem`
+// (products/vaults/adapters) with v1, same as every other tranche-* pallet — neither
+// is forked; only the settlement leg storage/extrinsics themselves are.
+impl pallet_tranche_tx_registry_v2::Config for Runtime {
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_tx_registry_v2::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_tranche_custom_flows::Config for Runtime {
 	// Shares one recorder identity with pallet-tranche-tx-registry.
 	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
@@ -1346,6 +1360,9 @@ mod runtime {
 
 	#[runtime::pallet_index(84)]
 	pub type TrancheCustomFlows = pallet_tranche_custom_flows;
+
+	#[runtime::pallet_index(85)]
+	pub type TrancheTxRegistryV2 = pallet_tranche_tx_registry_v2;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
