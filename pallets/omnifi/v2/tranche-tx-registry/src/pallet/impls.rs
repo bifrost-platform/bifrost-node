@@ -677,7 +677,14 @@ impl<T: Config> Pallet<T> {
 	}
 
 	/// `SettlementStep::RequestsApproved` — records evidence for every
-	/// `request_id` Valuation approved into this settlement, in one batch.
+	/// `request_id` Valuation approved into this settlement, in one batch per
+	/// call. For a `Multichain` product this is now typically called *multiple
+	/// times* per settlement — once per Finalize-triggering `continueFinalize`
+	/// tx, each batch scoped to just that chunk's requests (2026-09-17 contract
+	/// response, §4) — not once for the whole settlement right after
+	/// `NavReceived` as originally assumed. Already safe to call repeatedly:
+	/// each `request_id` is individually guarded by `approved_tx.is_none()`
+	/// below, and `SettlementRequests` accumulates additively across calls.
 	/// Deliberately has no `SettlementTriggers` precondition (unlike every
 	/// leg step) — a SingleChain SYNC product's Valuation Contract emits
 	/// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so this step
@@ -959,10 +966,24 @@ impl<T: Config> Pallet<T> {
 		// *whole settlement's* Collect/Response legs are done — settlement-wide,
 		// unlike every other gate here (including `collect_leg_complete`
 		// below), which only ever reads this one chain's own `entry`. Added
-		// 2026-09-16 per the contract team — the settlement's finalize-target
-		// chains all start together, in the same tx as the last `NavReceived`
-		// for this settlement. See
-		// `docs/tranche-tx-registry/settlement-leg-chunking-design.md` §6.3.
+		// 2026-09-16 per the contract team.
+		//
+		// 2026-09-17 correction: earlier contract-team guidance said all
+		// finalize-target chains start together, in the same tx as the last
+		// `NavReceived`. That's no longer how it works — Finalize is now
+		// manually/keeper-triggered via separate `continueFinalize` txs (one
+		// or more per settlement, chunk by chunk), decoupled from whichever tx
+		// completed Response. This `ensure!` is, and always was, the pallet's
+		// *entire* order enforcement for Finalize — a pure storage-state
+		// predicate (`local_settlement_complete`, itself just "did every
+		// declared `collect_response_chain_ids` chain finish its Response
+		// leg") with no notion of "same tx" at all — there is no way for a
+		// pallet extrinsic to check what other call landed in the same
+		// transaction, so that was never actually enforced here regardless of
+		// what the contract intended. Nothing needed adjusting on this side
+		// once the trigger model changed. See
+		// `docs/tranche-tx-registry/settlement-leg-chunking-design.md` §6.3
+		// and `chunking-contract-requirements.md` §3/§4.
 		if is_finalize_step {
 			ensure!(
 				Self::local_settlement_complete(product_id, settlement_id),
