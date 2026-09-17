@@ -195,14 +195,22 @@ pub type BridgeAttempts<BlockNumber> =
 /// `docs/tranche-tx-registry/settlement-leg-chunking-design.md` §6.1/§9.1-2).
 /// A leg's real-world worst case must satisfy
 /// `ceil(worst_case_items / CHUNK_SIZE) <= MAX_CHUNKS`, `CHUNK_SIZE` being the
-/// sending contract's own choice of how many items to pack per chunk — Collect
-/// (`MAX_TRANCHE_CHAINS`-many prices, generously small), Response
-/// (`MAX_MULTICHAIN_ADAPTERS * MAX_ASSET_POSITIONS` positions, worst case
-/// 200), Finalize (`MAX_SETTLEMENT_REQUESTS` investor requests, worst case
-/// 1,000) all fit under this bound with room to spare at the contract-side
-/// `CHUNK_SIZE`s the design settled on. A leg that genuinely needs more than
-/// `MAX_CHUNKS` chunks can never reach `leg_complete` — no recovery short of a
-/// governance migration raising this constant.
+/// sending contract's own choice of how many items to pack per chunk.
+/// Confirmed by the contract team (2026-09-17 response) at exactly this
+/// bound, no slack: Collect (`CHUNK_SIZE`=10 tranches, worst case
+/// `MAX_TRANCHE_CHAINS`=10 → 1 chunk), Response (`CHUNK_SIZE`=20 adapter
+/// valuations, worst case `MAX_MULTICHAIN_ADAPTERS * MAX_ASSET_POSITIONS`=200
+/// → 10 chunks), Finalize (`CHUNK_SIZE`=100 requests, deposits+redeems
+/// combined, worst case `MAX_SETTLEMENT_REQUESTS`=1,000 → 10 chunks) — the
+/// contract additionally reverts before ever declaring/sending a leg that
+/// would need more than `MAX_CHUNKS` (excess deferred to the next
+/// settlement round rather than exceeding this bound), so this pallet should
+/// never actually observe a would-be 11th chunk. A leg that genuinely needs
+/// more than `MAX_CHUNKS` chunks can never reach `leg_complete` on this side
+/// regardless — no recovery short of a governance migration raising this
+/// constant — so if the contract's per-product `CHUNK_SIZE` (configurable,
+/// 0 = default) is ever set smaller than the defaults above, re-check this
+/// invariant still holds before launch.
 pub const MAX_CHUNKS: u32 = 10;
 
 /// One chunk of a settlement leg's evidence — Collect, Response, and Finalize
@@ -331,11 +339,13 @@ pub const MAX_REQUEST_EXTRA_LEN: u32 = 1024;
 ///
 /// A request's link to a settlement — what used to be a sixth step here,
 /// `SettlementApproved` — is recorded via `record_settlement_tx`'s
-/// `SettlementStep::RequestsApproved` instead, one settlement-wide batch call rather
-/// than one `record_request_tx` call per request. See that variant's doc
-/// comment for the full mechanism and why it moved; `RequestEntry::settlement_id`/
-/// `approved_tx` and `get_request`'s own `settlement_id`/`settled` return values
-/// are unaffected by where the write comes from.
+/// `SettlementStep::RequestsApproved` instead: one or more settlement-wide
+/// batch calls (chunk-scoped in practice, per Finalize trigger — see that
+/// variant's doc comment) rather than one `record_request_tx` call per
+/// request. See that variant's doc comment for the full mechanism and why it
+/// moved; `RequestEntry::settlement_id`/`approved_tx` and `get_request`'s own
+/// `settlement_id`/`settled` return values are unaffected by where the write
+/// comes from.
 ///
 /// `adapter_chain_ids` (the explicit parameter) is only ever supplied at
 /// `RequestQueued` — never at `Requested`, regardless of Hub or Spoke — since
@@ -777,20 +787,28 @@ pub struct RequestChainEntry<BlockNumber> {
 /// ABI happens to expose.
 ///
 /// Records evidence for every `request_id` Valuation approved into this
-/// settlement, in one batch — replaces what used to be a per-request
+/// settlement, one batch per call — replaces what used to be a per-request
 /// `RequestStep::SettlementApproved` step on `record_request_tx` (one
 /// `record_request_tx` call per approved request). The underlying Valuation
 /// Contract event changed from firing once per request
-/// (`DepositApproved`/`RedeemApproved`) to firing once per settlement
-/// (`DepositsApproved`/`RedeemsApproved`, each carrying an array of approved
-/// items), so the recorder now only needs one `record_settlement_tx` call —
-/// carrying every approved `request_id` from that one event — instead of one
-/// call per request; for a Multichain product this fires at essentially the
-/// same moment as before (right after every one of the settlement's
-/// `collect_response_chain_ids` has reported NAV, i.e. `NavReceived`), just
-/// batched — but for a `SingleChain` SYNC product, Valuation emits
-/// `DepositsApproved`/`RedeemsApproved` *before* `Settled`, so this step can
-/// genuinely land before `SettleStarted` for the same `settlement_id`.
+/// (`DepositApproved`/`RedeemApproved`) to firing per settlement instead
+/// (`DepositsApproved`/`RedeemsApproved`), so the recorder needs far fewer
+/// `record_settlement_tx` calls than the old per-request scheme either way —
+/// but for a `Multichain` product this is **not** one single call right after
+/// `NavReceived` (2026-09-17 correction, contract response §4): the actual
+/// per-request allocation approval now happens inside one or more separate,
+/// keeper-triggered `continueFinalize` txs (one per Finalize chunk, run well
+/// after — not "at essentially the same moment as" — Response completes), so
+/// this step is typically recorded multiple times per settlement, each call
+/// scoped to that chunk's own `request_ids`. The `DepositsApproved`/
+/// `RedeemsApproved` *domain event* itself still only fires once, with the
+/// full aggregate array, in the last such tx — the recorder's per-chunk
+/// trigger for *this* step is `FinalizeStarted` (fired once per Finalize
+/// chunk send), not that domain event. For a `SingleChain` SYNC product,
+/// Valuation still emits `DepositsApproved`/`RedeemsApproved` *before*
+/// `Settled` in the one combined tx (unaffected by the above — a `SingleChain`
+/// settlement has no Finalize leg to chunk), so this step can genuinely land
+/// before `SettleStarted` for the same `settlement_id`.
 /// Deliberately has **no** `SettlementTriggers` precondition (unlike every
 /// leg step) precisely because of that — the old per-request
 /// `RequestStep::SettlementApproved` this replaced never required
