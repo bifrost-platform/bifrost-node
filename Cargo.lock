@@ -957,10 +957,12 @@ dependencies = [
  "pallet-tranche-custom-flows",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
+ "pallet-tranche-tx-registry-v2",
  "parity-scale-codec",
  "precompile-bifrost-evm-tx-payment",
  "precompile-tranche-custom-flows",
  "precompile-tranche-tx-registry",
+ "precompile-tranche-tx-registry-v2",
  "scale-info",
  "sp-core",
  "sp-runtime",
@@ -1095,6 +1097,7 @@ dependencies = [
  "pallet-tranche-permissions",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
+ "pallet-tranche-tx-registry-v2",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-treasury",
@@ -1116,6 +1119,7 @@ dependencies = [
  "precompile-tranche-permissions",
  "precompile-tranche-system",
  "precompile-tranche-tx-registry",
+ "precompile-tranche-tx-registry-v2",
  "precompile-utils",
  "scale-info",
  "sp-api",
@@ -8502,6 +8506,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-tranche-tx-registry-v2"
+version = "1.0.0"
+dependencies = [
+ "bp-tranche",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-evm",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-transaction-payment"
 version = "45.0.0"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
@@ -9594,6 +9618,22 @@ dependencies = [
  "pallet-evm",
  "pallet-tranche-system",
  "pallet-tranche-tx-registry",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-tx-registry-v2"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry-v2",
  "precompile-utils",
  "sp-core",
  "sp-runtime",

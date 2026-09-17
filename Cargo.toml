@@ -20,10 +20,12 @@ members = [
 	"pallets/bifrost-evm-tx-payment",
 	"pallets/oracle-registry",
 	"pallets/cccp-relay-queue",
-	"pallets/tranche-system",
-	"pallets/tranche-investments",
-	"pallets/tranche-permissions",
-	"pallets/tranche-tx-registry",
+	"pallets/omnifi/tranche-system",
+	"pallets/omnifi/tranche-investments",
+	"pallets/omnifi/tranche-permissions",
+	"pallets/omnifi/tranche-custom-flows",
+	"pallets/omnifi/v1/tranche-tx-registry",
+	"pallets/omnifi/v2/tranche-tx-registry",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -34,21 +36,30 @@ members = [
 	"precompiles/btc-socket-queue",
 	"precompiles/blaze",
 	"precompiles/bifrost-evm-tx-payment",
-	"precompiles/tranche-permissions",
-	"precompiles/tranche-system",
-	"precompiles/tranche-investments",
-	"precompiles/tranche-tx-registry",
-	"precompiles/tranche-custom-flows",
+	"precompiles/omnifi/tranche-permissions",
+	"precompiles/omnifi/tranche-system",
+	"precompiles/omnifi/tranche-investments",
+	"precompiles/omnifi/tranche-custom-flows",
+	"precompiles/omnifi/v1/tranche-tx-registry",
+	"precompiles/omnifi/v2/tranche-tx-registry",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
 	"primitives/oracle",
 	"primitives/cccp",
 	"primitives/tranche",
-	"pallets/tranche-custom-flows",
 ]
 [profile.release]
 panic = "unwind"
+
+# Works around a linker bug in the current macOS/Xcode CLT beta (Darwin 27 / CLT 27.0,
+# ld64 27037.1): stripping debuginfo from a release-optimized proc-macro dylib (sqlx-macros
+# in particular) produces a Mach-O with a mis-aligned LINKEDIT string pool, which dyld then
+# refuses to dlopen ("mis-aligned LINKEDIT string pool" — reproduces deterministically,
+# independent of opt-level or concurrent builds). Scoped to build-override (build
+# scripts/proc-macros only) so the actual shipped node/runtime binaries still get stripped.
+[profile.release.build-override]
+strip = "none"
 
 [workspace.package]
 authors = ["bifrost-platform"]
@@ -125,11 +136,15 @@ pallet-oracle-registry = { default-features = false, path = "pallets/oracle-regi
 pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay-queue" }
 
 # OmniFi tranche-system Pallets
-pallet-tranche-system = { default-features = false, path = "pallets/tranche-system" }
-pallet-tranche-investments = { default-features = false, path = "pallets/tranche-investments" }
-pallet-tranche-permissions = { default-features = false, path = "pallets/tranche-permissions" }
-pallet-tranche-tx-registry = { default-features = false, path = "pallets/tranche-tx-registry" }
-pallet-tranche-custom-flows = { default-features = false, path = "pallets/tranche-custom-flows" }
+pallet-tranche-system = { default-features = false, path = "pallets/omnifi/tranche-system" }
+pallet-tranche-investments = { default-features = false, path = "pallets/omnifi/tranche-investments" }
+pallet-tranche-permissions = { default-features = false, path = "pallets/omnifi/tranche-permissions" }
+pallet-tranche-custom-flows = { default-features = false, path = "pallets/omnifi/tranche-custom-flows" }
+# v1 (legacy) — unchanged pre-chunking settlement pipeline, existing products only.
+pallet-tranche-tx-registry = { default-features = false, path = "pallets/omnifi/v1/tranche-tx-registry" }
+# v2 — chunked settlement pipeline (Collect/Response/Finalize), new products only. See
+# docs/tranche-tx-registry/settlement-leg-chunking-design.md.
+pallet-tranche-tx-registry-v2 = { default-features = false, path = "pallets/omnifi/v2/tranche-tx-registry" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -144,11 +159,14 @@ precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
 
 # OmniFi tranche-system Precompiles
-precompile-tranche-permissions = { default-features = false, path = "precompiles/tranche-permissions" }
-precompile-tranche-system = { default-features = false, path = "precompiles/tranche-system" }
-precompile-tranche-investments = { default-features = false, path = "precompiles/tranche-investments" }
-precompile-tranche-tx-registry = { default-features = false, path = "precompiles/tranche-tx-registry" }
-precompile-tranche-custom-flows = { default-features = false, path = "precompiles/tranche-custom-flows" }
+precompile-tranche-permissions = { default-features = false, path = "precompiles/omnifi/tranche-permissions" }
+precompile-tranche-system = { default-features = false, path = "precompiles/omnifi/tranche-system" }
+precompile-tranche-investments = { default-features = false, path = "precompiles/omnifi/tranche-investments" }
+precompile-tranche-custom-flows = { default-features = false, path = "precompiles/omnifi/tranche-custom-flows" }
+# v1 (legacy)
+precompile-tranche-tx-registry = { default-features = false, path = "precompiles/omnifi/v1/tranche-tx-registry" }
+# v2 — chunked settlement pipeline precompile.
+precompile-tranche-tx-registry-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-tx-registry" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

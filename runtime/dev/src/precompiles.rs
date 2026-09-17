@@ -20,6 +20,7 @@ use precompile_tranche_permissions::TranchePermissionsPrecompile;
 use precompile_tranche_system::TrancheSystemPrecompile;
 use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompile;
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
+use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2Precompile;
 
 use precompile_utils::precompile_set::*;
 
@@ -84,6 +85,12 @@ pub type BifrostPrecompilesAt<R> = (
 	>,
 	PrecompileAt<AddressU64<515>, TrancheTxRegistryPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<516>, TrancheCustomFlowsPrecompile<R>, BifrostPrecompilesChecks>,
+	// v2 — chunked Collect/Response/Finalize settlement pipeline (see
+	// docs/tranche-tx-registry/settlement-leg-chunking-design.md), new products only.
+	// Deliberately a new 0x0300 block rather than continuing the 0x0200 tranche block —
+	// a fresh, independent address for a pallet with its own storage/extrinsics, not an
+	// addition to the existing v1 contract.
+	PrecompileAt<AddressU64<768>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<
