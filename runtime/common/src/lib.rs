@@ -174,14 +174,17 @@ where
 		const TX_REGISTRY_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
 
-		// TrancheTxRegistryV2 precompile address: 0x0000000000000000000000000000000000000300
+		// TrancheTxRegistryV2 precompile address: 0x0000000000000000000000000000000000000303
 		// — chunked Collect/Response/Finalize settlement pipeline, new products only (see
 		// docs/tranche-tx-registry/settlement-leg-chunking-design.md). A separate pallet and
 		// a separate precompile address from v1's, but the same recorder identity (v2's
 		// `Config::RecorderOrigin` is `pallet_tranche_tx_registry::EnsureTxRecorder`, not its
-		// own) — see `R::is_tx_recorder`, reused unchanged for this branch too.
+		// own) — see `R::is_tx_recorder`, reused unchanged for this branch too. `0x0303`
+		// (not `0x0300`) to mirror v1's own offset for this pallet's slot (`0x0200` block:
+		// system=+0, investments=+1, permissions=+2, tx-registry=+3, custom-flows=+4) — see
+		// `runtime/dev/src/precompiles.rs`'s own comment on the `0x0300` block's layout.
 		const TX_REGISTRY_PRECOMPILE_V2: H160 =
-			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0x00]);
+			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0x03]);
 
 		// TrancheCustomFlows precompile address: 0x0000000000000000000000000000000000000204
 		const CUSTOM_FLOWS_PRECOMPILE: H160 =
@@ -342,7 +345,7 @@ pub trait TxRegistryRecorderCheck {
 	/// `true` iff `selector` is one of v2 pallet-tranche-tx-registry-v2's four
 	/// `record_*` precompile functions — the v2 analogue of
 	/// `is_record_call_selector`, checked against the v2 precompile address
-	/// (0x0300) instead of v1's (0x0203). A genuinely different selector set from
+	/// (0x0303) instead of v1's (0x0203). A genuinely different selector set from
 	/// v1's: v2's `record_settlement_tx` gained `chunk_index`/`chunk_count`
 	/// (see `docs/tranche-tx-registry/settlement-leg-chunking-design.md`), so
 	/// its ABI signature — and therefore its selector — differs from v1's even
@@ -392,7 +395,7 @@ impl TxRegistryRecorderCheck for () {
 /// that same comparison to know whether a `record_*` call is *eligible* to be
 /// feeless in the first place. `is_record_call_selector`/`is_record_call_selector_v2`
 /// are checked against the *matching* precompile address at each call site in
-/// `is_feeless_internal` (v1's 0x0203 vs v2's 0x0300), so a v1 selector can never be
+/// `is_feeless_internal` (v1's 0x0203 vs v2's 0x0303), so a v1 selector can never be
 /// evaluated against the v2 branch or vice versa — precise by construction, not by
 /// correlating a selector to a registry after the fact. Pass as
 /// `BifrostFeelessCalls<Runtime, TxRegistryRecorder<Runtime>>`.
