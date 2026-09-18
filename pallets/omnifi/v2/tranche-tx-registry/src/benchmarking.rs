@@ -13,13 +13,23 @@
 //! pallet-tranche-system via `T::BenchmarkHelper`. `record_settlement_tx`
 //! carries the linear `n` (`request_ids`) its `WeightInfo` already declares.
 //!
-//! NOT yet covered (security-review C1): the `SettleApplied`/`NavReceived`
-//! close-cascade over `SettlementRequests` — that needs its own worst-case
-//! component and is tracked as follow-up. Also not yet covered: a chunked leg
-//! step's own cost (`CollectBridgeExecuted`/.../`SettleApplied` with nonzero
-//! chunk info) — this benchmark's `RequestsApproved` scenario calibrates the
-//! same flat two-parameter `WeightInfo::record_settlement_tx` formula applied
-//! to every step, same simplification v1 already made pre-chunking.
+//! **security-review C1, fixed 2026-09-18**: the `SettleApplied`/`NavReceived`/
+//! `SettleStarted`/`Settled` leg-completion close-cascade over
+//! `SettlementRequests` (`close_active_requests`) now has its own worst-case
+//! component, `close_cascade(n)`, benchmarked below by calling that helper
+//! directly via `#[block]` rather than through an extrinsic (it isn't one).
+//! `record_settlement_tx`'s dispatchable declares a pre-dispatch weight that
+//! always budgets for `close_cascade(MAX_SETTLEMENT_REQUESTS)` on every step
+//! that could possibly trigger the cascade (`SettleStarted`/`Settled`/the six
+//! leg steps — never `RequestsApproved`/`Extended`), then reports the much
+//! smaller *actual* cost via `PostDispatchInfo` once it knows whether the
+//! cascade ran at all and how large `SettlementRequests` actually was.
+//!
+//! Also not yet covered: a chunked leg step's own cost
+//! (`CollectBridgeExecuted`/.../`SettleApplied` with nonzero chunk info) —
+//! this benchmark's `RequestsApproved` scenario calibrates the same flat
+//! two-parameter `WeightInfo::record_settlement_tx` formula applied to every
+//! step, same simplification v1 already made pre-chunking.
 //!
 //! `RequestStep::Extended`/`SettlementStep::Extended` are deliberately not
 //! benchmarked — `RequestSubStepV2`/`SettlementSubStepV2` are uninhabited
@@ -68,6 +78,17 @@ fn vault(seed: u64) -> VaultId {
 }
 
 fn open_request<T: Config>(request_id: RequestId) {
+	open_request_for::<T>(request_id, h160(0x1_2_3));
+}
+
+/// Same as `open_request`, but with a caller-chosen `investor` — used by
+/// `close_cascade` below to seed one distinct investor per request, so each
+/// investor's own `InvestorActiveRequests` list stays length-1 (the
+/// benchmark is meant to calibrate `close_active_requests`' per-*entry* cost,
+/// not additionally fold in `close_one_active_request`'s own O(that
+/// investor's list length) position-scan cost by piling every request onto a
+/// single investor).
+fn open_request_for<T: Config>(request_id: RequestId, investor: H160) {
 	let v = vault(request_id.to_low_u64_be());
 	T::BenchmarkHelper::register_vault(PID, v.clone());
 	Pallet::<T>::record_request_tx(
@@ -75,7 +96,7 @@ fn open_request<T: Config>(request_id: RequestId) {
 		PID,
 		request_id,
 		Some(RequestOpening {
-			investor: h160(0x1_2_3),
+			investor,
 			vault: v,
 			amount: U256::from(1_000_000u64),
 			order_type: OrderType::Deposit,
@@ -161,6 +182,67 @@ mod benchmarks {
 			RequestEntries::<T>::get(PID, h256(1000)).and_then(|e| e.settlement_id),
 			Some(U256::from(9u64))
 		);
+	}
+
+	/// Worst-case per-entry cost of `close_active_requests`' leg-completion
+	/// cascade — the scan `record_settlement_tx` runs (via
+	/// `try_close_local_requests`/`close_active_requests` directly) whenever a
+	/// `SettleStarted`/`Settled`/leg-step call happens to complete a
+	/// settlement's Response leg locally or a chain's Finalize leg
+	/// (security-review C1). Not itself an extrinsic — measured with
+	/// `#[block]` around a direct call to the helper, same technique used
+	/// wherever a weight component isn't a dispatchable's own top-level cost.
+	/// One distinct investor per seeded request (see `open_request_for`'s doc
+	/// comment) isolates `close_active_requests`' own per-entry cost from
+	/// `close_one_active_request`'s separate, investor-list-length-dependent
+	/// cost, which is out of scope here (that list is bounded only by how
+	/// many products/requests one investor has open concurrently, not by
+	/// anything this settlement-scoped cascade controls).
+	#[benchmark]
+	fn close_cascade(n: Linear<0, { MAX_SETTLEMENT_REQUESTS }>) {
+		let settlement_id = U256::from(77u64);
+		let mut ids = Vec::new();
+		for i in 0..n {
+			let r = h256(5_000 + i as u64);
+			let investor = h160(0x9_0000 + i as u64);
+			open_request_for::<T>(r, investor);
+			ids.push(r);
+		}
+		if n > 0 {
+			let request_ids = BoundedVec::try_from(ids).expect("MAX_SETTLEMENT_REQUESTS");
+			Pallet::<T>::record_settlement_tx(
+				recorder_origin::<T>(),
+				PID,
+				settlement_id,
+				None,
+				None,
+				None,
+				Some(request_ids),
+				SettlementStep::RequestsApproved,
+				1u64,
+				h256(0x5e8),
+				None,
+				0u32,
+				0u32,
+				None,
+			)
+			.expect("approve batch");
+		}
+
+		let tx = TxRecord {
+			chain_id: 1u64,
+			tx_hash: h256(0x999),
+			recorded_at: frame_system::Pallet::<T>::block_number(),
+		};
+
+		#[block]
+		{
+			Pallet::<T>::close_active_requests(PID, settlement_id, None, tx);
+		}
+
+		if n > 0 {
+			assert!(InvestorActiveRequests::<T>::get(h160(0x9_0000)).is_empty());
+		}
 	}
 
 	#[benchmark]
