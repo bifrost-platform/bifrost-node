@@ -114,11 +114,14 @@ pragma solidity >=0.8.0;
  * frequent than Investments' own ledger calls), and potential reuse by other CCCP-v2
  * Bridge&Call flows beyond tranche-investments.
  *
- *   - Address: next free slot after tranche-system (0x...0200), investments (0x...0201),
- *     tranche-permissions (0x...0202) — 0x...0203 was briefly assigned to the
- *     now-deleted precompile-rwa-loans and is confirmed free for reuse here.
+ *   - Address: 0x0303, in the 0x0300 block reserved for v1/v2-forked pallets — laid out
+ *     with the *same offset as v1's own tx-registry slot* (v1's 0x0200 block: system=+0,
+ *     investments=+1, permissions=+2, tx-registry=+3, custom-flows=+4), not just the next
+ *     free slot in allocation order. See `runtime/dev/src/precompiles.rs`'s own comment on
+ *     the `0x0300` block's layout for why 0x0300/0x0302/0x0304 stay unused (system/
+ *     permissions/custom-flows are never forked into v1/v2).
  *
- * Address: 0x0000000000000000000000000000000000000203
+ * Address: 0x0000000000000000000000000000000000000303
  */
 interface TrancheTxRegistryV2 {
     /// @dev Mirrors Investments's VaultInput — duplicated here rather than shared, same

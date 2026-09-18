@@ -15,11 +15,11 @@ use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
+use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompile;
 use precompile_tranche_investments::TrancheInvestmentsPrecompile;
 use precompile_tranche_investments_v2::TrancheInvestmentsV2Precompile;
 use precompile_tranche_permissions::TranchePermissionsPrecompile;
 use precompile_tranche_system::TrancheSystemPrecompile;
-use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompile;
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
 use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2Precompile;
 
@@ -86,16 +86,18 @@ pub type BifrostPrecompilesAt<R> = (
 	>,
 	PrecompileAt<AddressU64<515>, TrancheTxRegistryPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<516>, TrancheCustomFlowsPrecompile<R>, BifrostPrecompilesChecks>,
-	// v2 — chunked Collect/Response/Finalize settlement pipeline (see
-	// docs/tranche-tx-registry/settlement-leg-chunking-design.md), new products only.
-	// Deliberately a new 0x0300 block rather than continuing the 0x0200 tranche block —
-	// a fresh, independent address for a pallet with its own storage/extrinsics, not an
-	// addition to the existing v1 contract.
-	PrecompileAt<AddressU64<768>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
-	// v2 — accurately weight-benchmarked fork of Investments, new products only, same
-	// 0x0300 block as TrancheTxRegistryV2. Permissions is not forked (see
-	// `TranchePermissionsPrecompile` above, same address as always) — 0x0302 stays free.
+	// v2 — a new 0x0300 block rather than continuing the 0x0200 tranche block (a fresh,
+	// independent address range for pallets with their own storage/extrinsics, not an
+	// addition to the existing v1 contracts) — laid out with the *same offsets as v1*
+	// for whichever slot each v2 pallet corresponds to (system=+0, investments=+1,
+	// permissions=+2, tx-registry=+3, custom-flows=+4), so only investments and
+	// tx-registry (the two actually forked into v1/v2 — see
+	// docs/tranche-tx-registry/settlement-leg-chunking-design.md) occupy a slot here;
+	// 0x0300 (system's slot), 0x0302 (permissions' — freed when permissions was
+	// un-forked back to the shared pallet) and 0x0304 (custom-flows') stay unused,
+	// since none of those three are forked.
 	PrecompileAt<AddressU64<769>, TrancheInvestmentsV2Precompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<771>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<
