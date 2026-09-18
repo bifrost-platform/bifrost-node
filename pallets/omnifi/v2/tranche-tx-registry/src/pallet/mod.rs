@@ -1049,9 +1049,26 @@ pub mod pallet {
 		/// `spoke_chain_id` is `Some` (chain-scoped) or `None`
 		/// (settlement-wide). See `SettlementStep::Extended`'s doc comment for
 		/// the full mechanism.
+		/// Declared (pre-dispatch) weight always budgets for the worst case of
+		/// `SettleStarted`/`Settled`/the six leg steps possibly triggering the
+		/// `close_active_requests` cascade (security-review C1 — that cascade
+		/// used to run entirely uncharged) — `RequestsApproved`/`Extended` never
+		/// trigger it (their own per-request `try_close_request` path is
+		/// already covered by the existing `n` term), so they get no cascade
+		/// budget. The dispatchable body below then reports the much smaller
+		/// *actual* weight via its `PostDispatchInfo`, refunding the unused
+		/// portion whenever the cascade didn't run at all (the common case —
+		/// most chunk calls don't complete a leg) or ran over fewer entries
+		/// than the worst-case bound.
 		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::record_settlement_tx(
 			request_ids.as_ref().map_or(0, |ids| ids.len() as u32),
+		).saturating_add(
+			if matches!(step, SettlementStep::RequestsApproved | SettlementStep::Extended) {
+				Weight::zero()
+			} else {
+				<T as Config>::WeightInfo::close_cascade(MAX_SETTLEMENT_REQUESTS)
+			},
 		))]
 		pub fn record_settlement_tx(
 			origin: OriginFor<T>,
@@ -1070,7 +1087,7 @@ pub mod pallet {
 			chunk_index: u32,
 			chunk_count: u32,
 			extra: Option<BoundedVec<u8, ConstU32<MAX_SETTLEMENT_EXTRA_LEN>>>,
-		) -> DispatchResult {
+		) -> DispatchResultWithPostInfo {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
 			if step != SettlementStep::Extended {
@@ -1091,6 +1108,10 @@ pub mod pallet {
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
 			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			// Captured before `request_ids` is moved into the `SettlementTxRecorded`
+			// event below — this is the same `n` the pre-dispatch weight above
+			// already declared, reused here to compute the actual (refunded) weight.
+			let n = request_ids.as_ref().map_or(0, |ids| ids.len() as u32);
 
 			// `collect_response_chain_ids`/`finalize_chain_ids`/`request_ids` are
 			// only ever genuinely *owned* by one handler each
@@ -1102,7 +1123,19 @@ pub mod pallet {
 			// `MAX_SETTLEMENT_REQUESTS` (1000), unlike the two chain-id sets
 			// (bounded at 10) — cloning it for a call that's just going to reject
 			// it with `Error::UnexpectedRequestIds` wastes real work.
-			match step {
+			//
+			// `cascade_scanned` is `Some(n)` (`close_active_requests`' scan size,
+			// itself possibly `0`) if this call actually invoked that cascade
+			// (leg-completion backstop), `None` if it never did — kept distinct
+			// from `Some(0)` so the actual weight below charges `close_cascade`'s
+			// real cost only when the helper genuinely ran, not on every
+			// `SettleStarted`/`Settled`/`NavReceived`/`SettleApplied` call
+			// regardless of whether it completed anything. See
+			// `close_active_requests`'s own doc comment. Only
+			// `handle_settle_started`/`handle_settled`/`handle_settlement_leg_step`
+			// can ever produce `Some`; `RequestsApproved`/`Extended` and the other
+			// four leg steps always produce `None`.
+			let cascade_scanned: Option<u32> = match step {
 				SettlementStep::SettleStarted => Self::handle_settle_started(
 					product_id,
 					settlement_id,
@@ -1123,25 +1156,31 @@ pub mod pallet {
 					bridge_status,
 					tx,
 				)?,
-				SettlementStep::RequestsApproved => Self::handle_requests_approved(
-					product_id,
-					settlement_id,
-					spoke_chain_id,
-					&collect_response_chain_ids,
-					&finalize_chain_ids,
-					request_ids.clone(),
-					bridge_status,
-					tx,
-				)?,
-				SettlementStep::Extended => Self::handle_settlement_extended(
-					product_id,
-					settlement_id,
-					&collect_response_chain_ids,
-					&finalize_chain_ids,
-					&request_ids,
-					bridge_status,
-					extra.clone(),
-				)?,
+				SettlementStep::RequestsApproved => {
+					Self::handle_requests_approved(
+						product_id,
+						settlement_id,
+						spoke_chain_id,
+						&collect_response_chain_ids,
+						&finalize_chain_ids,
+						request_ids.clone(),
+						bridge_status,
+						tx,
+					)?;
+					None
+				},
+				SettlementStep::Extended => {
+					Self::handle_settlement_extended(
+						product_id,
+						settlement_id,
+						&collect_response_chain_ids,
+						&finalize_chain_ids,
+						&request_ids,
+						bridge_status,
+						extra.clone(),
+					)?;
+					None
+				},
 				SettlementStep::CollectBridgeExecuted
 				| SettlementStep::NavReported
 				| SettlementStep::ResponseBridgeExecuted
@@ -1163,7 +1202,7 @@ pub mod pallet {
 				SettlementStep::Queued => {
 					return Err(Error::<T>::InvalidSettlementStep.into());
 				},
-			}
+			};
 
 			Self::deposit_event(Event::SettlementTxRecorded {
 				product_id,
@@ -1180,7 +1219,18 @@ pub mod pallet {
 				chunk_count,
 				extra,
 			});
-			Ok(())
+
+			// `close_cascade` is only added when the cascade genuinely ran
+			// (`Some(n)`) — a call that never touched `close_active_requests`
+			// (the common case: most chunk calls don't complete a leg) is
+			// refunded all the way back down to `record_settlement_tx(n)` alone,
+			// not merely down to `close_cascade(0)`'s own nonzero base cost.
+			let cascade_weight = cascade_scanned
+				.map(<T as Config>::WeightInfo::close_cascade)
+				.unwrap_or(Weight::zero());
+			let actual_weight =
+				<T as Config>::WeightInfo::record_settlement_tx(n).saturating_add(cascade_weight);
+			Ok(Some(actual_weight).into())
 		}
 
 		/// Attest to an investor's receive() tx on a vault — a plain local Spoke-chain

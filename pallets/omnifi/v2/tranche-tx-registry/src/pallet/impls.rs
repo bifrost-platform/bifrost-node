@@ -185,13 +185,24 @@ impl<T: Config> Pallet<T> {
 	/// `SettlementStep::RequestsApproved` arm (see that storage's own doc comment
 	/// for why it's no longer queried cross-pallet from
 	/// pallet-tranche-investments).
+	///
+	/// Returns the number of `SettlementRequests` entries scanned (not the
+	/// number actually closed — the `chain_id`/`RequestNotOpened` skips below
+	/// are cheap relative to a full `close_one_active_request`, but the read
+	/// of each entry itself is not) — this is the weight-relevant quantity
+	/// `record_settlement_tx`'s dispatchable uses to compute its actual
+	/// `WeightInfo::close_cascade` post-dispatch weight (security-review C1;
+	/// this cascade previously ran uncharged, see `benchmarking.rs`'s own doc
+	/// comment on the fix).
 	pub(crate) fn close_active_requests(
 		product_id: ProductId,
 		settlement_id: SettlementId,
 		chain_id: Option<ChainId>,
 		tx: TxRecord<BlockNumberFor<T>>,
-	) {
-		for request_id in SettlementRequests::<T>::get(product_id, settlement_id) {
+	) -> u32 {
+		let requests = SettlementRequests::<T>::get(product_id, settlement_id);
+		let scanned = requests.len() as u32;
+		for request_id in requests {
 			let Some(request_entry) = RequestEntries::<T>::get(product_id, request_id) else {
 				continue;
 			};
@@ -207,6 +218,7 @@ impl<T: Config> Pallet<T> {
 				tx.clone(),
 			);
 		}
+		scanned
 	}
 
 	/// A request whose vault is colocated with its product's own Valuation
@@ -229,14 +241,24 @@ impl<T: Config> Pallet<T> {
 	/// passes the tx of whichever step just made this condition true
 	/// (`SettleStarted`/`Settled`'s own tx when vacuously true immediately, or
 	/// the completing chunk's tx for a `NavReceived` trigger).
+	/// `Some(n)` (`n` = `close_active_requests`' scan size, itself possibly
+	/// `0` if `SettlementRequests` happened to be empty) iff the cascade
+	/// actually ran; `None` iff the condition wasn't met (no-op) — the `None`
+	/// case is deliberately distinct from `Some(0)` so `record_settlement_tx`
+	/// can charge exactly `close_cascade(0)`'s real cost only when
+	/// `close_active_requests` was actually called, not on every `NavReceived`/
+	/// `SettleStarted`/`Settled` call regardless (most of which never reach
+	/// completion and so never call it at all).
 	pub(crate) fn try_close_local_requests(
 		product_id: ProductId,
 		settlement_id: SettlementId,
 		tx: TxRecord<BlockNumberFor<T>>,
-	) {
+	) -> Option<u32> {
 		if Self::local_settlement_complete(product_id, settlement_id) {
 			let local_chain_id = Self::local_chain_id(product_id);
-			Self::close_active_requests(product_id, settlement_id, Some(local_chain_id), tx);
+			Some(Self::close_active_requests(product_id, settlement_id, Some(local_chain_id), tx))
+		} else {
+			None
 		}
 	}
 
@@ -563,6 +585,9 @@ impl<T: Config> Pallet<T> {
 	/// `SettlementFinalizeChains`'s doc comments), so declaring it here would
 	/// leave the settlement stuck at `SettleStarted` forever (no path to
 	/// `SettleApplied`/its own `NavReceived` entry).
+	/// Returns the `close_active_requests` scan size if `try_close_local_requests`
+	/// ran the cascade (empty chain sets — vacuously complete right away), `0`
+	/// otherwise — see `close_active_requests`'s own doc comment.
 	pub(crate) fn handle_settle_started(
 		product_id: ProductId,
 		settlement_id: SettlementId,
@@ -572,7 +597,7 @@ impl<T: Config> Pallet<T> {
 		request_ids: &Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		bridge_status: Option<BridgeStatus>,
 		tx: TxRecord<BlockNumberFor<T>>,
-	) -> DispatchResult {
+	) -> Result<Option<u32>, DispatchError> {
 		ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
 		ensure!(spoke_chain_id.is_none(), Error::<T>::UnexpectedSpokeChainId);
 		ensure!(request_ids.is_none(), Error::<T>::UnexpectedRequestIds);
@@ -622,8 +647,7 @@ impl<T: Config> Pallet<T> {
 		// anywhere off the local chain, or a fully local settlement — always the
 		// case for a `SingleChain` product), same as a leg-by-leg `NavReceived`
 		// reaching this state later would.
-		Self::try_close_local_requests(product_id, settlement_id, tx);
-		Ok(())
+		Ok(Self::try_close_local_requests(product_id, settlement_id, tx))
 	}
 
 	/// `SettlementStep::Settled` — the one case this step is valid as
@@ -655,7 +679,7 @@ impl<T: Config> Pallet<T> {
 		request_ids: &Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 		bridge_status: Option<BridgeStatus>,
 		tx: TxRecord<BlockNumberFor<T>>,
-	) -> DispatchResult {
+	) -> Result<Option<u32>, DispatchError> {
 		ensure!(
 			collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
 			Error::<T>::UnexpectedSpokeChainIds
@@ -940,7 +964,7 @@ impl<T: Config> Pallet<T> {
 		chunk_index: u32,
 		chunk_count: u32,
 		tx: TxRecord<BlockNumberFor<T>>,
-	) -> DispatchResult {
+	) -> Result<Option<u32>, DispatchError> {
 		ensure!(
 			collect_response_chain_ids.is_none() && finalize_chain_ids.is_none(),
 			Error::<T>::UnexpectedSpokeChainIds
@@ -1114,12 +1138,19 @@ impl<T: Config> Pallet<T> {
 			}
 		}
 
-		if just_completed_finalize {
-			Self::close_active_requests(product_id, settlement_id, Some(spoke_chain_id), close_tx);
+		let cascade_scanned = if just_completed_finalize {
+			Some(Self::close_active_requests(
+				product_id,
+				settlement_id,
+				Some(spoke_chain_id),
+				close_tx,
+			))
 		} else if step == SettlementStep::NavReceived {
-			Self::try_close_local_requests(product_id, settlement_id, close_tx);
-		}
-		Ok(())
+			Self::try_close_local_requests(product_id, settlement_id, close_tx)
+		} else {
+			None
+		};
+		Ok(cascade_scanned)
 	}
 
 	// -----------------------------------------------------------------------

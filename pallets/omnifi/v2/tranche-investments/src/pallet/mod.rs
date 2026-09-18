@@ -430,6 +430,14 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::ValuationOrigin::ensure_origin(origin)?;
 
+			// Hoisted out of the loop below (2026-09-18, code review finding) —
+			// reading/writing `SettlementRequests` once per entry made this whole
+			// extrinsic O(n^2) in `approvals.len()` (each iteration re-decoded and
+			// re-encoded a `BoundedVec` of growing length), unlike
+			// `pallet-tranche-tx-registry-v2`'s equivalent `handle_requests_approved`,
+			// which already wraps its own accumulation in a single `try_mutate`.
+			let mut settlement_requests = SettlementRequests::<T>::get(product_id, settlement_id);
+
 			for InvestmentApprovalInput { request_id, allocations, receivable_amount } in approvals
 			{
 				let requested = RequestedInvestments::<T>::get(product_id, request_id)
@@ -455,8 +463,6 @@ pub mod pallet {
 				}
 				ensure!(sum == requested.amount, Error::<T>::AllocationSumMismatch);
 
-				let mut settlement_requests =
-					SettlementRequests::<T>::get(product_id, settlement_id);
 				settlement_requests
 					.try_push(request_id)
 					.map_err(|_| Error::<T>::TooManySettlementRequests)?;
@@ -474,7 +480,6 @@ pub mod pallet {
 						timestamp: pallet_timestamp::Pallet::<T>::get(),
 					},
 				);
-				SettlementRequests::<T>::insert(product_id, settlement_id, settlement_requests);
 
 				Self::deposit_event(Event::InvestmentApproved {
 					product_id,
@@ -483,6 +488,8 @@ pub mod pallet {
 					receivable_amount,
 				});
 			}
+
+			SettlementRequests::<T>::insert(product_id, settlement_id, settlement_requests);
 
 			Ok(())
 		}
