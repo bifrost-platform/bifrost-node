@@ -297,6 +297,7 @@ fn propagate_whitelist_change<Runtime>(
 where
 	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
 {
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 	let orchestrator = pallet_tranche_system::OrchestratorAddress::<Runtime>::get();
 	if orchestrator == H160::zero() {
 		return Err(revert("orchestrator address not configured"));
