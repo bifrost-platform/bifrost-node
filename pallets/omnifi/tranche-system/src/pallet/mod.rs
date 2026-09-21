@@ -116,6 +116,14 @@ pub mod pallet {
 		/// (for `create_product`) duplicated within the same call.
 		AdapterAlreadyRegistered,
 		/// A `weightBps` set (top-level `multichain_adapters`, or one parent's
+		/// nested `adapters`) was empty — checked before
+		/// `WeightsMustSumTo10000` so an empty set reports "you need at least
+		/// one entry" rather than the misleading "your percentages don't sum
+		/// to 100%" (security-review 2026-09-18 L2 — an empty set's sum is
+		/// vacuously `0`, which would otherwise fail that check instead for
+		/// an unrelated reason).
+		EmptyWeights,
+		/// A `weightBps` set (top-level `multichain_adapters`, or one parent's
 		/// nested `adapters`) must sum to exactly 10_000 (100%).
 		WeightsMustSumTo10000,
 		/// Two entries of `create_product`'s `tranches` input, on the *same*

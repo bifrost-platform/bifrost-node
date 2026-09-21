@@ -24,7 +24,16 @@ impl<T: Config> Pallet<T> {
 	pub(crate) fn ensure_weights_sum_to_10000(
 		weights_bps: impl Iterator<Item = u16>,
 	) -> DispatchResult {
-		let sum: u32 = weights_bps.map(u32::from).sum();
+		let mut count: u32 = 0;
+		let mut sum: u32 = 0;
+		for weight_bps in weights_bps {
+			count += 1;
+			sum += u32::from(weight_bps);
+		}
+		// Checked first — an empty set's sum is vacuously `0`, which would
+		// otherwise fail the check below for an unrelated reason
+		// (security-review 2026-09-18 L2).
+		ensure!(count > 0, Error::<T>::EmptyWeights);
 		ensure!(sum == 10_000, Error::<T>::WeightsMustSumTo10000);
 		Ok(())
 	}
