@@ -68,11 +68,26 @@ impl<T: Config> Pallet<T> {
 	/// `RequestQueued`'s own declaration to land first. `RequestQueued` itself
 	/// merges its own `adapter_chain_ids` into whatever's already here rather than
 	/// overwriting, so self-declared chains survive it.
+	///
+	/// Requires `RequestEntries` to already exist for `(product_id, request_id)`
+	/// (security-review 2026-09-18 L3, originally 08-27 M2 — v1 left unfixed,
+	/// see that pallet's copy of this function, to keep existing v1 products'
+	/// weight/behavior frozen) — this self-declaring path is the one gap in the
+	/// pipeline that used to skip that check entirely (unlike `RequestQueued`'s
+	/// own handler, which already has `entry` loaded by the time it merges
+	/// `adapter_chain_ids`), letting a mistyped `request_id` in an
+	/// `AdapterBridgeExecuted`/`AdapterApplied` call silently create orphaned
+	/// `RequestChainEntries`/`RequestAdapterChains` for a request that was never
+	/// actually opened via `RequestStep::Requested`.
 	pub(crate) fn ensure_adapter_chain_declared(
 		product_id: ProductId,
 		request_id: RequestId,
 		chain_id: ChainId,
 	) -> DispatchResult {
+		ensure!(
+			RequestEntries::<T>::contains_key(product_id, request_id),
+			Error::<T>::RequestNotOpened
+		);
 		let mut chains = RequestAdapterChains::<T>::get(product_id, request_id).unwrap_or_default();
 		if !chains.contains(&chain_id) {
 			ensure!(
