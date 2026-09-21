@@ -151,7 +151,7 @@ where
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 
-		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
 
 		let (
 			base_asset,
@@ -239,7 +239,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
 
 		let (base_asset, valuation_address, settlement_mode) = valuation;
 		let (is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs) =
@@ -318,7 +318,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
 		let decoded_action = decode_crud_action(action)?;
 		let (tranche_type_byte, apr, vault, asset, shares, priority) = tranche;
 		let (vault_chain_id, vault_address) = vault;
@@ -426,7 +426,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
 		let bounded_adapters = decode_adapters::<Runtime>(&adapters)?;
 
 		let call = TrancheSystemCall::<Runtime>::set_adapters {
@@ -474,7 +474,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
 		let bounded_multichain_adapters =
 			decode_multichain_adapters::<Runtime>(&multichain_adapters)?;
 
@@ -515,7 +515,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(product_id, &caller_account)?;
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
 		let bounded_multichain_tranche_managers =
 			decode_multichain_tranche_managers(&multichain_tranche_managers)?;
 
@@ -961,12 +961,14 @@ fn encode_adapters<'a, AccountId: 'a + Into<H160> + Clone>(
 /// holds `ProductAdmin` for `product_id`, before constructing
 /// `Origin::ProductAdmin` — shared by all four extrinsics in this precompile.
 fn ensure_caller_is_product_admin<Runtime>(
+	handle: &mut impl PrecompileHandle,
 	product_id: ProductId,
 	caller_account: &Runtime::AccountId,
 ) -> EvmResult
 where
-	Runtime: pallet_tranche_permissions::Config,
+	Runtime: pallet_tranche_permissions::Config + pallet_evm::Config,
 {
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 	let is_admin = pallet_tranche_permissions::ProductAdmins::<Runtime>::get(product_id).as_ref()
 		== Some(caller_account);
 	if !is_admin {
