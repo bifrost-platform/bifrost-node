@@ -1,16 +1,24 @@
 //! Benchmarks for `pallet-tranche-custom-flows`.
 //!
 //! `set_flow_descriptor` scales on total slot count `s`; `record_flow_tx` on
-//! the `resolve_lane` slot scan `s` and the attempt-metadata byte length `n`
-//! (both already in its `WeightInfo` signature). The recorder identity — shared
-//! with `pallet-tranche-tx-registry` — is seeded via `T::BenchmarkHelper`.
+//! the `resolve_lane` slot scan `s`, the attempt-metadata byte length `n`, and
+//! (2026-09-21, security-review H1) the slot-metadata byte length `m` — all
+//! three in its `WeightInfo` signature. The recorder identity — shared with
+//! `pallet-tranche-tx-registry` — is seeded via `T::BenchmarkHelper`.
+//!
+//! `record_flow_tx`'s setup also pre-seeds `MAX_ATTEMPTS - 1` prior attempts
+//! at max metadata size before the measured call, so the benchmarked
+//! `FlowSlots::try_mutate` decode/re-encode reflects a near-worst-case
+//! existing `SlotRecord` (up to `MAX_ATTEMPTS` × `MAX_ATTEMPT_METADATA` +
+//! `MAX_SLOT_METADATA` ≈ 330KB) rather than an empty one — previously this
+//! benchmark only ever measured against a freshly-opened, empty record.
 
 #![cfg(feature = "runtime-benchmarks")]
 
 use super::*;
 use crate::{
 	BenchmarkHelper, FlowDescriptor, FlowId, MainTrack, SlotDef, SubTrack, TrackChain,
-	MAX_ATTEMPT_METADATA, MAX_DESCRIPTOR_SLOTS, MAX_SLOTS,
+	MAX_ATTEMPTS, MAX_ATTEMPT_METADATA, MAX_DESCRIPTOR_SLOTS, MAX_SLOTS, MAX_SLOT_METADATA,
 };
 use frame_benchmarking::v2::*;
 use frame_support::{traits::EnsureOrigin, BoundedVec};
@@ -85,31 +93,65 @@ mod benchmarks {
 	fn record_flow_tx(
 		s: Linear<1, { MAX_DESCRIPTOR_SLOTS }>,
 		n: Linear<0, { MAX_ATTEMPT_METADATA }>,
+		m: Linear<0, { MAX_SLOT_METADATA }>,
 	) {
 		// Register the descriptor whose slots `resolve_lane` will scan.
 		Pallet::<T>::set_flow_descriptor(gov_origin::<T>(), PID, FID, descriptor(s))
 			.expect("descriptor");
+		let instance_key = H256::repeat_byte(0xab);
+
+		// Pre-seed MAX_ATTEMPTS-1 prior attempts at max metadata size, so the
+		// measured call below appends the *last* slot in an already
+		// near-worst-case `SlotRecord` (security-review H1) — distinct
+		// `tx_hash` per seed call (only `DuplicateAttestation`-checked within
+		// this exact (instance, lane, slot)), `success: false` so none of them
+		// trip the close-counter side effects the measured call itself checks.
+		let max_attempt_meta = BoundedVec::<u8, ConstU32<MAX_ATTEMPT_METADATA>>::try_from(vec![
+				0u8;
+				MAX_ATTEMPT_METADATA as usize
+			])
+		.unwrap();
+		for i in 0..(MAX_ATTEMPTS - 1) {
+			Pallet::<T>::record_flow_tx(
+				rec_origin::<T>(),
+				PID,
+				FID,
+				instance_key,
+				None, // track_key -> main lane
+				0u8,  // slot_id 0 -> opens the instance (first call only)
+				1u64,
+				H256::repeat_byte(i as u8 + 1), // +1: repeat_byte(0) is the zero hash (rejected)
+				false,                          // don't satisfy yet — avoid closing before the measured call
+				Some(max_attempt_meta.clone()),
+				Some(max_attempt_meta.clone()), // also max out slot_metadata each time
+				Some(H160::repeat_byte(0x11)),
+			)
+			.expect("seed attempt");
+		}
+
 		let origin = rec_origin::<T>();
-		let meta =
+		let attempt_meta =
 			BoundedVec::<u8, ConstU32<MAX_ATTEMPT_METADATA>>::try_from(vec![0u8; n as usize])
 				.unwrap();
+		let slot_meta =
+			BoundedVec::<u8, ConstU32<MAX_SLOT_METADATA>>::try_from(vec![0u8; m as usize]).unwrap();
 
 		#[extrinsic_call]
 		_(
 			origin,
 			PID,
 			FID,
-			H256::repeat_byte(0xab), // instance_key
+			instance_key,
 			None,                    // track_key -> main lane
-			0u8,                     // slot_id 0 -> opens the instance
+			0u8,                     // slot_id 0
 			1u64,                    // chain_id (attestation)
-			H256::repeat_byte(0xcd), // tx_hash
+			H256::repeat_byte(0xcd), // tx_hash (distinct from every seed attempt)
 			true,                    // success
-			Some(meta),
-			None,                          // slot_metadata
+			Some(attempt_meta),
+			Some(slot_meta),
 			Some(H160::repeat_byte(0x11)), // investor (investor_scoped)
 		);
 
-		assert!(FlowInstances::<T>::contains_key((PID, FID, H256::repeat_byte(0xab))));
+		assert!(FlowInstances::<T>::contains_key((PID, FID, instance_key)));
 	}
 }
