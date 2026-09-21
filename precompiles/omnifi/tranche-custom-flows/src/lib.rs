@@ -129,13 +129,44 @@ pub(crate) const SELECTOR_LOG_FLOW_TX_RECORDED: [u8; 32] =
 /// investor never legitimately has this many flows open at once (entries are
 /// removed on close); hitting it means something upstream is wrong, so revert
 /// loudly rather than walk a multi-hundred-element `Vec` on an `eth_call`.
-const MAX_ACTIVE_FLOWS: usize = 500;
+/// 2026-09-21 (security-review M1): lowered from 500 to 100 — flows are
+/// transient (closed on satisfaction), so even a highly active investor
+/// legitimately holding dozens open at once is generous; 100 keeps this a
+/// tight backstop rather than a number large enough to itself be a real cost.
+const MAX_ACTIVE_FLOWS: usize = 100;
 
 /// Ceiling on how many `FlowSlots` entries `get_flow_instance` will scan for one
-/// instance. The descriptor already bounds this (main slots + Σ sub-track slots
-/// × chains), but that product can be large; a real flow records far fewer.
-/// Revert past it rather than let one `eth_call` walk thousands of storage keys.
-const MAX_INSTANCE_SLOT_SCAN: usize = 1024;
+/// instance. 2026-09-21 (security-review M1): lowered from 1024 to 512, in
+/// lockstep with tightening `pallet_tranche_custom_flows::MAX_SLOTS` (32→8) and
+/// `MAX_SUB_TRACKS` (10→5) — see that pallet's `MAX_TRACK_CHAINS` doc comment
+/// for the full worst-case derivation (now 408, so 512 covers every validly
+/// registered descriptor with headroom; previously the structural worst case
+/// was 3232, well *above* the old 1024 cap, meaning a legal-but-extreme
+/// descriptor could have made this view permanently unreadable — that gap is
+/// now closed from the descriptor-size side rather than by raising this cap
+/// to match). Revert past it rather than let one `eth_call` walk hundreds of
+/// storage keys.
+const MAX_INSTANCE_SLOT_SCAN: usize = 512;
+
+/// Cumulative byte budget for `get_flow_instance`'s assembled response —
+/// `SlotRecord::metadata` plus every `Attempt::metadata` across every entry
+/// scanned. `MAX_INSTANCE_SLOT_SCAN` alone caps *entry count*, not bytes, and
+/// each entry can independently carry up to `MAX_SLOT_METADATA` +
+/// `MAX_ATTEMPTS` × `MAX_ATTEMPT_METADATA` (~330KB) — so the entry-count cap
+/// alone still allows assembling and ABI-encoding up to
+/// `MAX_INSTANCE_SLOT_SCAN` × ~330KB (~169MB even after the 2026-09-21
+/// tightening above) in one `eth_call`, for near-nothing gas (security-review
+/// M1). 2MB is sized off the largest documented real flow
+/// (`docs/tranche-custom-flows/design-minimal.md` §11.5, the settlement
+/// pipeline mapping: 2 main slots + a 4-slot×10-chain sub track + a
+/// 2-slot×10-chain sub track ≈ 62 entries) at the review's own "realistic
+/// large" per-entry size (~20KB, a full CCCP socket message rather than just
+/// a hash) — `62 × 20KB ≈ 1.24MB` — with ~1.6x headroom, not an arbitrary
+/// round number (an earlier pass at this used `BlockLength`'s 5MB, which
+/// wasn't actually derived from real usage). Revert (not silently truncate)
+/// past it — a caller needs to know the difference between "this is
+/// everything" and "this was cut short".
+const MAX_INSTANCE_SCAN_BYTES: usize = 2 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Precompile
@@ -337,7 +368,8 @@ where
 
 	/// Full timeline for one flow execution. Returns a zeroed view (`opened_at ==
 	/// 0`) if the instance doesn't exist. Scans every recorded slot for the
-	/// instance (capped at `MAX_INSTANCE_SLOT_SCAN`).
+	/// instance (capped at `MAX_INSTANCE_SLOT_SCAN` entries and, independently,
+	/// `MAX_INSTANCE_SCAN_BYTES` of cumulative metadata — security-review M1).
 	#[precompile::public("get_flow_instance(uint64,bytes16,bytes32)")]
 	#[precompile::view]
 	fn get_flow_instance(
@@ -365,6 +397,7 @@ where
 			BTreeMap::new();
 
 		let mut scanned = 0usize;
+		let mut scanned_bytes = 0usize;
 		for ((lane, slot_id), record) in
 			pallet_tranche_custom_flows::FlowSlots::<Runtime>::iter_prefix((
 				product_id,
@@ -375,6 +408,17 @@ where
 			scanned += 1;
 			if scanned > MAX_INSTANCE_SLOT_SCAN {
 				return Err(revert("instance has too many recorded slots to serialise"));
+			}
+			// Entry count alone doesn't bound bytes — each entry's metadata is
+			// independently up to ~330KB (security-review M1). Track the
+			// cumulative size of what this call would actually assemble/encode
+			// and revert before building a response larger than this chain's
+			// own block would ever be.
+			scanned_bytes += record.metadata.len();
+			scanned_bytes +=
+				record.attempts.iter().map(|attempt| attempt.metadata.len()).sum::<usize>();
+			if scanned_bytes > MAX_INSTANCE_SCAN_BYTES {
+				return Err(revert("instance's recorded metadata is too large to serialise"));
 			}
 			match lane {
 				Lane::Main => main_lane.push((slot_id, record)),

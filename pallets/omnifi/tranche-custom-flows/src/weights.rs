@@ -70,23 +70,23 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `TrancheCustomFlows::FlowDescriptors` (r:1 w:1)
-	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(5197), added: 7672, mode: `MaxEncodedLen`)
-	/// The range of component `s` is `[1, 256]`.
+	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(1179), added: 3654, mode: `MaxEncodedLen`)
+	/// The range of component `s` is `[1, 48]`.
 	fn set_flow_descriptor(s: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `76`
-		//  Estimated: `8662`
+		//  Estimated: `4644`
 		// Minimum execution time: 8_000_000 picoseconds.
-		Weight::from_parts(9_514_984, 8662)
-			// Standard Error: 581
-			.saturating_add(Weight::from_parts(53_374, 0).saturating_mul(s.into()))
+		Weight::from_parts(10_378_414, 4644)
+			// Standard Error: 1_456
+			.saturating_add(Weight::from_parts(125_961, 0).saturating_mul(s.into()))
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
 	/// Storage: `TrancheTxRegistry::TxRecorder` (r:1 w:0)
 	/// Proof: `TrancheTxRegistry::TxRecorder` (`max_values`: Some(1), `max_size`: Some(20), added: 515, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::FlowDescriptors` (r:1 w:0)
-	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(5197), added: 7672, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(1179), added: 3654, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::FlowInstances` (r:1 w:1)
 	/// Proof: `TrancheCustomFlows::FlowInstances` (`max_values`: None, `max_size`: Some(132), added: 2607, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::FlowSlots` (r:1 w:1)
@@ -101,47 +101,45 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `TrancheCustomFlows::InvestorFlowHistoryLen` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::InvestorFlowHistoryPage` (r:1 w:1)
 	/// Proof: `TrancheCustomFlows::InvestorFlowHistoryPage` (`max_values`: None, `max_size`: Some(4210), added: 6685, mode: `MaxEncodedLen`)
-	/// The range of component `s` is `[1, 256]`.
+	/// The range of component `s` is `[1, 48]`.
 	/// The range of component `n` is `[0, 30720]`.
 	/// The range of component `m` is `[0, 30720]`.
 	fn record_flow_tx(s: u32, n: u32, m: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `308293 + s * (2 ±0)`
-		//  Estimated: `311766 + m * (5 ±0) + n * (5 ±0) + s * (2 ±0)`
-		// Minimum execution time: 207_000_000 picoseconds.
-		Weight::from_parts(231_238_930, 311766)
-			// Standard Error: 25
-			.saturating_add(Weight::from_parts(274, 0).saturating_mul(n.into()))
-			// Standard Error: 25
-			.saturating_add(Weight::from_parts(464, 0).saturating_mul(m.into()))
-			.saturating_add(T::DbWeight::get().reads(5_u64))
-			.saturating_add(T::DbWeight::get().writes(3_u64))
-			.saturating_add(Weight::from_parts(0, 5).saturating_mul(m.into()))
-			.saturating_add(Weight::from_parts(0, 5).saturating_mul(n.into()))
-			.saturating_add(Weight::from_parts(0, 2).saturating_mul(s.into()))
+		//  Measured:  `308291 + s * (3 ±0)`
+		//  Estimated: `311894 + s * (3 ±0)`
+		// Minimum execution time: 200_000_000 picoseconds.
+		Weight::from_parts(235_166_357, 311894)
+			// Standard Error: 35
+			.saturating_add(Weight::from_parts(291, 0).saturating_mul(n.into()))
+			// Standard Error: 35
+			.saturating_add(Weight::from_parts(236, 0).saturating_mul(m.into()))
+			.saturating_add(T::DbWeight::get().reads(6_u64))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
+			.saturating_add(Weight::from_parts(0, 3).saturating_mul(s.into()))
 	}
 }
 
 // For backwards compatibility and tests.
 impl WeightInfo for () {
 	/// Storage: `TrancheCustomFlows::FlowDescriptors` (r:1 w:1)
-	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(5197), added: 7672, mode: `MaxEncodedLen`)
-	/// The range of component `s` is `[1, 256]`.
+	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(1179), added: 3654, mode: `MaxEncodedLen`)
+	/// The range of component `s` is `[1, 48]`.
 	fn set_flow_descriptor(s: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `76`
-		//  Estimated: `8662`
+		//  Estimated: `4644`
 		// Minimum execution time: 8_000_000 picoseconds.
-		Weight::from_parts(9_514_984, 8662)
-			// Standard Error: 581
-			.saturating_add(Weight::from_parts(53_374, 0).saturating_mul(s.into()))
+		Weight::from_parts(10_378_414, 4644)
+			// Standard Error: 1_456
+			.saturating_add(Weight::from_parts(125_961, 0).saturating_mul(s.into()))
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
 	/// Storage: `TrancheTxRegistry::TxRecorder` (r:1 w:0)
 	/// Proof: `TrancheTxRegistry::TxRecorder` (`max_values`: Some(1), `max_size`: Some(20), added: 515, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::FlowDescriptors` (r:1 w:0)
-	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(5197), added: 7672, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheCustomFlows::FlowDescriptors` (`max_values`: None, `max_size`: Some(1179), added: 3654, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::FlowInstances` (r:1 w:1)
 	/// Proof: `TrancheCustomFlows::FlowInstances` (`max_values`: None, `max_size`: Some(132), added: 2607, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::FlowSlots` (r:1 w:1)
@@ -156,23 +154,21 @@ impl WeightInfo for () {
 	/// Proof: `TrancheCustomFlows::InvestorFlowHistoryLen` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheCustomFlows::InvestorFlowHistoryPage` (r:1 w:1)
 	/// Proof: `TrancheCustomFlows::InvestorFlowHistoryPage` (`max_values`: None, `max_size`: Some(4210), added: 6685, mode: `MaxEncodedLen`)
-	/// The range of component `s` is `[1, 256]`.
+	/// The range of component `s` is `[1, 48]`.
 	/// The range of component `n` is `[0, 30720]`.
 	/// The range of component `m` is `[0, 30720]`.
 	fn record_flow_tx(s: u32, n: u32, m: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `308293 + s * (2 ±0)`
-		//  Estimated: `311766 + m * (5 ±0) + n * (5 ±0) + s * (2 ±0)`
-		// Minimum execution time: 207_000_000 picoseconds.
-		Weight::from_parts(231_238_930, 311766)
-			// Standard Error: 25
-			.saturating_add(Weight::from_parts(274, 0).saturating_mul(n.into()))
-			// Standard Error: 25
-			.saturating_add(Weight::from_parts(464, 0).saturating_mul(m.into()))
-			.saturating_add(RocksDbWeight::get().reads(5_u64))
-			.saturating_add(RocksDbWeight::get().writes(3_u64))
-			.saturating_add(Weight::from_parts(0, 5).saturating_mul(m.into()))
-			.saturating_add(Weight::from_parts(0, 5).saturating_mul(n.into()))
-			.saturating_add(Weight::from_parts(0, 2).saturating_mul(s.into()))
+		//  Measured:  `308291 + s * (3 ±0)`
+		//  Estimated: `311894 + s * (3 ±0)`
+		// Minimum execution time: 200_000_000 picoseconds.
+		Weight::from_parts(235_166_357, 311894)
+			// Standard Error: 35
+			.saturating_add(Weight::from_parts(291, 0).saturating_mul(n.into()))
+			// Standard Error: 35
+			.saturating_add(Weight::from_parts(236, 0).saturating_mul(m.into()))
+			.saturating_add(RocksDbWeight::get().reads(6_u64))
+			.saturating_add(RocksDbWeight::get().writes(4_u64))
+			.saturating_add(Weight::from_parts(0, 3).saturating_mul(s.into()))
 	}
 }
