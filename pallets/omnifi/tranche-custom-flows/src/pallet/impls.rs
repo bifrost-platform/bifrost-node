@@ -238,7 +238,19 @@ impl<T: Config> Pallet<T> {
 		}
 
 		// step 8 — persist instance + open-count + investor index placement
-		FlowInstances::<T>::insert((product_id, flow_id, &instance_key), &instance);
+		//
+		// Only actually writes when `instance` could have changed since it was
+		// last read: `is_open` (brand new — nothing stored yet to compare
+		// against) or `newly_satisfied` (the only condition that gates step 7,
+		// the sole place `pending_lanes`/`closed` ever change on an existing
+		// instance — `just_closed` is already implied by it, kept for
+		// readability). A late/duplicate/optional-slot attempt that doesn't
+		// satisfy anything new re-persists byte-identical data otherwise
+		// (security-review 2026-09-18 L6, originally 09-03 L3) — cheap per
+		// call, but needless on every such record.
+		if is_open || newly_satisfied || just_closed {
+			FlowInstances::<T>::insert((product_id, flow_id, &instance_key), &instance);
+		}
 
 		// `OpenInstanceCount` gates descriptor replacement (§7). Same lifecycle
 		// edges as the `FlowOpened` / `FlowClosed` events below — an
