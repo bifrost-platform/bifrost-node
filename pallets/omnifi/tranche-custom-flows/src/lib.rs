@@ -88,19 +88,53 @@ pub type TrackKey = Option<ChainId>;
 // Bounds
 // ---------------------------------------------------------------------------
 
-/// Max steps in `main_track.slots` or in one sub track's `slots`.
-pub const MAX_SLOTS: u32 = 32;
-/// Max sub tracks (parallel-branch kinds) per flow.
-pub const MAX_SUB_TRACKS: u32 = 10;
-/// Max chains allowed in one sub track.
+/// Max steps in `main_track.slots` or in one sub track's `slots`. 2026-09-21
+/// (security-review M1): lowered from 32 to 8 — the largest documented real
+/// flow (`docs/tranche-custom-flows/design-minimal.md` §11.5, the settlement
+/// pipeline mapping) uses at most 4 slots per cycle; 8 gives 2x headroom. This
+/// bound, together with [`MAX_SUB_TRACKS`], is what keeps a single instance's
+/// worst-case `FlowSlots` entry count small enough for
+/// `precompile-tranche-custom-flows::get_flow_instance` to safely scan and
+/// serialise in one `eth_call` (see [`MAX_TRACK_CHAINS`]'s doc comment for the
+/// full worst-case calculation).
+pub const MAX_SLOTS: u32 = 8;
+/// Max sub tracks (parallel-branch kinds) per flow. 2026-09-21
+/// (security-review M1): lowered from 10 to 5 — the largest documented real
+/// flow (design-minimal.md §11.5) uses 2 sub tracks (collect/response,
+/// finalize); 5 gives 2.5x headroom (3 was the first pass at this bound, but
+/// felt too tight for descriptor design headroom, so it was relaxed to 5).
+/// See [`MAX_TRACK_CHAINS`]'s doc comment for why this bound matters for
+/// `get_flow_instance`'s worst case.
+pub const MAX_SUB_TRACKS: u32 = 5;
+/// Max chains allowed in one sub track. Deliberately left at 10 — this
+/// mirrors the "max 10 chains" convention already used throughout this
+/// tranche system (`pallet_tranche_system::MAX_MULTICHAIN_ADAPTERS`,
+/// `MAX_TRANCHE_CHAINS`, this pallet's own [`MAX_ATTEMPTS`]) — a flow modeling
+/// the settlement pipeline (design-minimal.md §11.5: one sub track per
+/// adapter chain, one per vault chain) genuinely needs up to 10 per sub track.
+///
+/// Combined with [`MAX_SLOTS`]/[`MAX_SUB_TRACKS`] above, this bounds a single
+/// instance's worst-case `FlowSlots` entry count — `main_track.slots.len() +
+/// Σ(sub_track.slots.len() × sub_track.chains.len())` — at
+/// `MAX_SLOTS + MAX_SUB_TRACKS × MAX_SLOTS × MAX_TRACK_CHAINS` = `8 + 5×8×10`
+/// = 408 (2026-09-21: previously `32 + 10×32×10` = 3232 before `MAX_SLOTS`/
+/// `MAX_SUB_TRACKS` were tightened — comfortably below the old, unrelated
+/// `MAX_DESCRIPTOR_SLOTS`=256 disjoint-id ceiling, so it was never actually
+/// the binding constraint despite looking like one). This is the number
+/// `precompile-tranche-custom-flows::MAX_INSTANCE_SLOT_SCAN` (512) must stay
+/// above for `get_flow_instance` to never reject a validly-registered
+/// descriptor's instance.
 pub const MAX_TRACK_CHAINS: u32 = 10;
 /// Max total slots across `main_track` ∪ every `sub_tracks[*]`, and hence the
 /// upper bound on the `resolve_lane` slot scan (the `s` weight component of
 /// `set_flow_descriptor` / `record_flow_tx`). Structurally the containers hold
-/// `MAX_SLOTS * (1 + MAX_SUB_TRACKS)` = 352, but slot ids are [`SlotId`] (`u8`)
-/// and `validate_and_finalize_descriptor` requires them globally disjoint and
-/// strictly ascending, so a valid descriptor can carry at most 256 of them.
-pub const MAX_DESCRIPTOR_SLOTS: u32 = 256;
+/// `MAX_SLOTS * (1 + MAX_SUB_TRACKS)` = 48, comfortably under the type-level
+/// ceiling slot ids ([`SlotId`], a `u8`) would otherwise impose (256) —
+/// 2026-09-21: before `MAX_SLOTS`/`MAX_SUB_TRACKS` were tightened (32/10),
+/// that same structural product was 352, which the u8 ceiling silently
+/// capped down to 256; now the structural product itself is the binding
+/// value, not the type ceiling.
+pub const MAX_DESCRIPTOR_SLOTS: u32 = 48;
 /// Max bytes of `SlotRecord::metadata` (per-slot, last-write-wins). Ceiling
 /// sized to hold a full CCCP socket message (~20 KB) plus overhead — typical
 /// entries are far smaller. `FlowSlots` is `#[pallet::unbounded]`, so this bound
