@@ -335,6 +335,11 @@ pub mod pallet {
 			// ceiling (security-review H1)
 			MAX_DESCRIPTOR_SLOTS,
 			attempt_metadata.as_ref().map_or(0, |metadata| metadata.len() as u32),
+			// `slot_metadata` is a second, independent up-to-30KB field
+			// (`FlowSlots`' `SlotRecord.metadata`, distinct from each
+			// `Attempt.metadata`) that this call can overwrite — previously
+			// uncounted entirely (security-review H1, 2026-09-18 finding).
+			slot_metadata.as_ref().map_or(0, |metadata| metadata.len() as u32),
 		))]
 		pub fn record_flow_tx(
 			origin: OriginFor<T>,
