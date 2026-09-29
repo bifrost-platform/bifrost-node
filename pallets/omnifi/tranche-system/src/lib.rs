@@ -72,13 +72,8 @@ pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 10;
 pub const MAX_TOTAL_ADAPTERS: u32 = MAX_MULTICHAIN_ADAPTERS * MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 
 /// Maximum number of per-chain TrancheManager bindings per product (see
-/// `MultichainProductDetails::multichain_tranche_managers`) — one entry per
-/// chain that has at least one tranche, so this is bounded by the same
-/// `MAX_TRANCHE_CHAINS` a product's tranches themselves are (not an
-/// independent cap — a `multichain_tranche_managers` entry can never outnumber
-/// the distinct tranche chains it's binding TrancheManagers for, since
-/// `set_multichain_tranche_managers` rejects any `chain_id` without a tranche
-/// on it).
+/// `MultichainProductDetails::multichain_tranche_managers`). Reuses
+/// `MAX_TRANCHE_CHAINS` as its cap; a manager chain needn't have a tranche.
 pub const MAX_TRANCHE_MANAGERS: u32 = MAX_TRANCHE_CHAINS;
 
 /// Maximum number of individual Adapters per single-chain product (see
@@ -531,11 +526,9 @@ pub struct MultichainProductDetails<AccountId> {
 	/// Hub included: a Hub-chain entry is required if (and only if) the
 	/// product has a Hub-deployed vault, same as any Spoke chain. Independent
 	/// per product — two products sharing a chain each bind their own
-	/// TrancheManager instance there. `set_multichain_tranche_managers`
-	/// enforces that every key here already has at least one tranche on that
-	/// chain (`Error::TrancheManagerChainHasNoTranche` otherwise) — this map
-	/// can never have more entries than `tranches` has chain groups, hence
-	/// reusing `MAX_TRANCHE_CHAINS` as this map's own bound.
+	/// TrancheManager instance there. A key need not have a
+	/// tranche on that chain (e.g. an adapter-only chain) — `MAX_TRANCHE_CHAINS`
+	/// is reused only as this map's size cap.
 	pub multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
 }
 

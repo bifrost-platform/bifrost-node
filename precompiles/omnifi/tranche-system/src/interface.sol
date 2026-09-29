@@ -697,10 +697,8 @@ interface TrancheSystem {
      *      intended end-state list every time, not deltas, same full-array-replace
      *      rationale as set_multichain_adapters (here: simplicity, since there's no
      *      cross-entry invariant like weightBps to protect).
-     *      Every entry's chain_id MUST already have at least one tranche registered on it
-     *      (reverts otherwise) — a TrancheManager binding for a chain with no vault on it
-     *      doesn't mean anything. In practice this means registering a new chain's tranche
-     *      via set_tranche BEFORE binding its TrancheManager here, not the other way round.
+     *      An entry's chain_id need not have a tranche registered on it (e.g. an
+     *      adapter-only chain).
      *      Emits MultichainTrancheManagersSet on success.
      * @param product_id                   The product whose TrancheManager table is being replaced
      * @param multichain_tranche_managers  The full intended end-state list of per-chain
