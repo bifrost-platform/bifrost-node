@@ -206,13 +206,9 @@ pub mod pallet {
 		/// — every tranche's `vault.chain_id` must equal the product's
 		/// declared `chain_id`.
 		SingleChainTranchesMustShareChain,
-		/// `create_product`'s or `set_multichain_tranche_managers`'s
-		/// `multichain_tranche_managers` input carried a `chain_id` with no
-		/// tranche on it for this product — a TrancheManager binding only makes
-		/// sense for a chain one of the product's vaults is actually deployed on
-		/// (see `MultichainProductDetails::multichain_tranche_managers`'s doc
-		/// comment). For `set_multichain_tranche_managers`, register a tranche
-		/// on that chain first (`set_tranche`), then bind its TrancheManager.
+		/// No longer returned: a TrancheManager may be bound to a chain with no
+		/// tranche (e.g. an adapter-only chain). Variant kept so later error
+		/// indices don't shift on the live chain.
 		TrancheManagerChainHasNoTranche,
 		/// `set_request_flow_version`/`set_settlement_flow_version` are stubbed
 		/// to always reject for now — no `FlowVersion` beyond `V1` has a real
@@ -499,20 +495,6 @@ pub mod pallet {
 				tranches
 					.try_insert(chain_id, chain_tranches)
 					.map_err(|_| Error::<T>::TooManyTranches)?;
-			}
-
-			// Same rule `set_multichain_tranche_managers` enforces — a
-			// TrancheManager binding only makes sense for a chain this product
-			// actually has a tranche on. Checked here too so the two entry
-			// points agree (this half; completeness — every tranche chain
-			// having a manager — is deliberately not required, see
-			// `MultichainProductDetails::multichain_tranche_managers`'s doc
-			// comment).
-			for chain_id in multichain_tranche_managers.keys() {
-				ensure!(
-					tranches.contains_key(chain_id),
-					Error::<T>::TrancheManagerChainHasNoTranche
-				);
 			}
 
 			Self::ensure_tranches_are_unregistered(
@@ -981,11 +963,8 @@ pub mod pallet {
 		/// atomically (Hub included, if the product has a Hub vault — see
 		/// `ProductDetails::multichain_tranche_managers`'s doc comment).
 		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
-		/// as `create_product`. Every `chain_id` key in the input must already
-		/// have at least one tranche registered on it (`Error::TrancheManagerChainHasNoTranche`
-		/// otherwise) — a TrancheManager binding for a chain with no vault on
-		/// it doesn't mean anything. Register a chain's tranche first
-		/// (`set_tranche`), then bind its TrancheManager here.
+		/// as `create_product`. A TrancheManager may be bound to any chain, including one
+		/// with no tranche (e.g. an adapter-only chain).
 		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_tranche_managers())]
 		pub fn set_multichain_tranche_managers(
@@ -1003,12 +982,6 @@ pub mod pallet {
 						return Err(Error::<T>::WrongProductType.into())
 					},
 				};
-				for chain_id in multichain_tranche_managers.keys() {
-					ensure!(
-						product.tranches.contains_key(chain_id),
-						Error::<T>::TrancheManagerChainHasNoTranche
-					);
-				}
 				product.multichain_tranche_managers = multichain_tranche_managers;
 				Ok(())
 			})?;
