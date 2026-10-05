@@ -3,15 +3,14 @@ use super::pallet::*;
 use crate::{pallet::*, IdentificationTuple, Relayer, RelayerMetadata, UnresponsivenessOffence};
 
 use bp_staking::{
-	traits::{Authorities, RelayManager},
+	traits::{Authorities, RelayExecutiveManager, RelayManager, RelayerSetManager},
 	RoundIndex,
 };
 use frame_support::{
 	pallet_prelude::*,
-	traits::{ChangeMembers, ValidatorSet, ValidatorSetWithIdentification},
+	traits::{ValidatorSet, ValidatorSetWithIdentification},
 	BoundedBTreeSet,
 };
-use pallet_membership::{Instance3, Members, Prime};
 use sp_runtime::traits::Convert;
 use sp_staking::offence::ReportOffence;
 use sp_std::{vec, vec::Vec};
@@ -32,7 +31,6 @@ impl<T: Config> Authorities<T::AccountId> for Pallet<T> {
 
 impl<T: Config> RelayManager<T::AccountId> for Pallet<T>
 where
-	T: pallet_membership::Config<Instance3>,
 	<T as frame_system::Config>::AccountId: From<
 		<<T as Config>::ValidatorSet as ValidatorSet<
 			<T as frame_system::Config>::AccountId,
@@ -219,29 +217,53 @@ where
 				T::SocketQueue::replace_authority(&r.old, &r.new);
 				T::RegistrationPool::replace_authority(&r.old, &r.new);
 				T::Blaze::replace_authority(&r.old, &r.new);
-
 				// replace member of RelayExecutive (only if it's the old member)
-				let mut members = Members::<T, Instance3>::get();
-				if let Some(location) = members.binary_search(&r.old).ok() {
-					if members.binary_search(&r.new).is_err() {
-						members[location] = r.new.clone();
-						members.sort();
-
-						Members::<T, Instance3>::put(members.clone());
-						T::MembershipChanged::change_members_sorted(&[r.new.clone()], &[r.old.clone()], &members[..]);
-
-						if Prime::<T, Instance3>::get() == Some(r.old) {
-							Prime::<T, Instance3>::put(&r.new);
-							T::MembershipChanged::set_prime(Some(r.new));
-						}
-					}
-				}
+				T::RelayExecutives::replace_member(&r.old, &r.new);
 			}
 		});
 	}
 }
 
+impl<T: Config> RelayerSetManager<T::AccountId> for Pallet<T> {
+	fn request_relayer_set(controller: &T::AccountId, new: T::AccountId) -> DispatchResult {
+		Self::do_set_relayer(controller, new)
+	}
+
+	fn cancel_relayer_set(controller: &T::AccountId) -> DispatchResult {
+		Self::do_cancel_relayer_set(controller)
+	}
+
+	fn has_pending_relayer_sets() -> bool {
+		!DelayedRelayerSets::<T>::get(Round::<T>::get()).is_empty()
+	}
+}
+
 impl<T: Config> Pallet<T> {
+	/// Request replacing the relayer bonded to `controller` with `new`. The state reflection will
+	/// be applied on the next round update.
+	pub fn do_set_relayer(controller: &T::AccountId, new: T::AccountId) -> DispatchResult {
+		let old = BondedController::<T>::get(controller).ok_or(Error::<T>::ControllerDNE)?;
+		ensure!(old != new, Error::<T>::NoWritingSameValue);
+		ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
+		ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
+		ensure!(
+			!Self::is_relayer_set_requested(old.clone()),
+			Error::<T>::AlreadyRelayerSetRequested
+		);
+		Self::add_to_relayer_sets(old.clone(), new.clone())?;
+		Self::deposit_event(Event::RelayerSet { old, new });
+		Ok(())
+	}
+
+	/// Cancel the pending relayer replacement request of `controller`.
+	pub fn do_cancel_relayer_set(controller: &T::AccountId) -> DispatchResult {
+		let relayer = BondedController::<T>::get(controller).ok_or(Error::<T>::ControllerDNE)?;
+		ensure!(Self::is_relayer_set_requested(relayer.clone()), Error::<T>::RelayerSetDNE);
+		Self::remove_relayer_set(&relayer)?;
+		Self::deposit_event(Event::RelayerSetCancelled { relayer });
+		Ok(())
+	}
+
 	/// Verifies if the given account is a (candidate) relayer
 	pub fn is_relayer(relayer: &T::AccountId) -> bool {
 		if RelayerState::<T>::get(relayer).is_some() {

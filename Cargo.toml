@@ -6,10 +6,14 @@ members = [
 	"node/dev",
 	"node/testnet",
 	"node/mainnet",
+	"node/private-mainnet-hub",
+	"node/private-testnet-hub",
 	"runtime/common",
 	"runtime/dev",
 	"runtime/testnet",
 	"runtime/mainnet",
+	"runtime/private-mainnet-hub",
+	"runtime/private-testnet-hub",
 	"pallets/bfc-staking",
 	"pallets/bfc-utility",
 	"pallets/bfc-offences",
@@ -20,6 +24,7 @@ members = [
 	"pallets/bifrost-evm-tx-payment",
 	"pallets/oracle-registry",
 	"pallets/cccp-relay-queue",
+	"pallets/permissioned-authority",
 	"pallets/omnifi/tranche-system",
 	"pallets/omnifi/tranche-custom-flows",
 	"pallets/omnifi/tranche-permissions",
@@ -37,6 +42,7 @@ members = [
 	"precompiles/btc-socket-queue",
 	"precompiles/blaze",
 	"precompiles/bifrost-evm-tx-payment",
+	"precompiles/permissioned-authority",
 	"precompiles/omnifi/tranche-system",
 	"precompiles/omnifi/tranche-custom-flows",
 	"precompiles/omnifi/tranche-permissions",
@@ -114,16 +120,22 @@ bifrost-common-constants = { default-features = false, path = "runtime/common/co
 bifrost-dev-constants = { default-features = false, path = "runtime/dev/constants" }
 bifrost-testnet-constants = { default-features = false, path = "runtime/testnet/constants" }
 bifrost-mainnet-constants = { default-features = false, path = "runtime/mainnet/constants" }
+bifrost-private-mainnet-hub-constants = { default-features = false, path = "runtime/private-mainnet-hub/constants" }
+bifrost-private-testnet-hub-constants = { default-features = false, path = "runtime/private-testnet-hub/constants" }
 bifrost-common-runtime = { default-features = false, path = "runtime/common" }
 bifrost-dev-runtime = { path = "runtime/dev" }
 bifrost-testnet-runtime = { path = "runtime/testnet" }
 bifrost-mainnet-runtime = { path = "runtime/mainnet" }
+bifrost-private-mainnet-hub-runtime = { path = "runtime/private-mainnet-hub" }
+bifrost-private-testnet-hub-runtime = { path = "runtime/private-testnet-hub" }
 
 # Bifrost Client
 bifrost-common-node = { path = "node/common" }
 bifrost-dev-node = { path = "node/dev" }
 bifrost-testnet-node = { path = "node/testnet" }
 bifrost-mainnet-node = { path = "node/mainnet" }
+bifrost-private-mainnet-hub-node = { path = "node/private-mainnet-hub" }
+bifrost-private-testnet-hub-node = { path = "node/private-testnet-hub" }
 
 # Bifrost Frame
 pallet-bfc-staking = { default-features = false, path = "pallets/bfc-staking" }
@@ -136,6 +148,7 @@ pallet-blaze = { default-features = false, path = "pallets/blaze" }
 pallet-bifrost-evm-tx-payment = { default-features = false, path = "pallets/bifrost-evm-tx-payment" }
 pallet-oracle-registry = { default-features = false, path = "pallets/oracle-registry" }
 pallet-cccp-relay-queue = { default-features = false, path = "pallets/cccp-relay-queue" }
+pallet-permissioned-authority = { default-features = false, path = "pallets/permissioned-authority" }
 
 # OmniFi tranche-system Pallets
 pallet-tranche-system = { default-features = false, path = "pallets/omnifi/tranche-system" }
@@ -164,6 +177,7 @@ precompile-btc-registration-pool = { default-features = false, path = "precompil
 precompile-btc-socket-queue = { default-features = false, path = "precompiles/btc-socket-queue" }
 precompile-blaze = { default-features = false, path = "precompiles/blaze" }
 precompile-bifrost-evm-tx-payment = { default-features = false, path = "precompiles/bifrost-evm-tx-payment" }
+precompile-permissioned-authority = { default-features = false, path = "precompiles/permissioned-authority" }
 
 # OmniFi tranche-system Precompiles
 precompile-tranche-system = { default-features = false, path = "precompiles/omnifi/tranche-system" }

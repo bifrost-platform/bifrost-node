@@ -170,60 +170,18 @@ where
 	///
 	/// This is called internally and by the trait implementation.
 	fn is_feeless_internal(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
-		// TrancheTxRegistry precompile address: 0x0000000000000000000000000000000000000203
-		const TX_REGISTRY_PRECOMPILE: H160 =
-			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
-
-		// TrancheTxRegistryV2 precompile address: 0x0000000000000000000000000000000000000303
-		// — chunked Collect/Response/Finalize settlement pipeline, new products only (see
-		// docs/tranche-tx-registry/settlement-leg-chunking-design.md). A separate pallet and
-		// a separate precompile address from v1's, but the same recorder identity (v2's
-		// `Config::RecorderOrigin` is `pallet_tranche_tx_registry::EnsureTxRecorder`, not its
-		// own) — see `R::is_tx_recorder`, reused unchanged for this branch too. `0x0303`
-		// (not `0x0300`) to mirror v1's own offset for this pallet's slot (`0x0200` block:
-		// system=+0, investments=+1, permissions=+2, tx-registry=+3, custom-flows=+4) — see
-		// `runtime/dev/src/precompiles.rs`'s own comment on the `0x0300` block's layout.
-		const TX_REGISTRY_PRECOMPILE_V2: H160 =
-			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0x03]);
-
-		// TrancheCustomFlows precompile address: 0x0000000000000000000000000000000000000204
-		const CUSTOM_FLOWS_PRECOMPILE: H160 =
-			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x04]);
-
 		// BifrostTransactionPayment precompile address: 0x0000000000000000000000000000000000000810
 		const TX_PAYMENT_PRECOMPILE: H160 =
 			H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x10]);
 
+		if let Some(is_feeless) = is_tranche_recorder_feeless::<R>(caller, target, input) {
+			return is_feeless;
+		}
+
 		if let Some(target) = target {
-			if target == TX_REGISTRY_PRECOMPILE && input.len() >= 4 {
-				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
-				return R::is_record_call_selector(selector) && R::is_tx_recorder(caller);
-			}
-
-			// Separate address, separate selector set (`is_record_call_selector_v2` — v2's
-			// `record_*` functions have different ABI signatures, e.g. `record_settlement_tx`
-			// gained `chunk_index`/`chunk_count`, so different selectors) — but the *same*
-			// recorder identity check as v1 (`R::is_tx_recorder`, not a separate
-			// `is_tx_recorder_v2`), matching `Config::RecorderOrigin` above. Correlated
-			// correctly by construction: this branch only ever runs for calls actually
-			// targeting the v2 address, so a v1 selector can never be evaluated here and
-			// vice versa.
-			if target == TX_REGISTRY_PRECOMPILE_V2 && input.len() >= 4 {
-				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
-				return R::is_record_call_selector_v2(selector) && R::is_tx_recorder(caller);
-			}
-
-			// Same recorder account, same "only one caller can ever reach it"
-			// property as the tx-registry branch above — `pallet-tranche-custom-flows`'s
-			// `RecorderOrigin` rejects everyone else at dispatch.
-			if target == CUSTOM_FLOWS_PRECOMPILE && input.len() >= 4 {
-				let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
-				return R::is_custom_flow_record_selector(selector) && R::is_tx_recorder(caller);
-			}
-
 			if target == TX_PAYMENT_PRECOMPILE && input.len() >= 4 {
 				// Function selectors, derived the same way as the tx-registry ones
-				// above — computed by `precompile_utils`'s own macro straight from
+				// in `is_tranche_recorder_feeless` — computed by `precompile_utils`'s own macro straight from
 				// `precompile-bifrost-evm-tx-payment`'s `#[precompile::public("...")]`
 				// signature strings, not a hand-verified `cast sig` constant.
 				type Call<T> = BifrostTransactionPaymentPrecompileCall<T>;
@@ -316,6 +274,90 @@ where
 		}
 
 		false
+	}
+}
+
+/// Feeless rule for the tranche recorder's `record_*` calls, shared by
+/// `BifrostFeelessCalls` and `TrancheRecorderFeelessCalls`.
+///
+/// Returns `None` when `target` isn't one of the tranche recorder precompiles (so the caller
+/// can fall through to its own rules), or `Some(is_feeless)` when it is.
+fn is_tranche_recorder_feeless<R: TxRegistryRecorderCheck>(
+	caller: H160,
+	target: Option<H160>,
+	input: &[u8],
+) -> Option<bool> {
+	// TrancheTxRegistry precompile address: 0x0000000000000000000000000000000000000203
+	const TX_REGISTRY_PRECOMPILE: H160 =
+		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x03]);
+
+	// TrancheTxRegistryV2 precompile address: 0x0000000000000000000000000000000000000303
+	// — chunked Collect/Response/Finalize settlement pipeline, new products only (see
+	// docs/tranche-tx-registry/settlement-leg-chunking-design.md). A separate pallet and
+	// a separate precompile address from v1's, but the same recorder identity (v2's
+	// `Config::RecorderOrigin` is `pallet_tranche_tx_registry::EnsureTxRecorder`, not its
+	// own) — see `R::is_tx_recorder`, reused unchanged for this branch too. `0x0303`
+	// (not `0x0300`) to mirror v1's own offset for this pallet's slot (`0x0200` block:
+	// system=+0, investments=+1, permissions=+2, tx-registry=+3, custom-flows=+4) — see
+	// `runtime/dev/src/precompiles.rs`'s own comment on the `0x0300` block's layout.
+	const TX_REGISTRY_PRECOMPILE_V2: H160 =
+		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0x03]);
+
+	// TrancheCustomFlows precompile address: 0x0000000000000000000000000000000000000204
+	const CUSTOM_FLOWS_PRECOMPILE: H160 =
+		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x04]);
+
+	let target = target?;
+	if input.len() < 4 {
+		return None;
+	}
+	let selector = u32::from_be_bytes([input[0], input[1], input[2], input[3]]);
+
+	if target == TX_REGISTRY_PRECOMPILE {
+		return Some(R::is_record_call_selector(selector) && R::is_tx_recorder(caller));
+	}
+
+	// Separate address, separate selector set (`is_record_call_selector_v2` — v2's
+	// `record_*` functions have different ABI signatures, e.g. `record_settlement_tx`
+	// gained `chunk_index`/`chunk_count`, so different selectors) — but the *same*
+	// recorder identity check as v1 (`R::is_tx_recorder`, not a separate
+	// `is_tx_recorder_v2`), matching `Config::RecorderOrigin` above. Correlated
+	// correctly by construction: this branch only ever runs for calls actually
+	// targeting the v2 address, so a v1 selector can never be evaluated here and
+	// vice versa.
+	if target == TX_REGISTRY_PRECOMPILE_V2 {
+		return Some(R::is_record_call_selector_v2(selector) && R::is_tx_recorder(caller));
+	}
+
+	// Same recorder account, same "only one caller can ever reach it"
+	// property as the tx-registry branch above — `pallet-tranche-custom-flows`'s
+	// `RecorderOrigin` rejects everyone else at dispatch.
+	if target == CUSTOM_FLOWS_PRECOMPILE {
+		return Some(R::is_custom_flow_record_selector(selector) && R::is_tx_recorder(caller));
+	}
+
+	None
+}
+
+/// Feeless call filter for runtimes that wire up the tranche recorder pallets but not
+/// `pallet-bifrost-evm-tx-payment` (e.g. `runtime/private-mainnet-hub`). Only the
+/// tx recorder's `record_*` calls are feeless — there is no ERC20 fee-token path, so a
+/// zero-balance caller can submit exactly the calls that are also truly feeless.
+pub struct TrancheRecorderFeelessCalls<R>(PhantomData<R>);
+
+impl<R: TxRegistryRecorderCheck> pallet_evm::FeelessCallFilter for TrancheRecorderFeelessCalls<R> {
+	fn is_zero_balance_callable(
+		caller: H160,
+		target: Option<H160>,
+		input: &[u8],
+		_gas_limit: U256,
+		_base_fee: U256,
+	) -> bool {
+		Self::is_feeless(caller, target, input)
+	}
+
+	fn is_feeless(caller: H160, target: Option<H160>, input: &[u8]) -> bool {
+		is_tranche_recorder_feeless::<R>(caller, target, input).unwrap_or(false)
 	}
 }
 
