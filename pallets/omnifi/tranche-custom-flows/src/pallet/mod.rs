@@ -1,15 +1,12 @@
 mod impls;
 
 use crate::{
-	migrations, ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey, Lane,
-	ProductId, SlotId, SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA,
-	MAX_DESCRIPTOR_SLOTS, MAX_SLOT_METADATA,
+	ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey, Lane, ProductId,
+	SlotId, SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA, MAX_DESCRIPTOR_SLOTS,
+	MAX_SLOT_METADATA,
 };
 
-use frame_support::{
-	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, StorageVersion},
-};
+use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, H256};
 use sp_std::vec::Vec;
@@ -18,24 +15,11 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	/// The pallet shipped to a live chain with no `#[pallet::storage_version]`
-	/// (on-chain version = implicit `0`). `V1` is the first migration —
-	/// `migrations::v1`, which pages `InvestorFlowHistory` (see
-	/// `bp_tranche::history`).
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade() -> Weight {
-			// `VersionedMigration` self-gates on the exact on-chain version, so
-			// this is inert once the chain is already at v1.
-			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
-		}
-	}
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {

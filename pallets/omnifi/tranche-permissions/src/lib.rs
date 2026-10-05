@@ -2,7 +2,6 @@
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-pub mod migrations;
 #[cfg(all(test, feature = "runtime-benchmarks"))]
 mod mock;
 mod pallet;

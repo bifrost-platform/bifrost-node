@@ -1,8 +1,8 @@
 mod impls;
 
 use crate::{
-	migrations, BridgeStatus, ChainId, HistoryPage, ProductId, ReceiveEntry, ReceiveKind,
-	RequestChainEntry, RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
+	BridgeStatus, ChainId, HistoryPage, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
+	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
 	SettlementFlowExtension, SettlementId, SettlementStep, TxRecord, WeightInfo, WhitelistEntry,
 	WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
 	MAX_SETTLEMENT_REQUESTS,
@@ -12,10 +12,7 @@ use pallet_tranche_system::{
 	MAX_TRANCHE_CHAINS,
 };
 
-use frame_support::{
-	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, StorageVersion},
-};
+use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_std::vec::Vec;
@@ -24,27 +21,11 @@ use sp_std::vec::Vec;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV3` alone: each `VersionedMigration`
-			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs all three, back to back, in the
-			// same upgrade) or already at v2 (skips straight to v3 — the live testbed
-			// case) — same pattern as
-			// `pallet_tranche_system::pallet::Hooks::on_runtime_upgrade`.
-			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
-				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
-				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
-				.saturating_add(migrations::v4::MigrateToV4::<T>::on_runtime_upgrade())
-		}
-	}
 
 	#[pallet::config]
 	/// `pallet_evm::Config` supplies `<Self as pallet_evm::Config>::ChainId`, this chain's
@@ -536,8 +517,7 @@ pub mod pallet {
 	/// `get_investor_request_history` pages through. `ValueQuery` — `0` for an
 	/// investor/product with no requests. Paired with `InvestorRequestHistoryPage`;
 	/// see [`bp_tranche::history`] for the paged-list design (append touches only
-	/// the tail page, reads only the pages they return). Replaced the old
-	/// unbounded `Vec<RequestId>` in `STORAGE_VERSION` 4 (`migrations::v4`).
+	/// the tail page, reads only the pages they return).
 	pub type InvestorRequestHistoryLen<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, ProductId, u32, ValueQuery>;
 
@@ -580,10 +560,7 @@ pub mod pallet {
 	/// sourced from the same `DepositsApproved`/`RedeemsApproved` events) already
 	/// enforces on "investors settled together in one cycle". A
 	/// `RequestsApproved` batch that would overflow it is rejected with
-	/// `TooManySettlementRequests`. Was an unbounded `Vec<RequestId>` before
-	/// `STORAGE_VERSION` 4 (`migrations::v4`, which `defensive_truncate`s any
-	/// pre-existing over-long entry — expected to be a no-op given the upstream
-	/// invariant).
+	/// `TooManySettlementRequests`.
 	pub type SettlementRequests<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
@@ -727,8 +704,7 @@ pub mod pallet {
 	/// The count `get_investor_receive_history` pages through. `ValueQuery` —
 	/// `0` if none. Paired with `InvestorReceiveHistoryPage`; the receive-side
 	/// mirror of `InvestorRequestHistoryLen` (see it, and [`bp_tranche::history`],
-	/// for the paged-list design). Replaced the old unbounded
-	/// `Vec<(VaultId, H256)>` in `STORAGE_VERSION` 4 (`migrations::v4`).
+	/// for the paged-list design).
 	pub type InvestorReceiveHistoryLen<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, ProductId, u32, ValueQuery>;
 

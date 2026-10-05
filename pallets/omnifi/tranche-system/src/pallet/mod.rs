@@ -1,18 +1,15 @@
 mod impls;
 
 use crate::{
-	migrations, AdapterInfo, AdapterKey, ChainTranches, CrudAction, FlowVersion,
-	MultichainAdapterInfo, MultichainProductDetails, ProductDetails, ProductId, SettlementMode,
-	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
-	ValuationInfo, VaultId, VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	AdapterInfo, AdapterKey, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
+	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
+	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
+	VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
 	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
 	MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 
-use frame_support::{
-	pallet_prelude::*,
-	traits::{OnRuntimeUpgrade, StorageVersion},
-};
+use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
 use sp_core::H160;
 use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
@@ -21,7 +18,7 @@ use sp_std::{collections::btree_map::BTreeMap, vec::Vec};
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(6);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -327,16 +324,13 @@ pub mod pallet {
 	/// supplying `product_id` up front.
 	///
 	/// An entry is written once, at first registration, and never removed
-	/// afterward (2026-08-26, `v6`) — `set_tranche(Remove)` only flips
+	/// afterward — `set_tranche(Remove)` only flips
 	/// `removed` to `true`. A `VaultId` therefore can never move to a
 	/// *different* product: `set_tranche(Add)` on a key already present here
 	/// reverts with `Error::VaultBoundToDifferentProduct` unless
 	/// `product_id` matches the existing entry's, in which case it's treated
 	/// as that same product re-adding a vault it previously removed
-	/// (`removed` clears back to `false`). Before `v6`, `Remove` deleted the
-	/// entry outright, freeing the key for any product to claim — see
-	/// `migrations::v6` for why that history can't be reconstructed
-	/// retroactively for vaults already removed before this upgrade.
+	/// (`removed` clears back to `false`).
 	pub type Vaults<T: Config> = StorageMap<_, Blake2_128Concat, VaultId, VaultRegistration>;
 
 	#[pallet::storage]
@@ -370,25 +364,6 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 	// Hooks
 	// -----------------------------------------------------------------------
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_runtime_upgrade() -> Weight {
-			// Chained rather than just `MigrateToV6` alone: each `VersionedMigration`
-			// self-gates on its own exact on-chain version, so this is safe regardless of
-			// whether a given chain is still at v0 (runs all six, back to back, in the
-			// same upgrade), already at v1 (skips straight to v2 then v3 then v4 then v5
-			// then v6 — the live testbed case, see `migrations::v2`'s doc comment for why
-			// v1 alone didn't get every chain to v2 on its own), or already at v5 (skips
-			// straight to v6).
-			migrations::v1::MigrateToV1::<T>::on_runtime_upgrade()
-				.saturating_add(migrations::v2::MigrateToV2::<T>::on_runtime_upgrade())
-				.saturating_add(migrations::v3::MigrateToV3::<T>::on_runtime_upgrade())
-				.saturating_add(migrations::v4::MigrateToV4::<T>::on_runtime_upgrade())
-				.saturating_add(migrations::v5::MigrateToV5::<T>::on_runtime_upgrade())
-				.saturating_add(migrations::v6::MigrateToV6::<T>::on_runtime_upgrade())
-		}
-	}
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
