@@ -135,3 +135,152 @@ pub trait BlazeManager<T: frame_system::Config> {
 	#[cfg(feature = "runtime-benchmarks")]
 	fn set_activation(activate: bool) -> Result<(), DispatchError>;
 }
+
+/// No-op implementations for runtimes that run `pallet-relay-manager` without the BTC bridge
+/// pallets (e.g. the private mainnet hub). `pallet-relay-manager` only ever calls
+/// `replace_authority` on these hooks, which becomes a no-op; the remaining methods report an
+/// empty/deactivated bridge and reject any state change.
+impl<AccountId> PoolManager<AccountId> for () {
+	fn get_refund_address(_who: &AccountId) -> Option<BoundedBitcoinAddress> {
+		None
+	}
+
+	fn get_vault_address(_who: &AccountId) -> Option<BoundedBitcoinAddress> {
+		None
+	}
+
+	fn get_bonded_descriptor(_who: &BoundedBitcoinAddress) -> Option<Descriptor<PublicKey>> {
+		None
+	}
+
+	fn get_system_vault(_round: u32) -> Option<BoundedBitcoinAddress> {
+		None
+	}
+
+	fn get_bitcoin_network() -> Network {
+		Network::Bitcoin
+	}
+
+	fn get_bitcoin_chain_id() -> u32 {
+		0
+	}
+
+	fn get_service_state() -> MigrationSequence {
+		MigrationSequence::Normal
+	}
+
+	fn get_current_round() -> u32 {
+		0
+	}
+
+	fn add_migration_tx(_txid: H256) {}
+
+	fn remove_migration_tx(_txid: H256) {}
+
+	fn execute_migration_tx(_txid: H256) {}
+
+	fn replace_authority(_old: &AccountId, _new: &AccountId) {}
+
+	fn process_set_refunds() {}
+
+	fn get_relay_executives(_round: u32) -> Vec<AccountId> {
+		Vec::new()
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_benchmark(_executives: &[AccountId], _user: &AccountId) -> Result<(), DispatchError> {
+		Ok(())
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_service_state(_state: MigrationSequence) -> Result<(), DispatchError> {
+		Ok(())
+	}
+}
+
+impl<AccountId> SocketQueueManager<AccountId> for () {
+	fn is_ready_for_migrate() -> bool {
+		false
+	}
+
+	fn verify_authority(_authority_id: &AccountId) -> Result<(), TransactionValidityError> {
+		Err(TransactionValidityError::Invalid(
+			sp_runtime::transaction_validity::InvalidTransaction::BadSigner,
+		))
+	}
+
+	fn verify_legacy_authority(_authority_id: &AccountId) -> Result<(), TransactionValidityError> {
+		Err(TransactionValidityError::Invalid(
+			sp_runtime::transaction_validity::InvalidTransaction::BadSigner,
+		))
+	}
+
+	fn replace_authority(_old: &AccountId, _new: &AccountId) {}
+
+	fn get_max_fee_rate() -> u64 {
+		0
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_max_fee_rate(_rate: u64) {}
+}
+
+impl<T: frame_system::Config> BlazeManager<T> for () {
+	fn is_activated() -> bool {
+		false
+	}
+
+	fn get_utxos() -> Vec<UtxoInfoWithSize> {
+		Vec::new()
+	}
+
+	fn clear_utxos() {}
+
+	fn lock_utxos(_txid: &H256, _inputs: &Vec<UtxoInfoWithSize>) -> Result<(), DispatchError> {
+		Err(DispatchError::Other("BTC bridge is not available"))
+	}
+
+	fn unlock_utxos(_txid: &H256) -> Result<(), DispatchError> {
+		Err(DispatchError::Other("BTC bridge is not available"))
+	}
+
+	fn extract_utxos_from_psbt(_psbt: &Psbt) -> Result<Vec<UtxoInfoWithSize>, DispatchError> {
+		Err(DispatchError::Other("BTC bridge is not available"))
+	}
+
+	fn get_outbound_pool() -> Vec<UnboundedBytes> {
+		Vec::new()
+	}
+
+	fn clear_outbound_pool(_targets: Vec<UnboundedBytes>) {}
+
+	fn try_fee_rate_finalization(_n: BlockNumberFor<T>) -> Option<(u64, u64)> {
+		None
+	}
+
+	fn clear_fee_rates() {}
+
+	fn select_coins(
+		_pool: Vec<ScoredUtxo>,
+		_target: u64,
+		_cost_of_change: u64,
+		_max_selection_weight: u64,
+		_max_tries: usize,
+		_change_target: u64,
+	) -> Option<(Vec<UtxoInfoWithSize>, SelectionStrategy)> {
+		None
+	}
+
+	fn handle_tolerance_counter(_is_increase: bool) {}
+
+	fn ensure_activation(_is_activated: bool) -> Result<(), DispatchError> {
+		Err(DispatchError::Other("BTC bridge is not available"))
+	}
+
+	fn replace_authority(_old: &T::AccountId, _new: &T::AccountId) {}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn set_activation(_activate: bool) -> Result<(), DispatchError> {
+		Ok(())
+	}
+}

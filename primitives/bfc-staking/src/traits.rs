@@ -95,3 +95,29 @@ pub trait OffenceHandler<AccountId, Balance> {
 	/// Verifies whether the given count has exceeded the maximum offence count.
 	fn is_offence_count_exceeds(count: u32, tier: TierType) -> bool;
 }
+
+/// The trait used by `pallet_relay_manager` to keep the relay executive member list in sync
+/// when a relayer replaces its account. The relay executives only matter for the BTC bridge
+/// (its multisig), so chains without it use the `()` no-op.
+pub trait RelayExecutiveManager<AccountId> {
+	/// Replace the `old` member with `new`, if `old` is a member.
+	fn replace_member(old: &AccountId, new: &AccountId);
+}
+
+impl<AccountId> RelayExecutiveManager<AccountId> for () {
+	fn replace_member(_old: &AccountId, _new: &AccountId) {}
+}
+
+/// Root-driven relayer address replacement, for chains whose relayers are managed by an
+/// authority pallet instead of being self-managed by their controllers. Requests follow the
+/// same delayed path as `pallet_relay_manager`'s `set_relayer`: applied at the next round.
+pub trait RelayerSetManager<AccountId> {
+	/// Request replacing the relayer bonded to `controller` with `new`.
+	fn request_relayer_set(controller: &AccountId, new: AccountId) -> Result<(), DispatchError>;
+
+	/// Cancel the pending relayer replacement of `controller`.
+	fn cancel_relayer_set(controller: &AccountId) -> Result<(), DispatchError>;
+
+	/// Whether any relayer replacement is pending for the current round.
+	fn has_pending_relayer_sets() -> bool;
+}
