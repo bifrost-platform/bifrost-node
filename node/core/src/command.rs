@@ -14,6 +14,8 @@ trait IdentifyChain {
 	fn is_dev(&self) -> bool;
 	fn is_testnet(&self) -> bool;
 	fn is_mainnet(&self) -> bool;
+	fn is_private_mainnet_hub(&self) -> bool;
+	fn is_private_testnet_hub(&self) -> bool;
 }
 
 impl IdentifyChain for dyn sc_service::ChainSpec {
@@ -26,6 +28,12 @@ impl IdentifyChain for dyn sc_service::ChainSpec {
 	fn is_mainnet(&self) -> bool {
 		self.id().starts_with("mainnet")
 	}
+	fn is_private_mainnet_hub(&self) -> bool {
+		self.id().starts_with("private-mainnet-hub")
+	}
+	fn is_private_testnet_hub(&self) -> bool {
+		self.id().starts_with("private-testnet-hub")
+	}
 }
 
 impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
@@ -37,6 +45,12 @@ impl<T: sc_service::ChainSpec + 'static> IdentifyChain for T {
 	}
 	fn is_mainnet(&self) -> bool {
 		<dyn sc_service::ChainSpec>::is_mainnet(self)
+	}
+	fn is_private_mainnet_hub(&self) -> bool {
+		<dyn sc_service::ChainSpec>::is_private_mainnet_hub(self)
+	}
+	fn is_private_testnet_hub(&self) -> bool {
+		<dyn sc_service::ChainSpec>::is_private_testnet_hub(self)
 	}
 }
 
@@ -76,6 +90,22 @@ impl SubstrateCli for Cli {
 			"mainnet" => Box::new(bifrost_mainnet_node::chain_spec::ChainSpec::from_json_file(
 				std::path::PathBuf::from("./specs/bifrost-mainnet.json"),
 			)?),
+			"private-mainnet-hub-local" => {
+				Box::new(bifrost_private_mainnet_hub_node::chain_spec::private_mainnet_hub_config())
+			},
+			"private-mainnet-hub" => {
+				Box::new(bifrost_private_mainnet_hub_node::chain_spec::ChainSpec::from_json_file(
+					std::path::PathBuf::from("./specs/bifrost-private-mainnet-hub.json"),
+				)?)
+			},
+			"private-testnet-hub-local" => {
+				Box::new(bifrost_private_testnet_hub_node::chain_spec::private_testnet_hub_config())
+			},
+			"private-testnet-hub" => {
+				Box::new(bifrost_private_testnet_hub_node::chain_spec::ChainSpec::from_json_file(
+					std::path::PathBuf::from("./specs/bifrost-private-testnet-hub.json"),
+				)?)
+			},
 			path => Box::new(bifrost_dev_node::chain_spec::ChainSpec::from_json_file(
 				std::path::PathBuf::from(path),
 			)?),
@@ -132,6 +162,24 @@ pub fn run() -> sc_cli::Result<()> {
 						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
+			} else if chain_spec.is_private_testnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						bifrost_private_testnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			} else if chain_spec.is_private_mainnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						bifrost_private_mainnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
 			} else if chain_spec.is_mainnet() {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
@@ -162,6 +210,24 @@ pub fn run() -> sc_cli::Result<()> {
 						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
 					Ok((cmd.run(client, config.database), task_manager))
 				})
+			} else if chain_spec.is_private_testnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, .. } =
+						bifrost_private_testnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					Ok((cmd.run(client, config.database), task_manager))
+				})
+			} else if chain_spec.is_private_mainnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, .. } =
+						bifrost_private_mainnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					Ok((cmd.run(client, config.database), task_manager))
+				})
 			} else {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
@@ -184,6 +250,24 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, .. } =
 						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
+					Ok((cmd.run(client, config.chain_spec), task_manager))
+				})
+			} else if chain_spec.is_private_testnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, .. } =
+						bifrost_private_testnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					Ok((cmd.run(client, config.chain_spec), task_manager))
+				})
+			} else if chain_spec.is_private_mainnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, .. } =
+						bifrost_private_mainnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
 					Ok((cmd.run(client, config.chain_spec), task_manager))
 				})
 			} else if chain_spec.is_mainnet() {
@@ -214,6 +298,24 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, import_queue, .. } =
 						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			} else if chain_spec.is_private_testnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						bifrost_private_testnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					Ok((cmd.run(client, import_queue), task_manager))
+				})
+			} else if chain_spec.is_private_mainnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, import_queue, .. } =
+						bifrost_private_mainnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
 					Ok((cmd.run(client, import_queue), task_manager))
 				})
 			} else if chain_spec.is_mainnet() {
@@ -252,6 +354,32 @@ pub fn run() -> sc_cli::Result<()> {
 				runner.async_run(|config| {
 					let PartialComponents { client, task_manager, backend, .. } =
 						bifrost_testnet_node::service::new_partial(&config, &rpc_config)?;
+					let aux_revert = Box::new(|client, _, blocks| {
+						sc_consensus_grandpa::revert(client, blocks)?;
+						Ok(())
+					});
+					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
+				})
+			} else if chain_spec.is_private_testnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, backend, .. } =
+						bifrost_private_testnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
+					let aux_revert = Box::new(|client, _, blocks| {
+						sc_consensus_grandpa::revert(client, blocks)?;
+						Ok(())
+					});
+					Ok((cmd.run(client, backend, Some(aux_revert)), task_manager))
+				})
+			} else if chain_spec.is_private_mainnet_hub() {
+				runner.async_run(|config| {
+					let PartialComponents { client, task_manager, backend, .. } =
+						bifrost_private_mainnet_hub_node::service::new_partial(
+							&config,
+							&rpc_config,
+						)?;
 					let aux_revert = Box::new(|client, _, blocks| {
 						sc_consensus_grandpa::revert(client, blocks)?;
 						Ok(())
@@ -331,6 +459,20 @@ pub fn run() -> sc_cli::Result<()> {
 								let storage = params.backend.expose_storage();
 								cmd.run(config, params.client, db, storage)
 							},
+							_spec if chain_spec.is_private_testnet_hub() => {
+								use bifrost_private_testnet_hub_node::service;
+								let params = service::new_partial(&config, &rpc_config)?;
+								let db = params.backend.expose_db();
+								let storage = params.backend.expose_storage();
+								cmd.run(config, params.client, db, storage)
+							},
+							_spec if chain_spec.is_private_mainnet_hub() => {
+								use bifrost_private_mainnet_hub_node::service;
+								let params = service::new_partial(&config, &rpc_config)?;
+								let db = params.backend.expose_db();
+								let storage = params.backend.expose_storage();
+								cmd.run(config, params.client, db, storage)
+							},
 							_spec if chain_spec.is_testnet() => {
 								use bifrost_testnet_node::service;
 								let params = service::new_partial(&config, &rpc_config)?;
@@ -371,6 +513,16 @@ pub fn run() -> sc_cli::Result<()> {
 			} else if chain_spec.is_testnet() {
 				runner.run_node_until_exit(|config| async move {
 					bifrost_testnet_node::service::new_full(config, rpc_config)
+						.map_err(sc_cli::Error::Service)
+				})
+			} else if chain_spec.is_private_testnet_hub() {
+				runner.run_node_until_exit(|config| async move {
+					bifrost_private_testnet_hub_node::service::new_full(config, rpc_config)
+						.map_err(sc_cli::Error::Service)
+				})
+			} else if chain_spec.is_private_mainnet_hub() {
+				runner.run_node_until_exit(|config| async move {
+					bifrost_private_mainnet_hub_node::service::new_full(config, rpc_config)
 						.map_err(sc_cli::Error::Service)
 				})
 			} else if chain_spec.is_mainnet() {

@@ -251,7 +251,8 @@ impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
 			| RuntimeCall::SafeMode(_)
 			| RuntimeCall::TxPause(_)
 			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
-			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. })
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat_v2 { .. }) => true,
 			_ => false,
 		}
 	}
@@ -878,6 +879,8 @@ impl pallet_relay_manager::Config for Runtime {
 	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayExecutives =
+		pallet_relay_manager::MembershipRelayExecutives<Runtime, pallet_membership::Instance3>;
 	type RelayQueue = CCCPRelayQueue;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;

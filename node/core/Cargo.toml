@@ -40,12 +40,22 @@ bifrost-mainnet-runtime = { workspace = true, features = [
 	"std",
 	"evm-tracing",
 ] }
+bifrost-private-mainnet-hub-runtime = { workspace = true, features = [
+	"std",
+	"evm-tracing",
+] }
+bifrost-private-testnet-hub-runtime = { workspace = true, features = [
+	"std",
+	"evm-tracing",
+] }
 
 # Bifrost node specs
 bifrost-common-node = { workspace = true }
 bifrost-dev-node = { workspace = true }
 bifrost-testnet-node = { workspace = true }
 bifrost-mainnet-node = { workspace = true }
+bifrost-private-mainnet-hub-node = { workspace = true }
+bifrost-private-testnet-hub-node = { workspace = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }
@@ -56,8 +66,12 @@ runtime-benchmarks = [
 	"bifrost-dev-runtime/runtime-benchmarks",
 	"bifrost-testnet-runtime/runtime-benchmarks",
 	"bifrost-mainnet-runtime/runtime-benchmarks",
+	"bifrost-private-mainnet-hub-runtime/runtime-benchmarks",
+	"bifrost-private-testnet-hub-runtime/runtime-benchmarks",
 	"bifrost-dev-node/runtime-benchmarks",
 	"bifrost-testnet-node/runtime-benchmarks",
 	"bifrost-mainnet-node/runtime-benchmarks",
+	"bifrost-private-mainnet-hub-node/runtime-benchmarks",
+	"bifrost-private-testnet-hub-node/runtime-benchmarks",
 	"sc-service/runtime-benchmarks",
 ]

@@ -8,8 +8,12 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 extern crate alloc;
+// `sp_io` is only used (qualified, no `use`) inside `IdentityBenchmarkHelper`, which is
+// entirely `#[cfg(feature = "runtime-benchmarks")]` — without this, a normal build (that
+// feature off) flags it as an unused dependency.
+use sp_io as _;
 
-pub use bifrost_testnet_constants::{
+pub use bifrost_private_testnet_hub_constants::{
 	currency::{GWEI, UNITS as BFC, *},
 	fee::*,
 	time::*,
@@ -44,6 +48,8 @@ use sp_std::prelude::*;
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
+use parity_scale_codec::{Decode, Encode};
+
 pub use pallet_balances::{Call as BalancesCall, NegativeImbalance};
 pub use pallet_bfc_staking::{InflationInfo, Range};
 use pallet_bifrost_evm_tx_payment::BifrostFeeAdapter;
@@ -62,8 +68,6 @@ use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 pub use pallet_timestamp::Call as TimestampCall;
 #[allow(deprecated)]
 use pallet_transaction_payment::CurrencyAdapter;
-
-use parity_scale_codec::{Decode, Encode};
 
 pub use frame_support::{
 	derive_impl,
@@ -118,7 +122,8 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing
+/// `OnRuntimeUpgrade`.
 type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
@@ -138,7 +143,6 @@ pub mod opaque {
 	use super::*;
 	pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
 
-	/// Opaque block type.
 	pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
 	impl_opaque_keys! {
@@ -153,13 +157,13 @@ pub mod opaque {
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The identifier for the different Substrate runtimes.
-	spec_name: alloc::borrow::Cow::Borrowed("thebifrost-testnet"),
+	spec_name: alloc::borrow::Cow::Borrowed("thebifrost-private-testnet-hub"),
 	// The name of the implementation of the spec.
-	impl_name: alloc::borrow::Cow::Borrowed("bifrost-testnet"),
+	impl_name: alloc::borrow::Cow::Borrowed("bifrost-private-testnet-hub"),
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 506,
+	spec_version: 1_000_000,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -190,7 +194,6 @@ parameter_types! {
 	pub const BlockHashCount: BlockNumber = 256;
 	pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights
 		::with_sensible_defaults(MAXIMUM_BLOCK_WEIGHT, NORMAL_DISPATCH_RATIO);
-	/// We allow for 5 MB blocks.
 	pub BlockLength: frame_system::limits::BlockLength = frame_system::limits::BlockLength
 		::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
 	pub const SS58Prefix: u8 = 42;
@@ -266,11 +269,11 @@ impl pallet_tx_pause::Config for Runtime {
 }
 
 parameter_types! {
-	pub const EnterDuration: BlockNumber = 6 * HOURS;
-	pub const EnterDepositAmount: Option<Balance> = None;
-	pub const ExtendDuration: BlockNumber = 1 * HOURS;
-	pub const ExtendDepositAmount: Option<Balance> = None;
-	pub const ReleaseDelay: u32 = 1 * HOURS;
+	pub const EnterDuration: BlockNumber = 2 * MINUTES;
+	pub const EnterDepositAmount: Balance = 2_000 * BFC;
+	pub const ExtendDuration: BlockNumber = 1 * MINUTES;
+	pub const ExtendDepositAmount: Balance = 1_000 * BFC;
+	pub const ReleaseDelay: u32 = 1 * MINUTES;
 }
 
 impl pallet_safe_mode::Config for Runtime {
@@ -354,8 +357,8 @@ where
 	// this seems to be called for substrate-based transactions
 	fn on_unbalanceds(mut fees_then_tips: impl Iterator<Item = NegativeImbalance<R>>) {
 		if let Some(fees) = fees_then_tips.next() {
-			// for fees, 50% are burned, 50% to the treasury
-			let (_, to_treasury) = fees.ration(50, 50);
+			// for fees, 20% are burned, 80% to the treasury
+			let (_, to_treasury) = fees.ration(20, 80);
 			// Balances pallet automatically burns dropped Negative Imbalances by decreasing
 			// total_supply accordingly
 			<pallet_treasury::Pallet<R> as OnUnbalanced<_>>::on_unbalanced(to_treasury);
@@ -367,7 +370,7 @@ where
 	fn on_nonzero_unbalanced(amount: NegativeImbalance<R>) {
 		// Balances pallet automatically burns dropped Negative Imbalances by decreasing
 		// total_supply accordingly
-		let (_, to_treasury) = amount.ration(50, 50);
+		let (_, to_treasury) = amount.ration(20, 80);
 		<pallet_treasury::Pallet<R> as OnUnbalanced<_>>::on_unbalanced(to_treasury);
 	}
 }
@@ -420,7 +423,7 @@ impl pallet_scheduler::Config for Runtime {
 }
 
 parameter_types! {
-	pub const SessionPeriod: u32 = 15 * MINUTES; // 300 blocks
+	pub const SessionPeriod: u32 = 1 * MINUTES;
 	pub const Offset: u32 = 0;
 }
 
@@ -447,51 +450,6 @@ impl pallet_session::historical::Config for Runtime {
 	type FullIdentificationOf = pallet_bfc_staking::ValidatorSnapshotOf<Self>;
 }
 
-parameter_types! {
-	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
-	pub const MaxKeys: u32 = 10_000;
-	pub const MaxPeerInHeartbeats: u32 = 10_000;
-	pub const DefaultSlashFraction: Perbill = Perbill::from_percent(10);
-}
-
-impl<LocalCall> frame_system::offchain::CreateBare<LocalCall> for Runtime
-where
-	RuntimeCall: From<LocalCall>,
-{
-	fn create_bare(call: Self::RuntimeCall) -> Self::Extrinsic {
-		Self::Extrinsic::new_bare(call)
-	}
-}
-
-impl<C> frame_system::offchain::CreateTransactionBase<C> for Runtime
-where
-	RuntimeCall: From<C>,
-{
-	type Extrinsic = UncheckedExtrinsic;
-	type RuntimeCall = RuntimeCall;
-}
-
-/// The module that manages validator livenesses.
-impl pallet_im_online::Config for Runtime {
-	type AuthorityId = ImOnlineId;
-	type RuntimeEvent = RuntimeEvent;
-	type NextSessionRotation = BfcStaking;
-	type ValidatorSet = Historical;
-	type ReportUnresponsiveness = Offences;
-	type UnsignedPriority = ImOnlineUnsignedPriority;
-	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
-	type MaxKeys = MaxKeys;
-	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
-	type DefaultSlashFraction = DefaultSlashFraction;
-}
-
-/// The module that manages validator offences.
-impl pallet_offences::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
-	type OnOffenceHandler = BfcStaking;
-}
-
 /// The Authorship module tracks the current author of the block.
 impl pallet_authorship::Config for Runtime {
 	type EventHandler = BfcStaking;
@@ -509,7 +467,7 @@ impl pallet_utility::Config for Runtime {
 parameter_types! {
 	/// The maximum amount of time (in blocks) for council members to vote on motions.
 	/// Motions may end in fewer blocks if enough votes are cast to determine the result.
-	pub const CouncilMotionDuration: BlockNumber = 1 * DAYS;
+	pub const CouncilMotionDuration: BlockNumber = 1 * HOURS;
 	/// The maximum number of Proposals that can be open in the council at once.
 	pub const CouncilMaxProposals: u32 = 100;
 	/// The maximum number of council members.
@@ -517,7 +475,7 @@ parameter_types! {
 
 	/// The maximum amount of time (in blocks) for technical committee members to vote on motions.
 	/// Motions may end in fewer blocks if enough votes are cast to determine the result.
-	pub const TechCommitteeMotionDuration: BlockNumber = 1 * DAYS;
+	pub const TechCommitteeMotionDuration: BlockNumber = 1 * HOURS;
 	/// The maximum number of Proposals that can be open in the technical committee at once.
 	pub const TechCommitteeMaxProposals: u32 = 100;
 	/// The maximum number of technical committee members.
@@ -525,37 +483,17 @@ parameter_types! {
 
 	/// The maximum amount of time (in blocks) for relay executive members to vote on motions.
 	/// Motions may end in fewer blocks if enough votes are cast to determine the result.
-	pub const RelayExecutivesMotionDuration: BlockNumber = 1 * DAYS;
+	pub const RelayExecutivesMotionDuration: BlockNumber = 1 * HOURS;
 	/// The maximum number of Proposals that can be open in the relay executives at once.
-	pub const RelayExecutivesMaxProposals: u32 = 100;
+	pub const RelayExecutivesMaxProposals: u32 = 10;
 	/// The maximum number of relay executive members.
-	pub const RelayExecutivesMaxMembers: u32 = 100;
+	pub const RelayExecutivesMaxMembers: u32 = 10;
 
 	pub MaxProposalWeight: Weight = BlockWeights::get().max_block;
 }
 
-/// A type that represents a relay executive member for governance
-type RelayExecutiveInstance = pallet_collective::Instance3;
-
-/// A module that grants relay executive members to participate for governance
-impl pallet_collective::Config<RelayExecutiveInstance> for Runtime {
-	type RuntimeOrigin = RuntimeOrigin;
-	type RuntimeEvent = RuntimeEvent;
-	type Proposal = RuntimeCall;
-	type MotionDuration = RelayExecutivesMotionDuration;
-	type MaxProposals = RelayExecutivesMaxProposals;
-	type MaxMembers = RelayExecutivesMaxMembers;
-	type DefaultVote = pallet_collective::MoreThanMajorityThenPrimeDefaultVote;
-	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
-	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
-	type MaxProposalWeight = MaxProposalWeight;
-	type DisapproveOrigin = EnsureRoot<Self::AccountId>;
-	type KillOrigin = EnsureRoot<Self::AccountId>;
-	type Consideration = ();
-}
-
 /// A type that represents a council member for governance
-pub type CouncilInstance = pallet_collective::Instance1;
+type CouncilInstance = pallet_collective::Instance1;
 
 /// A module that grants council members to participate for governance
 impl pallet_collective::Config<CouncilInstance> for Runtime {
@@ -575,7 +513,7 @@ impl pallet_collective::Config<CouncilInstance> for Runtime {
 }
 
 /// A type that represents a technical committee member for governance
-pub type TechCommitteeInstance = pallet_collective::Instance2;
+type TechCommitteeInstance = pallet_collective::Instance2;
 
 /// A module that grants technical committee members to participate for governance
 impl pallet_collective::Config<TechCommitteeInstance> for Runtime {
@@ -585,6 +523,26 @@ impl pallet_collective::Config<TechCommitteeInstance> for Runtime {
 	type MotionDuration = TechCommitteeMotionDuration;
 	type MaxProposals = TechCommitteeMaxProposals;
 	type MaxMembers = TechCommitteeMaxMembers;
+	type DefaultVote = pallet_collective::MoreThanMajorityThenPrimeDefaultVote;
+	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
+	type MaxProposalWeight = MaxProposalWeight;
+	type DisapproveOrigin = EnsureRoot<Self::AccountId>;
+	type KillOrigin = EnsureRoot<Self::AccountId>;
+	type Consideration = ();
+}
+
+/// A type that represents a relay executive member for governance
+type RelayExecutiveInstance = pallet_collective::Instance3;
+
+/// A module that grants relay executive members to participate for governance
+impl pallet_collective::Config<RelayExecutiveInstance> for Runtime {
+	type RuntimeOrigin = RuntimeOrigin;
+	type RuntimeEvent = RuntimeEvent;
+	type Proposal = RuntimeCall;
+	type MotionDuration = RelayExecutivesMotionDuration;
+	type MaxProposals = RelayExecutivesMaxProposals;
+	type MaxMembers = RelayExecutivesMaxMembers;
 	type DefaultVote = pallet_collective::MoreThanMajorityThenPrimeDefaultVote;
 	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
 	type SetMembersOrigin = EnsureRoot<Self::AccountId>;
@@ -637,8 +595,10 @@ impl pallet_membership::Config<pallet_membership::Instance3> for Runtime {
 	type AddOrigin = MoreThanTwoThirdsRelayExecutives;
 	type RuntimeEvent = RuntimeEvent;
 	type MaxMembers = RelayExecutivesMaxMembers;
-	type MembershipChanged = RelayExecutive;
-	type MembershipInitialized = RelayExecutive;
+	type MembershipChanged =
+		pallet_btc_registration_pool::MembershipHook<RelayExecutive, BtcRegistrationPool>;
+	type MembershipInitialized =
+		pallet_btc_registration_pool::MembershipHook<RelayExecutive, BtcRegistrationPool>;
 	type PrimeOrigin = MoreThanTwoThirdsRelayExecutives;
 	type RemoveOrigin = MoreThanTwoThirdsRelayExecutives;
 	type ResetOrigin = MoreThanTwoThirdsRelayExecutives;
@@ -646,20 +606,16 @@ impl pallet_membership::Config<pallet_membership::Instance3> for Runtime {
 	type WeightInfo = ();
 }
 
-/// The purpose of this offset is to ensure that a democratic proposal will not apply in the same
-/// block as a round change.
-const ENACTMENT_OFFSET: u32 = 10;
-
 parameter_types! {
-	pub const LaunchPeriod: BlockNumber = 1 * DAYS;
-	pub const VotingPeriod: BlockNumber = 1 * DAYS;
-	pub const VoteLockingPeriod: BlockNumber = 1 * DAYS;
-	pub const FastTrackVotingPeriod: BlockNumber = 1 * HOURS;
-	pub const EnactmentPeriod: BlockNumber = 1 * DAYS + ENACTMENT_OFFSET;
-	pub const CooloffPeriod: BlockNumber = 1 * DAYS;
-	pub const MinimumDeposit: Balance = 5 * SUPPLY_FACTOR * BFC;
-	pub const MaxVotes: u32 = 50;
-	pub const MaxProposals: u32 = 50;
+	pub const LaunchPeriod: BlockNumber = 1 * MINUTES;
+	pub const VotingPeriod: BlockNumber = 1 * MINUTES;
+	pub const VoteLockingPeriod: BlockNumber = 1 * MINUTES;
+	pub const FastTrackVotingPeriod: BlockNumber = 1 * MINUTES;
+	pub const EnactmentPeriod: BlockNumber = 1 * MINUTES;
+	pub const CooloffPeriod: BlockNumber = 3 * MINUTES;
+	pub const MinimumDeposit: Balance = 4 * SUPPLY_FACTOR * BFC;
+	pub const MaxVotes: u32 = 100;
+	pub const MaxProposals: u32 = 100;
 	pub const MaxDeposits: u32 = 1_000;
 	pub const MaxBlacklisted: u32 = 1_000;
 	pub const InstantAllowed: bool = true;
@@ -739,10 +695,10 @@ impl pallet_preimage::Config for Runtime {
 
 parameter_types! {
 	pub const ProposalBond: Permill = Permill::from_percent(5);
-	pub const ProposalBondMinimum: Balance = 5 * BFC;
-	pub const SpendPeriod: BlockNumber = 1 * DAYS;
+	pub const ProposalBondMinimum: Balance = 1 * BFC;
+	pub const SpendPeriod: BlockNumber = 1 * MINUTES;
 	pub const TreasuryPalletId: PalletId = PalletId(*b"py/trsry");
-	pub const MaxApprovals: u32 = 50;
+	pub const MaxApprovals: u32 = 100;
 	pub TreasuryAccount: AccountId = Treasury::account_id();
 }
 
@@ -770,7 +726,21 @@ impl pallet_treasury::Config for Runtime {
 	type PayoutPeriod = ConstU32<0>;
 	type BlockNumberProvider = System;
 	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = BenchmarkHelper;
+	type BenchmarkHelper = TreasuryBenchmarkHelper;
+}
+
+/// `AssetKind` is `()` (native-only treasury) and `Beneficiary` is an
+/// `AccountId20`, which `pallet_treasury`'s blanket `()` `ArgumentsFactory`
+/// can't build (it needs `FromEntropy`), so provide a trivial factory.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TreasuryBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_treasury::ArgumentsFactory<(), AccountId> for TreasuryBenchmarkHelper {
+	fn create_asset_kind(_seed: u32) {}
+	fn create_beneficiary(seed: [u8; 32]) -> AccountId {
+		AccountId::from(H160::from_slice(&seed[..20]))
+	}
 }
 
 parameter_types! {
@@ -781,8 +751,8 @@ parameter_types! {
 	pub const MaxSubAccounts: u32 = 100;
 	pub const MaxAdditionalFields: u32 = 100;
 	pub const MaxRegistrars: u32 = 20;
-	pub const PendingUsernameExpiration: u32 = 1 * DAYS;
-	pub const UsernameGracePeriod: u32 = 1 * DAYS;
+	pub const PendingUsernameExpiration: u32 = 1 * MINUTES;
+	pub const UsernameGracePeriod: u32 = 1 * MINUTES;
 	pub const MaxSuffixLength: u32 = 7;
 	pub const MaxUsernameLength: u32 = 32;
 }
@@ -809,10 +779,77 @@ impl pallet_identity::Config for Runtime {
 	type MaxSuffixLength = MaxSuffixLength;
 	type MaxUsernameLength = MaxUsernameLength;
 	type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = IdentityBenchmarkHelper;
+}
+
+/// `pallet_identity`'s `()` `BenchmarkHelper` only signs with sr25519/
+/// `MultiSignature`; this chain verifies `EthereumSignature`, so sign the
+/// username-ownership message with a freshly generated ECDSA key over its
+/// keccak hash (matching `EthereumSignature`'s `Verify` impl).
+#[cfg(feature = "runtime-benchmarks")]
+pub struct IdentityBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_identity::BenchmarkHelper<EthereumSigner, EthereumSignature>
+	for IdentityBenchmarkHelper
+{
+	fn sign_message(message: &[u8]) -> (EthereumSigner, EthereumSignature) {
+		let public = sp_io::crypto::ecdsa_generate(0.into(), None);
+		let hash = sp_io::hashing::keccak_256(message);
+		let sig = sp_io::crypto::ecdsa_sign_prehashed(0.into(), &public, &hash)
+			.expect("key was just generated; qed");
+		(EthereumSigner::from(public), EthereumSignature::new(sig))
+	}
 }
 
 parameter_types! {
-	pub const DefaultOffenceExpirationInSessions: u32 = 1u32;
+	pub const ImOnlineUnsignedPriority: TransactionPriority = TransactionPriority::max_value();
+	pub const MaxKeys: u32 = 10_000;
+	pub const MaxPeerInHeartbeats: u32 = 10_000;
+	pub const DefaultSlashFraction: Perbill = Perbill::from_parts(5_000_000); // 0.5%
+}
+
+impl<LocalCall> frame_system::offchain::CreateBare<LocalCall> for Runtime
+where
+	RuntimeCall: From<LocalCall>,
+{
+	fn create_bare(call: Self::RuntimeCall) -> Self::Extrinsic {
+		Self::Extrinsic::new_bare(call)
+	}
+}
+
+impl<C> frame_system::offchain::CreateTransactionBase<C> for Runtime
+where
+	RuntimeCall: From<C>,
+{
+	type Extrinsic = UncheckedExtrinsic;
+	type RuntimeCall = RuntimeCall;
+}
+
+/// The module that manages validator livenesses.
+impl pallet_im_online::Config for Runtime {
+	type AuthorityId = ImOnlineId;
+	type RuntimeEvent = RuntimeEvent;
+	type NextSessionRotation = BfcStaking;
+	type ValidatorSet = Historical;
+	type ReportUnresponsiveness = Offences;
+	type UnsignedPriority = ImOnlineUnsignedPriority;
+	type WeightInfo = pallet_im_online::weights::SubstrateWeight<Runtime>;
+	type MaxKeys = MaxKeys;
+	type MaxPeerInHeartbeats = MaxPeerInHeartbeats;
+	type DefaultSlashFraction = DefaultSlashFraction;
+}
+
+/// The module that manages validator offences.
+impl pallet_offences::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
+	type OnOffenceHandler = BfcStaking;
+}
+
+parameter_types! {
+	pub const DefaultOffenceExpirationInSessions: u32 = 5u32;
 	pub const DefaultFullMaximumOffenceCount: u32 = 5u32;
 	pub const DefaultBasicMaximumOffenceCount: u32 = 3u32;
 	pub const IsOffenceActive: bool = true;
@@ -834,7 +871,7 @@ impl pallet_bfc_offences::Config for Runtime {
 parameter_types! {
 	pub const StorageCacheLifetimeInRounds: u32 = 64u32;
 	pub const IsHeartbeatOffenceActive: bool = false;
-	pub const DefaultHeartbeatSlashFraction: Perbill = Perbill::from_percent(20);
+	pub const DefaultHeartbeatSlashFraction: Perbill = Perbill::from_percent(1);
 }
 
 /// A module that manages registered relayers for cross chain interoperability
@@ -844,7 +881,7 @@ impl pallet_relay_manager::Config for Runtime {
 	type RegistrationPool = BtcRegistrationPool;
 	type RelayExecutives =
 		pallet_relay_manager::MembershipRelayExecutives<Runtime, pallet_membership::Instance3>;
-	type RelayQueue = ();
+	type RelayQueue = CCCPRelayQueue;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;
@@ -864,33 +901,33 @@ impl pallet_cccp_relay_queue::Config for Runtime {
 
 parameter_types! {
 	/// Minimum round length that can be set by the system.
-	pub const MinBlocksPerRound: u32 = 10;
+	pub const MinBlocksPerRound: u32 = 1;
 	/// Maximum round length that can be set by the system.
 	pub const MaxBlocksPerRound: u32 = 28 * DAYS;
 	/// Blocks per round.
-	pub const DefaultBlocksPerRound: u32 = 8 * HOURS;
+	pub const DefaultBlocksPerRound: u32 = 2 * MINUTES;
 	/// Rounds before the validator leaving the candidates request can be executed.
-	pub const LeaveCandidatesDelay: u32 = 2;
+	pub const LeaveCandidatesDelay: u32 = 1;
 	/// Rounds before the candidate bond increase/decrease can be executed.
-	pub const CandidateBondLessDelay: u32 = 2;
+	pub const CandidateBondLessDelay: u32 = 1;
 	/// Rounds before the nominator exit can be executed.
-	pub const LeaveNominatorsDelay: u32 = 2;
+	pub const LeaveNominatorsDelay: u32 = 1;
 	/// Rounds before the nominator revocation can be executed.
-	pub const RevokeNominationDelay: u32 = 2;
+	pub const RevokeNominationDelay: u32 = 1;
 	/// Rounds before the nominator bond increase/decrease can be executed.
-	pub const NominationBondLessDelay: u32 = 2;
+	pub const NominationBondLessDelay: u32 = 1;
 	/// Rounds before the reward is paid.
 	pub const RewardPaymentDelay: u32 = 1;
 	/// Default maximum full validators selected per round, default at genesis.
-	pub const DefaultMaxSelectedFullCandidates: u32 = 30;
-	/// Default maximum basic validators selected per round, default at genesis.
-	pub const DefaultMaxSelectedBasicCandidates: u32 = 170;
+	pub const DefaultMaxSelectedFullCandidates: u32 = 10;
+	/// Default maximum basicvalidators selected per round, default at genesis.
+	pub const DefaultMaxSelectedBasicCandidates: u32 = 10;
 	/// Maximum top nominations per candidate.
-	pub const MaxTopNominationsPerCandidate: u32 = 2_000;
+	pub const MaxTopNominationsPerCandidate: u32 = 2;
 	/// Maximum bottom nominations per candidate.
-	pub const MaxBottomNominationsPerCandidate: u32 = 50;
+	pub const MaxBottomNominationsPerCandidate: u32 = 1;
 	/// Maximum nominations per nominator.
-	pub const MaxNominationsPerNominator: u32 = 10;
+	pub const MaxNominationsPerNominator: u32 = 3;
 	/// Default commission rate for full validators.
 	pub const DefaultFullValidatorCommission: Perbill = Perbill::from_percent(50);
 	/// Default commission rate for basic validators.
@@ -900,15 +937,15 @@ parameter_types! {
 	/// Maximum commission rate available for basic validators.
 	pub const MaxBasicValidatorCommission: Perbill = Perbill::from_percent(20);
 	/// Minimum stake required to become a full validator.
-	pub const MinFullValidatorStk: u128 = 100_000 * SUPPLY_FACTOR * BFC;
+	pub const MinFullValidatorStk: u128 = 1_000 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to become a basic validator.
-	pub const MinBasicValidatorStk: u128 = 50_000 * SUPPLY_FACTOR * BFC;
+	pub const MinBasicValidatorStk: u128 = 500 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a full candidate.
-	pub const MinFullCandidateStk: u128 = 100_000 * SUPPLY_FACTOR * BFC;
+	pub const MinFullCandidateStk: u128 = 950 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a basic candidate.
-	pub const MinBasicCandidateStk: u128 = 50_000 * SUPPLY_FACTOR * BFC;
+	pub const MinBasicCandidateStk: u128 = 100 * SUPPLY_FACTOR * BFC;
 	/// Minimum stake required to be reserved to be a nominator.
-	pub const MinNominatorStk: u128 = 1_000 * SUPPLY_FACTOR * BFC;
+	pub const MinNominatorStk: u128 = 1 * SUPPLY_FACTOR * BFC;
 }
 
 /// Minimal staking pallet that implements validator selection by total backed stake.
@@ -1042,7 +1079,10 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
-	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<
+		Runtime,
+		bifrost_common_runtime::TxRegistryRecorder<Runtime>,
+	>;
 }
 
 parameter_types! {
@@ -1081,6 +1121,53 @@ impl pallet_base_fee::Config for Runtime {
 	type DefaultElasticity = DefaultElasticity;
 }
 
+impl pallet_btc_socket_queue::Config for Runtime {
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
+	type Relayers = RelayManager;
+	type RegistrationPool = BtcRegistrationPool;
+	type Blaze = Blaze;
+	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
+	type DefaultMaxFeeRate = DefaultMaxFeeRate;
+	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
+}
+
+parameter_types! {
+	pub const BitcoinChainId: u32 = 10002;
+	pub const BitcoinNetwork: Network = Network::Regtest;
+	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
+	pub const DefaultMaxFeeRate: u64 = 15;
+	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
+}
+
+impl pallet_btc_registration_pool::Config for Runtime {
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Executives = RelayExecutiveMembership;
+	type SocketQueue = BtcSocketQueue;
+	type DefaultMultiSigRatio = DefaultMultiSigRatio;
+	type BitcoinChainId = BitcoinChainId;
+	type BitcoinNetwork = BitcoinNetwork;
+	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const FeeRateExpiration: u32 = 1 * MINUTES;
+	pub const ToleranceThreshold: u32 = 3;
+}
+
+impl pallet_blaze::Config for Runtime {
+	type Signature = EthereumSignature;
+	type Signer = EthereumSigner;
+	type Relayers = RelayManager;
+	type SocketQueue = BtcSocketQueue;
+	type RegistrationPool = BtcRegistrationPool;
+	type FeeRateExpiration = FeeRateExpiration;
+	type ToleranceThreshold = ToleranceThreshold;
+	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
+}
+
 parameter_types! {
 	/// Pallet ID for ERC20 gas fee collection.
 	/// Used to derive a deterministic EOA address outside the precompile range.
@@ -1105,70 +1192,185 @@ impl pallet_bifrost_evm_tx_payment::Config for Runtime {
 	type WeightInfo = pallet_bifrost_evm_tx_payment::weights::SubstrateWeight<Runtime>;
 }
 
-impl pallet_oracle_registry::Config for Runtime {
-	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
-}
-
-impl pallet_btc_socket_queue::Config for Runtime {
-	type Signature = EthereumSignature;
-	type Signer = EthereumSigner;
-	type Executives = RelayExecutiveMembership;
-	type Relayers = RelayManager;
-	type RegistrationPool = BtcRegistrationPool;
-	type Blaze = Blaze;
-	type WeightInfo = pallet_btc_socket_queue::weights::SubstrateWeight<Runtime>;
-	type DefaultMaxFeeRate = DefaultMaxFeeRate;
-	type DefaultMaxSocketMessageBytes = DefaultMaxSocketMessageBytes;
-}
-
-parameter_types! {
-	pub const BitcoinChainId: u32 = 10001;
-	pub const BitcoinNetwork: Network = Network::Testnet;
-	pub const DefaultMultiSigRatio: Percent = Percent::from_percent(100);
-	pub const DefaultMaxFeeRate: u64 = 15;
-	pub const DefaultMaxSocketMessageBytes: u32 = 2 * 1024;
-}
-
-impl pallet_btc_registration_pool::Config for Runtime {
-	type Signature = EthereumSignature;
-	type Signer = EthereumSigner;
-	type Executives = RelayExecutiveMembership;
-	type SocketQueue = BtcSocketQueue;
-	type DefaultMultiSigRatio = DefaultMultiSigRatio;
-	type BitcoinChainId = BitcoinChainId;
-	type BitcoinNetwork = BitcoinNetwork;
-	type WeightInfo = pallet_btc_registration_pool::weights::SubstrateWeight<Runtime>;
-}
-
-parameter_types! {
-	pub const FeeRateExpiration: u32 = 5 * MINUTES;
-	pub const ToleranceThreshold: u32 = 5;
-}
-
-impl pallet_blaze::Config for Runtime {
-	type Signature = EthereumSignature;
-	type Signer = EthereumSigner;
-	type Relayers = RelayManager;
-	type SocketQueue = BtcSocketQueue;
-	type RegistrationPool = BtcRegistrationPool;
-	type FeeRateExpiration = FeeRateExpiration;
-	type ToleranceThreshold = ToleranceThreshold;
-	type WeightInfo = pallet_blaze::weights::SubstrateWeight<Runtime>;
-}
-
 parameter_types! {
 	pub MbmServiceWeight: Weight = Perbill::from_percent(80) * BlockWeights::get().max_block;
 }
 
 impl pallet_migrations::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	// `Migrations` must satisfy `MockedMigrations` under `runtime-benchmarks`
+	// (blanket-impl'd for tuples down to the 0-tuple, but not for
+	// `LazyMigrationV1ToV2` itself) — swapped to `()` only for that feature so
+	// normal (non-benchmark) builds keep the real migration unchanged.
+	#[cfg(not(feature = "runtime-benchmarks"))]
 	type Migrations = pallet_identity::migration::v2::LazyMigrationV1ToV2<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type Migrations = ();
 	type CursorMaxLen = ConstU32<65_536>;
 	type IdentifierMaxLen = ConstU32<256>;
 	type MigrationStatusHandler = ();
 	type FailedMigrationHandler = frame_support::migrations::FreezeChainOnFailedMigration;
 	type MaxServiceWeight = MbmServiceWeight;
 	type WeightInfo = pallet_migrations::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_oracle_registry::Config for Runtime {
+	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_tranche_system::Config for Runtime {
+	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
+	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
+}
+
+// Shared, not forked — `grant_permission`/`revoke_permission` are ordinary paid
+// EVM calls (unlike custom-flows' feeless recorder-only calls), but they're
+// called by product admins granting/revoking access, not on every investor
+// tx, so accurately benchmarking this in place doesn't carry the same "must
+// not perturb an already-live per-tx gas cost" risk that justified forking
+// investments/tx-registry/permissions-v2 (now merged back) — see
+// docs/precompile-gas-changes-2026-09-17.md §6.
+impl pallet_tranche_permissions::Config for Runtime {
+	type Vaults = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TranchePermissionsBenchmarkHelper;
+}
+
+/// Seeds the pallet-tranche-system state that `pallet-tranche-permissions`
+/// inspects (through `type Vaults`/`type Products`) so the `TrancheInvestor`
+/// grant/revoke benchmarks reach their storage write instead of bailing out in
+/// `ensure_tranche_investor_vault_registered`. Only compiled for benchmarks.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TranchePermissionsBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_permissions::BenchmarkHelper for TranchePermissionsBenchmarkHelper {
+	fn setup_multichain_vault(
+		product_id: pallet_tranche_system::ProductId,
+		vault: pallet_tranche_system::VaultId,
+	) {
+		pallet_tranche_system::Vaults::<Runtime>::insert(
+			vault,
+			pallet_tranche_system::VaultRegistration { product_id, removed: false },
+		);
+	}
+}
+
+impl pallet_tranche_investments::Config for Runtime {
+	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type WeightInfo = pallet_tranche_investments::weights::SubstrateWeight<Runtime>;
+}
+
+// v2 — same rationale: accurately weight-benchmarked fork, new products only, since
+// investments' `record_*` calls ARE called on every investor tx (unlike permissions
+// above). Shares one Valuation-contract identity with
+// v1 (single place to manage that address — same pattern
+// `pallet_tranche_tx_registry_v2::Config::RecorderOrigin` below already uses for the
+// recorder identity) and shares `TrancheSystem` with v1.
+impl pallet_tranche_investments_v2::Config for Runtime {
+	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type WeightInfo = pallet_tranche_investments_v2::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheV2BenchmarkHelper;
+}
+
+/// Seeds pallet-tranche-system's reverse indexes so the `record_*` benchmarks
+/// for both `pallet-tranche-investments-v2` and `pallet-tranche-tx-registry-v2`
+/// reach their bodies (they check vault/adapter ownership via `type Vaults`/
+/// `type Adapters`). Benchmarks only.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TrancheV2BenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_investments_v2::BenchmarkHelper for TrancheV2BenchmarkHelper {
+	fn register_vault(
+		product_id: pallet_tranche_system::ProductId,
+		vault: pallet_tranche_system::VaultId,
+	) {
+		pallet_tranche_system::Vaults::<Runtime>::insert(
+			vault,
+			pallet_tranche_system::VaultRegistration { product_id, removed: false },
+		);
+	}
+	fn register_multichain_adapter(
+		product_id: pallet_tranche_system::ProductId,
+		key: pallet_tranche_system::AdapterKey,
+	) {
+		pallet_tranche_system::MultichainAdapterIndex::<Runtime>::insert(key, product_id);
+	}
+	fn register_adapter(
+		product_id: pallet_tranche_system::ProductId,
+		key: pallet_tranche_system::AdapterKey,
+	) {
+		pallet_tranche_system::AdapterIndex::<Runtime>::insert(key, product_id);
+	}
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_tx_registry_v2::BenchmarkHelper for TrancheV2BenchmarkHelper {
+	fn register_vault(
+		product_id: pallet_tranche_system::ProductId,
+		vault: pallet_tranche_system::VaultId,
+	) {
+		pallet_tranche_system::Vaults::<Runtime>::insert(
+			vault,
+			pallet_tranche_system::VaultRegistration { product_id, removed: false },
+		);
+	}
+	fn seed_recorder() {
+		pallet_tranche_tx_registry::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
+}
+
+impl pallet_tranche_tx_registry::Config for Runtime {
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_tx_registry::weights::SubstrateWeight<Runtime>;
+}
+
+// v2 — chunked Collect/Response/Finalize settlement pipeline, new products only (see
+// docs/tranche-tx-registry/settlement-leg-chunking-design.md). Shares one recorder
+// identity with v1 (single place to manage the recorder address — same pattern
+// `pallet_tranche_custom_flows::Config` below already uses) and shares `TrancheSystem`
+// (products/vaults/adapters) with v1, same as every other tranche-* pallet — neither
+// is forked; only the settlement leg storage/extrinsics themselves are.
+impl pallet_tranche_tx_registry_v2::Config for Runtime {
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_tx_registry_v2::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheV2BenchmarkHelper;
+}
+
+impl pallet_tranche_custom_flows::Config for Runtime {
+	// Shares one recorder identity with pallet-tranche-tx-registry.
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type GovernanceOrigin = EnsureRoot<AccountId>;
+	type WeightInfo = pallet_tranche_custom_flows::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheCustomFlowsBenchmarkHelper;
+}
+
+/// Sets `pallet-tranche-tx-registry`'s `TxRecorder` (the shared recorder
+/// identity) so `record_flow_tx`'s `EnsureTxRecorder` origin resolves. Benchmarks only.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TrancheCustomFlowsBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_custom_flows::BenchmarkHelper for TrancheCustomFlowsBenchmarkHelper {
+	fn seed_recorder() {
+		pallet_tranche_tx_registry::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -1254,9 +1456,6 @@ mod runtime {
 	#[runtime::pallet_index(42)]
 	pub type BaseFee = pallet_base_fee;
 
-	#[runtime::pallet_index(43)]
-	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
-
 	#[runtime::pallet_index(50)]
 	pub type Scheduler = pallet_scheduler;
 
@@ -1297,16 +1496,66 @@ mod runtime {
 	pub type Blaze = pallet_blaze;
 
 	#[runtime::pallet_index(63)]
-	pub type CCCPRelayQueue = pallet_cccp_relay_queue;
+	pub type BifrostTransactionPayment = pallet_bifrost_evm_tx_payment;
 
 	#[runtime::pallet_index(64)]
+	pub type CCCPRelayQueue = pallet_cccp_relay_queue;
+
+	#[runtime::pallet_index(65)]
 	pub type OracleRegistry = pallet_oracle_registry;
+
+	#[runtime::pallet_index(80)]
+	pub type TrancheSystem = pallet_tranche_system;
+
+	#[runtime::pallet_index(81)]
+	pub type TranchePermissions = pallet_tranche_permissions;
+
+	#[runtime::pallet_index(82)]
+	pub type TrancheInvestments = pallet_tranche_investments;
+
+	#[runtime::pallet_index(83)]
+	pub type TrancheTxRegistry = pallet_tranche_tx_registry;
+
+	#[runtime::pallet_index(84)]
+	pub type TrancheCustomFlows = pallet_tranche_custom_flows;
+
+	#[runtime::pallet_index(85)]
+	pub type TrancheTxRegistryV2 = pallet_tranche_tx_registry_v2;
+
+	#[runtime::pallet_index(86)]
+	pub type TrancheInvestmentsV2 = pallet_tranche_investments_v2;
 
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
 
 	#[runtime::pallet_index(100)]
 	pub type MultiBlockMigrations = pallet_migrations;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benches {
+	frame_benchmarking::define_benchmarks!(
+		[frame_system, SystemBench::<Runtime>]
+		[pallet_relay_manager, RelayManager]
+		[pallet_blaze, Blaze]
+		[pallet_btc_registration_pool, BtcRegistrationPool]
+		[pallet_btc_socket_queue, BtcSocketQueue]
+		// v1 tx-registry/investments deliberately excluded — their weights.rs stays
+		// untouched (dev placeholders), see
+		// docs/tranche-tx-registry/settlement-leg-chunking-design.md (their `record_*`
+		// calls run on every investor tx, so accurate weights would perturb an
+		// already-live per-tx gas cost). tx-registry-v2/investments-v2 (accurately
+		// weight-benchmarked forks, new products only), and pallet-tranche-system/
+		// -permissions/-custom-flows (none forked — their calls are either infrequent
+		// per-product admin actions or feeless, so accurate weights there don't
+		// perturb any live per-tx gas cost — see
+		// docs/precompile-gas-changes-2026-09-17.md §6) are benchmarked here.
+		[pallet_tranche_system, TrancheSystem]
+		[pallet_tranche_permissions, TranchePermissions]
+		[pallet_tranche_investments_v2, TrancheInvestmentsV2]
+		[pallet_tranche_tx_registry_v2, TrancheTxRegistryV2]
+		[pallet_tranche_custom_flows, TrancheCustomFlows]
+	);
 }
 
 bifrost_common_runtime::impl_common_runtime_apis!();
