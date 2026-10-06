@@ -1,1137 +1,1137 @@
 [
     {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": false,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chainId",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "adapter",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "epochId",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint64",
-                        "name": "valuationCutoff",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "principal",
-                        "type": "uint256"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "address",
-                                "name": "asset",
-                                "type": "address"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "amount",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "priceUsd",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "usdValue",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "bool",
-                                "name": "counted",
-                                "type": "bool"
-                            }
-                        ],
-                        "internalType": "struct Investments.AssetPosition[]",
-                        "name": "positions",
-                        "type": "tuple[]"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct Investments.AdapterValuation[]",
-                "name": "valuations",
-                "type": "tuple[]"
-            }
-        ],
-        "name": "AdapterValuationsRecorded",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": false,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "address",
-                        "name": "adapter_address",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "uint64",
-                        "name": "adapter_chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "amount",
-                        "type": "uint256"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct Investments.Allocation[]",
-                "name": "allocations",
-                "type": "tuple[]"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "receivable_amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "InvestmentApproved",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": false,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint64",
-                "name": "vault_chain_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "address",
-                "name": "vault_address",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "address",
-                "name": "investor_address",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint8",
-                "name": "order_type",
-                "type": "uint8"
-            }
-        ],
-        "name": "InvestmentRequested",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": false,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "pending_deposit_assets",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "product_nav",
-                "type": "uint256"
-            }
-        ],
-        "name": "TrancheSettlementRecorded",
-        "type": "event"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            }
-        ],
+        "type": "function",
         "name": "get_adapter_valuations",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
         "outputs": [
             {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chainId",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "adapter",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "epochId",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint64",
-                        "name": "valuationCutoff",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "principal",
-                        "type": "uint256"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "address",
-                                "name": "asset",
-                                "type": "address"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "amount",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "priceUsd",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "usdValue",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "bool",
-                                "name": "counted",
-                                "type": "bool"
-                            }
-                        ],
-                        "internalType": "struct Investments.AssetPosition[]",
-                        "name": "positions",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct Investments.AdapterValuation[]",
                 "name": "valuations",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            }
-        ],
-        "name": "get_approval",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "receivable_amount",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint8",
-                "name": "status",
-                "type": "uint8"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            }
-        ],
-        "name": "get_last_settlement",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.AdapterValuation[]",
                 "components": [
                     {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
+                        "name": "chainId",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     },
                     {
-                        "internalType": "uint256[]",
-                        "name": "share_prices",
-                        "type": "uint256[]"
+                        "name": "adapter",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     },
                     {
-                        "internalType": "uint256[]",
-                        "name": "tranche_navs",
-                        "type": "uint256[]"
-                    }
-                ],
-                "internalType": "struct Investments.ChainSettlement[]",
-                "name": "chains",
-                "type": "tuple[]"
-            },
-            {
-                "internalType": "uint256",
-                "name": "product_nav",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            }
-        ],
-        "name": "get_pending_deposit_assets",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "offset",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "limit",
-                "type": "uint256"
-            }
-        ],
-        "name": "get_pending_requests",
-        "outputs": [
-            {
-                "internalType": "bytes32[]",
-                "name": "request_ids",
-                "type": "bytes32[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            }
-        ],
-        "name": "get_request",
-        "outputs": [
-            {
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            },
-            {
-                "internalType": "uint64",
-                "name": "vault_chain_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "address",
-                "name": "vault",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint8",
-                "name": "order_type",
-                "type": "uint8"
-            },
-            {
-                "internalType": "uint8",
-                "name": "status",
-                "type": "uint8"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "offset",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "limit",
-                "type": "uint256"
-            }
-        ],
-        "name": "get_settlement_adapter_valuations",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "uint256",
-                        "name": "settlement_id",
-                        "type": "uint256"
+                        "name": "epochId",
+                        "type": "uint256",
+                        "internalType": "uint256"
                     },
                     {
+                        "name": "valuationCutoff",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "principal",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "positions",
+                        "type": "tuple[]",
+                        "internalType": "struct InvestmentsV2.AssetPosition[]",
                         "components": [
                             {
-                                "internalType": "uint64",
+                                "name": "asset",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "amount",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "priceUsd",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "usdValue",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "counted",
+                                "type": "bool",
+                                "internalType": "bool"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_approval",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "receivable_amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_last_settlement",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "chains",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.ChainSettlement[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "share_prices",
+                        "type": "uint256[]",
+                        "internalType": "uint256[]"
+                    },
+                    {
+                        "name": "tranche_navs",
+                        "type": "uint256[]",
+                        "internalType": "uint256[]"
+                    }
+                ]
+            },
+            {
+                "name": "product_nav",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_pending_deposit_assets",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_pending_requests",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "offset",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "limit",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "request_ids",
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_request",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "order_type",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_settlement_adapter_valuations",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "offset",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "limit",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "entries",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.AdapterValuationsEntry[]",
+                "components": [
+                    {
+                        "name": "settlement_id",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "valuations",
+                        "type": "tuple[]",
+                        "internalType": "struct InvestmentsV2.AdapterValuation[]",
+                        "components": [
+                            {
                                 "name": "chainId",
-                                "type": "uint64"
+                                "type": "uint64",
+                                "internalType": "uint64"
                             },
                             {
-                                "internalType": "address",
                                 "name": "adapter",
-                                "type": "address"
+                                "type": "bytes32",
+                                "internalType": "bytes32"
                             },
                             {
-                                "internalType": "uint256",
                                 "name": "epochId",
-                                "type": "uint256"
+                                "type": "uint256",
+                                "internalType": "uint256"
                             },
                             {
-                                "internalType": "uint64",
                                 "name": "valuationCutoff",
-                                "type": "uint64"
+                                "type": "uint64",
+                                "internalType": "uint64"
                             },
                             {
-                                "internalType": "uint256",
                                 "name": "principal",
-                                "type": "uint256"
+                                "type": "uint256",
+                                "internalType": "uint256"
                             },
                             {
+                                "name": "positions",
+                                "type": "tuple[]",
+                                "internalType": "struct InvestmentsV2.AssetPosition[]",
                                 "components": [
                                     {
-                                        "internalType": "address",
                                         "name": "asset",
-                                        "type": "address"
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
                                     },
                                     {
-                                        "internalType": "uint256",
                                         "name": "amount",
-                                        "type": "uint256"
+                                        "type": "uint256",
+                                        "internalType": "uint256"
                                     },
                                     {
-                                        "internalType": "uint256",
                                         "name": "priceUsd",
-                                        "type": "uint256"
+                                        "type": "uint256",
+                                        "internalType": "uint256"
                                     },
                                     {
-                                        "internalType": "uint256",
                                         "name": "usdValue",
-                                        "type": "uint256"
+                                        "type": "uint256",
+                                        "internalType": "uint256"
                                     },
                                     {
-                                        "internalType": "bool",
                                         "name": "counted",
-                                        "type": "bool"
+                                        "type": "bool",
+                                        "internalType": "bool"
                                     }
-                                ],
-                                "internalType": "struct Investments.AssetPosition[]",
-                                "name": "positions",
-                                "type": "tuple[]"
+                                ]
                             }
-                        ],
-                        "internalType": "struct Investments.AdapterValuation[]",
-                        "name": "valuations",
-                        "type": "tuple[]"
+                        ]
                     }
-                ],
-                "internalType": "struct Investments.AdapterValuationsEntry[]",
-                "name": "entries",
-                "type": "tuple[]"
+                ]
             },
             {
-                "internalType": "uint256",
                 "name": "total",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "stateMutability": "view",
-        "type": "function"
+        "stateMutability": "view"
     },
     {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            }
-        ],
+        "type": "function",
         "name": "get_settlement_id",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
         "outputs": [
             {
-                "internalType": "uint256",
                 "name": "",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "stateMutability": "view",
-        "type": "function"
+        "stateMutability": "view"
     },
     {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            }
-        ],
+        "type": "function",
         "name": "get_settlement_state",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
         "outputs": [
             {
+                "name": "tranches",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.TrancheSettle[]",
                 "components": [
                     {
-                        "internalType": "uint64",
                         "name": "vault_chain_id",
-                        "type": "uint64"
+                        "type": "uint64",
+                        "internalType": "uint64"
                     },
                     {
-                        "internalType": "address",
                         "name": "vault_address",
-                        "type": "address"
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     },
                     {
-                        "internalType": "uint256",
                         "name": "tranche_nav",
-                        "type": "uint256"
+                        "type": "uint256",
+                        "internalType": "uint256"
                     },
                     {
-                        "internalType": "uint256",
                         "name": "share_price",
-                        "type": "uint256"
+                        "type": "uint256",
+                        "internalType": "uint256"
                     },
                     {
-                        "internalType": "uint256",
                         "name": "units_outstanding",
-                        "type": "uint256"
+                        "type": "uint256",
+                        "internalType": "uint256"
                     },
                     {
-                        "internalType": "uint256",
                         "name": "principal",
-                        "type": "uint256"
+                        "type": "uint256",
+                        "internalType": "uint256"
                     }
-                ],
-                "internalType": "struct Investments.TrancheSettle[]",
-                "name": "tranches",
-                "type": "tuple[]"
+                ]
             },
             {
-                "internalType": "uint256",
                 "name": "pending_deposit_assets",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "uint256",
                 "name": "product_nav",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "uint256",
                 "name": "recorded_at",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "uint256",
                 "name": "timestamp",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "stateMutability": "view",
-        "type": "function"
+        "stateMutability": "view"
     },
     {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "offset",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "limit",
-                "type": "uint256"
-            }
-        ],
+        "type": "function",
         "name": "get_settlement_states",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "offset",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "limit",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
         "outputs": [
             {
-                "components": [
-                    {
-                        "internalType": "uint256",
-                        "name": "settlement_id",
-                        "type": "uint256"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "vault_chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "address",
-                                "name": "vault_address",
-                                "type": "address"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "tranche_nav",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "share_price",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "units_outstanding",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "principal",
-                                "type": "uint256"
-                            }
-                        ],
-                        "internalType": "struct Investments.TrancheSettle[]",
-                        "name": "tranches",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "pending_deposit_assets",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "product_nav",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "recorded_at",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "timestamp",
-                        "type": "uint256"
-                    }
-                ],
-                "internalType": "struct Investments.SettlementStateEntry[]",
                 "name": "entries",
-                "type": "tuple[]"
-            },
-            {
-                "internalType": "uint256",
-                "name": "total",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.SettlementStateEntry[]",
                 "components": [
                     {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
+                        "name": "settlement_id",
+                        "type": "uint256",
+                        "internalType": "uint256"
                     },
                     {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
+                        "name": "tranches",
+                        "type": "tuple[]",
+                        "internalType": "struct InvestmentsV2.TrancheSettle[]",
+                        "components": [
+                            {
+                                "name": "vault_chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "tranche_nav",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "share_price",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "units_outstanding",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "principal",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "pending_deposit_assets",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "product_nav",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "recorded_at",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": "uint256",
+                        "internalType": "uint256"
                     }
-                ],
-                "internalType": "struct Investments.VaultInput",
-                "name": "tranche",
-                "type": "tuple"
+                ]
+            },
+            {
+                "name": "total",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "get_tranche_state",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "tranche",
+                "type": "tuple",
+                "internalType": "struct InvestmentsV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            }
+        ],
         "outputs": [
             {
-                "internalType": "uint256",
                 "name": "units_outstanding",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "uint256",
                 "name": "principal",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "stateMutability": "view",
-        "type": "function"
+        "stateMutability": "view"
     },
     {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chainId",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "adapter",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "epochId",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint64",
-                        "name": "valuationCutoff",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "principal",
-                        "type": "uint256"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "address",
-                                "name": "asset",
-                                "type": "address"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "amount",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "priceUsd",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "usdValue",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "bool",
-                                "name": "counted",
-                                "type": "bool"
-                            }
-                        ],
-                        "internalType": "struct Investments.AssetPosition[]",
-                        "name": "positions",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct Investments.AdapterValuation[]",
-                "name": "valuations",
-                "type": "tuple[]"
-            }
-        ],
+        "type": "function",
         "name": "record_adapter_valuations",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
         "inputs": [
             {
-                "internalType": "uint64",
                 "name": "product_id",
-                "type": "uint64"
+                "type": "uint64",
+                "internalType": "uint64"
             },
             {
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            },
-            {
-                "internalType": "uint256",
                 "name": "settlement_id",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
+                "name": "valuations",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.AdapterValuation[]",
                 "components": [
                     {
-                        "internalType": "address",
-                        "name": "adapter_address",
-                        "type": "address"
+                        "name": "chainId",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     },
                     {
-                        "internalType": "uint64",
-                        "name": "adapter_chain_id",
-                        "type": "uint64"
+                        "name": "adapter",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     },
                     {
-                        "internalType": "uint256",
-                        "name": "amount",
-                        "type": "uint256"
-                    }
-                ],
-                "internalType": "struct Investments.Allocation[]",
-                "name": "allocations",
-                "type": "tuple[]"
-            },
-            {
-                "internalType": "uint256",
-                "name": "receivable_amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "record_investment_approval",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "bytes32",
-                        "name": "request_id",
-                        "type": "bytes32"
+                        "name": "epochId",
+                        "type": "uint256",
+                        "internalType": "uint256"
                     },
                     {
+                        "name": "valuationCutoff",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "principal",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "positions",
+                        "type": "tuple[]",
+                        "internalType": "struct InvestmentsV2.AssetPosition[]",
                         "components": [
                             {
-                                "internalType": "address",
-                                "name": "adapter_address",
-                                "type": "address"
+                                "name": "asset",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
                             },
                             {
-                                "internalType": "uint64",
-                                "name": "adapter_chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "uint256",
                                 "name": "amount",
-                                "type": "uint256"
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "priceUsd",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "usdValue",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "counted",
+                                "type": "bool",
+                                "internalType": "bool"
                             }
-                        ],
-                        "internalType": "struct Investments.Allocation[]",
-                        "name": "allocations",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "receivable_amount",
-                        "type": "uint256"
+                        ]
                     }
-                ],
-                "internalType": "struct Investments.InvestmentApprovalInput[]",
-                "name": "approvals",
-                "type": "tuple[]"
+                ]
             }
         ],
-        "name": "record_investment_approvals",
         "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
+        "stateMutability": "nonpayable"
     },
     {
+        "type": "function",
+        "name": "record_investment_approval",
         "inputs": [
             {
-                "internalType": "uint64",
                 "name": "product_id",
-                "type": "uint64"
+                "type": "uint64",
+                "internalType": "uint64"
             },
             {
-                "internalType": "bytes32",
                 "name": "request_id",
-                "type": "bytes32"
+                "type": "bytes32",
+                "internalType": "bytes32"
             },
             {
-                "internalType": "uint256",
                 "name": "settlement_id",
-                "type": "uint256"
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "uint64",
-                "name": "vault_chain_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "address",
-                "name": "vault_address",
-                "type": "address"
-            },
-            {
-                "internalType": "address",
-                "name": "investor_address",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint8",
-                "name": "order_type",
-                "type": "uint8"
-            }
-        ],
-        "name": "record_investment_request",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
+                "name": "allocations",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.Allocation[]",
                 "components": [
                     {
-                        "internalType": "uint64",
-                        "name": "vault_chain_id",
-                        "type": "uint64"
+                        "name": "adapter_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     },
                     {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
+                        "name": "adapter_chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     },
                     {
-                        "internalType": "uint256",
-                        "name": "tranche_nav",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "share_price",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "units_outstanding",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "principal",
-                        "type": "uint256"
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
                     }
-                ],
-                "internalType": "struct Investments.TrancheSettle[]",
-                "name": "tranches",
-                "type": "tuple[]"
+                ]
             },
             {
-                "internalType": "uint256",
-                "name": "pending_deposit_assets",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "product_nav",
-                "type": "uint256"
+                "name": "receivable_amount",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "name": "record_settlement",
         "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "record_investment_approvals",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "approvals",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.InvestmentApprovalInput[]",
+                "components": [
+                    {
+                        "name": "request_id",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "allocations",
+                        "type": "tuple[]",
+                        "internalType": "struct InvestmentsV2.Allocation[]",
+                        "components": [
+                            {
+                                "name": "adapter_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "adapter_chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "amount",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "receivable_amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "record_investment_request",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "investor_address",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "order_type",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "record_settlement",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "tranches",
+                "type": "tuple[]",
+                "internalType": "struct InvestmentsV2.TrancheSettle[]",
+                "components": [
+                    {
+                        "name": "vault_chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "tranche_nav",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "share_price",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "units_outstanding",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "principal",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            },
+            {
+                "name": "pending_deposit_assets",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "product_nav",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "AdapterValuationsRecorded",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "valuations",
+                "type": "tuple[]",
+                "indexed": false,
+                "internalType": "struct InvestmentsV2.AdapterValuation[]",
+                "components": [
+                    {
+                        "name": "chainId",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "adapter",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "epochId",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "valuationCutoff",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "principal",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "positions",
+                        "type": "tuple[]",
+                        "internalType": "struct InvestmentsV2.AssetPosition[]",
+                        "components": [
+                            {
+                                "name": "asset",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "amount",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "priceUsd",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "usdValue",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "counted",
+                                "type": "bool",
+                                "internalType": "bool"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InvestmentApproved",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "allocations",
+                "type": "tuple[]",
+                "indexed": false,
+                "internalType": "struct InvestmentsV2.Allocation[]",
+                "components": [
+                    {
+                        "name": "adapter_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "adapter_chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            },
+            {
+                "name": "receivable_amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "InvestmentRequested",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "investor_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "order_type",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "TrancheSettlementRecorded",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "pending_deposit_assets",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "product_nav",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            }
+        ],
+        "anonymous": false
     }
 ]

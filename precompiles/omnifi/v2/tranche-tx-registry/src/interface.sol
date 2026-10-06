@@ -126,19 +126,19 @@ pragma solidity >=0.8.0;
 interface TrancheTxRegistryV2 {
     /// @dev Mirrors Investments's VaultInput — duplicated here rather than shared, same
     ///      pattern already used between tranche-system and tranche-permissions.
-    /// @param chain_id      EVM chain ID where the tranche's ERC-7540 vault is deployed
-    /// @param vault_address ERC-7540 vault contract address identifying the tranche
+    /// @param chain_id      Chain ID where the tranche's vault is deployed
+    /// @param vault_address Vault address identifying the tranche, as bytes32 (EVM addresses left-padded)
     struct VaultInput {
         uint64 chain_id;
-        address vault_address;
+        bytes32 vault_address;
     }
 
     /// @dev Caller-attested off-chain tx reference — what the recorder claims happened.
-    /// @param chain_id EVM chain ID the tx occurred on
+    /// @param chain_id Chain ID the tx occurred on
     /// @param tx_hash  Transaction hash on that chain
     struct TxAttestation {
         uint64 chain_id;
-        bytes32 tx_hash;
+        bytes tx_hash;
     }
 
     /// @dev Stored form of a TxAttestation — identical fields plus `recorded_at`, this
@@ -149,7 +149,7 @@ interface TrancheTxRegistryV2 {
     ///      zeroed TxRecord, is what signals "does not apply").
     struct TxRecord {
         uint64 chain_id;
-        bytes32 tx_hash;
+        bytes tx_hash;
         uint256 recorded_at;
     }
 
@@ -254,7 +254,7 @@ interface TrancheTxRegistryV2 {
     /// @param amount     Investor's full requested amount, as submitted at Requested step
     /// @param order_type 0 = redeem, 1 = deposit
     struct RequestInfo {
-        address investor;
+        bytes32 investor;
         VaultInput vault;
         uint256 amount;
         uint8 order_type;
@@ -275,7 +275,7 @@ interface TrancheTxRegistryV2 {
     /// @param tx_hash The receive() tx's hash on that vault's chain
     struct ReceiveHistoryEntry {
         VaultInput vault;
-        bytes32 tx_hash;
+        bytes tx_hash;
     }
 
     /// @dev Step within a request's pipeline. `Requested`/`RequestBridgeExecuted`/
@@ -588,9 +588,9 @@ interface TrancheTxRegistryV2 {
     event RequestTxRecorded(
         uint64 indexed product_id,
         bytes32 indexed request_id,
-        address indexed investor,
+        bytes32 indexed investor,
         uint64 vault_chain_id,
-        address vault_address,
+        bytes32 vault_address,
         uint256 amount,
         uint8 order_type,
         RequestStep step,
@@ -630,9 +630,9 @@ interface TrancheTxRegistryV2 {
 
     event ReceiveTxRecorded(
         uint64 indexed product_id,
-        address indexed investor,
+        bytes32 indexed investor,
         VaultInput vault,
-        address receiver,
+        bytes32 receiver,
         uint256 amount,
         ReceiveKind kind,
         TxAttestation attestation
@@ -647,7 +647,7 @@ interface TrancheTxRegistryV2 {
     ///      BridgeExecuted` — MUST be 0 (ignored) otherwise, same
     ///      convention as RequestTxRecorded's own `bridge_status`.
     event WhitelistTxRecorded(
-        address indexed who,
+        bytes32 indexed who,
         VaultInput vault,
         bool grant,
         uint256 nonce,
@@ -724,9 +724,9 @@ interface TrancheTxRegistryV2 {
      * @param product_id             The product this request belongs to
      * @param request_id             The request this entry is for
      * @param investor               Investor address — required iff step == Requested
-     * @param vault_chain_id         EVM chain ID of the tranche vault — required iff
+     * @param vault_chain_id         Chain ID of the tranche vault — required iff
      *                               step == Requested
-     * @param vault_address          ERC-7540 vault contract address — required iff
+     * @param vault_address          Vault address (bytes32, EVM left-padded) — required iff
      *                               step == Requested
      * @param amount                 Investor's full requested amount — required iff
      *                               step == Requested
@@ -744,9 +744,9 @@ interface TrancheTxRegistryV2 {
     function record_request_tx(
         uint64 product_id,
         bytes32 request_id,
-        address investor,
+        bytes32 investor,
         uint64 vault_chain_id,
-        address vault_address,
+        bytes32 vault_address,
         uint256 amount,
         uint8 order_type,
         uint64[] calldata adapter_chain_ids,
@@ -902,8 +902,8 @@ interface TrancheTxRegistryV2 {
     function record_receive_tx(
         uint64 product_id,
         VaultInput calldata vault,
-        address investor,
-        address receiver,
+        bytes32 investor,
+        bytes32 receiver,
         uint256 amount,
         ReceiveKind kind,
         TxAttestation calldata attestation
@@ -959,7 +959,7 @@ interface TrancheTxRegistryV2 {
      */
     function record_whitelist_tx(
         VaultInput calldata vault,
-        address who,
+        bytes32 who,
         bool grant,
         uint256 nonce,
         WhitelistStep step,
@@ -988,7 +988,7 @@ interface TrancheTxRegistryV2 {
      * @return total    Total history length for this (investor, product_id)
      */
     function get_investor_receive_history(
-        address investor,
+        bytes32 investor,
         uint64 product_id,
         uint256 offset,
         uint256 limit
@@ -1018,14 +1018,14 @@ interface TrancheTxRegistryV2 {
      * @return tx       Evidence for this receive() tx
      */
     function get_receive(
-        address investor,
+        bytes32 investor,
         VaultInput calldata vault,
-        bytes32 tx_hash
+        bytes calldata tx_hash
     )
         external
         view
         returns (
-            address receiver,
+            bytes32 receiver,
             uint256 amount,
             ReceiveKind kind,
             TxRecord memory tx
@@ -1044,7 +1044,7 @@ interface TrancheTxRegistryV2 {
      */
     function get_latest_whitelist_nonce(
         VaultInput calldata vault,
-        address who
+        bytes32 who
     ) external view returns (uint256 nonce);
 
     /**
@@ -1088,7 +1088,7 @@ interface TrancheTxRegistryV2 {
      */
     function get_whitelist(
         VaultInput calldata vault,
-        address who,
+        bytes32 who,
         uint256 nonce
     )
         external
@@ -1185,7 +1185,7 @@ interface TrancheTxRegistryV2 {
      * @return requests The investor's in-flight (product_id, request_id) pairs
      */
     function get_investor_active_requests(
-        address investor
+        bytes32 investor
     ) external view returns (InvestorRequest[] memory requests);
 
     /**
@@ -1210,7 +1210,7 @@ interface TrancheTxRegistryV2 {
      * @return total       Total history length for this (investor, product_id)
      */
     function get_investor_request_history(
-        address investor,
+        bytes32 investor,
         uint64 product_id,
         uint256 offset,
         uint256 limit

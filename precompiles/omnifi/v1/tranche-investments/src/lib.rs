@@ -8,7 +8,10 @@ use pallet_tranche_investments::{
 	OrderType, TrancheSettle, MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_ASSET_POSITIONS,
 	MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
+use pallet_tranche_system::{
+	legacy::{AdapterKeyV1 as AdapterKey, VaultIdV1 as VaultId},
+	ProductId,
+};
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
@@ -552,7 +555,7 @@ where
 				let settle = settlement
 					.tranches
 					.iter()
-					.find(|s| s.vault == tranche.vault)
+					.find(|s| pallet_tranche_system::VaultId::from(&s.vault) == tranche.vault)
 					.ok_or_else(|| revert("tranche missing from latest settlement"))?;
 				share_prices.push(settle.share_price);
 				tranche_navs.push(settle.tranche_nav);

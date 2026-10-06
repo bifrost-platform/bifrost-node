@@ -23,7 +23,7 @@ use sp_std::marker::PhantomData;
 /// and re-exported here as the canonical `pallet_tranche_system::ProductId`.
 /// The move is SCALE-encoding-neutral (crate path only affects `TypeInfo`
 /// metadata) — this pallet's existing storage needs no migration.
-pub use bp_tranche::ProductId;
+pub use bp_tranche::{ChainAddress, ProductId};
 
 /// Maximum number of tranches a single chain within a product can have.
 /// Originally a flat, product-wide cap; rescoped (2026-08-20) to apply per
@@ -125,10 +125,10 @@ pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
 	MaxEncodedLen,
 )]
 pub struct VaultId {
-	/// EVM chain ID of the chain where the vault contract is deployed.
+	/// Chain ID of the chain where the vault is deployed.
 	pub chain_id: u64,
-	/// ERC-7540 vault contract address on that chain.
-	pub vault_address: H160,
+	/// Vault address on that chain, as a 32-byte `ChainAddress` (EVM: left-padded).
+	pub vault_address: ChainAddress,
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ pub struct VaultRegistration {
 /// Nested Adapters (see `AdapterInfo`) are NOT keyed by this type — they carry
 /// no `chain_id` of their own (removed 2026-07-27; a nested adapter always
 /// lives on its parent MultichainAdapter's chain), so `MultichainProductDetails`'s
-/// nested `adapters` map is keyed by plain `H160` instead. `AdapterIndex`'s reverse-index
+/// nested `adapters` map is keyed by plain `ChainAddress` instead. `AdapterIndex`'s reverse-index
 /// (see pallet/mod.rs) still uses this type, though — global adapter uniqueness
 /// stays chain-aware (some on-chain protocols share the same contract address
 /// across different chains via CREATE2), it's just derived from the parent
@@ -188,9 +188,80 @@ pub struct VaultRegistration {
 )]
 pub struct AdapterKey {
 	/// The adapter's (or MultichainAdapter's) own contract/source address.
-	pub address: H160,
-	/// EVM chain ID where that address lives.
+	pub address: ChainAddress,
+	/// Chain ID where that address lives.
 	pub chain_id: u64,
+}
+
+/// Pre-non-EVM (`H160`) shapes of `VaultId`/`AdapterKey`, kept SCALE-identical to
+/// what the frozen, EVM-only v1 pallets (`pallet-tranche-investments`,
+/// `pallet-tranche-tx-registry`) hold in storage, so those need no migration.
+/// They convert into the current types (left-padding the address) at every
+/// `VaultInspect`/`AdapterInspect` call.
+pub mod legacy {
+	use super::*;
+
+	/// `VaultId` as it was before non-EVM support (`vault_address: H160`).
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		Eq,
+		Ord,
+		PartialOrd,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
+	pub struct VaultIdV1 {
+		pub chain_id: u64,
+		pub vault_address: H160,
+	}
+
+	/// `AdapterKey` as it was before non-EVM support (`address: H160`).
+	#[derive(
+		Clone,
+		Encode,
+		Decode,
+		DecodeWithMemTracking,
+		PartialEq,
+		Eq,
+		Ord,
+		PartialOrd,
+		RuntimeDebug,
+		TypeInfo,
+		MaxEncodedLen,
+	)]
+	pub struct AdapterKeyV1 {
+		pub address: H160,
+		pub chain_id: u64,
+	}
+
+	impl From<VaultIdV1> for VaultId {
+		fn from(v: VaultIdV1) -> Self {
+			VaultId { chain_id: v.chain_id, vault_address: bp_tranche::from_evm(v.vault_address) }
+		}
+	}
+
+	impl From<&VaultIdV1> for VaultId {
+		fn from(v: &VaultIdV1) -> Self {
+			v.clone().into()
+		}
+	}
+
+	impl From<AdapterKeyV1> for AdapterKey {
+		fn from(k: AdapterKeyV1) -> Self {
+			AdapterKey { address: bp_tranche::from_evm(k.address), chain_id: k.chain_id }
+		}
+	}
+
+	impl From<&AdapterKeyV1> for AdapterKey {
+		fn from(k: &AdapterKeyV1) -> Self {
+			k.clone().into()
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -263,12 +334,12 @@ pub struct Tranche {
 	/// not necessarily the same asset across different tranches of the same
 	/// product). Distinct from `ValuationInfo::base_asset`, which is the
 	/// Hub-chain asset NAV/pricing is denominated in.
-	pub asset: H160,
+	pub asset: ChainAddress,
 	/// This tranche's own share-token contract address — the ERC-7540 vault's
 	/// share token investors receive/burn on deposit/redeem, on `vault.chain_id`.
 	/// Distinct from `asset` (what's deposited in) and `ValuationInfo::base_asset`
 	/// (the Hub-chain pricing denomination).
-	pub shares: H160,
+	pub shares: ChainAddress,
 }
 
 /// One entry of `create_product`'s `tranches` input. Carries an explicit
@@ -296,32 +367,36 @@ pub struct TrancheInput {
 	pub tranche_type: TrancheType,
 	pub vault: VaultId,
 	/// See `Tranche::asset`'s doc comment.
-	pub asset: H160,
+	pub asset: ChainAddress,
 	/// See `Tranche::shares`' doc comment.
-	pub shares: H160,
+	pub shares: ChainAddress,
 }
 
 // ---------------------------------------------------------------------------
 // SourceType / AdapterInfo
 // ---------------------------------------------------------------------------
 
-/// Generic over `AccountId` because `OffchainSource` carries `borrower` — unlike
-/// `product_admin` (owned entirely by pallet-tranche-permissions), `borrower`
-/// lives directly on the adapter here. A product can have multiple
+/// `OffchainSource` carries `borrower` — unlike `product_admin` (owned entirely
+/// by pallet-tranche-permissions), `borrower` lives directly on the adapter here. A product can have multiple
 /// OffchainSource adapters, each potentially a different institution, so
 /// there's no single product-scoped "Borrower" role to delegate to — this is
 /// the source of truth instead.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub enum SourceType<AccountId> {
+pub enum SourceType {
 	/// Backed by an off-chain RWA loan book. Borrow/repay bookkeeping for
 	/// that loan book is NOT tracked on-chain (2026-07-24) — it lives
 	/// entirely in the adapter itself off-chain, since nothing on-chain
 	/// consumes it once NAV stopped being computed on-node. `borrower` here
-	/// is adapter metadata only (identity, not a ledger).
+	/// is adapter metadata only (identity, not a ledger) — never used for
+	/// authorization.
+	///
+	/// `borrower` is a `ChainAddress` on the adapter's own chain (the parent
+	/// MultichainAdapter's `chain_id`, or the product's `chain_id` for a
+	/// single-chain product), like every other adapter-side address.
 	OffchainSource {
-		borrower: AccountId,
+		borrower: ChainAddress,
 		collaterals: BoundedVec<CollateralAsset, ConstU32<MAX_COLLATERALS>>,
 	},
 	/// Backed by an on-chain yield protocol (e.g. Compound, Morpho, Aave).
@@ -337,7 +412,7 @@ pub struct CollateralAsset {
 	/// The EVM chain `nft_contract` is deployed on — not necessarily Bifrost.
 	pub chain_id: u64,
 	/// ERC-721 / ERC-1155 contract address on `chain_id`.
-	pub nft_contract: H160,
+	pub nft_contract: ChainAddress,
 	/// Token ID identifying the specific NFT.
 	pub nft_token_id: U256,
 }
@@ -350,14 +425,14 @@ pub struct CollateralAsset {
 /// (see `MultichainAdapterInfo`) rather than living in a flat, product-wide map.
 /// Wraps `SourceType` together with this adapter's own sub-allocation weight —
 /// a bare `SourceType` was enough before `weightBps` existed on the interface,
-/// but now needs a second field alongside it. Keyed by plain `H160` (its own
+/// but now needs a second field alongside it. Keyed by plain `ChainAddress` (its own
 /// address) in its parent's `adapters` map — no `chain_id` of its own, since a
 /// nested adapter always lives on its parent MultichainAdapter's chain.
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct AdapterInfo<AccountId> {
-	pub source_type: SourceType<AccountId>,
+pub struct AdapterInfo {
+	pub source_type: SourceType,
 	/// Sub-allocation weight within this adapter's parent MultichainAdapter,
 	/// basis points (10_000 = 100%). Across one MultichainAdapter's nested
 	/// `adapters`, these must always sum to exactly 10_000 (2026-07-27, same
@@ -383,16 +458,13 @@ pub struct AdapterInfo<AccountId> {
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct MultichainAdapterInfo<AccountId> {
+pub struct MultichainAdapterInfo {
 	pub weight_bps: u16,
-	/// Keyed by the adapter's own address (`H160`) — not `AdapterKey`, since a
+	/// Keyed by the adapter's own address (`ChainAddress`) — not `AdapterKey`, since a
 	/// nested adapter carries no `chain_id` of its own; it's always this parent's
 	/// `chain_id` (implied, not duplicated in the key).
-	pub adapters: BoundedBTreeMap<
-		H160,
-		AdapterInfo<AccountId>,
-		ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
-	>,
+	pub adapters:
+		BoundedBTreeMap<ChainAddress, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -485,9 +557,8 @@ pub enum SettlementMode {
 /// directly, unwrapped, since it's already exactly one chain).
 pub type ChainTranches = BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>;
 
-/// Generic over `AccountId` (via `SourceType`, see its doc comment) — unlike the
-/// old design, this pallet now stores adapter `borrower`s directly rather than
-/// delegating them to the permissions pallet. `product_admin` is still NOT
+/// Unlike the old design, this pallet stores adapter `borrower`s directly (see
+/// `SourceType`) rather than delegating them to the permissions pallet. `product_admin` is still NOT
 /// stored here, though — it remains fully owned by pallet-tranche-permissions'
 /// own `ProductAdmins` storage, since there's exactly one ProductAdmin per
 /// product and no ambiguity about where it belongs, unlike `borrower` which
@@ -500,7 +571,7 @@ pub type ChainTranches = BoundedVec<Tranche, ConstU32<MAX_TRANCHES_PER_CHAIN>>;
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct MultichainProductDetails<AccountId> {
+pub struct MultichainProductDetails {
 	pub valuation: ValuationInfo,
 	/// Keyed by `chain_id` — one entry per chain that has at least one
 	/// tranche (an entry is removed entirely once its last tranche is, via
@@ -515,11 +586,8 @@ pub struct MultichainProductDetails<AccountId> {
 	/// function's doc comment in interface.sol for why (100%-sum invariant).
 	/// Each entry now owns its own nested `adapters` (see `MultichainAdapterInfo`)
 	/// — there is no separate top-level adapters map anymore.
-	pub multichain_adapters: BoundedBTreeMap<
-		AdapterKey,
-		MultichainAdapterInfo<AccountId>,
-		ConstU32<MAX_MULTICHAIN_ADAPTERS>,
-	>,
+	pub multichain_adapters:
+		BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, ConstU32<MAX_MULTICHAIN_ADAPTERS>>,
 	/// This product's TrancheManager contract address on each chain one of
 	/// its vaults is deployed on — keyed by `chain_id`, one entry per chain.
 	/// Hub included: a Hub-chain entry is required if (and only if) the
@@ -528,7 +596,8 @@ pub struct MultichainProductDetails<AccountId> {
 	/// TrancheManager instance there. A key need not have a
 	/// tranche on that chain (e.g. an adapter-only chain) — `MAX_TRANCHE_CHAINS`
 	/// is reused only as this map's size cap.
-	pub multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
+	pub multichain_tranche_managers:
+		BoundedBTreeMap<u64, ChainAddress, ConstU32<MAX_TRANCHE_MANAGERS>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -548,10 +617,10 @@ pub struct MultichainProductDetails<AccountId> {
 pub struct SingleChainValuationInfo {
 	/// The product's denomination asset, on the product's `chain_id`. Same
 	/// role as `ValuationInfo::base_asset`.
-	pub base_asset: H160,
+	pub base_asset: ChainAddress,
 	/// The Valuation contract address, on the product's `chain_id` — NOT
 	/// necessarily the Hub chain, unlike `ValuationInfo::valuation_address`.
-	pub valuation_address: H160,
+	pub valuation_address: ChainAddress,
 	pub settlement_mode: SettlementMode,
 }
 
@@ -574,7 +643,7 @@ pub struct SingleChainValuationInfo {
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub struct SingleChainProductDetails<AccountId> {
+pub struct SingleChainProductDetails {
 	pub valuation: SingleChainValuationInfo,
 	/// The single EVM chain every contract in this product lives on.
 	pub chain_id: u64,
@@ -588,22 +657,19 @@ pub struct SingleChainProductDetails<AccountId> {
 	/// The single TrancheManager contract address, on `chain_id`. Unlike
 	/// `MultichainProductDetails::multichain_tranche_managers`, there's only
 	/// ever one — no per-chain table, since there's only one chain.
-	pub tranche_manager: H160,
+	pub tranche_manager: ChainAddress,
 	/// Flat individual-Adapter registry — unlike
 	/// `MultichainProductDetails::multichain_adapters`, there's no
 	/// MultichainAdapter routing layer above these (nothing to route between,
 	/// with only one chain), so this is a single, ungrouped level, keyed by
 	/// each adapter's own address the same way `MultichainAdapterInfo::adapters`
 	/// is. `weight_bps` across the whole map must sum to exactly 10_000.
-	pub adapters: BoundedBTreeMap<
-		H160,
-		AdapterInfo<AccountId>,
-		ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
-	>,
+	pub adapters:
+		BoundedBTreeMap<ChainAddress, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>>,
 	/// The Ledger contract address, on `chain_id` — mirrors
 	/// `pallet-tranche-investments`' interface locally for this product. See
 	/// this struct's doc comment.
-	pub ledger: H160,
+	pub ledger: ChainAddress,
 }
 
 // ---------------------------------------------------------------------------
@@ -619,9 +685,9 @@ pub struct SingleChainProductDetails<AccountId> {
 #[derive(
 	Clone, Encode, Decode, DecodeWithMemTracking, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen,
 )]
-pub enum ProductDetails<AccountId> {
-	Multichain(MultichainProductDetails<AccountId>),
-	SingleChain(SingleChainProductDetails<AccountId>),
+pub enum ProductDetails {
+	Multichain(MultichainProductDetails),
+	SingleChain(SingleChainProductDetails),
 }
 
 // ---------------------------------------------------------------------------

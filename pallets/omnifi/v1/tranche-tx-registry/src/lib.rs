@@ -6,7 +6,7 @@ pub mod weights;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
-use pallet_tranche_system::{ProductId, VaultId};
+use pallet_tranche_system::{legacy::VaultIdV1 as VaultId, ProductId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, H256, U256};
@@ -41,7 +41,8 @@ pub type SettlementId = U256;
 /// module docs.
 pub use bp_tranche::{
 	history::{self, HistoryPage, PagedInvestorHistory},
-	ChainId, TxRecord,
+	legacy::EvmTxRecord as TxRecord,
+	ChainId,
 };
 
 /// Maximum number of `request_id`s a single `record_settlement_tx` call can batch

@@ -16,7 +16,9 @@ use pallet_bifrost_evm_tx_payment::{
 };
 use pallet_evm::AddressMapping;
 use precompile_bifrost_evm_tx_payment::BifrostTransactionPaymentPrecompileCall;
-use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompileCall;
+use precompile_tranche_custom_flows::{
+	universal::TrancheCustomFlowsUniversalPrecompileCall, TrancheCustomFlowsPrecompileCall,
+};
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompileCall;
 use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2PrecompileCall;
 use sp_core::{H160, U256};
@@ -307,6 +309,11 @@ fn is_tranche_recorder_feeless<R: TxRegistryRecorderCheck>(
 	const CUSTOM_FLOWS_PRECOMPILE: H160 =
 		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x04]);
 
+	// Its non-EVM-compatible ("universal") interface: 0x0000000000000000000000000000000000000604
+	// — same pallet and recorder, different ABI, so its own selector set.
+	const CUSTOM_FLOWS_UNIVERSAL_PRECOMPILE: H160 =
+		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x06, 0x04]);
+
 	let target = target?;
 	if input.len() < 4 {
 		return None;
@@ -334,6 +341,12 @@ fn is_tranche_recorder_feeless<R: TxRegistryRecorderCheck>(
 	// `RecorderOrigin` rejects everyone else at dispatch.
 	if target == CUSTOM_FLOWS_PRECOMPILE {
 		return Some(R::is_custom_flow_record_selector(selector) && R::is_tx_recorder(caller));
+	}
+
+	if target == CUSTOM_FLOWS_UNIVERSAL_PRECOMPILE {
+		return Some(
+			R::is_custom_flow_universal_record_selector(selector) && R::is_tx_recorder(caller),
+		);
 	}
 
 	None
@@ -399,6 +412,9 @@ pub trait TxRegistryRecorderCheck {
 	/// address. The recorder identity is the same account as v1/v2, so
 	/// `is_tx_recorder` is reused for it.
 	fn is_custom_flow_record_selector(selector: u32) -> bool;
+	/// Same as `is_custom_flow_record_selector`, for the custom-flows "universal"
+	/// (non-EVM-compatible) precompile's own ABI.
+	fn is_custom_flow_universal_record_selector(selector: u32) -> bool;
 }
 
 /// Default: no caller is ever the tx recorder, and no selector is ever a
@@ -420,6 +436,9 @@ impl TxRegistryRecorderCheck for () {
 		false
 	}
 	fn is_custom_flow_record_selector(_selector: u32) -> bool {
+		false
+	}
+	fn is_custom_flow_universal_record_selector(_selector: u32) -> bool {
 		false
 	}
 }
@@ -481,5 +500,10 @@ where
 
 	fn is_custom_flow_record_selector(selector: u32) -> bool {
 		TrancheCustomFlowsPrecompileCall::<T>::record_flow_tx_selectors().contains(&selector)
+	}
+
+	fn is_custom_flow_universal_record_selector(selector: u32) -> bool {
+		TrancheCustomFlowsUniversalPrecompileCall::<T>::record_flow_tx_selectors()
+			.contains(&selector)
 	}
 }

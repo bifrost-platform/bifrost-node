@@ -1,7 +1,7 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![warn(unused_crate_dependencies)]
-
-extern crate alloc;
+//! Non-EVM-compatible interface (`interface_universal.sol`), served at its own
+//! precompile address: every product/spoke-chain address is a `bytes32`
+//! `ChainAddress` (EVM addresses left-padded) and every foreign tx hash is
+//! `bytes`. The EVM-only interface in the crate root keeps its original ABI.
 
 use alloc::format;
 use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
@@ -13,35 +13,35 @@ use sp_core::{H160, H256, U256};
 use sp_runtime::traits::Dispatchable;
 use sp_std::marker::PhantomData;
 
-pub mod universal;
-pub use universal::TranchePermissionsUniversalPrecompile;
-
 // ---------------------------------------------------------------------------
 // Event log selectors
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_PERMISSION_GRANTED: [u8; 32] =
-	keccak256!("PermissionGranted(uint64,uint8,address,uint64,address)");
+	keccak256!("PermissionGranted(uint64,uint8,address)");
 pub(crate) const SELECTOR_LOG_PERMISSION_REVOKED: [u8; 32] =
-	keccak256!("PermissionRevoked(uint64,uint8,address,uint64,address)");
+	keccak256!("PermissionRevoked(uint64,uint8,address)");
+pub(crate) const SELECTOR_LOG_TRANCHE_INVESTOR_GRANTED: [u8; 32] =
+	keccak256!("TrancheInvestorGranted(uint64,uint64,bytes32,bytes32)");
+pub(crate) const SELECTOR_LOG_TRANCHE_INVESTOR_REVOKED: [u8; 32] =
+	keccak256!("TrancheInvestorRevoked(uint64,uint64,bytes32,bytes32)");
 
-/// `Orchestrator.sendWhitelist(uint64,uint64,address,address,uint8)` selector
-/// (`cast sig "sendWhitelist(uint64,uint64,address,address,uint8)"`).
-const ORCHESTRATOR_SEND_WHITELIST_SELECTOR: [u8; 4] = [0xea, 0x90, 0xaf, 0x2c];
+/// `Orchestrator.sendWhitelist(uint64,uint64,bytes32,bytes32,uint8)` selector
+/// (`cast sig "sendWhitelist(uint64,uint64,bytes32,bytes32,uint8)"`).
+const ORCHESTRATOR_SEND_WHITELIST_SELECTOR: [u8; 4] = [0x86, 0xae, 0xb8, 0xfa];
 
 /// Gas limit for the `Orchestrator.sendWhitelist` subcall.
 const ORCHESTRATOR_CALL_GAS_LIMIT: u64 = 1_000_000;
 
 /// `interface.sol`'s `VaultInput` struct, decoded positionally as a tuple —
-/// `(chain_id, vault_address)`.
-type EvmVaultInput = (u64, Address);
+/// `(chain_id, vault_address)`, the address as a 32-byte `ChainAddress`.
+type EvmVaultInput = (u64, H256);
 
 // ---------------------------------------------------------------------------
 // Precompile
 // ---------------------------------------------------------------------------
 
-/// A precompile that wraps `pallet_tranche_permissions`'s `grant_permission`/
-/// `revoke_permission` extrinsics.
+/// A precompile that wraps `pallet_tranche_permissions`'s extrinsics.
 ///
 /// Called directly by ProductAdmin EOAs — not by a Gateway — so origins are
 /// resolved from `handle.context().caller` as signed substrate accounts.
@@ -49,10 +49,10 @@ type EvmVaultInput = (u64, Address);
 /// the pallet requires a root origin for that role, and a precompile-dispatched
 /// call can only ever construct a signed origin (see `grant_permission`'s
 /// doc comment in `pallet_tranche_permissions`).
-pub struct TranchePermissionsPrecompile<Runtime>(PhantomData<Runtime>);
+pub struct TranchePermissionsUniversalPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
-impl<Runtime> TranchePermissionsPrecompile<Runtime>
+impl<Runtime> TranchePermissionsUniversalPrecompile<Runtime>
 where
 	Runtime: pallet_tranche_permissions::Config
 		+ pallet_tranche_system::Config
@@ -62,42 +62,30 @@ where
 	Runtime::RuntimeCall: From<TranchePermissionsCall<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
-	/// Grant `role` to `who` for `product_id`. See `Role`'s encoding below and
+	/// Grant `role` to `who` for `product_id`. See
 	/// `pallet_tranche_permissions::grant_permission`'s doc comment for full
-	/// authorization rules.
-	///
-	/// `vault` is only used when `role == TrancheInvestor` (`role == 2`); pass
-	/// zero/default otherwise.
+	/// authorization rules. Tranche investors are granted with
+	/// `grant_tranche_investor` instead (`role == 2` reverts).
 	///
 	/// @param product_id Hub product ID
-	/// @param role       0 = ProductAdmin, 1 = OracleFeeder, 2 = TrancheInvestor
+	/// @param role       0 = ProductAdmin, 1 = OracleFeeder
 	/// @param who        EVM address receiving the role
-	/// @param vault      TrancheInvestor-only: (chain_id, vault_address) identifying the tranche
-	#[precompile::public("grant_permission(uint64,uint8,address,(uint64,address))")]
+	#[precompile::public("grant_permission(uint64,uint8,address)")]
 	fn grant_permission(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		role: u8,
 		who: Address,
-		vault: EvmVaultInput,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
-		let propagate = decoded_role.is_none();
-		// The original interface still carries tranche investors as `role == 2`;
-		// they're now their own extrinsic, keyed by a `ChainAddress` investor.
-		let call = match decoded_role {
-			Some(role) => TranchePermissionsCall::<Runtime>::grant_permission {
-				product_id,
-				role,
-				who: Runtime::AddressMapping::into_account_id(who.0),
-			},
-			None => TranchePermissionsCall::<Runtime>::grant_tranche_investor {
-				product_id,
-				vault: evm_vault(vault_chain_id, vault_address),
-				investor: who.0.into(),
-			},
+		let who_account = Runtime::AddressMapping::into_account_id(who.0);
+		let decoded_role = decode_role(role)?;
+
+		let call = TranchePermissionsCall::<Runtime>::grant_permission {
+			product_id,
+			role: decoded_role,
+			who: who_account,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -109,61 +97,36 @@ where
 		let event = log1(
 			handle.context().address,
 			SELECTOR_LOG_PERMISSION_GRANTED,
-			solidity::encode_event_data((
-				product_id,
-				role,
-				who,
-				vault_chain_id,
-				Address(vault_address),
-			)),
+			solidity::encode_event_data((product_id, role, who)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
 
-		if propagate {
-			propagate_whitelist_change::<Runtime>(
-				handle,
-				product_id,
-				vault_chain_id,
-				vault_address,
-				who.0,
-				1,
-			)?;
-		}
-
 		Ok(())
 	}
 
-	/// Revoke `role` from `who` for `product_id`. Same authorization and
-	/// `vault` usage rules as `grant_permission`.
+	/// Revoke `role` from `who` for `product_id`. Same authorization rules as
+	/// `grant_permission`; tranche investors use `revoke_tranche_investor`.
 	///
 	/// @param product_id Hub product ID
-	/// @param role       0 = ProductAdmin, 1 = OracleFeeder, 2 = TrancheInvestor
+	/// @param role       0 = ProductAdmin, 1 = OracleFeeder
 	/// @param who        EVM address losing the role
-	/// @param vault      TrancheInvestor-only: (chain_id, vault_address) identifying the tranche
-	#[precompile::public("revoke_permission(uint64,uint8,address,(uint64,address))")]
+	#[precompile::public("revoke_permission(uint64,uint8,address)")]
 	fn revoke_permission(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		role: u8,
 		who: Address,
-		vault: EvmVaultInput,
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		let (decoded_role, vault_chain_id, vault_address) = decode_role(role, vault)?;
-		let propagate = decoded_role.is_none();
-		let call = match decoded_role {
-			Some(role) => TranchePermissionsCall::<Runtime>::revoke_permission {
-				product_id,
-				role,
-				who: Runtime::AddressMapping::into_account_id(who.0),
-			},
-			None => TranchePermissionsCall::<Runtime>::revoke_tranche_investor {
-				product_id,
-				vault: evm_vault(vault_chain_id, vault_address),
-				investor: who.0.into(),
-			},
+		let who_account = Runtime::AddressMapping::into_account_id(who.0);
+		let decoded_role = decode_role(role)?;
+
+		let call = TranchePermissionsCall::<Runtime>::revoke_permission {
+			product_id,
+			role: decoded_role,
+			who: who_account,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -175,32 +138,49 @@ where
 		let event = log1(
 			handle.context().address,
 			SELECTOR_LOG_PERMISSION_REVOKED,
-			solidity::encode_event_data((
-				product_id,
-				role,
-				who,
-				vault_chain_id,
-				Address(vault_address),
-			)),
+			solidity::encode_event_data((product_id, role, who)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
 
-		if propagate {
-			propagate_whitelist_change::<Runtime>(
-				handle,
-				product_id,
-				vault_chain_id,
-				vault_address,
-				who.0,
-				0,
-			)?;
-		}
-
 		Ok(())
 	}
 
-	/// Read whether `who` currently holds the TrancheInvestor whitelist for
+	/// Whitelist `investor` for `vault` of `product_id`, then propagate the grant
+	/// to `vault`'s chain through the Orchestrator. See
+	/// `pallet_tranche_permissions::grant_tranche_investor`'s doc comment.
+	///
+	/// @param product_id Hub product ID
+	/// @param vault      (chain_id, vault_address) identifying the tranche
+	/// @param investor   The investor's address on `vault.chain_id`, as bytes32
+	/// (EVM addresses left-padded)
+	#[precompile::public("grant_tranche_investor(uint64,(uint64,bytes32),bytes32)")]
+	fn grant_tranche_investor(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		vault: EvmVaultInput,
+		investor: H256,
+	) -> EvmResult {
+		Self::set_tranche_investor(handle, product_id, vault, investor, true)
+	}
+
+	/// Remove `investor` from `vault`'s whitelist of `product_id`, then propagate
+	/// the revoke through the Orchestrator. Same rules as `grant_tranche_investor`.
+	///
+	/// @param product_id Hub product ID
+	/// @param vault      (chain_id, vault_address) identifying the tranche
+	/// @param investor   The investor's address on `vault.chain_id`, as bytes32
+	#[precompile::public("revoke_tranche_investor(uint64,(uint64,bytes32),bytes32)")]
+	fn revoke_tranche_investor(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		vault: EvmVaultInput,
+		investor: H256,
+	) -> EvmResult {
+		Self::set_tranche_investor(handle, product_id, vault, investor, false)
+	}
+
+	/// Read whether `investor` currently holds the TrancheInvestor whitelist for
 	/// `vault` under `product_id`.
 	///
 	/// `product_id` is part of the actual check (2026-08-26) — `TrancheInvestors`
@@ -214,19 +194,18 @@ where
 	/// @param product_id The product `vault` currently belongs to
 	/// @param vault      (chain_id, vault_address) identifying the tranche whose whitelist
 	/// is being checked
-	/// @param who        EVM address to check
-	#[precompile::public("is_tranche_investor(uint64,(uint64,address),address)")]
+	/// @param investor   The investor's address on `vault.chain_id`, as bytes32
+	#[precompile::public("is_tranche_investor(uint64,(uint64,bytes32),bytes32)")]
 	#[precompile::view]
 	fn is_tranche_investor(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		vault: EvmVaultInput,
-		who: Address,
+		investor: H256,
 	) -> EvmResult<bool> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let (vault_chain_id, vault_address) = vault;
-		let vault = evm_vault(vault_chain_id, vault_address.0);
-		let investor: H256 = who.0.into();
+		let (chain_id, vault_address) = vault;
+		let vault = VaultId { chain_id, vault_address };
 		Ok(pallet_tranche_permissions::TrancheInvestors::<Runtime>::contains_key((
 			product_id, vault, investor,
 		)))
@@ -256,9 +235,70 @@ where
 				product_id,
 				&who_account,
 			)),
-			2 => Err(revert("role TrancheInvestor requires a vault — use is_tranche_investor")),
 			_ => Err(revert("invalid role")),
 		}
+	}
+}
+
+impl<Runtime> TranchePermissionsUniversalPrecompile<Runtime>
+where
+	Runtime: pallet_tranche_permissions::Config
+		+ pallet_tranche_system::Config
+		+ pallet_evm::Config
+		+ frame_system::Config,
+	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+	Runtime::RuntimeCall: From<TranchePermissionsCall<Runtime>>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
+{
+	/// Shared body of `grant_tranche_investor` (`grant == true`) and
+	/// `revoke_tranche_investor`: dispatch, log, then propagate to the vault's
+	/// chain through the Orchestrator.
+	fn set_tranche_investor(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		vault: EvmVaultInput,
+		investor: H256,
+		grant: bool,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		let (chain_id, vault_address) = vault;
+		let vault = VaultId { chain_id, vault_address };
+
+		let call = if grant {
+			TranchePermissionsCall::<Runtime>::grant_tranche_investor {
+				product_id,
+				vault: vault.clone(),
+				investor,
+			}
+		} else {
+			TranchePermissionsCall::<Runtime>::revoke_tranche_investor {
+				product_id,
+				vault: vault.clone(),
+				investor,
+			}
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			frame_system::RawOrigin::Signed(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let selector = if grant {
+			SELECTOR_LOG_TRANCHE_INVESTOR_GRANTED
+		} else {
+			SELECTOR_LOG_TRANCHE_INVESTOR_REVOKED
+		};
+		let event = log1(
+			handle.context().address,
+			selector,
+			solidity::encode_event_data((product_id, chain_id, vault_address, investor)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		propagate_whitelist_change::<Runtime>(handle, product_id, &vault, investor, grant as u8)
 	}
 }
 
@@ -266,30 +306,19 @@ where
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Decodes the raw `role` discriminant + `vault` tuple: `Some(role)` for
-/// ProductAdmin/OracleFeeder, `None` for TrancheInvestor (`role == 2`, now the
-/// separate investor extrinsic), plus the `(chain_id, vault_address)` pair to
-/// echo back in the emitted event — `(0, H160::zero())` for non-`TrancheInvestor`
-/// roles, regardless of what the caller passed in `vault`.
-fn decode_role(role: u8, vault: EvmVaultInput) -> EvmResult<(Option<Role>, u64, H160)> {
+/// Decodes the raw `role` discriminant into a `Role`. `2` (the former
+/// `TrancheInvestor`) is rejected — use `grant_tranche_investor`/
+/// `revoke_tranche_investor`.
+fn decode_role(role: u8) -> EvmResult<Role> {
 	match role {
-		0 => Ok((Some(Role::ProductAdmin), 0, H160::zero())),
-		1 => Ok((Some(Role::OracleFeeder), 0, H160::zero())),
-		2 => {
-			let (chain_id, vault_address) = vault;
-			Ok((None, chain_id, vault_address.0))
-		},
+		0 => Ok(Role::ProductAdmin),
+		1 => Ok(Role::OracleFeeder),
 		_ => Err(revert("invalid role")),
 	}
 }
 
-/// An EVM vault as the pallet's `VaultId` (address left-padded).
-fn evm_vault(chain_id: u64, vault_address: H160) -> VaultId {
-	VaultId { chain_id, vault_address: vault_address.into() }
-}
-
 /// Propagates a `TrancheInvestor` grant/revoke to `vault`'s chain by calling
-/// `Orchestrator.sendWhitelist(chainId, productId, vaultAddress, who, action)`
+/// `Orchestrator.sendWhitelist(chainId, productId, vaultAddress, investor, action)`
 /// as a subcall from this precompile's own address. Called unconditionally
 /// for every `TrancheInvestor` grant/revoke — including a Hub-vault one — since
 /// OrchestratorHub is itself the single entry point for both cases: for a
@@ -315,9 +344,8 @@ fn evm_vault(chain_id: u64, vault_address: H160) -> VaultId {
 fn propagate_whitelist_change<Runtime>(
 	handle: &mut impl PrecompileHandle,
 	product_id: pallet_tranche_system::ProductId,
-	vault_chain_id: u64,
-	vault_address: H160,
-	who: H160,
+	vault: &VaultId,
+	investor: H256,
 	action: u8,
 ) -> EvmResult
 where
@@ -329,7 +357,8 @@ where
 		return Err(revert("orchestrator address not configured"));
 	}
 
-	let calldata = encode_send_whitelist(vault_chain_id, product_id, vault_address, who, action);
+	let calldata =
+		encode_send_whitelist(vault.chain_id, product_id, vault.vault_address, investor, action);
 	let context = Context {
 		address: orchestrator,
 		caller: handle.context().address,
@@ -349,17 +378,16 @@ where
 	}
 }
 
-/// ABI-encodes `Orchestrator.sendWhitelist(uint64,uint64,address,address,uint8)`'s
+/// ABI-encodes `Orchestrator.sendWhitelist(uint64,uint64,bytes32,bytes32,uint8)`'s
 /// calldata — five statically-sized parameters, so a flat selector + five
-/// 32-byte left-padded slots, no dynamic offsets needed. `uint64` and `uint256`
-/// encode an in-range value to the same 32-byte word, so only the selector
-/// (derived from the signature string) actually changes here — the
-/// `product_id` slot's bytes are unaffected.
+/// 32-byte slots, no dynamic offsets needed. `vault_address`/`investor` are
+/// 32-byte `ChainAddress`es written as-is (an EVM address is already left-padded,
+/// so its slot is byte-identical to the old `address` encoding).
 fn encode_send_whitelist(
 	chain_id: u64,
 	product_id: pallet_tranche_system::ProductId,
-	vault_address: H160,
-	who: H160,
+	vault_address: H256,
+	investor: H256,
 	action: u8,
 ) -> sp_std::vec::Vec<u8> {
 	let mut calldata = sp_std::vec::Vec::with_capacity(4 + 32 * 5);
@@ -371,11 +399,8 @@ fn encode_send_whitelist(
 	let product_id_bytes: [u8; 32] = U256::from(product_id).to_big_endian();
 	calldata.extend_from_slice(&product_id_bytes);
 
-	calldata.extend_from_slice(&[0u8; 12]);
 	calldata.extend_from_slice(vault_address.as_bytes());
-
-	calldata.extend_from_slice(&[0u8; 12]);
-	calldata.extend_from_slice(who.as_bytes());
+	calldata.extend_from_slice(investor.as_bytes());
 
 	calldata.extend_from_slice(&[0u8; 31]);
 	calldata.push(action);

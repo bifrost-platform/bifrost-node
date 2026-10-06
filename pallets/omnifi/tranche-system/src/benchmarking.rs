@@ -13,6 +13,7 @@
 #![cfg(feature = "runtime-benchmarks")]
 
 use super::*;
+use crate::ChainAddress;
 use crate::{
 	AdapterInfo, AdapterKey, CrudAction, MultichainAdapterInfo, SettlementMode,
 	SingleChainValuationInfo, SourceType, TrancheInput, TrancheType, ValuationInfo, VaultId,
@@ -33,6 +34,10 @@ fn admin_origin<T: Config>() -> T::RuntimeOrigin {
 
 fn h160(n: u64) -> H160 {
 	H160::from_low_u64_be(n)
+}
+
+fn addr(n: u64) -> ChainAddress {
+	h160(n).into()
 }
 
 fn valuation() -> ValuationInfo {
@@ -59,9 +64,9 @@ fn chain_tranches<T: Config>(chain_id: u64, n: u32, vault_seed: &mut u64) -> Vec
 				} else {
 					TrancheType::Senior { apr: U256::from(i + 1) }
 				},
-				vault: VaultId { chain_id, vault_address: h160(*vault_seed) },
-				asset: h160(0xa55e7),
-				shares: h160(0x_5_a4e5),
+				vault: VaultId { chain_id, vault_address: addr(*vault_seed) },
+				asset: addr(0xa55e7),
+				shares: addr(0x_5_a4e5),
 			}
 		})
 		.collect()
@@ -78,8 +83,7 @@ fn full_tranches<T: Config>() -> BoundedVec<TrancheInput, ConstU32<{ crate::MAX_
 
 fn nested_adapters<T: Config>(
 	parent: u64,
-) -> BoundedBTreeMap<H160, AdapterInfo<T::AccountId>, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>>
-{
+) -> BoundedBTreeMap<ChainAddress, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>> {
 	let mut m = BoundedBTreeMap::new();
 	let n = MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 	for j in 0..n {
@@ -87,17 +91,17 @@ fn nested_adapters<T: Config>(
 			(0..MAX_COLLATERALS)
 				.map(|k| crate::CollateralAsset {
 					chain_id: 900 + k as u64,
-					nft_contract: h160(0x2_000_000 + parent * 1_000 + j as u64 * 10 + k as u64),
+					nft_contract: addr(0x2_000_000 + parent * 1_000 + j as u64 * 10 + k as u64),
 					nft_token_id: U256::from(k),
 				})
 				.collect::<Vec<_>>(),
 		)
 		.expect("MAX_COLLATERALS");
 		m.try_insert(
-			h160(0x1_000_000 + parent * 1_000 + j as u64),
+			addr(0x1_000_000 + parent * 1_000 + j as u64),
 			AdapterInfo {
 				source_type: SourceType::OffchainSource {
-					borrower: whitelisted_caller(),
+					borrower: addr(0xb0_0000 + parent * 1_000 + j as u64),
 					collaterals,
 				},
 				weight_bps: (10_000 / n) as u16 + if j == 0 { (10_000 % n) as u16 } else { 0 },
@@ -108,16 +112,13 @@ fn nested_adapters<T: Config>(
 	m
 }
 
-fn full_multichain_adapters<T: Config>() -> BoundedBTreeMap<
-	AdapterKey,
-	MultichainAdapterInfo<T::AccountId>,
-	ConstU32<MAX_MULTICHAIN_ADAPTERS>,
-> {
+fn full_multichain_adapters<T: Config>(
+) -> BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, ConstU32<MAX_MULTICHAIN_ADAPTERS>> {
 	let mut m = BoundedBTreeMap::new();
 	let n = MAX_MULTICHAIN_ADAPTERS;
 	for i in 0..n as u64 {
 		m.try_insert(
-			AdapterKey { address: h160(0x9_000_000 + i), chain_id: 100 + i },
+			AdapterKey { address: addr(0x9_000_000 + i), chain_id: 100 + i },
 			MultichainAdapterInfo {
 				weight_bps: (10_000 / n) as u16 + if i == 0 { (10_000 % n) as u16 } else { 0 },
 				adapters: nested_adapters::<T>(i),
@@ -128,10 +129,10 @@ fn full_multichain_adapters<T: Config>() -> BoundedBTreeMap<
 	m
 }
 
-fn full_managers() -> BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>> {
+fn full_managers() -> BoundedBTreeMap<u64, ChainAddress, ConstU32<MAX_TRANCHE_MANAGERS>> {
 	let mut m = BoundedBTreeMap::new();
 	for c in 1..=MAX_TRANCHE_MANAGERS as u64 {
-		m.try_insert(c, h160(0x3_000_000 + c)).expect("manager insert");
+		m.try_insert(c, addr(0x3_000_000 + c)).expect("manager insert");
 	}
 	m
 }
@@ -175,15 +176,15 @@ mod benchmarks {
 			BoundedVec::try_from(chain_tranches::<T>(7, MAX_TRANCHES_PER_CHAIN, &mut seed))
 				.expect("MAX_TRANCHES_PER_CHAIN");
 		let mut adapters: BoundedBTreeMap<
-			H160,
-			AdapterInfo<T::AccountId>,
+			ChainAddress,
+			AdapterInfo,
 			ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 		> = BoundedBTreeMap::new();
 		let n = MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT;
 		for j in 0..n {
 			adapters
 				.try_insert(
-					h160(0x4_000_000 + j as u64),
+					addr(0x4_000_000 + j as u64),
 					AdapterInfo {
 						source_type: SourceType::OnchainSource,
 						weight_bps: (10_000 / n) as u16
@@ -193,8 +194,8 @@ mod benchmarks {
 				.expect("sc adapter insert");
 		}
 		let val = SingleChainValuationInfo {
-			base_asset: h160(0xba5e),
-			valuation_address: h160(0x7a1),
+			base_asset: addr(0xba5e),
+			valuation_address: addr(0x7a1),
 			settlement_mode: SettlementMode::Async {
 				settlement_start_timestamp: 4_000_000_000,
 				settlement_length_secs: 86_400,
@@ -209,9 +210,9 @@ mod benchmarks {
 			7u64,
 			val,
 			tranches,
-			h160(0x6ed_0),
+			addr(0x6ed_0),
 			adapters,
-			h160(0x_1ed6e7),
+			addr(0x_1ed6e7),
 		);
 
 		assert!(Products::<T>::contains_key(PID));
@@ -238,7 +239,7 @@ mod benchmarks {
 		)
 		.expect("setup");
 
-		let new_vault = VaultId { chain_id: 1, vault_address: h160(0x9_999_999) };
+		let new_vault = VaultId { chain_id: 1, vault_address: addr(0x9_999_999) };
 
 		#[extrinsic_call]
 		_(
@@ -247,8 +248,8 @@ mod benchmarks {
 			CrudAction::Add,
 			new_vault.clone(),
 			TrancheType::Senior { apr: U256::from(42) },
-			h160(0xa55e7),
-			h160(0x_5_a4e5),
+			addr(0xa55e7),
+			addr(0x_5_a4e5),
 			0u8,
 		);
 
@@ -261,15 +262,15 @@ mod benchmarks {
 	fn set_adapters() {
 		setup_full_product::<T>();
 		let mut replacement: BoundedBTreeMap<
-			H160,
-			AdapterInfo<T::AccountId>,
+			ChainAddress,
+			AdapterInfo,
 			ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 		> = BoundedBTreeMap::new();
 		let n = MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 		for j in 0..n {
 			replacement
 				.try_insert(
-					h160(0x5_000_000 + j as u64),
+					addr(0x5_000_000 + j as u64),
 					AdapterInfo {
 						source_type: SourceType::OnchainSource,
 						weight_bps: (10_000 / n) as u16
@@ -280,7 +281,7 @@ mod benchmarks {
 		}
 
 		#[extrinsic_call]
-		_(admin_origin::<T>() as T::RuntimeOrigin, PID, h160(0x9_000_000), 100u64, replacement);
+		_(admin_origin::<T>() as T::RuntimeOrigin, PID, addr(0x9_000_000), 100u64, replacement);
 	}
 
 	/// Worst case: full-replace the whole MultichainAdapter routing table.
@@ -291,21 +292,21 @@ mod benchmarks {
 		// is removed and re-inserted.
 		let mut m: BoundedBTreeMap<
 			AdapterKey,
-			MultichainAdapterInfo<T::AccountId>,
+			MultichainAdapterInfo,
 			ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 		> = BoundedBTreeMap::new();
 		let n = MAX_MULTICHAIN_ADAPTERS;
 		for i in 0..n as u64 {
 			let mut nested: BoundedBTreeMap<
-				H160,
-				AdapterInfo<T::AccountId>,
+				ChainAddress,
+				AdapterInfo,
 				ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 			> = BoundedBTreeMap::new();
 			let k = MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 			for j in 0..k {
 				nested
 					.try_insert(
-						h160(0x6_000_000 + i * 100 + j as u64),
+						addr(0x6_000_000 + i * 100 + j as u64),
 						AdapterInfo {
 							source_type: SourceType::OnchainSource,
 							weight_bps: (10_000 / k) as u16
@@ -315,7 +316,7 @@ mod benchmarks {
 					.expect("insert");
 			}
 			m.try_insert(
-				AdapterKey { address: h160(0x8_000_000 + i), chain_id: 200 + i },
+				AdapterKey { address: addr(0x8_000_000 + i), chain_id: 200 + i },
 				MultichainAdapterInfo {
 					weight_bps: (10_000 / n) as u16 + if i == 0 { (10_000 % n) as u16 } else { 0 },
 					adapters: nested,
@@ -338,10 +339,10 @@ mod benchmarks {
 	#[benchmark]
 	fn set_multichain_tranche_managers() {
 		setup_full_product::<T>();
-		let mut m: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>> =
+		let mut m: BoundedBTreeMap<u64, ChainAddress, ConstU32<MAX_TRANCHE_MANAGERS>> =
 			BoundedBTreeMap::new();
 		for c in 1..=MAX_TRANCHE_MANAGERS as u64 {
-			m.try_insert(c, h160(0x7_000_000 + c)).expect("insert");
+			m.try_insert(c, addr(0x7_000_000 + c)).expect("insert");
 		}
 
 		#[extrinsic_call]

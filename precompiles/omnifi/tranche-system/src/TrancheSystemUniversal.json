@@ -1,0 +1,1693 @@
+[
+    {
+        "type": "function",
+        "name": "create_product",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "valuation",
+                "type": "tuple",
+                "internalType": "struct TrancheSystemUniversal.ValuationInput",
+                "components": [
+                    {
+                        "name": "base_asset",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "valuation_address",
+                        "type": "address",
+                        "internalType": "address"
+                    },
+                    {
+                        "name": "settlement_start_timestamp",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "settlement_length_secs",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "settlement_offset_secs",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    }
+                ]
+            },
+            {
+                "name": "tranches",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.TrancheInput[]",
+                "components": [
+                    {
+                        "name": "tranche_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.TrancheType"
+                    },
+                    {
+                        "name": "apr",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "vault",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.VaultInput",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "asset",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "shares",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "priority",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    }
+                ]
+            },
+            {
+                "name": "multichain_adapters",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.MultichainAdapterInput[]",
+                "components": [
+                    {
+                        "name": "adapter_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                        "components": [
+                            {
+                                "name": "source_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.SourceType"
+                            },
+                            {
+                                "name": "source_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "borrower",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "collaterals",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "nft_contract",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "nft_token_id",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "multichain_tranche_managers",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.MultichainTrancheManagerInput[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tranche_manager_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "create_single_chain_product",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "valuation",
+                "type": "tuple",
+                "internalType": "struct TrancheSystemUniversal.SingleChainValuationInput",
+                "components": [
+                    {
+                        "name": "base_asset",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "valuation_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "settlement_mode",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.SettlementModeInput",
+                        "components": [
+                            {
+                                "name": "is_sync",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "settlement_start_timestamp",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "settlement_length_secs",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "settlement_offset_secs",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "tranches",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.TrancheInput[]",
+                "components": [
+                    {
+                        "name": "tranche_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.TrancheType"
+                    },
+                    {
+                        "name": "apr",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "vault",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.VaultInput",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "asset",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "shares",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "priority",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    }
+                ]
+            },
+            {
+                "name": "tranche_manager",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "adapters",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                "components": [
+                    {
+                        "name": "source_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.SourceType"
+                    },
+                    {
+                        "name": "source_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "borrower",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "collaterals",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "nft_contract",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "nft_token_id",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "ledger",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "get_adapters",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "adapters_by_chain",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.AdaptersByChain[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                        "components": [
+                            {
+                                "name": "source_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.SourceType"
+                            },
+                            {
+                                "name": "source_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "borrower",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "collaterals",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "nft_contract",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "nft_token_id",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_ledger",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "ledger",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_multichain_adapters",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "multichain_adapters",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.MultichainAdapterInput[]",
+                "components": [
+                    {
+                        "name": "adapter_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                        "components": [
+                            {
+                                "name": "source_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.SourceType"
+                            },
+                            {
+                                "name": "source_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "borrower",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "collaterals",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "nft_contract",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "nft_token_id",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_multichain_product_details",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "details",
+                "type": "tuple",
+                "internalType": "struct TrancheSystemUniversal.MultichainProductDetails",
+                "components": [
+                    {
+                        "name": "valuation",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.ValuationInput",
+                        "components": [
+                            {
+                                "name": "base_asset",
+                                "type": "address",
+                                "internalType": "address"
+                            },
+                            {
+                                "name": "valuation_address",
+                                "type": "address",
+                                "internalType": "address"
+                            },
+                            {
+                                "name": "settlement_start_timestamp",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "settlement_length_secs",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "settlement_offset_secs",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "tranches",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.TrancheInput[]",
+                        "components": [
+                            {
+                                "name": "tranche_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.TrancheType"
+                            },
+                            {
+                                "name": "apr",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "vault",
+                                "type": "tuple",
+                                "internalType": "struct TrancheSystemUniversal.VaultInput",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "vault_address",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "asset",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "shares",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "priority",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "multichain_adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.MultichainAdapterInput[]",
+                        "components": [
+                            {
+                                "name": "adapter_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "adapters",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                                "components": [
+                                    {
+                                        "name": "source_type",
+                                        "type": "uint8",
+                                        "internalType": "enum TrancheSystemUniversal.SourceType"
+                                    },
+                                    {
+                                        "name": "source_address",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "weightBps",
+                                        "type": "uint16",
+                                        "internalType": "uint16"
+                                    },
+                                    {
+                                        "name": "borrower",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "collaterals",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                        "components": [
+                                            {
+                                                "name": "chain_id",
+                                                "type": "uint64",
+                                                "internalType": "uint64"
+                                            },
+                                            {
+                                                "name": "nft_contract",
+                                                "type": "bytes32",
+                                                "internalType": "bytes32"
+                                            },
+                                            {
+                                                "name": "nft_token_id",
+                                                "type": "uint256",
+                                                "internalType": "uint256"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "multichain_tranche_managers",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.MultichainTrancheManagerInput[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "tranche_manager_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_multichain_tranche_managers",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "multichain_tranche_managers",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.MultichainTrancheManagerInput[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tranche_manager_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_orchestrator",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "orchestrator",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_product",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "base_asset",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "valuation",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "settlement_start_timestamp",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_length_secs",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_offset_secs",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_singlechain_product_details",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "details",
+                "type": "tuple",
+                "internalType": "struct TrancheSystemUniversal.SingleChainProductDetails",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "valuation",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.SingleChainValuationInput",
+                        "components": [
+                            {
+                                "name": "base_asset",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "valuation_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "settlement_mode",
+                                "type": "tuple",
+                                "internalType": "struct TrancheSystemUniversal.SettlementModeInput",
+                                "components": [
+                                    {
+                                        "name": "is_sync",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "settlement_start_timestamp",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "settlement_length_secs",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "settlement_offset_secs",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "tranches",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.TrancheInput[]",
+                        "components": [
+                            {
+                                "name": "tranche_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.TrancheType"
+                            },
+                            {
+                                "name": "apr",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "vault",
+                                "type": "tuple",
+                                "internalType": "struct TrancheSystemUniversal.VaultInput",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "vault_address",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "asset",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "shares",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "priority",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "tranche_manager",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                        "components": [
+                            {
+                                "name": "source_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.SourceType"
+                            },
+                            {
+                                "name": "source_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "borrower",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "collaterals",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "nft_contract",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "nft_token_id",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "ledger",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_tranche_manager",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "tranche_manager",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_tranches",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "tranches",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.TrancheInput[]",
+                "components": [
+                    {
+                        "name": "tranche_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.TrancheType"
+                    },
+                    {
+                        "name": "apr",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "vault",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.VaultInput",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "asset",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "shares",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "priority",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "set_adapters",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "parent_adapter_address",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "parent_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "adapters",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                "components": [
+                    {
+                        "name": "source_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.SourceType"
+                    },
+                    {
+                        "name": "source_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "borrower",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "collaterals",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "nft_contract",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "nft_token_id",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "set_multichain_adapters",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "multichain_adapters",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.MultichainAdapterInput[]",
+                "components": [
+                    {
+                        "name": "adapter_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                        "components": [
+                            {
+                                "name": "source_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.SourceType"
+                            },
+                            {
+                                "name": "source_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "borrower",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "collaterals",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "nft_contract",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "nft_token_id",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "set_multichain_tranche_managers",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "multichain_tranche_managers",
+                "type": "tuple[]",
+                "internalType": "struct TrancheSystemUniversal.MultichainTrancheManagerInput[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tranche_manager_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "set_tranche",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "action",
+                "type": "uint8",
+                "internalType": "enum TrancheSystemUniversal.CrudAction"
+            },
+            {
+                "name": "tranche",
+                "type": "tuple",
+                "internalType": "struct TrancheSystemUniversal.TrancheInput",
+                "components": [
+                    {
+                        "name": "tranche_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.TrancheType"
+                    },
+                    {
+                        "name": "apr",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "vault",
+                        "type": "tuple",
+                        "internalType": "struct TrancheSystemUniversal.VaultInput",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "asset",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "shares",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "priority",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    }
+                ]
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "AdaptersSet",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "parent_adapter_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "parent_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "adapters",
+                "type": "tuple[]",
+                "indexed": false,
+                "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                "components": [
+                    {
+                        "name": "source_type",
+                        "type": "uint8",
+                        "internalType": "enum TrancheSystemUniversal.SourceType"
+                    },
+                    {
+                        "name": "source_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "borrower",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "collaterals",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "nft_contract",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "nft_token_id",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "MultichainAdaptersSet",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "multichain_adapters",
+                "type": "tuple[]",
+                "indexed": false,
+                "internalType": "struct TrancheSystemUniversal.MultichainAdapterInput[]",
+                "components": [
+                    {
+                        "name": "adapter_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "weightBps",
+                        "type": "uint16",
+                        "internalType": "uint16"
+                    },
+                    {
+                        "name": "adapters",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheSystemUniversal.AdapterInput[]",
+                        "components": [
+                            {
+                                "name": "source_type",
+                                "type": "uint8",
+                                "internalType": "enum TrancheSystemUniversal.SourceType"
+                            },
+                            {
+                                "name": "source_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "weightBps",
+                                "type": "uint16",
+                                "internalType": "uint16"
+                            },
+                            {
+                                "name": "borrower",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "collaterals",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheSystemUniversal.CollateralInput[]",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "nft_contract",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    },
+                                    {
+                                        "name": "nft_token_id",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "MultichainTrancheManagersSet",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "multichain_tranche_managers",
+                "type": "tuple[]",
+                "indexed": false,
+                "internalType": "struct TrancheSystemUniversal.MultichainTrancheManagerInput[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tranche_manager_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "ProductCreated",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "product_admin",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "base_asset",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "valuation_address",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "settlement_start_timestamp",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_length_secs",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_offset_secs",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SingleChainProductCreated",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "product_admin",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            },
+            {
+                "name": "chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "base_asset",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "valuation_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "tranche_manager",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "ledger",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "is_sync",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            },
+            {
+                "name": "settlement_start_timestamp",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_length_secs",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_offset_secs",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "TrancheSet",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "action",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TrancheSystemUniversal.CrudAction"
+            },
+            {
+                "name": "tranche_type",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TrancheSystemUniversal.TrancheType"
+            },
+            {
+                "name": "apr",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "asset",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "shares",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "priority",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            }
+        ],
+        "anonymous": false
+    }
+]

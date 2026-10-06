@@ -3,7 +3,10 @@ use crate::{
 	RequestId, RequestedInvestment, Settlement, SettlementId, TrancheSettle, WeightInfo,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
+use pallet_tranche_system::{
+	legacy::{AdapterKeyV1 as AdapterKey, VaultIdV1 as VaultId},
+	AdapterInspect, ProductId, VaultInspect,
+};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
@@ -287,7 +290,7 @@ pub mod pallet {
 
 			let vault = VaultId { chain_id: vault_chain_id, vault_address };
 			ensure!(
-				T::Vaults::vault_belongs_to_product(product_id, &vault),
+				T::Vaults::vault_belongs_to_product(product_id, &(&vault).into()),
 				Error::<T>::VaultNotRegistered
 			);
 			ensure!(!amount.is_zero(), Error::<T>::ZeroAmount);
@@ -354,7 +357,7 @@ pub mod pallet {
 				ensure!(
 					T::Adapters::multichain_adapter_belongs_to_product(
 						product_id,
-						&allocation.adapter
+						&(&allocation.adapter).into()
 					),
 					Error::<T>::AllocationAdapterNotRegistered
 				);
@@ -438,7 +441,7 @@ pub mod pallet {
 					ensure!(
 						T::Adapters::multichain_adapter_belongs_to_product(
 							product_id,
-							&allocation.adapter
+							&(&allocation.adapter).into()
 						),
 						Error::<T>::AllocationAdapterNotRegistered
 					);
@@ -503,7 +506,7 @@ pub mod pallet {
 				let key = AdapterKey { address: valuation.adapter, chain_id: valuation.chain_id };
 				ensure!(seen.insert(key.clone()), Error::<T>::DuplicateAdapterValuationEntry);
 				ensure!(
-					T::Adapters::adapter_belongs_to_product(product_id, &key),
+					T::Adapters::adapter_belongs_to_product(product_id, &(&key).into()),
 					Error::<T>::AdapterValuationAdapterNotRegistered
 				);
 			}
@@ -544,7 +547,7 @@ pub mod pallet {
 			for settle in tranches.iter() {
 				ensure!(seen.insert(settle.vault.clone()), Error::<T>::DuplicateTrancheSettleEntry);
 				ensure!(
-					T::Vaults::vault_belongs_to_product(product_id, &settle.vault),
+					T::Vaults::vault_belongs_to_product(product_id, &(&settle.vault).into()),
 					Error::<T>::VaultNotRegistered
 				);
 			}

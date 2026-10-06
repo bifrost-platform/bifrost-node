@@ -19,7 +19,7 @@ interface InvestmentsV2 {
     /// @dev One slice of a request's approval: `amount` was allocated to the
     ///      MultichainAdapter identified by (`adapter_address`, `adapter_chain_id`).
     struct Allocation {
-        address adapter_address;
+        bytes32 adapter_address;
         uint64 adapter_chain_id;
         uint256 amount;
     }
@@ -43,7 +43,7 @@ interface InvestmentsV2 {
     ///      record format (chainId, adapter, epochId, valuationCutoff), not this file's usual
     ///      snake_case convention, so the pallet-side type and any off-chain indexer consuming
     ///      both share field semantics 1:1.
-    /// @param chainId         EVM chain ID the adapter lives on — combined with `adapter`, this
+    /// @param chainId         Chain ID the adapter lives on — combined with `adapter`, this
     ///                        is the adapter's global identity (chainId, adapter)
     /// @param adapter         Adapter contract address on that chain
     /// @param epochId         Adapter's own local epoch/settlement counter
@@ -52,7 +52,7 @@ interface InvestmentsV2 {
     /// @param positions       Per-asset breakdown of this adapter's current holdings
     struct AdapterValuation {
         uint64 chainId;
-        address adapter;
+        bytes32 adapter;
         uint256 epochId;
         uint64 valuationCutoff;
         uint256 principal;
@@ -69,26 +69,26 @@ interface InvestmentsV2 {
     /// @param counted  Whether this position counts toward the adapter's NAV — pre-swap reward
     ///                 tokens are `false` (see design doc §4)
     struct AssetPosition {
-        address asset;
+        bytes32 asset;
         uint256 amount;
         uint256 priceUsd;
         uint256 usdValue;
         bool counted;
     }
 
-    /// @param chain_id      EVM chain ID where the tranche's ERC-7540 vault is deployed
-    /// @param vault_address ERC-7540 vault contract address identifying the tranche
+    /// @param chain_id      Chain ID where the tranche's vault is deployed
+    /// @param vault_address Vault address identifying the tranche, as bytes32 (EVM addresses left-padded)
     struct VaultInput {
         uint64 chain_id;
-        address vault_address;
+        bytes32 vault_address;
     }
 
     /// @dev Post-waterfall settlement result for a single tranche, one entry per tranche within
     ///      a product. Distinct from AdapterValuation.principal (that's capital deployed into
     ///      one yield source; this is a tranche's own Senior principal claim) — neither
     ///      substitutes for the other.
-    /// @param vault_chain_id     EVM chain ID where the tranche's ERC-7540 vault is deployed
-    /// @param vault_address      ERC-7540 vault contract address identifying the tranche
+    /// @param vault_chain_id     Chain ID where the tranche's vault is deployed
+    /// @param vault_address      Vault address identifying the tranche, as bytes32 (EVM addresses left-padded)
     /// @param tranche_nav        This tranche's NAV after the waterfall, in the product's base asset
     /// @param share_price        Tranche share-token price, FixedU128-style 1e18 fixed-point
     /// @param units_outstanding  Tranche share-token total supply after this settlement
@@ -96,7 +96,7 @@ interface InvestmentsV2 {
     ///                           Senior-only convention as TrancheSystem's TrancheInput.apr
     struct TrancheSettle {
         uint64 vault_chain_id;
-        address vault_address;
+        bytes32 vault_address;
         uint256 tranche_nav;
         uint256 share_price;
         uint256 units_outstanding;
@@ -153,8 +153,8 @@ interface InvestmentsV2 {
         bytes32 request_id,
         uint256 settlement_id,
         uint64 vault_chain_id,
-        address vault_address,
-        address investor_address,
+        bytes32 vault_address,
+        bytes32 investor_address,
         uint256 amount,
         uint8 order_type
     );
@@ -190,8 +190,8 @@ interface InvestmentsV2 {
      *                         request time (before this request ever reaches the Valuation
      *                         Contract)
      * @param settlement_id    Valuation Contract's settlement cycle in effect at request time
-     * @param vault_chain_id   EVM chain ID of the chain where the tranche vault is deployed
-     * @param vault_address    ERC-7540 vault contract address on that chain
+     * @param vault_chain_id   Chain ID of the chain where the tranche vault is deployed
+     * @param vault_address    Vault address on that chain, as bytes32 (EVM addresses left-padded)
      * @param investor_address Investor address on the external chain
      * @param amount           Investor's full requested deposit/redeem amount (18-decimal U256, pre-allocation)
      * @param order_type       0 = redeem, 1 = deposit
@@ -201,8 +201,8 @@ interface InvestmentsV2 {
         bytes32 request_id,
         uint256 settlement_id,
         uint64 vault_chain_id,
-        address vault_address,
-        address investor_address,
+        bytes32 vault_address,
+        bytes32 investor_address,
         uint256 amount,
         uint8 order_type
     ) external;
@@ -368,8 +368,8 @@ interface InvestmentsV2 {
      * @param product_id The product the request belongs to
      * @param request_id The request to look up
      * @return investor           Investor address on the external chain
-     * @return vault_chain_id     EVM chain ID of the tranche vault this request targets
-     * @return vault              ERC-7540 vault contract address on that chain
+     * @return vault_chain_id     Chain ID of the tranche vault this request targets
+     * @return vault              Vault address on that chain, as bytes32 (EVM addresses left-padded)
      * @return amount             Investor's full requested amount (pre-allocation)
      * @return settlement_id      See dev notes above
      * @return order_type         0 = redeem, 1 = deposit
@@ -382,9 +382,9 @@ interface InvestmentsV2 {
         external
         view
         returns (
-            address investor,
+            bytes32 investor,
             uint64 vault_chain_id,
-            address vault,
+            bytes32 vault,
             uint256 amount,
             uint256 settlement_id,
             uint8 order_type,

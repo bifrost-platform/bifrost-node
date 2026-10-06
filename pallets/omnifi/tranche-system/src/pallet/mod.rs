@@ -1,10 +1,10 @@
 mod impls;
 
 use crate::{
-	AdapterInfo, AdapterKey, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
-	MultichainProductDetails, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
-	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	AdapterInfo, AdapterKey, ChainAddress, ChainTranches, CrudAction, FlowVersion,
+	MultichainAdapterInfo, MultichainProductDetails, ProductDetails, ProductId, SettlementMode,
+	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
+	ValuationInfo, VaultId, VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
 	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
 	MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
@@ -245,10 +245,10 @@ pub mod pallet {
 			product_id: ProductId,
 			product_admin: T::AccountId,
 			chain_id: u64,
-			base_asset: H160,
-			valuation_address: H160,
-			tranche_manager: H160,
-			ledger: H160,
+			base_asset: ChainAddress,
+			valuation_address: ChainAddress,
+			tranche_manager: ChainAddress,
+			ledger: ChainAddress,
 			is_sync: bool,
 			settlement_start_timestamp: u64,
 			settlement_length_secs: u64,
@@ -267,14 +267,18 @@ pub mod pallet {
 			action: CrudAction,
 			vault: VaultId,
 			tranche_type: TrancheType,
-			asset: H160,
-			shares: H160,
+			asset: ChainAddress,
+			shares: ChainAddress,
 			/// Position within `vault.chain_id`'s own ordering, NOT
 			/// product-wide — see `TrancheInput`'s doc comment.
 			priority: u8,
 		},
 		/// A MultichainAdapter's nested adapters were replaced wholesale.
-		AdaptersSet { product_id: ProductId, parent_adapter_address: H160, parent_chain_id: u64 },
+		AdaptersSet {
+			product_id: ProductId,
+			parent_adapter_address: ChainAddress,
+			parent_chain_id: u64,
+		},
 		/// A product's entire MultichainAdapter table was replaced wholesale.
 		MultichainAdaptersSet { product_id: ProductId },
 		/// A product's entire per-chain TrancheManager table was replaced
@@ -291,8 +295,7 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::unbounded]
 	/// All active products, keyed by product ID.
-	pub type Products<T: Config> =
-		StorageMap<_, Blake2_128Concat, ProductId, ProductDetails<T::AccountId>>;
+	pub type Products<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, ProductDetails>;
 
 	#[pallet::storage]
 	/// `product_id`'s registered request-pipeline `FlowVersion` — written
@@ -337,7 +340,7 @@ pub mod pallet {
 	/// Reverse index: which product an individual Adapter (source_address, chain_id)
 	/// belongs to. Globally unique across all products, same rationale as `Vaults`.
 	/// The adapter itself now lives nested inside its parent MultichainAdapter's
-	/// `adapters` map (see `MultichainAdapterInfo`), keyed there by plain `H160`
+	/// `adapters` map (see `MultichainAdapterInfo`), keyed there by plain `ChainAddress`
 	/// (no `chain_id` — it carries none of its own, see `AdapterInfo`) — this
 	/// index still keys by the full `AdapterKey{address, chain_id}` shape, with
 	/// `chain_id` derived from the parent MultichainAdapter at write time, so
@@ -410,10 +413,14 @@ pub mod pallet {
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHE_INPUTS>>,
 			multichain_adapters: BoundedBTreeMap<
 				AdapterKey,
-				MultichainAdapterInfo<T::AccountId>,
+				MultichainAdapterInfo,
 				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 			>,
-			multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
+			multichain_tranche_managers: BoundedBTreeMap<
+				u64,
+				ChainAddress,
+				ConstU32<MAX_TRANCHE_MANAGERS>,
+			>,
 		) -> DispatchResult {
 			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
 
@@ -545,13 +552,13 @@ pub mod pallet {
 			chain_id: u64,
 			valuation: SingleChainValuationInfo,
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
-			tranche_manager: H160,
+			tranche_manager: ChainAddress,
 			adapters: BoundedBTreeMap<
-				H160,
-				AdapterInfo<T::AccountId>,
+				ChainAddress,
+				AdapterInfo,
 				ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 			>,
-			ledger: H160,
+			ledger: ChainAddress,
 		) -> DispatchResult {
 			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
 
@@ -743,8 +750,8 @@ pub mod pallet {
 			action: CrudAction,
 			vault: VaultId,
 			tranche_type: TrancheType,
-			asset: H160,
-			shares: H160,
+			asset: ChainAddress,
+			shares: ChainAddress,
 			priority: u8,
 		) -> DispatchResult {
 			T::ProductAdminOrigin::ensure_origin(origin)?;
@@ -810,11 +817,11 @@ pub mod pallet {
 		pub fn set_adapters(
 			origin: OriginFor<T>,
 			product_id: ProductId,
-			parent_adapter_address: H160,
+			parent_adapter_address: ChainAddress,
 			parent_chain_id: u64,
 			adapters: BoundedBTreeMap<
-				H160,
-				AdapterInfo<T::AccountId>,
+				ChainAddress,
+				AdapterInfo,
 				ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 			>,
 		) -> DispatchResult {
@@ -878,7 +885,7 @@ pub mod pallet {
 			product_id: ProductId,
 			multichain_adapters: BoundedBTreeMap<
 				AdapterKey,
-				MultichainAdapterInfo<T::AccountId>,
+				MultichainAdapterInfo,
 				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
 			>,
 		) -> DispatchResult {
@@ -945,7 +952,11 @@ pub mod pallet {
 		pub fn set_multichain_tranche_managers(
 			origin: OriginFor<T>,
 			product_id: ProductId,
-			multichain_tranche_managers: BoundedBTreeMap<u64, H160, ConstU32<MAX_TRANCHE_MANAGERS>>,
+			multichain_tranche_managers: BoundedBTreeMap<
+				u64,
+				ChainAddress,
+				ConstU32<MAX_TRANCHE_MANAGERS>,
+			>,
 		) -> DispatchResult {
 			T::ProductAdminOrigin::ensure_origin(origin)?;
 

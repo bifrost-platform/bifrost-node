@@ -3,11 +3,13 @@ use crate::{
 	RequestId, RequestedInvestment, Settlement, SettlementId, TrancheSettle, WeightInfo,
 	MAX_ADAPTER_VALUATIONS, MAX_ALLOCATIONS, MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{AdapterInspect, AdapterKey, ProductId, VaultId, VaultInspect};
+use pallet_tranche_system::{
+	AdapterInspect, AdapterKey, ChainAddress, ProductId, VaultId, VaultInspect,
+};
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
-use sp_core::{ConstU32, H160, U256};
+use sp_core::{ConstU32, U256};
 use sp_runtime::BoundedVec;
 use sp_std::collections::btree_set::BTreeSet;
 
@@ -126,7 +128,7 @@ pub mod pallet {
 		InvestmentRequested {
 			product_id: ProductId,
 			vault: VaultId,
-			investor_address: H160,
+			investor_address: ChainAddress,
 			amount: U256,
 			request_id: RequestId,
 			settlement_id: SettlementId,
@@ -285,8 +287,8 @@ pub mod pallet {
 			request_id: RequestId,
 			settlement_id: SettlementId,
 			vault_chain_id: u64,
-			vault_address: H160,
-			investor_address: H160,
+			vault_address: ChainAddress,
+			investor_address: ChainAddress,
 			amount: U256,
 			order_type: OrderType,
 		) -> DispatchResult {

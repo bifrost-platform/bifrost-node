@@ -1,0 +1,300 @@
+[
+    {
+        "type": "function",
+        "name": "grant_permission",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "role",
+                "type": "uint8",
+                "internalType": "enum TranchePermissionsUniversal.Role"
+            },
+            {
+                "name": "who",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "grant_tranche_investor",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TranchePermissionsUniversal.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "has_role",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "role",
+                "type": "uint8",
+                "internalType": "enum TranchePermissionsUniversal.Role"
+            },
+            {
+                "name": "who",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "is_tranche_investor",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TranchePermissionsUniversal.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "revoke_permission",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "role",
+                "type": "uint8",
+                "internalType": "enum TranchePermissionsUniversal.Role"
+            },
+            {
+                "name": "who",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "revoke_tranche_investor",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TranchePermissionsUniversal.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "PermissionGranted",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "role",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TranchePermissionsUniversal.Role"
+            },
+            {
+                "name": "who",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "PermissionRevoked",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "role",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TranchePermissionsUniversal.Role"
+            },
+            {
+                "name": "who",
+                "type": "address",
+                "indexed": false,
+                "internalType": "address"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "TrancheInvestorGranted",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "TrancheInvestorRevoked",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            }
+        ],
+        "anonymous": false
+    }
+]

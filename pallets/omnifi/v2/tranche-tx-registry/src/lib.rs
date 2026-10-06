@@ -31,7 +31,7 @@ impl BenchmarkHelper for () {
 use pallet_tranche_system::{ProductId, VaultId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, H160, H256, U256};
+use sp_core::{ConstU32, H256, U256};
 use sp_runtime::{BoundedVec, RuntimeDebug};
 use sp_std::marker::PhantomData;
 
@@ -63,7 +63,7 @@ pub type SettlementId = U256;
 /// module docs.
 pub use bp_tranche::{
 	history::{self, HistoryPage, PagedInvestorHistory},
-	ChainId, TxRecord,
+	is_valid_tx_hash, ChainAddress, ChainId, TxHash, TxRecord, MAX_TX_HASH_LEN,
 };
 
 /// Maximum number of `request_id`s a single `record_settlement_tx` call can batch
@@ -477,7 +477,7 @@ pub enum OrderType {
 	MaxEncodedLen,
 )]
 pub struct RequestOpening {
-	pub investor: H160,
+	pub investor: ChainAddress,
 	pub vault: VaultId,
 	pub amount: U256,
 	pub order_type: OrderType,
@@ -634,7 +634,7 @@ pub struct RequestEntry<BlockNumber> {
 	/// The tranche vault this request targets.
 	pub vault: VaultId,
 	/// Investor address the entry was opened with.
-	pub investor: H160,
+	pub investor: ChainAddress,
 	/// Investor's full requested amount (pre-allocation), same units as
 	/// `record_investment_request`'s `amount`.
 	pub amount: U256,
@@ -1150,14 +1150,14 @@ pub struct ReceiveEntry<BlockNumber> {
 	/// as this entry's own storage key. ERC-7540 calls this the controller;
 	/// named `investor` here to match every other "who does this belong to"
 	/// field in this pallet.
-	pub investor: H160,
+	pub investor: ChainAddress,
 	/// The tranche vault this receive() call was against — same value as this
 	/// entry's own storage key.
 	pub vault: VaultId,
 	/// Who actually received the funds. TrancheManager's receive() call lets
 	/// the controller (`investor` above) designate a different receiver;
 	/// `receiver == investor` when the controller receives for themselves.
-	pub receiver: H160,
+	pub receiver: ChainAddress,
 	/// Shares received (`kind == Deposit`) or assets received (`kind == Redeem`).
 	pub amount: U256,
 	pub tx: TxRecord<BlockNumber>,
@@ -1268,7 +1268,7 @@ pub struct WhitelistEntry<BlockNumber> {
 	pub vault: VaultId,
 	/// The account whose whitelist status is being changed — same value as
 	/// this entry's own storage key.
-	pub who: H160,
+	pub who: ChainAddress,
 	/// `true` = grant, `false` = revoke. Fixed for the lifetime of this
 	/// entry — every step after the one that opened it must resupply the
 	/// same value (checked, not just trusted) since Solidity has no

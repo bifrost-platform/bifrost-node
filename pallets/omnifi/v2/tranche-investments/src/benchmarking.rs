@@ -15,6 +15,7 @@ use crate::{
 };
 use frame_benchmarking::v2::*;
 use frame_support::{traits::EnsureOrigin, BoundedVec};
+use pallet_tranche_system::ChainAddress;
 use pallet_tranche_system::{AdapterKey, VaultId, MAX_TRANCHE_INPUTS};
 use sp_core::{H160, H256, U256};
 use sp_std::{vec, vec::Vec};
@@ -25,8 +26,8 @@ const SID_LOW: u128 = 7;
 fn origin<T: Config>() -> T::RuntimeOrigin {
 	T::ValuationOrigin::try_successful_origin().expect("ValuationOrigin benchmark helper")
 }
-fn h160(n: u64) -> H160 {
-	H160::from_low_u64_be(n)
+fn h160(n: u64) -> ChainAddress {
+	H160::from_low_u64_be(n).into()
 }
 fn sid(n: u128) -> SettlementId {
 	U256::from(n)

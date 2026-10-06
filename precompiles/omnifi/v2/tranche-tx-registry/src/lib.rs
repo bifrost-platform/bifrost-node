@@ -9,11 +9,11 @@ use pallet_tranche_system::{
 };
 use pallet_tranche_tx_registry_v2::{
 	history::HISTORY_PAGE_SIZE, BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType,
-	ReceiveKind, RequestOpening, RequestStep, SettlementStep, TxRecord, WhitelistStep,
-	MAX_SETTLEMENT_REQUESTS,
+	ReceiveKind, RequestOpening, RequestStep, SettlementStep, TxHash, TxRecord, WhitelistStep,
+	MAX_SETTLEMENT_REQUESTS, MAX_TX_HASH_LEN,
 };
 use precompile_utils::prelude::*;
-use sp_core::{ConstU32, Get, H160, H256, U256};
+use sp_core::{ConstU32, Get, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
@@ -22,16 +22,16 @@ use sp_std::{marker::PhantomData, vec, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_REQUEST_TX_RECORDED: [u8; 32] = keccak256!(
-	"RequestTxRecorded(uint64,bytes32,address,uint64,address,uint256,uint8,uint8,uint64[],(uint64,bytes32),uint8)"
+	"RequestTxRecorded(uint64,bytes32,bytes32,uint64,bytes32,uint256,uint8,uint8,uint64[],(uint64,bytes),uint8)"
 );
 pub(crate) const SELECTOR_LOG_SETTLEMENT_TX_RECORDED: [u8; 32] = keccak256!(
-	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],bytes32[],(uint64,bytes32),uint8,uint32,uint32)"
+	"SettlementTxRecorded(uint64,uint256,uint64,uint8,uint64[],uint64[],bytes32[],(uint64,bytes),uint8,uint32,uint32)"
 );
 pub(crate) const SELECTOR_LOG_RECEIVE_TX_RECORDED: [u8; 32] = keccak256!(
-	"ReceiveTxRecorded(uint64,address,(uint64,address),address,uint256,uint8,(uint64,bytes32))"
+	"ReceiveTxRecorded(uint64,bytes32,(uint64,bytes32),bytes32,uint256,uint8,(uint64,bytes))"
 );
 pub(crate) const SELECTOR_LOG_WHITELIST_TX_RECORDED: [u8; 32] = keccak256!(
-	"WhitelistTxRecorded(address,(uint64,address),bool,uint256,uint8,(uint64,bytes32),uint8)"
+	"WhitelistTxRecorded(bytes32,(uint64,bytes32),bool,uint256,uint8,(uint64,bytes),uint8)"
 );
 
 // ---------------------------------------------------------------------------
@@ -39,21 +39,24 @@ pub(crate) const SELECTOR_LOG_WHITELIST_TX_RECORDED: [u8; 32] = keccak256!(
 // ---------------------------------------------------------------------------
 
 /// `VaultInput` — (chain_id, vault_address)
-type EvmVaultInput = (u64, Address);
+type EvmVaultInput = (u64, H256);
+/// A tx identifier in its chain's native byte form (32 bytes for EVM/Stellar,
+/// 64 for Solana) — `bytes` on the ABI, bounded at `MAX_TX_HASH_LEN`.
+type EvmTxHash = BoundedBytes<ConstU32<MAX_TX_HASH_LEN>>;
 /// `TxAttestation` — (chain_id, tx_hash)
-type EvmTxAttestation = (u64, H256);
+type EvmTxAttestation = (u64, EvmTxHash);
 /// `TxRecord` — (chain_id, tx_hash, recorded_at)
-type EvmTxRecord = (u64, H256, U256);
+type EvmTxRecord = (u64, EvmTxHash, U256);
 /// `RequestTxStep` — (step, tx)
 type EvmRequestTxStep = (u8, EvmTxRecord);
 /// `AdapterLeg` — (chain_id, steps)
 type EvmAdapterLeg = (u64, Vec<EvmRequestTxStep>);
 /// `RequestInfo` — (investor, vault, amount, order_type)
-type EvmRequestInfo = (Address, EvmVaultInput, U256, u8);
+type EvmRequestInfo = (H256, EvmVaultInput, U256, u8);
 /// `InvestorRequest` — (product_id, request_id)
 type EvmInvestorRequest = (u64, H256);
 /// `ReceiveHistoryEntry` — (vault, tx_hash)
-type EvmReceiveHistoryEntry = (EvmVaultInput, H256);
+type EvmReceiveHistoryEntry = (EvmVaultInput, EvmTxHash);
 /// `WhitelistTxStep` — (step, tx)
 type EvmWhitelistTxStep = (u8, EvmTxRecord);
 /// `BridgeAttempt` — (status, tx)
@@ -155,9 +158,9 @@ where
 	/// into the pallet's `Option<RequestOpening>`/`Option<BoundedVec<..>>` shapes.
 	///
 	/// @param investor              Investor address — required iff step == Requested
-	/// @param vault_chain_id        EVM chain ID of the tranche vault — required iff
+	/// @param vault_chain_id        Chain ID of the tranche vault — required iff
 	/// step == Requested
-	/// @param vault_address         ERC-7540 vault contract address — required iff
+	/// @param vault_address         Vault address (bytes32, EVM left-padded) — required iff
 	/// step == Requested
 	/// @param amount                Investor's full requested amount — required iff
 	/// step == Requested
@@ -174,15 +177,15 @@ where
 	/// @param bridge_status         3 = Executed, 4 = Reverted — meaningful iff step ==
 	/// RequestBridgeExecuted or AdapterBridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
-		"record_request_tx(uint64,bytes32,address,uint64,address,uint256,uint8,uint64[],uint8,(uint64,bytes32),uint8)"
+		"record_request_tx(uint64,bytes32,bytes32,uint64,bytes32,uint256,uint8,uint64[],uint8,(uint64,bytes),uint8)"
 	)]
 	fn record_request_tx(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		request_id: H256,
-		investor: Address,
+		investor: H256,
 		vault_chain_id: u64,
-		vault_address: Address,
+		vault_address: H256,
 		amount: U256,
 		order_type: u8,
 		adapter_chain_ids: Vec<u64>,
@@ -206,7 +209,7 @@ where
 			RequestStep::RequestBridgeExecuted | RequestStep::AdapterBridgeExecuted
 		);
 		let decoded_bridge_status = decode_gated_bridge_status(is_bridge_step, bridge_status)?;
-		let (chain_id, tx_hash) = attestation;
+		let (chain_id, tx_hash) = attestation.clone();
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		// `extra` (pallet-side flow-version-scoped payload for
@@ -221,7 +224,7 @@ where
 			adapter_chain_ids: decoded_adapter_chains,
 			step: decoded_step,
 			chain_id,
-			tx_hash,
+			tx_hash: to_tx_hash(tx_hash.clone()),
 			bridge_status: decoded_bridge_status,
 			extra: None,
 		};
@@ -237,7 +240,7 @@ where
 			SELECTOR_LOG_REQUEST_TX_RECORDED,
 			topic_u256(U256::from(product_id)),
 			request_id,
-			topic_h160(investor.0),
+			investor,
 			solidity::encode_event_data((
 				vault_chain_id,
 				vault_address,
@@ -294,7 +297,7 @@ where
 	/// @param chunk_count Total chunk count for this (settlement_id, spoke_chain_id, leg) —
 	/// same gating as chunk_index; every chunk of the same leg must agree on this value
 	#[precompile::public(
-		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],bytes32[],uint8,(uint64,bytes32),uint8,uint32,uint32)"
+		"record_settlement_tx(uint64,uint256,uint64,uint64[],uint64[],bytes32[],uint8,(uint64,bytes),uint8,uint32,uint32)"
 	)]
 	fn record_settlement_tx(
 		handle: &mut impl PrecompileHandle,
@@ -341,7 +344,7 @@ where
 		if !is_leg_step && (chunk_index != 0 || chunk_count != 0) {
 			return Err(revert("chunk_index/chunk_count must be 0 outside the six leg steps"));
 		}
-		let (chain_id, tx_hash) = attestation;
+		let (chain_id, tx_hash) = attestation.clone();
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		// `extra` isn't exposed through this Solidity interface yet — see
@@ -355,7 +358,7 @@ where
 			request_ids: decoded_request_ids,
 			step: decoded_step,
 			chain_id,
-			tx_hash,
+			tx_hash: to_tx_hash(tx_hash.clone()),
 			bridge_status: decoded_bridge_status,
 			chunk_index,
 			chunk_count,
@@ -400,33 +403,33 @@ where
 	/// @param amount   Shares received (kind == Deposit) or assets received (kind == Redeem)
 	/// @param kind     0 = Redeem, 1 = Deposit
 	#[precompile::public(
-		"record_receive_tx(uint64,(uint64,address),address,address,uint256,uint8,(uint64,bytes32))"
+		"record_receive_tx(uint64,(uint64,bytes32),bytes32,bytes32,uint256,uint8,(uint64,bytes))"
 	)]
 	fn record_receive_tx(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		vault: EvmVaultInput,
-		investor: Address,
-		receiver: Address,
+		investor: H256,
+		receiver: H256,
 		amount: U256,
 		kind: u8,
 		attestation: EvmTxAttestation,
 	) -> EvmResult {
 		let (vault_chain_id, vault_address) = vault;
-		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address };
 		let decoded_kind = decode_receive_kind(kind)?;
-		let (chain_id, tx_hash) = attestation;
+		let (chain_id, tx_hash) = attestation.clone();
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = TxRegistryCall::<Runtime>::record_receive_tx {
 			product_id,
 			vault: vault_id,
-			investor: investor.0,
-			receiver: receiver.0,
+			investor,
+			receiver,
 			amount,
 			kind: decoded_kind,
 			chain_id,
-			tx_hash,
+			tx_hash: to_tx_hash(tx_hash.clone()),
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
@@ -439,7 +442,7 @@ where
 			handle.context().address,
 			SELECTOR_LOG_RECEIVE_TX_RECORDED,
 			topic_u256(U256::from(product_id)),
-			topic_h160(investor.0),
+			investor,
 			solidity::encode_event_data((vault, receiver, amount, kind, attestation)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -465,12 +468,12 @@ where
 	/// @param bridge_status 3 = Executed, 4 = Reverted — meaningful iff step ==
 	/// BridgeExecuted, MUST be 0 otherwise
 	#[precompile::public(
-		"record_whitelist_tx((uint64,address),address,bool,uint256,uint8,(uint64,bytes32),uint8)"
+		"record_whitelist_tx((uint64,bytes32),bytes32,bool,uint256,uint8,(uint64,bytes),uint8)"
 	)]
 	fn record_whitelist_tx(
 		handle: &mut impl PrecompileHandle,
 		vault: EvmVaultInput,
-		who: Address,
+		who: H256,
 		grant: bool,
 		nonce: U256,
 		step: u8,
@@ -478,21 +481,21 @@ where
 		bridge_status: u8,
 	) -> EvmResult {
 		let (vault_chain_id, vault_address) = vault;
-		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address };
 		let decoded_step = decode_whitelist_step(step)?;
 		let is_bridge_step = decoded_step == WhitelistStep::BridgeExecuted;
 		let decoded_bridge_status = decode_gated_bridge_status(is_bridge_step, bridge_status)?;
-		let (chain_id, tx_hash) = attestation;
+		let (chain_id, tx_hash) = attestation.clone();
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = TxRegistryCall::<Runtime>::record_whitelist_tx {
 			vault: vault_id,
-			who: who.0,
+			who,
 			grant,
 			nonce,
 			step: decoded_step,
 			chain_id,
-			tx_hash,
+			tx_hash: to_tx_hash(tx_hash.clone()),
 			bridge_status: decoded_bridge_status,
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
@@ -505,7 +508,7 @@ where
 		let event = log2(
 			handle.context().address,
 			SELECTOR_LOG_WHITELIST_TX_RECORDED,
-			topic_h160(who.0),
+			who,
 			solidity::encode_event_data((vault, grant, nonce, step, attestation, bridge_status)),
 		);
 		handle.record_log_costs(&[&event])?;
@@ -621,15 +624,15 @@ where
 	///
 	/// @param investor The investor address to look up
 	/// @return requests The investor's in-flight (product_id, request_id) pairs
-	#[precompile::public("get_investor_active_requests(address)")]
+	#[precompile::public("get_investor_active_requests(bytes32)")]
 	#[precompile::view]
 	fn get_investor_active_requests(
 		handle: &mut impl PrecompileHandle,
-		investor: Address,
+		investor: H256,
 	) -> EvmResult<Vec<EvmInvestorRequest>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let requests =
-			pallet_tranche_tx_registry_v2::InvestorActiveRequests::<Runtime>::get(investor.0);
+			pallet_tranche_tx_registry_v2::InvestorActiveRequests::<Runtime>::get(investor);
 		Ok(requests.into_iter().collect())
 	}
 
@@ -655,11 +658,11 @@ where
 	/// @param limit       Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE
 	/// @return request_ids Up to `limit` request_ids, most-recent first
 	/// @return total       Total history length for this (investor, product_id)
-	#[precompile::public("get_investor_request_history(address,uint64,uint256,uint256)")]
+	#[precompile::public("get_investor_request_history(bytes32,uint64,uint256,uint256)")]
 	#[precompile::view]
 	fn get_investor_request_history(
 		handle: &mut impl PrecompileHandle,
-		investor: Address,
+		investor: H256,
 		product_id: ProductId,
 		offset: U256,
 		limit: U256,
@@ -675,7 +678,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost().saturating_mul(3))?;
 		let (request_ids, total) =
 			pallet_tranche_tx_registry_v2::Pallet::<Runtime>::read_request_history(
-				investor.0, product_id, offset, limit,
+				investor, product_id, offset, limit,
 			);
 		Ok((request_ids, U256::from(total)))
 	}
@@ -699,11 +702,11 @@ where
 	/// @param limit       Max entries to return — MUST NOT exceed HISTORY_PAGE_SIZE
 	/// @return receives Up to `limit` (vault, tx_hash) pairs, most-recent first
 	/// @return total    Total history length for this (investor, product_id)
-	#[precompile::public("get_investor_receive_history(address,uint64,uint256,uint256)")]
+	#[precompile::public("get_investor_receive_history(bytes32,uint64,uint256,uint256)")]
 	#[precompile::view]
 	fn get_investor_receive_history(
 		handle: &mut impl PrecompileHandle,
-		investor: Address,
+		investor: H256,
 		product_id: ProductId,
 		offset: U256,
 		limit: U256,
@@ -718,11 +721,13 @@ where
 		// (`limit <= HISTORY_PAGE_SIZE`).
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost().saturating_mul(3))?;
 		let (raw, total) = pallet_tranche_tx_registry_v2::Pallet::<Runtime>::read_receive_history(
-			investor.0, product_id, offset, limit,
+			investor, product_id, offset, limit,
 		);
 		let receives = raw
 			.into_iter()
-			.map(|(vault, tx_hash)| ((vault.chain_id, Address(vault.vault_address)), tx_hash))
+			.map(|(vault, tx_hash)| {
+				((vault.chain_id, vault.vault_address), tx_hash.into_inner().into())
+			})
 			.collect();
 		Ok((receives, U256::from(total)))
 	}
@@ -747,25 +752,27 @@ where
 	/// @return amount   Shares received (kind == Deposit) or assets received (kind == Redeem)
 	/// @return kind     Which receivable pool this receive() call drained
 	/// @return tx       Evidence for this receive() tx
-	#[precompile::public("get_receive(address,(uint64,address),bytes32)")]
+	#[precompile::public("get_receive(bytes32,(uint64,bytes32),bytes)")]
 	#[precompile::view]
 	fn get_receive(
 		handle: &mut impl PrecompileHandle,
-		investor: Address,
+		investor: H256,
 		vault: EvmVaultInput,
-		tx_hash: H256,
-	) -> EvmResult<(Address, U256, u8, EvmTxRecord)> {
+		tx_hash: EvmTxHash,
+	) -> EvmResult<(H256, U256, u8, EvmTxRecord)> {
 		let (vault_chain_id, vault_address) = vault;
-		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address };
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let entry = pallet_tranche_tx_registry_v2::ReceiveEntries::<Runtime>::get((
-			investor.0, vault_id, tx_hash,
+			investor,
+			vault_id,
+			to_tx_hash(tx_hash),
 		))
 		.ok_or_else(|| revert("receive not found"))?;
 
 		Ok((
-			Address(entry.receiver),
+			entry.receiver,
 			entry.amount,
 			encode_receive_kind(entry.kind),
 			encode_tx_record(Some(entry.tx)),
@@ -784,18 +791,18 @@ where
 	/// @param vault The tranche vault to look up
 	/// @param who   The account whose whitelist status to look up
 	/// @return nonce The most recent whitelist action's nonce for this pair
-	#[precompile::public("get_latest_whitelist_nonce((uint64,address),address)")]
+	#[precompile::public("get_latest_whitelist_nonce((uint64,bytes32),bytes32)")]
 	#[precompile::view]
 	fn get_latest_whitelist_nonce(
 		handle: &mut impl PrecompileHandle,
 		vault: EvmVaultInput,
-		who: Address,
+		who: H256,
 	) -> EvmResult<U256> {
 		let (vault_chain_id, vault_address) = vault;
-		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address };
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		pallet_tranche_tx_registry_v2::LatestWhitelistNonce::<Runtime>::get(who.0, vault_id)
+		pallet_tranche_tx_registry_v2::LatestWhitelistNonce::<Runtime>::get(who, vault_id)
 			.ok_or_else(|| revert("no whitelist action recorded for this (vault, who)"))
 	}
 
@@ -829,20 +836,20 @@ where
 	/// @return bridge_attempts The Bridge leg's full attempt history — every attempt
 	/// observed, Executed or Reverted alike, in order; empty if no Bridge leg applies
 	/// (same cases `steps` itself omits BridgeExecuted for) or simply not yet attempted
-	#[precompile::public("get_whitelist((uint64,address),address,uint256)")]
+	#[precompile::public("get_whitelist((uint64,bytes32),bytes32,uint256)")]
 	#[precompile::view]
 	fn get_whitelist(
 		handle: &mut impl PrecompileHandle,
 		vault: EvmVaultInput,
-		who: Address,
+		who: H256,
 		nonce: U256,
 	) -> EvmResult<(bool, Vec<EvmWhitelistTxStep>, u8, Vec<EvmBridgeAttempt>)> {
 		let (vault_chain_id, vault_address) = vault;
-		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address };
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let entry =
-			pallet_tranche_tx_registry_v2::WhitelistEntries::<Runtime>::get((who.0, vault_id, nonce))
+			pallet_tranche_tx_registry_v2::WhitelistEntries::<Runtime>::get((who, vault_id, nonce))
 				.ok_or_else(|| revert("whitelist action not found"))?;
 
 		// A SingleChain product's action has no Orchestrator-driven `WhitelistRequested`
@@ -1062,7 +1069,7 @@ where
 				None => (
 					request_id,
 					false,
-					(Address(H160::zero()), (0u64, Address(H160::zero())), U256::zero(), 0u8),
+					(H256::zero(), (0u64, H256::zero()), U256::zero(), 0u8),
 					Vec::new(),
 					Vec::new(),
 					0u8,
@@ -1151,9 +1158,10 @@ where
 	BlockNumberFor<Runtime>: Into<U256>,
 {
 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-	let Some(settle_started_tx) =
-		pallet_tranche_tx_registry_v2::SettlementTriggers::<Runtime>::get(product_id, settlement_id)
-	else {
+	let Some(settle_started_tx) = pallet_tranche_tx_registry_v2::SettlementTriggers::<Runtime>::get(
+		product_id,
+		settlement_id,
+	) else {
 		return Ok((
 			encode_tx_record::<BlockNumberFor<Runtime>>(None),
 			encode_settlement_step(SettlementStep::Queued),
@@ -1161,16 +1169,19 @@ where
 		));
 	};
 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-	let collect_response_chain_ids = pallet_tranche_tx_registry_v2::SettlementCollectResponseChains::<
-		Runtime,
-	>::get(product_id, settlement_id)
-	.unwrap_or_default();
+	let collect_response_chain_ids =
+		pallet_tranche_tx_registry_v2::SettlementCollectResponseChains::<Runtime>::get(
+			product_id,
+			settlement_id,
+		)
+		.unwrap_or_default();
 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-	let finalize_chain_ids = pallet_tranche_tx_registry_v2::SettlementFinalizeChains::<Runtime>::get(
-		product_id,
-		settlement_id,
-	)
-	.unwrap_or_default();
+	let finalize_chain_ids =
+		pallet_tranche_tx_registry_v2::SettlementFinalizeChains::<Runtime>::get(
+			product_id,
+			settlement_id,
+		)
+		.unwrap_or_default();
 	let chain_ids = union_chain_ids(&collect_response_chain_ids, &finalize_chain_ids);
 
 	let mut spoke_chains = Vec::with_capacity(chain_ids.len());
@@ -1262,8 +1273,8 @@ where
 	};
 
 	let info: EvmRequestInfo = (
-		Address(entry.investor),
-		(entry.vault.chain_id, Address(entry.vault.vault_address)),
+		entry.investor,
+		(entry.vault.chain_id, entry.vault.vault_address),
 		entry.amount,
 		encode_request_order_type(entry.order_type),
 	);
@@ -1388,36 +1399,35 @@ where
 	// for the whole chain, and free of the chunk-level "this chain's leg isn't
 	// fully done yet" lag that criterion has for a request already paid out in
 	// an earlier chunk.
-	let settled =
-		if !has_inbound_leg {
-			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			match pallet_tranche_tx_registry_v2::SettlementCollectResponseChains::<Runtime>::get(
-				product_id,
-				settlement_id,
-			) {
-				Some(chains) => {
-					let mut all_responded = true;
-					for chain_id in chains.iter() {
-						handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-						let chain_entry = pallet_tranche_tx_registry_v2::SettlementChainEntries::<
-							Runtime,
-						>::get((product_id, settlement_id, *chain_id));
-						let responded = leg_complete(
-							chain_entry.response_chunk_count,
-							&chain_entry.response_chunks,
-						);
-						if !responded {
-							all_responded = false;
-							break;
-						}
+	let settled = if !has_inbound_leg {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		match pallet_tranche_tx_registry_v2::SettlementCollectResponseChains::<Runtime>::get(
+			product_id,
+			settlement_id,
+		) {
+			Some(chains) => {
+				let mut all_responded = true;
+				for chain_id in chains.iter() {
+					handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+					let chain_entry = pallet_tranche_tx_registry_v2::SettlementChainEntries::<
+						Runtime,
+					>::get((product_id, settlement_id, *chain_id));
+					let responded = leg_complete(
+						chain_entry.response_chunk_count,
+						&chain_entry.response_chunks,
+					);
+					if !responded {
+						all_responded = false;
+						break;
 					}
-					all_responded
-				},
-				None => false,
-			}
-		} else {
-			entry.settled_tx.is_some()
-		};
+				}
+				all_responded
+			},
+			None => false,
+		}
+	} else {
+		entry.settled_tx.is_some()
+	};
 
 	Ok(Some((
 		info,
@@ -1437,10 +1447,10 @@ fn topic_u256(value: U256) -> H256 {
 	H256::from(value.to_big_endian())
 }
 
-/// `address` topic encoding — left-padded with zeros, matching Solidity's ABI
-/// encoding of an indexed `address` event parameter.
-fn topic_h160(value: H160) -> H256 {
-	H256::from(value)
+/// Converts an ABI `bytes` tx hash into the pallet's `TxHash`. The ABI type is
+/// already bounded at `MAX_TX_HASH_LEN`, so this never truncates.
+fn to_tx_hash(tx_hash: EvmTxHash) -> TxHash {
+	TxHash::truncate_from(tx_hash.into())
 }
 
 /// `Option<TxRecord<_>>` -> interface.sol's `TxRecord`, using `recorded_at == 0` as
@@ -1448,8 +1458,10 @@ fn topic_h160(value: H160) -> H256 {
 /// comment).
 fn encode_tx_record<BlockNumber: Into<U256>>(record: Option<TxRecord<BlockNumber>>) -> EvmTxRecord {
 	match record {
-		Some(record) => (record.chain_id, record.tx_hash, record.recorded_at.into()),
-		None => (0, H256::zero(), U256::zero()),
+		Some(record) => {
+			(record.chain_id, record.tx_hash.into_inner().into(), record.recorded_at.into())
+		},
+		None => (0, EvmTxHash::default(), U256::zero()),
 	}
 }
 
@@ -1672,17 +1684,14 @@ fn encode_request_order_type(order_type: OrderType) -> u8 {
 /// documented contract.
 fn decode_request_opening(
 	step: RequestStep,
-	investor: Address,
+	investor: H256,
 	vault_chain_id: u64,
-	vault_address: Address,
+	vault_address: H256,
 	amount: U256,
 	order_type: u8,
 ) -> EvmResult<Option<RequestOpening>> {
 	if step == RequestStep::Requested {
-		if investor.0.is_zero()
-			|| vault_chain_id == 0
-			|| vault_address.0.is_zero()
-			|| amount.is_zero()
+		if investor.is_zero() || vault_chain_id == 0 || vault_address.is_zero() || amount.is_zero()
 		{
 			return Err(revert(
 				"investor/vault_chain_id/vault_address/amount required when step == Requested",
@@ -1690,15 +1699,15 @@ fn decode_request_opening(
 		}
 		let decoded_order_type = decode_request_order_type(order_type)?;
 		Ok(Some(RequestOpening {
-			investor: investor.0,
-			vault: VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 },
+			investor,
+			vault: VaultId { chain_id: vault_chain_id, vault_address },
 			amount,
 			order_type: decoded_order_type,
 		}))
 	} else {
-		if !investor.0.is_zero()
+		if !investor.is_zero()
 			|| vault_chain_id != 0
-			|| !vault_address.0.is_zero()
+			|| !vault_address.is_zero()
 			|| !amount.is_zero()
 			|| order_type != 0
 		{

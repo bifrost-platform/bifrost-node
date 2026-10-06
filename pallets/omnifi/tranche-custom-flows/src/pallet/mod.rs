@@ -1,14 +1,14 @@
 mod impls;
 
 use crate::{
-	ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey, Lane, ProductId,
-	SlotId, SlotRecord, TrackKey, WeightInfo, MAX_ATTEMPT_METADATA, MAX_DESCRIPTOR_SLOTS,
-	MAX_SLOT_METADATA,
+	ChainAddress, ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage,
+	InstanceKey, Lane, ProductId, SlotId, SlotRecord, TrackKey, TxHash, WeightInfo,
+	MAX_ATTEMPT_METADATA, MAX_DESCRIPTOR_SLOTS, MAX_SLOT_METADATA,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
-use sp_core::{ConstU32, H160, H256};
+use sp_core::ConstU32;
 use sp_std::vec::Vec;
 
 #[frame_support::pallet]
@@ -119,7 +119,7 @@ pub mod pallet {
 			product_id: ProductId,
 			flow_id: FlowId,
 			instance_key: InstanceKey,
-			investor: Option<H160>,
+			investor: Option<ChainAddress>,
 		},
 		/// One attestation was appended. `chain_id` / `tx_hash` are the attested tx
 		/// (the chain it landed on + its hash), independent of `lane`.
@@ -130,7 +130,7 @@ pub mod pallet {
 			lane: Lane,
 			slot_id: SlotId,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			success: bool,
 		},
 		/// Every required lane completed — the instance is now closed.
@@ -212,8 +212,13 @@ pub mod pallet {
 	/// An investor's currently in-flight flows across all products — added on
 	/// open, removed on close. Only populated for `investor_scoped` flows.
 	/// Mirrors `pallet_tranche_tx_registry::InvestorActiveRequests`.
-	pub type InvestorActiveFlows<T: Config> =
-		StorageMap<_, Blake2_128Concat, H160, Vec<(ProductId, FlowId, InstanceKey)>, ValueQuery>;
+	pub type InvestorActiveFlows<T: Config> = StorageMap<
+		_,
+		Blake2_128Concat,
+		ChainAddress,
+		Vec<(ProductId, FlowId, InstanceKey)>,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	/// Logical length of an investor's completed-instance history for one
@@ -225,7 +230,7 @@ pub mod pallet {
 	pub type InvestorFlowHistoryLen<T: Config> = StorageNMap<
 		_,
 		(
-			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ChainAddress>,
 			NMapKey<Blake2_128Concat, ProductId>,
 			NMapKey<Blake2_128Concat, FlowId>,
 		),
@@ -241,7 +246,7 @@ pub mod pallet {
 	pub type InvestorFlowHistoryPage<T: Config> = StorageNMap<
 		_,
 		(
-			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ChainAddress>,
 			NMapKey<Blake2_128Concat, ProductId>,
 			NMapKey<Blake2_128Concat, FlowId>,
 			NMapKey<Blake2_128Concat, u32>,
@@ -333,11 +338,11 @@ pub mod pallet {
 			track_key: TrackKey,
 			slot_id: SlotId,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			success: bool,
 			attempt_metadata: Option<BoundedVec<u8, ConstU32<MAX_ATTEMPT_METADATA>>>,
 			slot_metadata: Option<BoundedVec<u8, ConstU32<MAX_SLOT_METADATA>>>,
-			investor: Option<H160>,
+			investor: Option<ChainAddress>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			Self::do_record_flow_tx(
