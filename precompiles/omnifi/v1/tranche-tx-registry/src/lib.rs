@@ -5,7 +5,8 @@ use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::AddressMapping;
 use pallet_tranche_system::{
-	ProductId, ProductInspect, VaultId, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHE_CHAINS,
+	legacy::VaultIdV1 as VaultId, ProductId, ProductInspect, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHE_CHAINS,
 };
 use pallet_tranche_tx_registry::{
 	history::HISTORY_PAGE_SIZE, BridgeAttempts, BridgeStatus, Call as TxRegistryCall, OrderType,

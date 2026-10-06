@@ -7,7 +7,10 @@ pub mod weights;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
-use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
+use pallet_tranche_system::{
+	legacy::{AdapterKeyV1 as AdapterKey, VaultIdV1 as VaultId},
+	ProductId,
+};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, H256, U256};

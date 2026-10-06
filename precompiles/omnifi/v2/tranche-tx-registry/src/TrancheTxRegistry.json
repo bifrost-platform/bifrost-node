@@ -1,1843 +1,2109 @@
 [
     {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct TrancheTxRegistry.VaultInput",
-                "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "indexed": false,
-                "internalType": "address",
-                "name": "receiver",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "enum TrancheTxRegistry.ReceiveKind",
-                "name": "kind",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
-            }
-        ],
-        "name": "ReceiveTxRecorded",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": true,
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            },
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint64",
-                "name": "vault_chain_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "address",
-                "name": "vault_address",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint8",
-                "name": "order_type",
-                "type": "uint8"
-            },
-            {
-                "indexed": false,
-                "internalType": "enum TrancheTxRegistry.RequestStep",
-                "name": "step",
-                "type": "uint8"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint64[]",
-                "name": "adapter_chain_ids",
-                "type": "uint64[]"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint8",
-                "name": "bridge_status",
-                "type": "uint8"
-            }
-        ],
-        "name": "RequestTxRecorded",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": true,
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "indexed": true,
-                "internalType": "uint64",
-                "name": "spoke_chain_id",
-                "type": "uint64"
-            },
-            {
-                "indexed": false,
-                "internalType": "enum TrancheTxRegistry.SettlementStep",
-                "name": "step",
-                "type": "uint8"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint64[]",
-                "name": "collect_response_chain_ids",
-                "type": "uint64[]"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint64[]",
-                "name": "finalize_chain_ids",
-                "type": "uint64[]"
-            },
-            {
-                "indexed": false,
-                "internalType": "bytes32[]",
-                "name": "request_ids",
-                "type": "bytes32[]"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint8",
-                "name": "bridge_status",
-                "type": "uint8"
-            }
-        ],
-        "name": "SettlementTxRecorded",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "who",
-                "type": "address"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct TrancheTxRegistry.VaultInput",
-                "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "indexed": false,
-                "internalType": "bool",
-                "name": "grant",
-                "type": "bool"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "nonce",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "enum TrancheTxRegistry.WhitelistStep",
-                "name": "step",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "indexed": false,
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint8",
-                "name": "bridge_status",
-                "type": "uint8"
-            }
-        ],
-        "name": "WhitelistTxRecorded",
-        "type": "event"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            }
-        ],
+        "type": "function",
         "name": "get_investor_active_requests",
+        "inputs": [
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
         "outputs": [
             {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "product_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "request_id",
-                        "type": "bytes32"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.InvestorRequest[]",
                 "name": "requests",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            },
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "offset",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "limit",
-                "type": "uint256"
-            }
-        ],
-        "name": "get_investor_receive_history",
-        "outputs": [
-            {
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.InvestorRequest[]",
                 "components": [
                     {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "address",
-                                "name": "vault_address",
-                                "type": "address"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.VaultInput",
-                        "name": "vault",
-                        "type": "tuple"
+                        "name": "product_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
                     },
                     {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.ReceiveHistoryEntry[]",
-                "name": "receives",
-                "type": "tuple[]"
-            },
-            {
-                "internalType": "uint256",
-                "name": "total",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            },
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "offset",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "limit",
-                "type": "uint256"
-            }
-        ],
-        "name": "get_investor_request_history",
-        "outputs": [
-            {
-                "internalType": "bytes32[]",
-                "name": "request_ids",
-                "type": "bytes32[]"
-            },
-            {
-                "internalType": "uint256",
-                "name": "total",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.VaultInput",
-                "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "internalType": "address",
-                "name": "who",
-                "type": "address"
-            }
-        ],
-        "name": "get_latest_whitelist_nonce",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "nonce",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "address",
-                "name": "investor",
-                "type": "address"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.VaultInput",
-                "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "internalType": "bytes32",
-                "name": "tx_hash",
-                "type": "bytes32"
-            }
-        ],
-        "name": "get_receive",
-        "outputs": [
-            {
-                "internalType": "address",
-                "name": "receiver",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "internalType": "enum TrancheTxRegistry.ReceiveKind",
-                "name": "kind",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "recorded_at",
-                        "type": "uint256"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.TxRecord",
-                "name": "tx",
-                "type": "tuple"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            }
-        ],
-        "name": "get_request",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "address",
-                        "name": "investor",
-                        "type": "address"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "address",
-                                "name": "vault_address",
-                                "type": "address"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.VaultInput",
-                        "name": "vault",
-                        "type": "tuple"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "amount",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "uint8",
-                        "name": "order_type",
-                        "type": "uint8"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.RequestInfo",
-                "name": "info",
-                "type": "tuple"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "enum TrancheTxRegistry.RequestStep",
-                        "name": "step",
-                        "type": "uint8"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "bytes32",
-                                "name": "tx_hash",
-                                "type": "bytes32"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "recorded_at",
-                                "type": "uint256"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                        "name": "tx",
-                        "type": "tuple"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.RequestTxStep[]",
-                "name": "request_steps",
-                "type": "tuple[]"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "enum TrancheTxRegistry.RequestStep",
-                                "name": "step",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.RequestTxStep[]",
-                        "name": "steps",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.AdapterLeg[]",
-                "name": "adapter_legs",
-                "type": "tuple[]"
-            },
-            {
-                "internalType": "enum TrancheTxRegistry.RequestStep",
-                "name": "status",
-                "type": "uint8"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "internalType": "bool",
-                "name": "settled",
-                "type": "bool"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint8",
-                        "name": "status",
-                        "type": "uint8"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "bytes32",
-                                "name": "tx_hash",
-                                "type": "bytes32"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "recorded_at",
-                                "type": "uint256"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                        "name": "tx",
-                        "type": "tuple"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                "name": "request_bridge_attempts",
-                "type": "tuple[]"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint8",
-                                "name": "status",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                        "name": "attempts",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.ChainBridgeAttempts[]",
-                "name": "adapter_bridge_attempts",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "bytes32[]",
-                "name": "request_ids",
-                "type": "bytes32[]"
-            }
-        ],
-        "name": "get_requests",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "bytes32",
                         "name": "request_id",
-                        "type": "bytes32"
-                    },
-                    {
-                        "internalType": "bool",
-                        "name": "found",
-                        "type": "bool"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "address",
-                                "name": "investor",
-                                "type": "address"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "address",
-                                        "name": "vault_address",
-                                        "type": "address"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.VaultInput",
-                                "name": "vault",
-                                "type": "tuple"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "amount",
-                                "type": "uint256"
-                            },
-                            {
-                                "internalType": "uint8",
-                                "name": "order_type",
-                                "type": "uint8"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.RequestInfo",
-                        "name": "info",
-                        "type": "tuple"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "enum TrancheTxRegistry.RequestStep",
-                                "name": "step",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.RequestTxStep[]",
-                        "name": "request_steps",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "enum TrancheTxRegistry.RequestStep",
-                                        "name": "step",
-                                        "type": "uint8"
-                                    },
-                                    {
-                                        "components": [
-                                            {
-                                                "internalType": "uint64",
-                                                "name": "chain_id",
-                                                "type": "uint64"
-                                            },
-                                            {
-                                                "internalType": "bytes32",
-                                                "name": "tx_hash",
-                                                "type": "bytes32"
-                                            },
-                                            {
-                                                "internalType": "uint256",
-                                                "name": "recorded_at",
-                                                "type": "uint256"
-                                            }
-                                        ],
-                                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                                        "name": "tx",
-                                        "type": "tuple"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.RequestTxStep[]",
-                                "name": "steps",
-                                "type": "tuple[]"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.AdapterLeg[]",
-                        "name": "adapter_legs",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "internalType": "enum TrancheTxRegistry.RequestStep",
-                        "name": "status",
-                        "type": "uint8"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "settlement_id",
-                        "type": "uint256"
-                    },
-                    {
-                        "internalType": "bool",
-                        "name": "settled",
-                        "type": "bool"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint8",
-                                "name": "status",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                        "name": "request_bridge_attempts",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint8",
-                                        "name": "status",
-                                        "type": "uint8"
-                                    },
-                                    {
-                                        "components": [
-                                            {
-                                                "internalType": "uint64",
-                                                "name": "chain_id",
-                                                "type": "uint64"
-                                            },
-                                            {
-                                                "internalType": "bytes32",
-                                                "name": "tx_hash",
-                                                "type": "bytes32"
-                                            },
-                                            {
-                                                "internalType": "uint256",
-                                                "name": "recorded_at",
-                                                "type": "uint256"
-                                            }
-                                        ],
-                                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                                        "name": "tx",
-                                        "type": "tuple"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                                "name": "attempts",
-                                "type": "tuple[]"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.ChainBridgeAttempts[]",
-                        "name": "adapter_bridge_attempts",
-                        "type": "tuple[]"
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     }
-                ],
-                "internalType": "struct TrancheTxRegistry.RequestDetails[]",
-                "name": "entries",
-                "type": "tuple[]"
+                ]
             }
         ],
-        "stateMutability": "view",
-        "type": "function"
+        "stateMutability": "view"
     },
     {
+        "type": "function",
+        "name": "get_investor_receive_history",
         "inputs": [
             {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            }
-        ],
-        "name": "get_settlement",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "recorded_at",
-                        "type": "uint256"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.TxRecord",
-                "name": "trigger_tx",
-                "type": "tuple"
-            },
-            {
-                "internalType": "enum TrancheTxRegistry.SettlementStep",
-                "name": "status",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "spoke_chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "enum TrancheTxRegistry.SettlementStep",
-                                "name": "step",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.SettlementTxStep[]",
-                        "name": "steps",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.SettlementChainSteps[]",
-                "name": "spoke_chains",
-                "type": "tuple[]"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "spoke_chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint8",
-                                "name": "status",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                        "name": "collect_attempts",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint8",
-                                "name": "status",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                        "name": "response_attempts",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint8",
-                                "name": "status",
-                                "type": "uint8"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint64",
-                                        "name": "chain_id",
-                                        "type": "uint64"
-                                    },
-                                    {
-                                        "internalType": "bytes32",
-                                        "name": "tx_hash",
-                                        "type": "bytes32"
-                                    },
-                                    {
-                                        "internalType": "uint256",
-                                        "name": "recorded_at",
-                                        "type": "uint256"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.TxRecord",
-                                "name": "tx",
-                                "type": "tuple"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                        "name": "finalize_attempts",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.SettlementChainBridgeAttempts[]",
-                "name": "spoke_bridge_attempts",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256[]",
-                "name": "settlement_ids",
-                "type": "uint256[]"
-            }
-        ],
-        "name": "get_settlements",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "uint256",
-                        "name": "settlement_id",
-                        "type": "uint256"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "bytes32",
-                                "name": "tx_hash",
-                                "type": "bytes32"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "recorded_at",
-                                "type": "uint256"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                        "name": "settle_started_tx",
-                        "type": "tuple"
-                    },
-                    {
-                        "internalType": "enum TrancheTxRegistry.SettlementStep",
-                        "name": "status",
-                        "type": "uint8"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "spoke_chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "enum TrancheTxRegistry.SettlementStep",
-                                        "name": "step",
-                                        "type": "uint8"
-                                    },
-                                    {
-                                        "components": [
-                                            {
-                                                "internalType": "uint64",
-                                                "name": "chain_id",
-                                                "type": "uint64"
-                                            },
-                                            {
-                                                "internalType": "bytes32",
-                                                "name": "tx_hash",
-                                                "type": "bytes32"
-                                            },
-                                            {
-                                                "internalType": "uint256",
-                                                "name": "recorded_at",
-                                                "type": "uint256"
-                                            }
-                                        ],
-                                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                                        "name": "tx",
-                                        "type": "tuple"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.SettlementTxStep[]",
-                                "name": "steps",
-                                "type": "tuple[]"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.SettlementChainSteps[]",
-                        "name": "spoke_chains",
-                        "type": "tuple[]"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "spoke_chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint8",
-                                        "name": "status",
-                                        "type": "uint8"
-                                    },
-                                    {
-                                        "components": [
-                                            {
-                                                "internalType": "uint64",
-                                                "name": "chain_id",
-                                                "type": "uint64"
-                                            },
-                                            {
-                                                "internalType": "bytes32",
-                                                "name": "tx_hash",
-                                                "type": "bytes32"
-                                            },
-                                            {
-                                                "internalType": "uint256",
-                                                "name": "recorded_at",
-                                                "type": "uint256"
-                                            }
-                                        ],
-                                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                                        "name": "tx",
-                                        "type": "tuple"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                                "name": "collect_attempts",
-                                "type": "tuple[]"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint8",
-                                        "name": "status",
-                                        "type": "uint8"
-                                    },
-                                    {
-                                        "components": [
-                                            {
-                                                "internalType": "uint64",
-                                                "name": "chain_id",
-                                                "type": "uint64"
-                                            },
-                                            {
-                                                "internalType": "bytes32",
-                                                "name": "tx_hash",
-                                                "type": "bytes32"
-                                            },
-                                            {
-                                                "internalType": "uint256",
-                                                "name": "recorded_at",
-                                                "type": "uint256"
-                                            }
-                                        ],
-                                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                                        "name": "tx",
-                                        "type": "tuple"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                                "name": "response_attempts",
-                                "type": "tuple[]"
-                            },
-                            {
-                                "components": [
-                                    {
-                                        "internalType": "uint8",
-                                        "name": "status",
-                                        "type": "uint8"
-                                    },
-                                    {
-                                        "components": [
-                                            {
-                                                "internalType": "uint64",
-                                                "name": "chain_id",
-                                                "type": "uint64"
-                                            },
-                                            {
-                                                "internalType": "bytes32",
-                                                "name": "tx_hash",
-                                                "type": "bytes32"
-                                            },
-                                            {
-                                                "internalType": "uint256",
-                                                "name": "recorded_at",
-                                                "type": "uint256"
-                                            }
-                                        ],
-                                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                                        "name": "tx",
-                                        "type": "tuple"
-                                    }
-                                ],
-                                "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                                "name": "finalize_attempts",
-                                "type": "tuple[]"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.SettlementChainBridgeAttempts[]",
-                        "name": "spoke_bridge_attempts",
-                        "type": "tuple[]"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.SettlementInfo[]",
-                "name": "entries",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.VaultInput",
-                "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "internalType": "address",
-                "name": "who",
-                "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "nonce",
-                "type": "uint256"
-            }
-        ],
-        "name": "get_whitelist",
-        "outputs": [
-            {
-                "internalType": "bool",
-                "name": "grant",
-                "type": "bool"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "enum TrancheTxRegistry.WhitelistStep",
-                        "name": "step",
-                        "type": "uint8"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "bytes32",
-                                "name": "tx_hash",
-                                "type": "bytes32"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "recorded_at",
-                                "type": "uint256"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                        "name": "tx",
-                        "type": "tuple"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.WhitelistTxStep[]",
-                "name": "steps",
-                "type": "tuple[]"
-            },
-            {
-                "internalType": "enum TrancheTxRegistry.WhitelistStep",
-                "name": "status",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint8",
-                        "name": "status",
-                        "type": "uint8"
-                    },
-                    {
-                        "components": [
-                            {
-                                "internalType": "uint64",
-                                "name": "chain_id",
-                                "type": "uint64"
-                            },
-                            {
-                                "internalType": "bytes32",
-                                "name": "tx_hash",
-                                "type": "bytes32"
-                            },
-                            {
-                                "internalType": "uint256",
-                                "name": "recorded_at",
-                                "type": "uint256"
-                            }
-                        ],
-                        "internalType": "struct TrancheTxRegistry.TxRecord",
-                        "name": "tx",
-                        "type": "tuple"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.BridgeAttempt[]",
-                "name": "bridge_attempts",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.VaultInput",
-                "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "internalType": "address",
                 "name": "investor",
-                "type": "address"
+                "type": "bytes32",
+                "internalType": "bytes32"
             },
             {
-                "internalType": "address",
-                "name": "receiver",
-                "type": "address"
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
             },
             {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
+                "name": "offset",
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "enum TrancheTxRegistry.ReceiveKind",
-                "name": "kind",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
+                "name": "limit",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "name": "record_receive_tx",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
+        "outputs": [
+            {
+                "name": "receives",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.ReceiveHistoryEntry[]",
+                "components": [
+                    {
+                        "name": "vault",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "total",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
     },
     {
+        "type": "function",
+        "name": "get_investor_request_history",
         "inputs": [
             {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "bytes32",
-                "name": "request_id",
-                "type": "bytes32"
-            },
-            {
-                "internalType": "address",
                 "name": "investor",
-                "type": "address"
+                "type": "bytes32",
+                "internalType": "bytes32"
             },
             {
-                "internalType": "uint64",
-                "name": "vault_chain_id",
-                "type": "uint64"
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
             },
             {
-                "internalType": "address",
-                "name": "vault_address",
-                "type": "address"
+                "name": "offset",
+                "type": "uint256",
+                "internalType": "uint256"
             },
             {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint8",
-                "name": "order_type",
-                "type": "uint8"
-            },
-            {
-                "internalType": "uint64[]",
-                "name": "adapter_chain_ids",
-                "type": "uint64[]"
-            },
-            {
-                "internalType": "enum TrancheTxRegistry.RequestStep",
-                "name": "step",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
-            },
-            {
-                "internalType": "uint8",
-                "name": "bridge_status",
-                "type": "uint8"
+                "name": "limit",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "name": "record_request_tx",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
+        "outputs": [
             {
-                "internalType": "uint64",
-                "name": "product_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint256",
-                "name": "settlement_id",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint64",
-                "name": "spoke_chain_id",
-                "type": "uint64"
-            },
-            {
-                "internalType": "uint64[]",
-                "name": "collect_response_chain_ids",
-                "type": "uint64[]"
-            },
-            {
-                "internalType": "uint64[]",
-                "name": "finalize_chain_ids",
-                "type": "uint64[]"
-            },
-            {
-                "internalType": "bytes32[]",
                 "name": "request_ids",
-                "type": "bytes32[]"
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
             },
             {
-                "internalType": "enum TrancheTxRegistry.SettlementStep",
-                "name": "step",
-                "type": "uint8"
-            },
-            {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
-            },
-            {
-                "internalType": "uint8",
-                "name": "bridge_status",
-                "type": "uint8"
+                "name": "total",
+                "type": "uint256",
+                "internalType": "uint256"
             }
         ],
-        "name": "record_settlement_tx",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
+        "stateMutability": "view"
     },
     {
+        "type": "function",
+        "name": "get_latest_whitelist_nonce",
         "inputs": [
             {
-                "components": [
-                    {
-                        "internalType": "uint64",
-                        "name": "chain_id",
-                        "type": "uint64"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "vault_address",
-                        "type": "address"
-                    }
-                ],
-                "internalType": "struct TrancheTxRegistry.VaultInput",
                 "name": "vault",
-                "type": "tuple"
-            },
-            {
-                "internalType": "address",
-                "name": "who",
-                "type": "address"
-            },
-            {
-                "internalType": "bool",
-                "name": "grant",
-                "type": "bool"
-            },
-            {
-                "internalType": "uint256",
-                "name": "nonce",
-                "type": "uint256"
-            },
-            {
-                "internalType": "enum TrancheTxRegistry.WhitelistStep",
-                "name": "step",
-                "type": "uint8"
-            },
-            {
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
                 "components": [
                     {
-                        "internalType": "uint64",
                         "name": "chain_id",
-                        "type": "uint64"
+                        "type": "uint64",
+                        "internalType": "uint64"
                     },
                     {
-                        "internalType": "bytes32",
-                        "name": "tx_hash",
-                        "type": "bytes32"
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
                     }
-                ],
-                "internalType": "struct TrancheTxRegistry.TxAttestation",
-                "name": "attestation",
-                "type": "tuple"
+                ]
             },
             {
-                "internalType": "uint8",
-                "name": "bridge_status",
-                "type": "uint8"
+                "name": "who",
+                "type": "bytes32",
+                "internalType": "bytes32"
             }
         ],
-        "name": "record_whitelist_tx",
+        "outputs": [
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_receive",
+        "inputs": [
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "tx_hash",
+                "type": "bytes",
+                "internalType": "bytes"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "receiver",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "kind",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.ReceiveKind"
+            },
+            {
+                "name": "tx",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "recorded_at",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_request",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "info",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.RequestInfo",
+                "components": [
+                    {
+                        "name": "investor",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "vault",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "vault_address",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "amount",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "order_type",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    }
+                ]
+            },
+            {
+                "name": "request_steps",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.RequestTxStep[]",
+                "components": [
+                    {
+                        "name": "step",
+                        "type": "uint8",
+                        "internalType": "enum TrancheTxRegistryV2.RequestStep"
+                    },
+                    {
+                        "name": "tx",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "tx_hash",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "recorded_at",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "adapter_legs",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.AdapterLeg[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "steps",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.RequestTxStep[]",
+                        "components": [
+                            {
+                                "name": "step",
+                                "type": "uint8",
+                                "internalType": "enum TrancheTxRegistryV2.RequestStep"
+                            },
+                            {
+                                "name": "tx",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "tx_hash",
+                                        "type": "bytes",
+                                        "internalType": "bytes"
+                                    },
+                                    {
+                                        "name": "recorded_at",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.RequestStep"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "settled",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "request_bridge_attempts",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                "components": [
+                    {
+                        "name": "status",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    },
+                    {
+                        "name": "tx",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "tx_hash",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "recorded_at",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "adapter_bridge_attempts",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.ChainBridgeAttempts[]",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "attempts",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                        "components": [
+                            {
+                                "name": "status",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            },
+                            {
+                                "name": "tx",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "tx_hash",
+                                        "type": "bytes",
+                                        "internalType": "bytes"
+                                    },
+                                    {
+                                        "name": "recorded_at",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_requests",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_ids",
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "entries",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.RequestDetails[]",
+                "components": [
+                    {
+                        "name": "request_id",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    },
+                    {
+                        "name": "found",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "info",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.RequestInfo",
+                        "components": [
+                            {
+                                "name": "investor",
+                                "type": "bytes32",
+                                "internalType": "bytes32"
+                            },
+                            {
+                                "name": "vault",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "vault_address",
+                                        "type": "bytes32",
+                                        "internalType": "bytes32"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "amount",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            },
+                            {
+                                "name": "order_type",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "request_steps",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.RequestTxStep[]",
+                        "components": [
+                            {
+                                "name": "step",
+                                "type": "uint8",
+                                "internalType": "enum TrancheTxRegistryV2.RequestStep"
+                            },
+                            {
+                                "name": "tx",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "tx_hash",
+                                        "type": "bytes",
+                                        "internalType": "bytes"
+                                    },
+                                    {
+                                        "name": "recorded_at",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "adapter_legs",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.AdapterLeg[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "steps",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheTxRegistryV2.RequestTxStep[]",
+                                "components": [
+                                    {
+                                        "name": "step",
+                                        "type": "uint8",
+                                        "internalType": "enum TrancheTxRegistryV2.RequestStep"
+                                    },
+                                    {
+                                        "name": "tx",
+                                        "type": "tuple",
+                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                        "components": [
+                                            {
+                                                "name": "chain_id",
+                                                "type": "uint64",
+                                                "internalType": "uint64"
+                                            },
+                                            {
+                                                "name": "tx_hash",
+                                                "type": "bytes",
+                                                "internalType": "bytes"
+                                            },
+                                            {
+                                                "name": "recorded_at",
+                                                "type": "uint256",
+                                                "internalType": "uint256"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "status",
+                        "type": "uint8",
+                        "internalType": "enum TrancheTxRegistryV2.RequestStep"
+                    },
+                    {
+                        "name": "settlement_id",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "settled",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "request_bridge_attempts",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                        "components": [
+                            {
+                                "name": "status",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            },
+                            {
+                                "name": "tx",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "tx_hash",
+                                        "type": "bytes",
+                                        "internalType": "bytes"
+                                    },
+                                    {
+                                        "name": "recorded_at",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "adapter_bridge_attempts",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.ChainBridgeAttempts[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "attempts",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                "components": [
+                                    {
+                                        "name": "status",
+                                        "type": "uint8",
+                                        "internalType": "uint8"
+                                    },
+                                    {
+                                        "name": "tx",
+                                        "type": "tuple",
+                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                        "components": [
+                                            {
+                                                "name": "chain_id",
+                                                "type": "uint64",
+                                                "internalType": "uint64"
+                                            },
+                                            {
+                                                "name": "tx_hash",
+                                                "type": "bytes",
+                                                "internalType": "bytes"
+                                            },
+                                            {
+                                                "name": "recorded_at",
+                                                "type": "uint256",
+                                                "internalType": "uint256"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_settlement",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "settle_started_tx",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "recorded_at",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    }
+                ]
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.SettlementStep"
+            },
+            {
+                "name": "spoke_chains",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.SettlementChainLegChunks[]",
+                "components": [
+                    {
+                        "name": "spoke_chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "collect",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.SettlementChainLeg",
+                        "components": [
+                            {
+                                "name": "needed",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "chunk_count",
+                                "type": "uint32",
+                                "internalType": "uint32"
+                            },
+                            {
+                                "name": "complete",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "chunks",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheTxRegistryV2.LegChunkView[]",
+                                "components": [
+                                    {
+                                        "name": "chunk_index",
+                                        "type": "uint32",
+                                        "internalType": "uint32"
+                                    },
+                                    {
+                                        "name": "bridge_attempts",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                        "components": [
+                                            {
+                                                "name": "status",
+                                                "type": "uint8",
+                                                "internalType": "uint8"
+                                            },
+                                            {
+                                                "name": "tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "name": "applied_tx",
+                                        "type": "tuple",
+                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                        "components": [
+                                            {
+                                                "name": "chain_id",
+                                                "type": "uint64",
+                                                "internalType": "uint64"
+                                            },
+                                            {
+                                                "name": "tx_hash",
+                                                "type": "bytes",
+                                                "internalType": "bytes"
+                                            },
+                                            {
+                                                "name": "recorded_at",
+                                                "type": "uint256",
+                                                "internalType": "uint256"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "response",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.SettlementChainLeg",
+                        "components": [
+                            {
+                                "name": "needed",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "chunk_count",
+                                "type": "uint32",
+                                "internalType": "uint32"
+                            },
+                            {
+                                "name": "complete",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "chunks",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheTxRegistryV2.LegChunkView[]",
+                                "components": [
+                                    {
+                                        "name": "chunk_index",
+                                        "type": "uint32",
+                                        "internalType": "uint32"
+                                    },
+                                    {
+                                        "name": "bridge_attempts",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                        "components": [
+                                            {
+                                                "name": "status",
+                                                "type": "uint8",
+                                                "internalType": "uint8"
+                                            },
+                                            {
+                                                "name": "tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "name": "applied_tx",
+                                        "type": "tuple",
+                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                        "components": [
+                                            {
+                                                "name": "chain_id",
+                                                "type": "uint64",
+                                                "internalType": "uint64"
+                                            },
+                                            {
+                                                "name": "tx_hash",
+                                                "type": "bytes",
+                                                "internalType": "bytes"
+                                            },
+                                            {
+                                                "name": "recorded_at",
+                                                "type": "uint256",
+                                                "internalType": "uint256"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "name": "finalize",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.SettlementChainLeg",
+                        "components": [
+                            {
+                                "name": "needed",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "chunk_count",
+                                "type": "uint32",
+                                "internalType": "uint32"
+                            },
+                            {
+                                "name": "complete",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "chunks",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheTxRegistryV2.LegChunkView[]",
+                                "components": [
+                                    {
+                                        "name": "chunk_index",
+                                        "type": "uint32",
+                                        "internalType": "uint32"
+                                    },
+                                    {
+                                        "name": "bridge_attempts",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                        "components": [
+                                            {
+                                                "name": "status",
+                                                "type": "uint8",
+                                                "internalType": "uint8"
+                                            },
+                                            {
+                                                "name": "tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "name": "applied_tx",
+                                        "type": "tuple",
+                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                        "components": [
+                                            {
+                                                "name": "chain_id",
+                                                "type": "uint64",
+                                                "internalType": "uint64"
+                                            },
+                                            {
+                                                "name": "tx_hash",
+                                                "type": "bytes",
+                                                "internalType": "bytes"
+                                            },
+                                            {
+                                                "name": "recorded_at",
+                                                "type": "uint256",
+                                                "internalType": "uint256"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_settlements",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_ids",
+                "type": "uint256[]",
+                "internalType": "uint256[]"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "entries",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.SettlementInfo[]",
+                "components": [
+                    {
+                        "name": "settlement_id",
+                        "type": "uint256",
+                        "internalType": "uint256"
+                    },
+                    {
+                        "name": "settle_started_tx",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "tx_hash",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "recorded_at",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "status",
+                        "type": "uint8",
+                        "internalType": "enum TrancheTxRegistryV2.SettlementStep"
+                    },
+                    {
+                        "name": "spoke_chains",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheTxRegistryV2.SettlementChainLegChunks[]",
+                        "components": [
+                            {
+                                "name": "spoke_chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "collect",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.SettlementChainLeg",
+                                "components": [
+                                    {
+                                        "name": "needed",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "chunk_count",
+                                        "type": "uint32",
+                                        "internalType": "uint32"
+                                    },
+                                    {
+                                        "name": "complete",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "chunks",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheTxRegistryV2.LegChunkView[]",
+                                        "components": [
+                                            {
+                                                "name": "chunk_index",
+                                                "type": "uint32",
+                                                "internalType": "uint32"
+                                            },
+                                            {
+                                                "name": "bridge_attempts",
+                                                "type": "tuple[]",
+                                                "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                                "components": [
+                                                    {
+                                                        "name": "status",
+                                                        "type": "uint8",
+                                                        "internalType": "uint8"
+                                                    },
+                                                    {
+                                                        "name": "tx",
+                                                        "type": "tuple",
+                                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                        "components": [
+                                                            {
+                                                                "name": "chain_id",
+                                                                "type": "uint64",
+                                                                "internalType": "uint64"
+                                                            },
+                                                            {
+                                                                "name": "tx_hash",
+                                                                "type": "bytes",
+                                                                "internalType": "bytes"
+                                                            },
+                                                            {
+                                                                "name": "recorded_at",
+                                                                "type": "uint256",
+                                                                "internalType": "uint256"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "name": "applied_tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "response",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.SettlementChainLeg",
+                                "components": [
+                                    {
+                                        "name": "needed",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "chunk_count",
+                                        "type": "uint32",
+                                        "internalType": "uint32"
+                                    },
+                                    {
+                                        "name": "complete",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "chunks",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheTxRegistryV2.LegChunkView[]",
+                                        "components": [
+                                            {
+                                                "name": "chunk_index",
+                                                "type": "uint32",
+                                                "internalType": "uint32"
+                                            },
+                                            {
+                                                "name": "bridge_attempts",
+                                                "type": "tuple[]",
+                                                "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                                "components": [
+                                                    {
+                                                        "name": "status",
+                                                        "type": "uint8",
+                                                        "internalType": "uint8"
+                                                    },
+                                                    {
+                                                        "name": "tx",
+                                                        "type": "tuple",
+                                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                        "components": [
+                                                            {
+                                                                "name": "chain_id",
+                                                                "type": "uint64",
+                                                                "internalType": "uint64"
+                                                            },
+                                                            {
+                                                                "name": "tx_hash",
+                                                                "type": "bytes",
+                                                                "internalType": "bytes"
+                                                            },
+                                                            {
+                                                                "name": "recorded_at",
+                                                                "type": "uint256",
+                                                                "internalType": "uint256"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "name": "applied_tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "finalize",
+                                "type": "tuple",
+                                "internalType": "struct TrancheTxRegistryV2.SettlementChainLeg",
+                                "components": [
+                                    {
+                                        "name": "needed",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "chunk_count",
+                                        "type": "uint32",
+                                        "internalType": "uint32"
+                                    },
+                                    {
+                                        "name": "complete",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "chunks",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheTxRegistryV2.LegChunkView[]",
+                                        "components": [
+                                            {
+                                                "name": "chunk_index",
+                                                "type": "uint32",
+                                                "internalType": "uint32"
+                                            },
+                                            {
+                                                "name": "bridge_attempts",
+                                                "type": "tuple[]",
+                                                "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                                                "components": [
+                                                    {
+                                                        "name": "status",
+                                                        "type": "uint8",
+                                                        "internalType": "uint8"
+                                                    },
+                                                    {
+                                                        "name": "tx",
+                                                        "type": "tuple",
+                                                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                        "components": [
+                                                            {
+                                                                "name": "chain_id",
+                                                                "type": "uint64",
+                                                                "internalType": "uint64"
+                                                            },
+                                                            {
+                                                                "name": "tx_hash",
+                                                                "type": "bytes",
+                                                                "internalType": "bytes"
+                                                            },
+                                                            {
+                                                                "name": "recorded_at",
+                                                                "type": "uint256",
+                                                                "internalType": "uint256"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                "name": "applied_tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_whitelist",
+        "inputs": [
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "who",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "grant",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "steps",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.WhitelistTxStep[]",
+                "components": [
+                    {
+                        "name": "step",
+                        "type": "uint8",
+                        "internalType": "enum TrancheTxRegistryV2.WhitelistStep"
+                    },
+                    {
+                        "name": "tx",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "tx_hash",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "recorded_at",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.WhitelistStep"
+            },
+            {
+                "name": "bridge_attempts",
+                "type": "tuple[]",
+                "internalType": "struct TrancheTxRegistryV2.BridgeAttempt[]",
+                "components": [
+                    {
+                        "name": "status",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    },
+                    {
+                        "name": "tx",
+                        "type": "tuple",
+                        "internalType": "struct TrancheTxRegistryV2.TxRecord",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "tx_hash",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "recorded_at",
+                                "type": "uint256",
+                                "internalType": "uint256"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "record_receive_tx",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "receiver",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "kind",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.ReceiveKind"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
         "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "record_request_tx",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "order_type",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "adapter_chain_ids",
+                "type": "uint64[]",
+                "internalType": "uint64[]"
+            },
+            {
+                "name": "step",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.RequestStep"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "bridge_status",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "record_settlement_tx",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "spoke_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "collect_response_chain_ids",
+                "type": "uint64[]",
+                "internalType": "uint64[]"
+            },
+            {
+                "name": "finalize_chain_ids",
+                "type": "uint64[]",
+                "internalType": "uint64[]"
+            },
+            {
+                "name": "request_ids",
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
+            },
+            {
+                "name": "step",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.SettlementStep"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "bridge_status",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "chunk_index",
+                "type": "uint32",
+                "internalType": "uint32"
+            },
+            {
+                "name": "chunk_count",
+                "type": "uint32",
+                "internalType": "uint32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "function",
+        "name": "record_whitelist_tx",
+        "inputs": [
+            {
+                "name": "vault",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "who",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "grant",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "step",
+                "type": "uint8",
+                "internalType": "enum TrancheTxRegistryV2.WhitelistStep"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "bridge_status",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "ReceiveTxRecorded",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "receiver",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "kind",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TrancheTxRegistryV2.ReceiveKind"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "RequestTxRecorded",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "request_id",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vault_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "vault_address",
+                "type": "bytes32",
+                "indexed": false,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "amount",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "order_type",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            },
+            {
+                "name": "step",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TrancheTxRegistryV2.RequestStep"
+            },
+            {
+                "name": "adapter_chain_ids",
+                "type": "uint64[]",
+                "indexed": false,
+                "internalType": "uint64[]"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "bridge_status",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "SettlementTxRecorded",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "settlement_id",
+                "type": "uint256",
+                "indexed": true,
+                "internalType": "uint256"
+            },
+            {
+                "name": "spoke_chain_id",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "step",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TrancheTxRegistryV2.SettlementStep"
+            },
+            {
+                "name": "collect_response_chain_ids",
+                "type": "uint64[]",
+                "indexed": false,
+                "internalType": "uint64[]"
+            },
+            {
+                "name": "finalize_chain_ids",
+                "type": "uint64[]",
+                "indexed": false,
+                "internalType": "uint64[]"
+            },
+            {
+                "name": "request_ids",
+                "type": "bytes32[]",
+                "indexed": false,
+                "internalType": "bytes32[]"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "bridge_status",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            },
+            {
+                "name": "chunk_index",
+                "type": "uint32",
+                "indexed": false,
+                "internalType": "uint32"
+            },
+            {
+                "name": "chunk_count",
+                "type": "uint32",
+                "indexed": false,
+                "internalType": "uint32"
+            }
+        ],
+        "anonymous": false
+    },
+    {
+        "type": "event",
+        "name": "WhitelistTxRecorded",
+        "inputs": [
+            {
+                "name": "who",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "vault",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct TrancheTxRegistryV2.VaultInput",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "vault_address",
+                        "type": "bytes32",
+                        "internalType": "bytes32"
+                    }
+                ]
+            },
+            {
+                "name": "grant",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            },
+            {
+                "name": "nonce",
+                "type": "uint256",
+                "indexed": false,
+                "internalType": "uint256"
+            },
+            {
+                "name": "step",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "enum TrancheTxRegistryV2.WhitelistStep"
+            },
+            {
+                "name": "attestation",
+                "type": "tuple",
+                "indexed": false,
+                "internalType": "struct TrancheTxRegistryV2.TxAttestation",
+                "components": [
+                    {
+                        "name": "chain_id",
+                        "type": "uint64",
+                        "internalType": "uint64"
+                    },
+                    {
+                        "name": "tx_hash",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    }
+                ]
+            },
+            {
+                "name": "bridge_status",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            }
+        ],
+        "anonymous": false
     }
 ]

@@ -5,8 +5,8 @@ use crate::{
 	MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN, MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
-	AdapterInspect, FlowVersion, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
-	MAX_TRANCHE_CHAINS,
+	legacy::VaultIdV1 as VaultId, AdapterInspect, FlowVersion, ProductInspect, VaultInspect,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHE_CHAINS,
 };
 
 use super::pallet::*;
@@ -305,7 +305,7 @@ impl<T: Config> Pallet<T> {
 	) -> DispatchResult {
 		let opening = opening.ok_or(Error::<T>::RequestOpeningRequired)?;
 		ensure!(
-			T::Vaults::vault_belongs_to_product(product_id, &opening.vault),
+			T::Vaults::vault_belongs_to_product(product_id, &(&opening.vault).into()),
 			Error::<T>::VaultNotRegistered
 		);
 		ensure!(
@@ -920,8 +920,8 @@ impl<T: Config> Pallet<T> {
 			!WhitelistEntries::<T>::contains_key(key.clone()),
 			Error::<T>::WhitelistAlreadyTriggered
 		);
-		let product_id =
-			T::Vaults::product_id_for_vault(&vault).ok_or(Error::<T>::VaultNotRegistered)?;
+		let product_id = T::Vaults::product_id_for_vault(&(&vault).into())
+			.ok_or(Error::<T>::VaultNotRegistered)?;
 		// A `SingleChain` product has no Orchestrator-driven trigger — its
 		// whitelist action is `WhitelistApplied` alone (self-opening — see
 		// `handle_whitelist_applied`).
@@ -1004,7 +1004,7 @@ impl<T: Config> Pallet<T> {
 			},
 			None => {
 				ensure!(bridge_status.is_none(), Error::<T>::UnexpectedBridgeStatus);
-				let product_id = T::Vaults::product_id_for_vault(&vault)
+				let product_id = T::Vaults::product_id_for_vault(&(&vault).into())
 					.ok_or(Error::<T>::VaultNotRegistered)?;
 				ensure!(
 					T::Products::single_chain_id(product_id).is_some(),

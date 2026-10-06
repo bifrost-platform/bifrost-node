@@ -1,5 +1,7 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![warn(unused_crate_dependencies)]
+//! Non-EVM-compatible interface (`interface_universal.sol`), served at its own
+//! precompile address: every product/spoke-chain address is a `bytes32`
+//! `ChainAddress` (EVM addresses left-padded) and every foreign tx hash is
+//! `bytes`. The EVM-only interface in the crate root keeps its original ABI.
 
 //! EVM precompile for `pallet-tranche-custom-flows`.
 //!
@@ -16,7 +18,7 @@
 //!   it left-aligned in the 32-byte ABI word, ignoring the low 16 bytes.
 //! - `track_chain_id == 0` means the main lane (`TrackKey::None`); any other
 //!   value is `TrackKey::Some(chain)`.
-//! - `investor == address(0)` on `record_flow_tx` means "not investor-scoped /
+//! - `investor == bytes32(0)` on `record_flow_tx` means "not investor-scoped /
 //!   not the opening call" (`Option::None`).
 //! - `slot_metadata` empty bytes means "leave the stored value untouched"
 //!   (`Option::None`); a non-empty value overwrites. Overwriting with a
@@ -28,7 +30,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_evm::AddressMapping;
 use pallet_tranche_custom_flows::{
 	history::HISTORY_PAGE_SIZE, Attempt, Call as CustomFlowsCall, ChainId, FlowDescriptor, FlowId,
-	Lane, ProductId, SlotId, SlotRecord, TrackKey, TxHash,
+	Lane, ProductId, SlotId, SlotRecord, TrackKey, TxHash, MAX_TX_HASH_LEN,
 };
 use precompile_utils::{
 	prelude::*,
@@ -37,12 +39,9 @@ use precompile_utils::{
 		Codec,
 	},
 };
-use sp_core::{H160, H256, U256};
+use sp_core::{ConstU32, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, vec::Vec};
-
-pub mod universal;
-pub use universal::TrancheCustomFlowsUniversalPrecompile;
 
 // ---------------------------------------------------------------------------
 // EvmFlowId — Solidity `bytes16`
@@ -107,7 +106,10 @@ type EvmDescriptorTrackView = (Vec<EvmSlotDefView>, Vec<EvmTrackChainView>);
 /// encodes an N-value return; see interface.sol).
 type EvmFlowDescriptorView = (u16, u64, bool, Vec<EvmSlotDefView>, Vec<EvmDescriptorTrackView>);
 /// `TxRecord` — (chain_id, tx_hash, recorded_at)
-type EvmTxRecord = (u64, H256, U256);
+/// A tx identifier in its chain's native byte form (32 bytes for EVM/Stellar,
+/// 64 for Solana) — `bytes` on the ABI, bounded at `MAX_TX_HASH_LEN`.
+type EvmTxHash = BoundedBytes<ConstU32<MAX_TX_HASH_LEN>>;
+type EvmTxRecord = (u64, EvmTxHash, U256);
 /// `AttemptView` — (success, metadata, tx)
 type EvmAttemptView = (bool, UnboundedBytes, EvmTxRecord);
 /// `SlotView` — (slot_id, satisfied, slot_metadata, attempts)
@@ -118,14 +120,14 @@ type EvmSubLaneView = (u64, Vec<EvmSlotView>);
 type EvmSubLaneGroup = (u8, Vec<EvmSubLaneView>);
 /// `get_flow_instance` return — flat tuple (investor, closed, pending_lanes, opened_at,
 /// main_lane, sub_tracks), NOT a single wrapping struct (see `EvmFlowDescriptorView`).
-type EvmFlowInstanceView = (Address, bool, u16, u64, Vec<EvmSlotView>, Vec<EvmSubLaneGroup>);
+type EvmFlowInstanceView = (H256, bool, u16, u64, Vec<EvmSlotView>, Vec<EvmSubLaneGroup>);
 
 /// `keccak256("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes32,bool)")` —
 /// mirrors the pallet's own `FlowTxRecorded` event so EVM-side indexers can follow
 /// attestations (incl. the attested `chain_id` / `tx_hash`) via `eth_getLogs` on the
 /// precompile address (parity with `precompile-tranche-tx-registry`).
 pub(crate) const SELECTOR_LOG_FLOW_TX_RECORDED: [u8; 32] =
-	keccak256!("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes32,bool)");
+	keccak256!("FlowTxRecorded(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes,bool)");
 
 /// Ceiling on the size of an investor's `InvestorActiveFlows` `Vec` (across all
 /// products/flows) that `get_investor_active_flows` will decode+scan. An
@@ -178,10 +180,10 @@ const MAX_INSTANCE_SCAN_BYTES: usize = 2 * 1024 * 1024;
 /// Wraps `pallet_tranche_custom_flows`'s `record_flow_tx` extrinsic and exposes
 /// read-only views over its storage. `set_flow_descriptor` is governance-only
 /// and intentionally not surfaced here.
-pub struct TrancheCustomFlowsPrecompile<Runtime>(PhantomData<Runtime>);
+pub struct TrancheCustomFlowsUniversalPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
-impl<Runtime> TrancheCustomFlowsPrecompile<Runtime>
+impl<Runtime> TrancheCustomFlowsUniversalPrecompile<Runtime>
 where
 	Runtime: pallet_tranche_custom_flows::Config + pallet_evm::Config + frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
@@ -204,9 +206,9 @@ where
 	/// @param success         Whether this observation satisfies the slot
 	/// @param attempt_metadata Opaque per-attempt bytes (empty = none)
 	/// @param slot_metadata    Opaque per-slot bytes, overwrites the stored value (empty = leave untouched)
-	/// @param investor        Investor for the opening call iff the flow is investor-scoped; address(0) otherwise
+	/// @param investor        Investor (bytes32, EVM left-padded) for the opening call iff the flow is investor-scoped; bytes32(0) otherwise
 	#[precompile::public(
-		"record_flow_tx(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes32,bool,bytes,bytes,address)"
+		"record_flow_tx(uint64,bytes16,bytes32,uint64,uint8,uint64,bytes,bool,bytes,bytes,bytes32)"
 	)]
 	fn record_flow_tx(
 		handle: &mut impl PrecompileHandle,
@@ -216,11 +218,11 @@ where
 		track_chain_id: u64,
 		slot_id: u8,
 		chain_id: u64,
-		tx_hash: H256,
+		tx_hash: EvmTxHash,
 		success: bool,
 		attempt_metadata: UnboundedBytes,
 		slot_metadata: UnboundedBytes,
-		investor: Address,
+		investor: H256,
 	) -> EvmResult {
 		let flow_id = flow_id.0;
 		let track_key: TrackKey = if track_chain_id == 0 { None } else { Some(track_chain_id) };
@@ -245,7 +247,7 @@ where
 			)
 		};
 
-		let investor = if investor.0 == H160::zero() { None } else { Some(investor.0.into()) };
+		let investor = if investor.is_zero() { None } else { Some(investor) };
 
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		let call = CustomFlowsCall::<Runtime>::record_flow_tx {
@@ -255,7 +257,7 @@ where
 			track_key,
 			slot_id,
 			chain_id,
-			tx_hash: TxHash::truncate_from(tx_hash.as_bytes().to_vec()),
+			tx_hash: TxHash::truncate_from(tx_hash.clone().into()),
 			success,
 			attempt_metadata,
 			slot_metadata,
@@ -292,19 +294,17 @@ where
 	/// growth is bounded by real, weight-metered `record_flow_tx` opens, not
 	/// something this call can be tricked into inflating (same rationale as
 	/// `precompile-tranche-tx-registry`). `MAX_ACTIVE_FLOWS` is a loud backstop.
-	#[precompile::public("get_investor_active_flows(address,uint64,bytes16)")]
+	#[precompile::public("get_investor_active_flows(bytes32,uint64,bytes16)")]
 	#[precompile::view]
 	fn get_investor_active_flows(
 		handle: &mut impl PrecompileHandle,
-		investor: Address,
+		investor: H256,
 		product_id: ProductId,
 		flow_id: EvmFlowId,
 	) -> EvmResult<Vec<H256>> {
 		let flow_id = flow_id.0;
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let flows = pallet_tranche_custom_flows::InvestorActiveFlows::<Runtime>::get(H256::from(
-			investor.0,
-		));
+		let flows = pallet_tranche_custom_flows::InvestorActiveFlows::<Runtime>::get(investor);
 		if flows.len() > MAX_ACTIVE_FLOWS {
 			return Err(revert("investor has too many active flows"));
 		}
@@ -325,11 +325,11 @@ where
 	/// `bp_tranche::history`), so this reads only the length header plus the one
 	/// or two pages the requested slice falls in, regardless of how long the
 	/// history has grown.
-	#[precompile::public("get_investor_flow_history(address,uint64,bytes16,uint256,uint256)")]
+	#[precompile::public("get_investor_flow_history(bytes32,uint64,bytes16,uint256,uint256)")]
 	#[precompile::view]
 	fn get_investor_flow_history(
 		handle: &mut impl PrecompileHandle,
-		investor: Address,
+		investor: H256,
 		product_id: ProductId,
 		flow_id: EvmFlowId,
 		offset: U256,
@@ -346,11 +346,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost().saturating_mul(3))?;
 		let (instance_keys, total) =
 			pallet_tranche_custom_flows::Pallet::<Runtime>::read_flow_history(
-				investor.0.into(),
-				product_id,
-				flow_id.0,
-				offset,
-				limit,
+				investor, product_id, flow_id.0, offset, limit,
 			);
 		Ok((instance_keys, U256::from(total)))
 	}
@@ -395,7 +391,7 @@ where
 			flow_id,
 			instance_key,
 		)) else {
-			return Ok((Address(H160::zero()), false, 0, 0, Vec::new(), Vec::new()));
+			return Ok((H256::zero(), false, 0, 0, Vec::new(), Vec::new()));
 		};
 
 		type Record<Runtime> = SlotRecord<BlockNumberFor<Runtime>>;
@@ -441,7 +437,7 @@ where
 		let main_view: Vec<EvmSlotView> = main_lane
 			.into_iter()
 			.map(|(slot_id, record)| encode_slot(slot_id, record))
-			.collect::<EvmResult<_>>()?;
+			.collect();
 
 		let sub_view: Vec<EvmSubLaneGroup> = sub
 			.into_iter()
@@ -453,18 +449,18 @@ where
 						let slot_views: Vec<EvmSlotView> = slots
 							.into_iter()
 							.map(|(slot_id, record)| encode_slot(slot_id, record))
-							.collect::<EvmResult<_>>()?;
-						Ok((chain, slot_views))
+							.collect();
+						(chain, slot_views)
 					})
-					.collect::<EvmResult<_>>()?;
-				Ok((track, lanes))
+					.collect();
+				(track, lanes)
 			})
-			.collect::<EvmResult<_>>()?;
+			.collect();
 
 		let opened_at: u64 = instance.opened_at.into().try_into().unwrap_or(u64::MAX);
 
 		Ok((
-			evm(&instance.investor.unwrap_or_default())?,
+			instance.investor.unwrap_or_default(),
 			instance.closed,
 			instance.pending_lanes,
 			opened_at,
@@ -484,47 +480,23 @@ fn topic_u256(value: U256) -> H256 {
 	H256::from(value.to_big_endian())
 }
 
-fn encode_slot<B: Into<U256>>(slot_id: SlotId, record: SlotRecord<B>) -> EvmResult<EvmSlotView> {
+fn encode_slot<B: Into<U256>>(slot_id: SlotId, record: SlotRecord<B>) -> EvmSlotView {
 	let attempts = record
 		.attempts
 		.into_iter()
 		.map(|attempt: Attempt<B>| {
-			Ok((
+			(
 				attempt.success,
 				UnboundedBytes::from(attempt.metadata.into_inner()),
 				(
 					attempt.tx.chain_id,
-					evm_tx_hash(&attempt.tx.tx_hash)?,
+					attempt.tx.tx_hash.into_inner().into(),
 					attempt.tx.recorded_at.into(),
 				),
-			))
+			)
 		})
-		.collect::<EvmResult<_>>()?;
-	Ok((slot_id, record.satisfied, UnboundedBytes::from(record.metadata.into_inner()), attempts))
-}
-
-// The original, EVM-only interface (`interface.sol`) keeps its ABI byte-for-byte.
-// Storage now holds 32-byte `ChainAddress`es and variable-length tx hashes, so a
-// value this ABI can't express (a non-EVM investor, a non-32-byte tx hash)
-// reverts and points at the universal precompile.
-
-pub(crate) const NON_EVM_VALUE: &str =
-	"non-EVM value; use the universal precompile at 0x0000000000000000000000000000000000000604";
-
-/// Narrows a `ChainAddress` back to an EVM address, reverting if it isn't one.
-fn evm(address: &H256) -> EvmResult<Address> {
-	if address.as_bytes()[..12].iter().any(|b| *b != 0) {
-		return Err(revert(NON_EVM_VALUE));
-	}
-	Ok(Address(H160::from_slice(&address.as_bytes()[12..])))
-}
-
-/// A stored tx hash as `bytes32`, reverting if it isn't 32 bytes long.
-fn evm_tx_hash(tx_hash: &TxHash) -> EvmResult<H256> {
-	if tx_hash.len() != 32 {
-		return Err(revert(NON_EVM_VALUE));
-	}
-	Ok(H256::from_slice(tx_hash))
+		.collect();
+	(slot_id, record.satisfied, UnboundedBytes::from(record.metadata.into_inner()), attempts)
 }
 
 fn encode_descriptor(descriptor: FlowDescriptor) -> EvmFlowDescriptorView {

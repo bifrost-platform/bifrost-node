@@ -12,6 +12,7 @@ repository = { workspace = true }
 parity-scale-codec = { workspace = true }
 scale-info = { workspace = true }
 ethereum = { workspace = true }
+log = { workspace = true }
 
 # Substrate
 frame-system = { workspace = true }
@@ -42,6 +43,7 @@ default = ["std"]
 std = [
 	"scale-info/std",
 	"ethereum/std",
+	"log/std",
 	"parity-scale-codec/std",
 	"frame-system/std",
 	"frame-support/std",

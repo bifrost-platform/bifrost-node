@@ -122,9 +122,18 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
+/// Every precompile address in this runtime's precompile set, as `H160`.
+pub struct PrecompileAddresses;
+impl frame_support::traits::Get<Vec<H160>> for PrecompileAddresses {
+	fn get() -> Vec<H160> {
+		Precompiles::used_addresses().map(Into::into).collect()
+	}
+}
+
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing
 /// `OnRuntimeUpgrade`.
-type SingleBlockMigrations = ();
+type SingleBlockMigrations =
+	(bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -163,7 +172,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 1_000_000,
+	spec_version: 1_000_001,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.

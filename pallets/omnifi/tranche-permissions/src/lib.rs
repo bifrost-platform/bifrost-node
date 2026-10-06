@@ -12,8 +12,7 @@ pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
 #[cfg(feature = "runtime-benchmarks")]
-use pallet_tranche_system::ProductId;
-use pallet_tranche_system::VaultId;
+use pallet_tranche_system::{ProductId, VaultId};
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
@@ -52,7 +51,11 @@ impl BenchmarkHelper for () {
 /// - `ProductAdmin` — exactly one. Pre-granted by sudo before `create_product` is ever called (see
 ///   pallet-tranche-system's `create_product` flow).
 /// - `OracleFeeder` — many.
-/// - `TrancheInvestor` — many, scoped to a specific tranche (`VaultId`), not the whole product.
+///
+/// Tranche investors are NOT a `Role`: an investor is identified by a
+/// `ChainAddress` on the vault's own (possibly non-EVM) chain, not by a Hub
+/// account, so they're managed through `grant_tranche_investor`/
+/// `revoke_tranche_investor` and stored in `TrancheInvestors` instead.
 ///
 /// No `Borrower` variant: a product can have multiple OffchainSource
 /// adapters, each potentially a different institution, so there's no single
@@ -80,6 +83,4 @@ pub enum Role {
 	/// on-chain extrinsic — reserved for a future on-chain NAV-feeding
 	/// mechanism; today NAV reaches Valuation entirely off-chain/externally.
 	OracleFeeder,
-	/// May submit deposit/redeem requests for a specific tranche.
-	TrancheInvestor(VaultId),
 }

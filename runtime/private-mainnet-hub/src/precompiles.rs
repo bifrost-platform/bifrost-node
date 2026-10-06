@@ -5,11 +5,15 @@ use pallet_evm_precompile_simple::{ECRecover, Identity, Ripemd160, Sha256};
 
 use precompile_permissioned_authority::PermissionedAuthorityPrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
-use precompile_tranche_custom_flows::TrancheCustomFlowsPrecompile;
+use precompile_tranche_custom_flows::{
+	TrancheCustomFlowsPrecompile, TrancheCustomFlowsUniversalPrecompile,
+};
 use precompile_tranche_investments::TrancheInvestmentsPrecompile;
 use precompile_tranche_investments_v2::TrancheInvestmentsV2Precompile;
-use precompile_tranche_permissions::TranchePermissionsPrecompile;
-use precompile_tranche_system::TrancheSystemPrecompile;
+use precompile_tranche_permissions::{
+	TranchePermissionsPrecompile, TranchePermissionsUniversalPrecompile,
+};
+use precompile_tranche_system::{TrancheSystemPrecompile, TrancheSystemUniversalPrecompile};
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
 use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2Precompile;
 
@@ -60,6 +64,21 @@ pub type BifrostPrecompilesAt<R> = (
 	// OmniFi tranche-* v2 precompiles (0x0300 block, same per-pallet offsets as v1):
 	PrecompileAt<AddressU64<769>, TrancheInvestmentsV2Precompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<771>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
+	// Non-EVM-compatible ("universal") interfaces of tranche-system/permissions/custom-flows
+	// — the 0x0600 block, same per-pallet offsets as the EVM-only 0x0200 block. Same
+	// storage; spoke-chain addresses are `bytes32` and foreign tx hashes `bytes` here,
+	// while the 0x0200 precompiles keep their original EVM-only ABI.
+	PrecompileAt<AddressU64<1536>, TrancheSystemUniversalPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<
+		AddressU64<1538>,
+		TranchePermissionsUniversalPrecompile<R>,
+		TranchePermissionsPrecompilesChecks,
+	>,
+	PrecompileAt<
+		AddressU64<1540>,
+		TrancheCustomFlowsUniversalPrecompile<R>,
+		BifrostPrecompilesChecks,
+	>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<

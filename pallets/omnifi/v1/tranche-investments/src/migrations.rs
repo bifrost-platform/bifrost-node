@@ -2,7 +2,7 @@ use crate::{
 	Allocation, ApprovedInvestment, Config, OrderType, Pallet, RequestId, RequestedInvestment,
 	Settlement, SettlementId, TrancheSettle, MAX_ALLOCATIONS,
 };
-use pallet_tranche_system::{ProductId, VaultId};
+use pallet_tranche_system::{legacy::VaultIdV1 as VaultId, ProductId};
 
 use frame_support::{
 	migrations::VersionedMigration, pallet_prelude::*, storage_alias,

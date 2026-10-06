@@ -1,15 +1,20 @@
+//! Storage migrations for `pallet-tranche-permissions`.
+//!
+//! Only the latest migration is kept: every live chain running this pallet is
+//! already at the version the previous one targeted (v1).
+
 use crate::{Config, Pallet};
-use pallet_tranche_system::{VaultId, VaultInspect};
+use pallet_tranche_system::{legacy::VaultIdV1, ChainAddress, ProductId, VaultId};
 
 use frame_support::{
 	migrations::VersionedMigration, pallet_prelude::*, storage_alias,
 	traits::UncheckedOnRuntimeUpgrade, weights::Weight, Blake2_128Concat,
 };
+use sp_core::H160;
 use sp_std::{marker::PhantomData, vec::Vec};
 
 pub(crate) const LOG_TARGET: &str = "runtime::tranche-permissions";
 
-// syntactic sugar for logging.
 macro_rules! log {
 	($level:tt, $patter:expr $(, $values:expr)* $(,)?) => {
 		log::$level!(
@@ -19,81 +24,67 @@ macro_rules! log {
 	};
 }
 
-/// v0 -> v1: re-keys `TrancheInvestors` from `VaultId` alone to
-/// `(product_id, VaultId)` — see the current storage definition's own doc
-/// comment for why keying on `VaultId` alone was unsafe: `VaultId` is only
-/// unique while a tranche is *currently registered* —
-/// `pallet_tranche_system::set_tranche(Remove)` frees it for a different
-/// product to register later, which would otherwise resurrect the old
-/// product's stale investor whitelist for the new one.
-pub mod v1 {
+/// v1 -> v2: non-EVM support. `TrancheInvestors`' investor key changes from the
+/// Hub `AccountId` (20-byte `AccountId20` on every Bifrost runtime, hence decoded
+/// here as `H160`) to a 32-byte `ChainAddress` on the vault's chain, and its
+/// `VaultId` key widens (`vault_address: H160 -> ChainAddress`). Both are
+/// left-padded; no entry is added or dropped.
+pub mod v2 {
 	use super::*;
 
 	#[storage_alias]
-	type TrancheInvestors<T: Config> = StorageDoubleMap<
+	pub type TrancheInvestors<T: Config> = StorageNMap<
 		Pallet<T>,
-		Blake2_128Concat,
-		VaultId,
-		Blake2_128Concat,
-		<T as frame_system::Config>::AccountId,
+		(
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, VaultIdV1>,
+			NMapKey<Blake2_128Concat, H160>,
+		),
 		(),
 	>;
 
-	pub struct MigrateV0ToV1<T>(PhantomData<T>);
+	pub struct MigrateV1ToV2<T>(PhantomData<T>);
 
-	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV0ToV1<T> {
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV1ToV2<T> {
 		fn on_runtime_upgrade() -> Weight {
-			let mut weight = Weight::zero();
+			// Collect before re-inserting — old and new keys share the map prefix.
+			let entries = TrancheInvestors::<T>::iter_keys().collect::<Vec<_>>();
+			let _ = TrancheInvestors::<T>::clear(u32::MAX, None);
+			let count = entries.len() as u64;
 
-			let entries = TrancheInvestors::<T>::drain().collect::<Vec<_>>();
-			// `drain()` removes each entry as it's iterated (1 read + 1 write per
-			// entry), separate from the per-entry lookup/reinsert charged below.
-			weight = weight.saturating_add(
-				T::DbWeight::get().reads_writes(entries.len() as u64, entries.len() as u64),
-			);
-			let mut migrated = 0u64;
-			let mut dropped = 0u64;
-			for (vault, who, ()) in entries {
-				weight = weight.saturating_add(T::DbWeight::get().reads(1));
-				match T::Vaults::product_id_for_vault(&vault) {
-					// Vault still registered — re-key under its *current*
-					// owner. If a different product re-registered this exact
-					// `VaultId` since this entry was originally written, this
-					// correctly attributes it to whoever owns the vault now
-					// rather than carrying the stale grant forward under the
-					// old product.
-					Some(product_id) => {
-						crate::TrancheInvestors::<T>::insert((product_id, vault, who), ());
-						migrated += 1;
-					},
-					// Vault no longer registered at all — no current owner to
-					// attribute this entry to, so it's simply dropped rather
-					// than kept under a synthetic product_id.
-					None => {
-						dropped += 1;
-					},
-				}
+			for (product_id, vault, investor) in entries {
+				let vault: VaultId = vault.into();
+				let investor: ChainAddress = investor.into();
+				crate::TrancheInvestors::<T>::insert((product_id, vault, investor), ());
 			}
-			weight = weight.saturating_add(T::DbWeight::get().writes(migrated));
 
-			log!(
-				info,
-				"tranche-permissions v0->v1: re-keyed {} TrancheInvestors entries under their current product_id, dropped {} whose vault is no longer registered ✅",
-				migrated,
-				dropped,
+			log!(info, "tranche-permissions v2: re-keyed {} TrancheInvestors entries", count);
+
+			// Each entry: 1 read + 1 write (clear) + 1 write (insert).
+			T::DbWeight::get().reads_writes(count, count.saturating_mul(2))
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
+			Ok((TrancheInvestors::<T>::iter_keys().count() as u32).encode())
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+			let before: u32 =
+				Decode::decode(&mut &state[..]).map_err(|_| "v2: bad pre_upgrade state")?;
+			ensure!(
+				crate::TrancheInvestors::<T>::iter_keys().count() as u32 == before,
+				"v2: TrancheInvestors entries lost"
 			);
-
-			weight
+			Ok(())
 		}
 	}
 
-	/// Gated `on_chain == 0 && in_code == 1`, and bumps the on-chain version
-	/// itself — wire this (not `MigrateV0ToV1` directly) into the pallet's
-	/// own hook.
-	pub type MigrateToV1<T> = VersionedMigration<
-		0,
+	pub type MigrateToV2<T> = VersionedMigration<
 		1,
-		MigrateV0ToV1<T>,
+		2,
+		MigrateV1ToV2<T>,
 		Pallet<T>,
 		<T as frame_system::Config>::DbWeight,
 	>;

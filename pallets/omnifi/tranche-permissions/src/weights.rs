@@ -64,6 +64,8 @@ use core::marker::PhantomData;
 pub trait WeightInfo {
 	fn grant_permission() -> Weight;
 	fn revoke_permission() -> Weight;
+	fn grant_tranche_investor() -> Weight;
+	fn revoke_tranche_investor() -> Weight;
 }
 
 /// Weights for `pallet_tranche_permissions` using the Substrate node and recommended hardware.
@@ -103,6 +105,16 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(4_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	fn grant_tranche_investor() -> Weight {
+		Weight::from_parts(25_000_000, 3763)
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
+	fn revoke_tranche_investor() -> Weight {
+		Weight::from_parts(27_000_000, 3889)
+			.saturating_add(T::DbWeight::get().reads(4_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
 }
 
 // For backwards compatibility and tests.
@@ -137,6 +149,16 @@ impl WeightInfo for () {
 		//  Measured:  `424`
 		//  Estimated: `3889`
 		// Minimum execution time: 22_000_000 picoseconds.
+		Weight::from_parts(27_000_000, 3889)
+			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	fn grant_tranche_investor() -> Weight {
+		Weight::from_parts(25_000_000, 3763)
+			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	fn revoke_tranche_investor() -> Weight {
 		Weight::from_parts(27_000_000, 3889)
 			.saturating_add(RocksDbWeight::get().reads(4_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))

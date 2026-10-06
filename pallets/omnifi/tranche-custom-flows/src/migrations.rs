@@ -1,21 +1,21 @@
 //! Storage migrations for `pallet-tranche-custom-flows`.
 //!
-//! The pallet shipped to a live chain with no `#[pallet::storage_version]`, so
-//! its on-chain version is the implicit `0`. `v1` is the first migration: it
-//! introduces `STORAGE_VERSION = 1` and converts the old unbounded
-//! `InvestorFlowHistory` `Vec` into the paged `InvestorFlowHistoryLen` +
-//! `InvestorFlowHistoryPage` storages (see `bp_tranche::history`).
+//! Only the latest migration is kept: every live chain running this pallet is
+//! already at the version the previous one targeted (v1).
 
 use crate::{
-	history::HISTORY_PAGE_SIZE, Config, FlowId, HistoryPage, InstanceKey, Pallet, ProductId,
+	Attempt, Config, FlowId, FlowInstance, HistoryPage, InstanceKey, Lane, Pallet, ProductId,
+	SlotId, SlotRecord, MAX_ATTEMPTS, MAX_ATTEMPT_METADATA, MAX_SLOT_METADATA,
 };
 
+use bp_tranche::legacy::EvmTxRecord;
 use frame_support::{
 	migrations::VersionedMigration, pallet_prelude::*, storage_alias,
 	traits::UncheckedOnRuntimeUpgrade, weights::Weight, Blake2_128Concat,
 };
-use sp_core::H160;
-use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, vec::Vec};
+use sp_core::{ConstU32, H160};
+use sp_runtime::BoundedVec;
+use sp_std::{marker::PhantomData, vec::Vec};
 
 pub(crate) const LOG_TARGET: &str = "runtime::tranche-custom-flows";
 
@@ -25,86 +25,204 @@ macro_rules! log {
 	};
 }
 
-/// v0 -> v1: split the single unbounded per-`(investor, product)`
-/// `InvestorFlowHistory` `Vec<(FlowId, InstanceKey)>` into the paged
-/// `InvestorFlowHistoryLen` + `InvestorFlowHistoryPage` storages, re-keyed by
-/// `(investor, product, flow)` — one cleanly-paginated list per flow, matching
-/// how `get_investor_flow_history` reads it. Entry order within each flow is
-/// preserved (oldest first).
-pub mod v1 {
+/// v1 -> v2: non-EVM support. Investors widen from `H160` to a 32-byte
+/// `ChainAddress` (left-padded) and recorded tx hashes from `H256` to a
+/// variable-length `TxHash`. Rewrites `FlowInstances`/`FlowSlots` values and
+/// re-keys the investor-keyed `InvestorActiveFlows`/`InvestorFlowHistoryLen`/
+/// `InvestorFlowHistoryPage`. No entry is added or dropped.
+pub mod v2 {
 	use super::*;
 
+	pub mod old {
+		use super::*;
+
+		#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug)]
+		pub struct Attempt<BlockNumber> {
+			pub tx: EvmTxRecord<BlockNumber>,
+			pub success: bool,
+			pub metadata: BoundedVec<u8, ConstU32<MAX_ATTEMPT_METADATA>>,
+		}
+
+		#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug)]
+		pub struct SlotRecord<BlockNumber> {
+			pub satisfied: bool,
+			pub metadata: BoundedVec<u8, ConstU32<MAX_SLOT_METADATA>>,
+			pub attempts: BoundedVec<Attempt<BlockNumber>, ConstU32<MAX_ATTEMPTS>>,
+		}
+
+		#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug)]
+		pub struct FlowInstance<BlockNumber> {
+			pub opened_at: BlockNumber,
+			pub investor: Option<H160>,
+			pub pending_lanes: u16,
+			pub closed: bool,
+		}
+	}
+
+	type BlockNumberOf<T> = frame_system::pallet_prelude::BlockNumberFor<T>;
+
 	#[storage_alias]
-	type InvestorFlowHistory<T: Config> = StorageDoubleMap<
+	pub type FlowInstances<T: Config> = StorageNMap<
 		Pallet<T>,
-		Blake2_128Concat,
-		H160,
-		Blake2_128Concat,
-		ProductId,
-		Vec<(FlowId, InstanceKey)>,
-		ValueQuery,
+		(
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, FlowId>,
+			NMapKey<Blake2_128Concat, InstanceKey>,
+		),
+		old::FlowInstance<BlockNumberOf<T>>,
 	>;
 
-	pub struct MigrateV0ToV1<T>(PhantomData<T>);
+	#[storage_alias]
+	pub type FlowSlots<T: Config> = StorageNMap<
+		Pallet<T>,
+		(
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, FlowId>,
+			NMapKey<Blake2_128Concat, InstanceKey>,
+			NMapKey<Blake2_128Concat, Lane>,
+			NMapKey<Blake2_128Concat, SlotId>,
+		),
+		old::SlotRecord<BlockNumberOf<T>>,
+	>;
 
-	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV0ToV1<T> {
+	#[storage_alias]
+	pub type InvestorActiveFlows<T: Config> =
+		StorageMap<Pallet<T>, Blake2_128Concat, H160, Vec<(ProductId, FlowId, InstanceKey)>>;
+
+	#[storage_alias]
+	pub type InvestorFlowHistoryLen<T: Config> = StorageNMap<
+		Pallet<T>,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, FlowId>,
+		),
+		u32,
+	>;
+
+	#[storage_alias]
+	pub type InvestorFlowHistoryPage<T: Config> = StorageNMap<
+		Pallet<T>,
+		(
+			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ProductId>,
+			NMapKey<Blake2_128Concat, FlowId>,
+			NMapKey<Blake2_128Concat, u32>,
+		),
+		HistoryPage<InstanceKey>,
+	>;
+
+	fn slot<BN>(old: old::SlotRecord<BN>) -> SlotRecord<BN> {
+		SlotRecord {
+			satisfied: old.satisfied,
+			metadata: old.metadata,
+			// Same bound on both sides (`MAX_ATTEMPTS`), so this never truncates.
+			attempts: BoundedVec::truncate_from(
+				old.attempts
+					.into_inner()
+					.into_iter()
+					.map(|a| Attempt { tx: a.tx.into(), success: a.success, metadata: a.metadata })
+					.collect(),
+			),
+		}
+	}
+
+	pub struct MigrateV1ToV2<T>(PhantomData<T>);
+
+	impl<T: Config> UncheckedOnRuntimeUpgrade for MigrateV1ToV2<T> {
 		fn on_runtime_upgrade() -> Weight {
-			let old_lists = InvestorFlowHistory::<T>::drain().collect::<Vec<_>>();
+			// Value-only rewrites: keys are unchanged, so each `insert` overwrites
+			// the entry it was read from. Collected first so no entry is read after
+			// being rewritten in the new shape.
+			let old_instances = FlowInstances::<T>::iter().collect::<Vec<_>>();
+			let instances = old_instances.len() as u64;
+			for ((product_id, flow_id, key), inst) in old_instances {
+				crate::FlowInstances::<T>::insert(
+					(product_id, flow_id, key),
+					FlowInstance {
+						opened_at: inst.opened_at,
+						investor: inst.investor.map(Into::into),
+						pending_lanes: inst.pending_lanes,
+						closed: inst.closed,
+					},
+				);
+			}
 
-			let mut old_list_count = 0u64;
-			let mut new_list_count = 0u64;
-			let mut page_writes = 0u64;
+			let old_slots = FlowSlots::<T>::iter().collect::<Vec<_>>();
+			let slots = old_slots.len() as u64;
+			for (key, record) in old_slots {
+				crate::FlowSlots::<T>::insert(key, slot(record));
+			}
 
-			for (investor, product_id, entries) in old_lists {
-				old_list_count = old_list_count.saturating_add(1);
+			// Investor-keyed maps: keys change, so collect, clear, re-insert.
+			let active = InvestorActiveFlows::<T>::drain().collect::<Vec<_>>();
+			let history_len = InvestorFlowHistoryLen::<T>::drain().collect::<Vec<_>>();
+			let history_pages = InvestorFlowHistoryPage::<T>::drain().collect::<Vec<_>>();
+			let rekeyed = (active.len() + history_len.len() + history_pages.len()) as u64;
 
-				// Group by flow_id, preserving append order within each group.
-				let mut by_flow: BTreeMap<FlowId, Vec<InstanceKey>> = BTreeMap::new();
-				for (flow_id, instance_key) in entries {
-					by_flow.entry(flow_id).or_default().push(instance_key);
-				}
-
-				for (flow_id, keys) in by_flow {
-					let len = keys.len() as u32;
-					for (page_idx, chunk) in keys.chunks(HISTORY_PAGE_SIZE as usize).enumerate() {
-						// `chunk.len() <= HISTORY_PAGE_SIZE` — never truncates.
-						crate::InvestorFlowHistoryPage::<T>::insert(
-							(investor, product_id, flow_id, page_idx as u32),
-							HistoryPage::truncate_from(chunk.to_vec()),
-						);
-						page_writes = page_writes.saturating_add(1);
-					}
-					crate::InvestorFlowHistoryLen::<T>::insert(
-						(investor, product_id, flow_id),
-						len,
-					);
-					new_list_count = new_list_count.saturating_add(1);
-				}
+			for (investor, flows) in active {
+				let investor: crate::ChainAddress = investor.into();
+				crate::InvestorActiveFlows::<T>::insert(investor, flows);
+			}
+			for ((investor, product_id, flow_id), len) in history_len {
+				let investor: crate::ChainAddress = investor.into();
+				crate::InvestorFlowHistoryLen::<T>::insert((investor, product_id, flow_id), len);
+			}
+			for ((investor, product_id, flow_id, page), entries) in history_pages {
+				let investor: crate::ChainAddress = investor.into();
+				crate::InvestorFlowHistoryPage::<T>::insert(
+					(investor, product_id, flow_id, page),
+					entries,
+				);
 			}
 
 			log!(
 				info,
-				"tranche-custom-flows v0->v1: paged {} InvestorFlowHistory lists into {} per-flow lists ({} page writes) ✅",
-				old_list_count,
-				new_list_count,
-				page_writes,
+				"tranche-custom-flows v2: migrated {} instances, {} slots, re-keyed {} investor entries",
+				instances,
+				slots,
+				rekeyed
 			);
 
-			// reads: one per drained old key. writes: drained key removed + each
-			// page + each len header.
+			// Value rewrites: 1 read + 1 write each; re-keys: 1 read + 2 writes each.
 			T::DbWeight::get().reads_writes(
-				old_list_count,
-				old_list_count.saturating_add(page_writes).saturating_add(new_list_count),
+				instances + slots + rekeyed,
+				instances + slots + rekeyed.saturating_mul(2),
 			)
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
+			let counts: (u32, u32, u32, u32, u32) = (
+				FlowInstances::<T>::iter_keys().count() as u32,
+				FlowSlots::<T>::iter_keys().count() as u32,
+				InvestorActiveFlows::<T>::iter_keys().count() as u32,
+				InvestorFlowHistoryLen::<T>::iter_keys().count() as u32,
+				InvestorFlowHistoryPage::<T>::iter_keys().count() as u32,
+			);
+			Ok(counts.encode())
+		}
+
+		#[cfg(feature = "try-runtime")]
+		fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+			let (instances, slots, active, len, pages): (u32, u32, u32, u32, u32) =
+				Decode::decode(&mut &state[..]).map_err(|_| "v2: bad pre_upgrade state")?;
+			ensure!(crate::FlowInstances::<T>::iter().count() as u32 == instances, "v2: instances");
+			ensure!(crate::FlowSlots::<T>::iter().count() as u32 == slots, "v2: slots");
+			ensure!(crate::InvestorActiveFlows::<T>::iter().count() as u32 == active, "v2: active");
+			ensure!(crate::InvestorFlowHistoryLen::<T>::iter().count() as u32 == len, "v2: len");
+			ensure!(
+				crate::InvestorFlowHistoryPage::<T>::iter().count() as u32 == pages,
+				"v2: pages"
+			);
+			Ok(())
 		}
 	}
 
-	/// Gated `on_chain == 0 && in_code == 1`; bumps the on-chain version. Wire
-	/// this (not `MigrateV0ToV1` directly) into `Pallet::on_runtime_upgrade`.
-	pub type MigrateToV1<T> = VersionedMigration<
-		0,
+	pub type MigrateToV2<T> = VersionedMigration<
 		1,
-		MigrateV0ToV1<T>,
+		2,
+		MigrateV1ToV2<T>,
 		Pallet<T>,
 		<T as frame_system::Config>::DbWeight,
 	>;

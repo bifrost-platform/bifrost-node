@@ -951,6 +951,7 @@ dependencies = [
  "ethereum",
  "frame-support",
  "frame-system",
+ "log",
  "pallet-bfc-utility",
  "pallet-bifrost-evm-tx-payment",
  "pallet-evm",

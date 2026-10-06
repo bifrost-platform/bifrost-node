@@ -4,7 +4,7 @@ use crate::{
 	SettlementChainEntry, SettlementId, TxRecord, WhitelistEntry, WhitelistNonce,
 	MAX_SETTLEMENT_REQUESTS,
 };
-use pallet_tranche_system::{ProductId, VaultId};
+use pallet_tranche_system::{legacy::VaultIdV1 as VaultId, ProductId};
 
 use frame_support::{
 	migrations::VersionedMigration, pallet_prelude::*, storage_alias,

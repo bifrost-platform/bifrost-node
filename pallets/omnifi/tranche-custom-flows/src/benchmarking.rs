@@ -22,7 +22,12 @@ use crate::{
 };
 use frame_benchmarking::v2::*;
 use frame_support::{traits::EnsureOrigin, BoundedVec};
-use sp_core::{H160, H256};
+use sp_core::H256;
+
+/// A worst-case (max-length, Solana-sized) tx hash.
+fn tx_hash(byte: u8) -> TxHash {
+	TxHash::truncate_from(sp_std::vec![byte; MAX_TX_HASH_LEN as usize])
+}
 use sp_std::{vec, vec::Vec};
 
 const PID: ProductId = 1;
@@ -120,11 +125,11 @@ mod benchmarks {
 				None, // track_key -> main lane
 				0u8,  // slot_id 0 -> opens the instance (first call only)
 				1u64,
-				H256::repeat_byte(i as u8 + 1), // +1: repeat_byte(0) is the zero hash (rejected)
-				false,                          // don't satisfy yet — avoid closing before the measured call
+				tx_hash(i as u8 + 1), // +1: an all-zero hash is rejected
+				false,                // don't satisfy yet — avoid closing before the measured call
 				Some(max_attempt_meta.clone()),
 				Some(max_attempt_meta.clone()), // also max out slot_metadata each time
-				Some(H160::repeat_byte(0x11)),
+				Some(ChainAddress::repeat_byte(0x11)),
 			)
 			.expect("seed attempt");
 		}
@@ -142,14 +147,14 @@ mod benchmarks {
 			PID,
 			FID,
 			instance_key,
-			None,                    // track_key -> main lane
-			0u8,                     // slot_id 0
-			1u64,                    // chain_id (attestation)
-			H256::repeat_byte(0xcd), // tx_hash (distinct from every seed attempt)
-			true,                    // success
+			None,          // track_key -> main lane
+			0u8,           // slot_id 0
+			1u64,          // chain_id (attestation)
+			tx_hash(0xcd), // tx_hash (distinct from every seed attempt)
+			true,          // success
 			Some(attempt_meta),
 			Some(slot_meta),
-			Some(H160::repeat_byte(0x11)), // investor (investor_scoped)
+			Some(ChainAddress::repeat_byte(0x11)), // investor (investor_scoped)
 		);
 
 		assert!(FlowInstances::<T>::contains_key((PID, FID, instance_key)));

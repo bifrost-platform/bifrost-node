@@ -1,7 +1,7 @@
 use crate::{
-	history, BridgeAttempt, BridgeAttempts, BridgeStatus, ChainId, HistoryPage, LegChunk,
-	LegChunks, PagedInvestorHistory, ProductId, RequestEntry, RequestExtraV2, RequestId,
-	RequestOpening, SettlementChainEntry, SettlementExtraV2, SettlementId, SettlementStep,
+	history, BridgeAttempt, BridgeAttempts, BridgeStatus, ChainAddress, ChainId, HistoryPage,
+	LegChunk, LegChunks, PagedInvestorHistory, ProductId, RequestEntry, RequestExtraV2, RequestId,
+	RequestOpening, SettlementChainEntry, SettlementExtraV2, SettlementId, SettlementStep, TxHash,
 	TxRecord, WhitelistEntry, WhitelistNonce, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
 	MAX_SETTLEMENT_REQUESTS,
 };
@@ -18,7 +18,7 @@ use frame_support::{
 	traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_core::{ConstU32, H160, H256};
+use sp_core::ConstU32;
 use sp_std::vec::Vec;
 
 // Private, non-extrinsic helpers — kept in their own `impl` block, separate from
@@ -165,7 +165,7 @@ impl<T: Config> Pallet<T> {
 	fn close_one_active_request(
 		product_id: ProductId,
 		request_id: RequestId,
-		investor: H160,
+		investor: ChainAddress,
 		tx: TxRecord<BlockNumberFor<T>>,
 	) {
 		let mut requests = InvestorActiveRequests::<T>::get(investor);
@@ -1176,7 +1176,7 @@ impl<T: Config> Pallet<T> {
 	/// newer than what's currently stored (or nothing is stored yet) —
 	/// shared by `WhitelistRequested` and `WhitelistApplied`'s self-open
 	/// case, the two steps that can open a fresh `WhitelistEntries` entry.
-	fn bump_latest_whitelist_nonce(who: H160, vault: VaultId, nonce: WhitelistNonce) {
+	fn bump_latest_whitelist_nonce(who: ChainAddress, vault: VaultId, nonce: WhitelistNonce) {
 		let is_newer = match LatestWhitelistNonce::<T>::get(who, vault.clone()) {
 			Some(latest) => nonce > latest,
 			None => true,
@@ -1190,7 +1190,7 @@ impl<T: Config> Pallet<T> {
 	/// opens a fresh `WhitelistEntries` entry.
 	pub(crate) fn handle_whitelist_requested(
 		vault: VaultId,
-		who: H160,
+		who: ChainAddress,
 		grant: bool,
 		nonce: WhitelistNonce,
 		bridge_status: Option<BridgeStatus>,
@@ -1230,7 +1230,7 @@ impl<T: Config> Pallet<T> {
 	/// somehow exists).
 	pub(crate) fn handle_whitelist_bridge_executed(
 		vault: VaultId,
-		who: H160,
+		who: ChainAddress,
 		grant: bool,
 		nonce: WhitelistNonce,
 		bridge_status: Option<BridgeStatus>,
@@ -1261,7 +1261,7 @@ impl<T: Config> Pallet<T> {
 	/// self-open case.
 	pub(crate) fn handle_whitelist_applied(
 		vault: VaultId,
-		who: H160,
+		who: ChainAddress,
 		grant: bool,
 		nonce: WhitelistNonce,
 		bridge_status: Option<BridgeStatus>,
@@ -1316,7 +1316,11 @@ impl<T: Config> Pallet<T> {
 
 	/// Append one `request_id` to `(investor, product_id)`'s paged request
 	/// history (`RequestStep::Requested`).
-	pub fn push_request_history(investor: H160, product_id: ProductId, request_id: RequestId) {
+	pub fn push_request_history(
+		investor: ChainAddress,
+		product_id: ProductId,
+		request_id: RequestId,
+	) {
 		history::history_push::<RequestHistoryIndex<T>>((investor, product_id), request_id);
 	}
 
@@ -1324,7 +1328,7 @@ impl<T: Config> Pallet<T> {
 	/// most-recent-first: up to `limit` entries after skipping the newest
 	/// `offset`, plus the full history length. `offset >= total` ⇒ empty.
 	pub fn read_request_history(
-		investor: H160,
+		investor: ChainAddress,
 		product_id: ProductId,
 		offset: u32,
 		limit: u32,
@@ -1334,18 +1338,22 @@ impl<T: Config> Pallet<T> {
 
 	/// Append one `(vault, tx_hash)` to `(investor, product_id)`'s paged receive
 	/// history (`record_receive_tx`).
-	pub fn push_receive_history(investor: H160, product_id: ProductId, entry: (VaultId, H256)) {
+	pub fn push_receive_history(
+		investor: ChainAddress,
+		product_id: ProductId,
+		entry: (VaultId, TxHash),
+	) {
 		history::history_push::<ReceiveHistoryIndex<T>>((investor, product_id), entry);
 	}
 
 	/// Read a page of `(investor, product_id)`'s receive history,
 	/// most-recent-first. Same contract as [`Self::read_request_history`].
 	pub fn read_receive_history(
-		investor: H160,
+		investor: ChainAddress,
 		product_id: ProductId,
 		offset: u32,
 		limit: u32,
-	) -> (Vec<(VaultId, H256)>, u32) {
+	) -> (Vec<(VaultId, TxHash)>, u32) {
 		history::history_read::<ReceiveHistoryIndex<T>>((investor, product_id), offset, limit)
 	}
 }
@@ -1355,7 +1363,7 @@ impl<T: Config> Pallet<T> {
 pub struct RequestHistoryIndex<T>(PhantomData<T>);
 
 impl<T: Config> PagedInvestorHistory for RequestHistoryIndex<T> {
-	type Key = (H160, ProductId);
+	type Key = (ChainAddress, ProductId);
 	type Entry = RequestId;
 
 	fn len((investor, product_id): Self::Key) -> u32 {
@@ -1383,8 +1391,8 @@ impl<T: Config> PagedInvestorHistory for RequestHistoryIndex<T> {
 pub struct ReceiveHistoryIndex<T>(PhantomData<T>);
 
 impl<T: Config> PagedInvestorHistory for ReceiveHistoryIndex<T> {
-	type Key = (H160, ProductId);
-	type Entry = (VaultId, H256);
+	type Key = (ChainAddress, ProductId);
+	type Entry = (VaultId, TxHash);
 
 	fn len((investor, product_id): Self::Key) -> u32 {
 		InvestorReceiveHistoryLen::<T>::get(investor, product_id)

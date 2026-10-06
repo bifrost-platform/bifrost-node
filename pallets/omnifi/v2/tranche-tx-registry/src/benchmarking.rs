@@ -49,10 +49,11 @@ use crate::{
 	BenchmarkHelper, OrderType, ReceiveKind, RequestOpening, RequestStep, SettlementStep,
 	WhitelistStep, MAX_SETTLEMENT_REQUESTS,
 };
+use bp_tranche::MAX_TX_HASH_LEN;
 use frame_benchmarking::v2::*;
 use frame_support::{traits::EnsureOrigin, BoundedVec};
 use frame_system::RawOrigin;
-use pallet_tranche_system::VaultId;
+use pallet_tranche_system::{ChainAddress, VaultId};
 use sp_core::{H160, H256, U256};
 use sp_std::vec::Vec;
 
@@ -67,11 +68,18 @@ fn recorder_origin<T: Config>() -> T::RuntimeOrigin {
 	T::BenchmarkHelper::seed_recorder();
 	T::RecorderOrigin::try_successful_origin().expect("RecorderOrigin benchmark helper")
 }
-fn h160(n: u64) -> H160 {
-	H160::from_low_u64_be(n)
+fn h160(n: u64) -> ChainAddress {
+	H160::from_low_u64_be(n).into()
 }
 fn h256(n: u64) -> H256 {
 	H256::from_low_u64_be(n)
+}
+
+/// A worst-case (max-length) tx hash — the Solana-sized 64 bytes.
+fn tx_hash(n: u64) -> TxHash {
+	let mut bytes = [0xffu8; MAX_TX_HASH_LEN as usize];
+	bytes[..8].copy_from_slice(&n.to_be_bytes());
+	TxHash::truncate_from(bytes.to_vec())
 }
 fn vault(seed: u64) -> VaultId {
 	VaultId { chain_id: 1, vault_address: h160(0x10_000 + seed) }
@@ -88,7 +96,7 @@ fn open_request<T: Config>(request_id: RequestId) {
 /// not additionally fold in `close_one_active_request`'s own O(that
 /// investor's list length) position-scan cost by piling every request onto a
 /// single investor).
-fn open_request_for<T: Config>(request_id: RequestId, investor: H160) {
+fn open_request_for<T: Config>(request_id: RequestId, investor: ChainAddress) {
 	let v = vault(request_id.to_low_u64_be());
 	T::BenchmarkHelper::register_vault(PID, v.clone());
 	Pallet::<T>::record_request_tx(
@@ -104,7 +112,7 @@ fn open_request_for<T: Config>(request_id: RequestId, investor: H160) {
 		None,
 		RequestStep::Requested,
 		1u64,
-		h256(request_id.to_low_u64_be()),
+		tx_hash(request_id.to_low_u64_be()),
 		None,
 		None,
 	)
@@ -142,7 +150,7 @@ mod benchmarks {
 			None,
 			RequestStep::Requested,
 			1u64,
-			h256(0xa1),
+			tx_hash(0xa1),
 			None,
 			None,
 		);
@@ -171,7 +179,7 @@ mod benchmarks {
 			Some(request_ids),
 			SettlementStep::RequestsApproved,
 			1u64,
-			h256(0x5e7),
+			tx_hash(0x5e7),
 			None,
 			0u32,
 			0u32,
@@ -220,7 +228,7 @@ mod benchmarks {
 				Some(request_ids),
 				SettlementStep::RequestsApproved,
 				1u64,
-				h256(0x5e8),
+				tx_hash(0x5e8),
 				None,
 				0u32,
 				0u32,
@@ -231,7 +239,7 @@ mod benchmarks {
 
 		let tx = TxRecord {
 			chain_id: 1u64,
-			tx_hash: h256(0x999),
+			tx_hash: tx_hash(0x999),
 			recorded_at: frame_system::Pallet::<T>::block_number(),
 		};
 
@@ -260,10 +268,10 @@ mod benchmarks {
 			U256::from(500u64),
 			ReceiveKind::Deposit,
 			1u64,
-			h256(0x4ec),
+			tx_hash(0x4ec),
 		);
 
-		assert!(ReceiveEntries::<T>::contains_key((h160(0x1_2_3), v, h256(0x4ec))));
+		assert!(ReceiveEntries::<T>::contains_key((h160(0x1_2_3), v, tx_hash(0x4ec))));
 	}
 
 	#[benchmark]
@@ -280,7 +288,7 @@ mod benchmarks {
 			U256::from(1u64),
 			WhitelistStep::WhitelistRequested,
 			1u64,
-			h256(0x1157),
+			tx_hash(0x1157),
 			None,
 		);
 

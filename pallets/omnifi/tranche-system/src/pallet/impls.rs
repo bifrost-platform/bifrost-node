@@ -1,19 +1,18 @@
 use crate::{
-	AdapterInspect, AdapterKey, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
-	ProductDetails, ProductId, ProductInspect, Tranche, TrancheType, VaultId, VaultInspect,
-	VaultRegistration,
+	AdapterInspect, AdapterKey, ChainAddress, ChainTranches, CrudAction, FlowVersion,
+	MultichainAdapterInfo, ProductDetails, ProductId, ProductInspect, Tranche, TrancheType,
+	VaultId, VaultInspect, VaultRegistration,
 };
 
 use super::pallet::*;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
-use sp_core::H160;
 use sp_runtime::DispatchError;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 /// One vault `set_tranche`'s `Update` cascade renamed alongside the vault the
 /// caller directly targeted — `(vault, new_type, asset, shares, priority)`.
 /// See `cascade_tranche_type_rename`'s own doc comment.
-pub(crate) type CascadedTrancheUpdate = (VaultId, TrancheType, H160, H160, u8);
+pub(crate) type CascadedTrancheUpdate = (VaultId, TrancheType, ChainAddress, ChainAddress, u8);
 
 impl<T: Config> Pallet<T> {
 	/// Checks a `weightBps` set sums to exactly 10_000 (100%) — shared by
@@ -71,10 +70,8 @@ impl<T: Config> Pallet<T> {
 	/// per-entry storage lookup alone can't catch, since neither write has
 	/// happened yet at validation time (mirrors `ensure_tranches_are_unregistered`'s
 	/// same intra-call-duplicate guard for `tranches`).
-	pub(crate) fn ensure_multichain_adapters_are_unregistered<'a, AccountId: 'a>(
-		multichain_adapters: impl Iterator<
-			Item = (&'a AdapterKey, &'a MultichainAdapterInfo<AccountId>),
-		>,
+	pub(crate) fn ensure_multichain_adapters_are_unregistered<'a>(
+		multichain_adapters: impl Iterator<Item = (&'a AdapterKey, &'a MultichainAdapterInfo)>,
 	) -> DispatchResult {
 		let mut seen = BTreeSet::new();
 		for (key, info) in multichain_adapters {
@@ -209,12 +206,12 @@ impl<T: Config> Pallet<T> {
 	/// following one topology across three unrelated actions.
 	pub(crate) fn apply_set_tranche(
 		product_id: ProductId,
-		product: &mut ProductDetails<T::AccountId>,
+		product: &mut ProductDetails,
 		action: CrudAction,
 		vault: &VaultId,
 		tranche_type: &TrancheType,
-		asset: H160,
-		shares: H160,
+		asset: ChainAddress,
+		shares: ChainAddress,
 		priority: u8,
 	) -> Result<Vec<CascadedTrancheUpdate>, DispatchError> {
 		match action {
@@ -249,11 +246,11 @@ impl<T: Config> Pallet<T> {
 	/// re-adding a vault it previously removed.
 	fn apply_add_tranche(
 		product_id: ProductId,
-		product: &mut ProductDetails<T::AccountId>,
+		product: &mut ProductDetails,
 		vault: &VaultId,
 		tranche_type: &TrancheType,
-		asset: H160,
-		shares: H160,
+		asset: ChainAddress,
+		shares: ChainAddress,
 		priority: u8,
 	) -> DispatchResult {
 		let chain_tranches = match product {
@@ -303,10 +300,7 @@ impl<T: Config> Pallet<T> {
 	/// tombstones (never deletes — see `Vaults`' own storage doc comment)
 	/// its `Vaults` entry, then checks the two product-wide floors this
 	/// action alone can violate (see `ensure_product_minimums_after_remove`).
-	fn apply_remove_tranche(
-		product: &mut ProductDetails<T::AccountId>,
-		vault: &VaultId,
-	) -> DispatchResult {
+	fn apply_remove_tranche(product: &mut ProductDetails, vault: &VaultId) -> DispatchResult {
 		let removed_type = match product {
 			ProductDetails::Multichain(product) => {
 				let chain_id = vault.chain_id;
@@ -358,7 +352,7 @@ impl<T: Config> Pallet<T> {
 	/// one atomic product-wide group (see `cascade_tranche_type_rename`), so
 	/// neither can ever trip this — only `Remove` needs it.
 	fn ensure_product_minimums_after_remove(
-		product: &ProductDetails<T::AccountId>,
+		product: &ProductDetails,
 		removed_type: TrancheType,
 	) -> DispatchResult {
 		let total_tranches: usize = match product {
@@ -394,11 +388,11 @@ impl<T: Config> Pallet<T> {
 	/// Returns every OTHER vault the cascade renamed, for `set_tranche` to
 	/// emit one `Event::TrancheSet` per affected vault.
 	fn apply_update_tranche(
-		product: &mut ProductDetails<T::AccountId>,
+		product: &mut ProductDetails,
 		vault: &VaultId,
 		tranche_type: &TrancheType,
-		asset: H160,
-		shares: H160,
+		asset: ChainAddress,
+		shares: ChainAddress,
 		priority: u8,
 	) -> Result<Vec<CascadedTrancheUpdate>, DispatchError> {
 		match product {
@@ -472,8 +466,8 @@ impl<T: Config> Pallet<T> {
 		chain_tranches: &mut ChainTranches,
 		vault: &VaultId,
 		tranche_type: &TrancheType,
-		asset: H160,
-		shares: H160,
+		asset: ChainAddress,
+		shares: ChainAddress,
 		priority: u8,
 	) -> Result<TrancheType, DispatchError> {
 		let idx = chain_tranches
@@ -512,7 +506,7 @@ impl<T: Config> Pallet<T> {
 	/// address.
 	pub(crate) fn ensure_single_chain_adapters_are_unregistered<'a>(
 		chain_id: u64,
-		addresses: impl Iterator<Item = &'a H160>,
+		addresses: impl Iterator<Item = &'a ChainAddress>,
 	) -> DispatchResult {
 		for address in addresses {
 			let key = AdapterKey { address: *address, chain_id };
@@ -532,8 +526,8 @@ impl<T: Config> Pallet<T> {
 	pub(crate) fn replace_adapter_index<'a>(
 		product_id: ProductId,
 		chain_id: u64,
-		old_addresses: impl Iterator<Item = &'a H160>,
-		new_addresses: impl Iterator<Item = &'a H160> + Clone,
+		old_addresses: impl Iterator<Item = &'a ChainAddress>,
+		new_addresses: impl Iterator<Item = &'a ChainAddress> + Clone,
 	) -> DispatchResult {
 		for old_address in old_addresses {
 			AdapterIndex::<T>::remove(&AdapterKey { address: *old_address, chain_id });
@@ -555,11 +549,9 @@ impl<T: Config> Pallet<T> {
 	/// every MultichainAdapter (and its nested Adapters) in the given set.
 	/// Callers must have already validated uniqueness (see
 	/// `ensure_multichain_adapters_are_unregistered`).
-	pub(crate) fn insert_multichain_adapter_index<'a, AccountId: 'a>(
+	pub(crate) fn insert_multichain_adapter_index<'a>(
 		product_id: ProductId,
-		multichain_adapters: impl Iterator<
-			Item = (&'a AdapterKey, &'a MultichainAdapterInfo<AccountId>),
-		>,
+		multichain_adapters: impl Iterator<Item = (&'a AdapterKey, &'a MultichainAdapterInfo)>,
 	) {
 		for (key, info) in multichain_adapters {
 			MultichainAdapterIndex::<T>::insert(key, product_id);

@@ -1,7 +1,7 @@
 use crate::{
-	history, Attempt, ChainId, FlowDescriptor, FlowId, FlowInstance, HistoryPage, InstanceKey,
-	Lane, PagedInvestorHistory, ProductId, SlotId, TrackKey, MAX_ATTEMPT_METADATA,
-	MAX_SLOT_METADATA,
+	history, is_valid_tx_hash, Attempt, ChainAddress, ChainId, FlowDescriptor, FlowId,
+	FlowInstance, HistoryPage, InstanceKey, Lane, PagedInvestorHistory, ProductId, SlotId,
+	TrackKey, TxHash, MAX_ATTEMPT_METADATA, MAX_SLOT_METADATA,
 };
 use bp_tranche::TxRecord;
 use core::marker::PhantomData;
@@ -11,7 +11,7 @@ use frame_support::{
 	ensure,
 	pallet_prelude::{BoundedVec, DispatchResult},
 };
-use sp_core::{ConstU32, H160, H256};
+use sp_core::ConstU32;
 use sp_std::vec::Vec;
 
 /// Where a `slot_id` sits in a validated descriptor, plus the facts the close
@@ -134,11 +134,11 @@ impl<T: Config> Pallet<T> {
 		track_key: TrackKey,
 		slot_id: SlotId,
 		chain_id: ChainId,
-		tx_hash: H256,
+		tx_hash: TxHash,
 		success: bool,
 		attempt_metadata: Option<BoundedVec<u8, ConstU32<MAX_ATTEMPT_METADATA>>>,
 		slot_metadata: Option<BoundedVec<u8, ConstU32<MAX_SLOT_METADATA>>>,
-		investor: Option<H160>,
+		investor: Option<ChainAddress>,
 	) -> DispatchResult {
 		// step 2 — descriptor
 		let descriptor =
@@ -148,7 +148,7 @@ impl<T: Config> Pallet<T> {
 		let resolved = Self::resolve_lane(&descriptor, slot_id, track_key)?;
 
 		// step 4 — attestation format (checked before touching storage)
-		ensure!(!tx_hash.is_zero(), Error::<T>::ZeroTxHash);
+		ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::ZeroTxHash);
 
 		// step 5 — instance open / exist. There is no `open` flag: the instance
 		// is created by the first record of the first main slot, and every other
@@ -203,7 +203,7 @@ impl<T: Config> Pallet<T> {
 				slot_record
 					.attempts
 					.try_push(Attempt {
-						tx: TxRecord { chain_id, tx_hash, recorded_at: now },
+						tx: TxRecord { chain_id, tx_hash: tx_hash.clone(), recorded_at: now },
 						success,
 						metadata: attempt_metadata.unwrap_or_default(),
 					})
@@ -365,7 +365,7 @@ impl<T: Config> Pallet<T> {
 	/// Append one completed instance to `(investor, product_id, flow_id)`'s
 	/// paged history.
 	pub fn push_flow_history(
-		investor: H160,
+		investor: ChainAddress,
 		product_id: ProductId,
 		flow_id: FlowId,
 		instance_key: InstanceKey,
@@ -377,7 +377,7 @@ impl<T: Config> Pallet<T> {
 	/// history, most-recent-first: up to `limit` entries after skipping the
 	/// newest `offset`, plus the full history length. `offset >= total` ⇒ empty.
 	pub fn read_flow_history(
-		investor: H160,
+		investor: ChainAddress,
 		product_id: ProductId,
 		flow_id: FlowId,
 		offset: u32,
@@ -392,7 +392,7 @@ impl<T: Config> Pallet<T> {
 pub struct FlowHistoryIndex<T>(PhantomData<T>);
 
 impl<T: Config> PagedInvestorHistory for FlowHistoryIndex<T> {
-	type Key = (H160, ProductId, FlowId);
+	type Key = (ChainAddress, ProductId, FlowId);
 	type Entry = InstanceKey;
 
 	fn len((investor, product_id, flow_id): Self::Key) -> u32 {

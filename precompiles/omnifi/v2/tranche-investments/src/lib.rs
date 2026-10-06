@@ -19,11 +19,11 @@ use sp_std::{marker::PhantomData, vec::Vec};
 // ---------------------------------------------------------------------------
 
 pub(crate) const SELECTOR_LOG_INVESTMENT_REQUESTED: [u8; 32] =
-	keccak256!("InvestmentRequested(uint64,bytes32,uint256,uint64,address,address,uint256,uint8)");
+	keccak256!("InvestmentRequested(uint64,bytes32,uint256,uint64,bytes32,bytes32,uint256,uint8)");
 pub(crate) const SELECTOR_LOG_INVESTMENT_APPROVED: [u8; 32] =
-	keccak256!("InvestmentApproved(uint64,bytes32,uint256,(address,uint64,uint256)[],uint256)");
+	keccak256!("InvestmentApproved(uint64,bytes32,uint256,(bytes32,uint64,uint256)[],uint256)");
 pub(crate) const SELECTOR_LOG_ADAPTER_VALUATIONS_RECORDED: [u8; 32] = keccak256!(
-	"AdapterValuationsRecorded(uint64,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
+	"AdapterValuationsRecorded(uint64,uint256,(uint64,bytes32,uint256,uint64,uint256,(bytes32,uint256,uint256,uint256,bool)[])[])"
 );
 pub(crate) const SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED: [u8; 32] =
 	keccak256!("TrancheSettlementRecorded(uint64,uint256,uint256,uint256)");
@@ -33,18 +33,18 @@ pub(crate) const SELECTOR_LOG_TRANCHE_SETTLEMENT_RECORDED: [u8; 32] =
 // ---------------------------------------------------------------------------
 
 /// `Allocation` — (adapter_address, adapter_chain_id, amount)
-type EvmAllocation = (Address, u64, U256);
+type EvmAllocation = (H256, u64, U256);
 /// `InvestmentApprovalInput` — (request_id, allocations, receivable_amount)
 type EvmInvestmentApprovalInput = (H256, Vec<EvmAllocation>, U256);
 /// `AssetPosition` — (asset, amount, priceUsd, usdValue, counted)
-type EvmAssetPosition = (Address, U256, U256, U256, bool);
+type EvmAssetPosition = (H256, U256, U256, U256, bool);
 /// `AdapterValuation` — (chainId, adapter, epochId, valuationCutoff, principal, positions)
-type EvmAdapterValuation = (u64, Address, U256, u64, U256, Vec<EvmAssetPosition>);
+type EvmAdapterValuation = (u64, H256, U256, u64, U256, Vec<EvmAssetPosition>);
 /// `TrancheSettle` — (vault_chain_id, vault_address, tranche_nav, share_price,
 /// units_outstanding, principal)
-type EvmTrancheSettle = (u64, Address, U256, U256, U256, U256);
+type EvmTrancheSettle = (u64, H256, U256, U256, U256, U256);
 /// `VaultInput` — (chain_id, vault_address)
-type EvmVaultInput = (u64, Address);
+type EvmVaultInput = (u64, H256);
 /// `ChainSettlement` — (chain_id, share_prices, tranche_navs), one entry per chain that has
 /// at least one tranche — see `get_last_settlement`'s doc comment on why this is chain-grouped
 /// rather than one flat pair of arrays (tranche priority became chain-scoped, not
@@ -99,7 +99,7 @@ where
 	///
 	/// @param order_type 0 = redeem, 1 = deposit
 	#[precompile::public(
-		"record_investment_request(uint64,bytes32,uint256,uint64,address,address,uint256,uint8)"
+		"record_investment_request(uint64,bytes32,uint256,uint64,bytes32,bytes32,uint256,uint8)"
 	)]
 	fn record_investment_request(
 		handle: &mut impl PrecompileHandle,
@@ -107,8 +107,8 @@ where
 		request_id: H256,
 		settlement_id: U256,
 		vault_chain_id: u64,
-		vault_address: Address,
-		investor_address: Address,
+		vault_address: H256,
+		investor_address: H256,
 		amount: U256,
 		order_type: u8,
 	) -> EvmResult {
@@ -121,8 +121,8 @@ where
 			request_id,
 			settlement_id,
 			vault_chain_id,
-			vault_address: vault_address.0,
-			investor_address: investor_address.0,
+			vault_address,
+			investor_address,
 			amount,
 			order_type: decoded_order_type,
 		};
@@ -156,7 +156,7 @@ where
 	/// Record a pending request's full approval. See
 	/// `pallet_tranche_investments_v2::record_investment_approval`'s doc comment.
 	#[precompile::public(
-		"record_investment_approval(uint64,bytes32,uint256,(address,uint64,uint256)[],uint256)"
+		"record_investment_approval(uint64,bytes32,uint256,(bytes32,uint64,uint256)[],uint256)"
 	)]
 	fn record_investment_approval(
 		handle: &mut impl PrecompileHandle,
@@ -204,7 +204,7 @@ where
 	/// Batch form of `record_investment_approval`. See
 	/// `pallet_tranche_investments_v2::record_investment_approvals`'s doc comment.
 	#[precompile::public(
-		"record_investment_approvals(uint64,uint256,(bytes32,(address,uint64,uint256)[],uint256)[])"
+		"record_investment_approvals(uint64,uint256,(bytes32,(bytes32,uint64,uint256)[],uint256)[])"
 	)]
 	fn record_investment_approvals(
 		handle: &mut impl PrecompileHandle,
@@ -253,7 +253,7 @@ where
 	/// Record the finalized per-Adapter NAV breakdown for a settlement. See
 	/// `pallet_tranche_investments_v2::record_adapter_valuations`'s doc comment.
 	#[precompile::public(
-		"record_adapter_valuations(uint64,uint256,(uint64,address,uint256,uint64,uint256,(address,uint256,uint256,uint256,bool)[])[])"
+		"record_adapter_valuations(uint64,uint256,(uint64,bytes32,uint256,uint64,uint256,(bytes32,uint256,uint256,uint256,bool)[])[])"
 	)]
 	fn record_adapter_valuations(
 		handle: &mut impl PrecompileHandle,
@@ -292,7 +292,7 @@ where
 	/// product's finalized aggregate NAV. See
 	/// `pallet_tranche_investments_v2::record_settlement`'s doc comment.
 	#[precompile::public(
-		"record_settlement(uint64,uint256,(uint64,address,uint256,uint256,uint256,uint256)[],uint256,uint256)"
+		"record_settlement(uint64,uint256,(uint64,bytes32,uint256,uint256,uint256,uint256)[],uint256,uint256)"
 	)]
 	fn record_settlement(
 		handle: &mut impl PrecompileHandle,
@@ -415,31 +415,31 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		request_id: H256,
-	) -> EvmResult<(Address, u64, Address, U256, U256, u8, u8)> {
+	) -> EvmResult<(H256, u64, H256, U256, U256, u8, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
-		if let Some(requested) =
-			pallet_tranche_investments_v2::RequestedInvestments::<Runtime>::get(product_id, request_id)
-		{
+		if let Some(requested) = pallet_tranche_investments_v2::RequestedInvestments::<Runtime>::get(
+			product_id, request_id,
+		) {
 			return Ok((
-				Address(requested.investor_address),
+				requested.investor_address,
 				requested.vault.chain_id,
-				Address(requested.vault.vault_address),
+				requested.vault.vault_address,
 				requested.amount,
 				requested.settlement_id,
 				encode_order_type(requested.order_type),
 				0u8,
 			));
 		}
-		if let Some(approved) =
-			pallet_tranche_investments_v2::ApprovedInvestments::<Runtime>::get(product_id, request_id)
-		{
+		if let Some(approved) = pallet_tranche_investments_v2::ApprovedInvestments::<Runtime>::get(
+			product_id, request_id,
+		) {
 			let requested = &approved.requested;
 			return Ok((
-				Address(requested.investor_address),
+				requested.investor_address,
 				requested.vault.chain_id,
-				Address(requested.vault.vault_address),
+				requested.vault.vault_address,
 				requested.amount,
 				approved.settlement_id,
 				encode_order_type(requested.order_type),
@@ -455,7 +455,7 @@ where
 	/// @param product_id The product the tranche belongs to
 	/// @param tranche    The tranche's identifying vault (chain_id, vault_address)
 	/// @return units_outstanding, principal
-	#[precompile::public("get_tranche_state(uint64,(uint64,address))")]
+	#[precompile::public("get_tranche_state(uint64,(uint64,bytes32))")]
 	#[precompile::view]
 	fn get_tranche_state(
 		handle: &mut impl PrecompileHandle,
@@ -465,7 +465,7 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 		let (chain_id, vault_address) = tranche;
-		let vault = VaultId { chain_id, vault_address: vault_address.0 };
+		let vault = VaultId { chain_id, vault_address };
 
 		let last_id = pallet_tranche_investments_v2::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
@@ -609,7 +609,7 @@ where
 			.map(|settle| {
 				(
 					settle.vault.chain_id,
-					Address(settle.vault.vault_address),
+					settle.vault.vault_address,
 					settle.tranche_nav,
 					settle.share_price,
 					settle.units_outstanding,
@@ -706,7 +706,7 @@ where
 				.map(|settle| {
 					(
 						settle.vault.chain_id,
-						Address(settle.vault.vault_address),
+						settle.vault.vault_address,
 						settle.tranche_nav,
 						settle.share_price,
 						settle.units_outstanding,
@@ -832,9 +832,10 @@ where
 	) -> EvmResult<(U256, U256, u8)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
-		let approved =
-			pallet_tranche_investments_v2::ApprovedInvestments::<Runtime>::get(product_id, request_id)
-				.ok_or_else(|| revert("approval not found"))?;
+		let approved = pallet_tranche_investments_v2::ApprovedInvestments::<Runtime>::get(
+			product_id, request_id,
+		)
+		.ok_or_else(|| revert("approval not found"))?;
 		Ok((approved.settlement_id, approved.receivable_amount, 1u8))
 	}
 }
@@ -957,7 +958,7 @@ fn decode_allocations(
 ) -> EvmResult<BoundedVec<Allocation, ConstU32<MAX_ALLOCATIONS>>> {
 	let mut bounded = BoundedVec::<Allocation, ConstU32<MAX_ALLOCATIONS>>::default();
 	for (adapter_address, adapter_chain_id, amount) in allocations.iter().cloned() {
-		let adapter = AdapterKey { address: adapter_address.0, chain_id: adapter_chain_id };
+		let adapter = AdapterKey { address: adapter_address, chain_id: adapter_chain_id };
 		bounded
 			.try_push(Allocation { adapter, amount })
 			.map_err(|_| revert("too many allocations"))?;
@@ -989,26 +990,20 @@ fn decode_asset_positions(
 	let mut bounded = BoundedVec::<AssetPosition, ConstU32<MAX_ASSET_POSITIONS>>::default();
 	for (asset, amount, price_usd, usd_value, counted) in positions.iter().cloned() {
 		bounded
-			.try_push(AssetPosition { asset: asset.0, amount, price_usd, usd_value, counted })
+			.try_push(AssetPosition { asset, amount, price_usd, usd_value, counted })
 			.map_err(|_| revert("too many asset positions"))?;
 	}
 	Ok(bounded)
 }
 
 fn encode_asset_position(position: &AssetPosition) -> EvmAssetPosition {
-	(
-		Address(position.asset),
-		position.amount,
-		position.price_usd,
-		position.usd_value,
-		position.counted,
-	)
+	(position.asset, position.amount, position.price_usd, position.usd_value, position.counted)
 }
 
 fn encode_adapter_valuation(valuation: &AdapterValuation) -> EvmAdapterValuation {
 	(
 		valuation.chain_id,
-		Address(valuation.adapter),
+		valuation.adapter,
 		valuation.epoch_id,
 		valuation.valuation_cutoff,
 		valuation.principal,
@@ -1027,7 +1022,7 @@ fn decode_adapter_valuations(
 		bounded
 			.try_push(AdapterValuation {
 				chain_id,
-				adapter: adapter.0,
+				adapter,
 				epoch_id,
 				valuation_cutoff,
 				principal,
@@ -1051,7 +1046,7 @@ fn decode_tranche_settles(
 	for (vault_chain_id, vault_address, tranche_nav, share_price, units_outstanding, principal) in
 		tranches.iter().cloned()
 	{
-		let vault = VaultId { chain_id: vault_chain_id, vault_address: vault_address.0 };
+		let vault = VaultId { chain_id: vault_chain_id, vault_address };
 		bounded
 			.try_push(TrancheSettle {
 				vault,

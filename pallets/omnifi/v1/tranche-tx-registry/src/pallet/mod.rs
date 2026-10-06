@@ -8,8 +8,8 @@ use crate::{
 	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
-	AdapterInspect, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
-	MAX_TRANCHE_CHAINS,
+	legacy::VaultIdV1 as VaultId, AdapterInspect, ProductInspect, VaultInspect,
+	MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHE_CHAINS,
 };
 
 use frame_support::{
@@ -1140,7 +1140,7 @@ pub mod pallet {
 			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
 
 			ensure!(
-				T::Vaults::vault_belongs_to_product(product_id, &vault),
+				T::Vaults::vault_belongs_to_product(product_id, &(&vault).into()),
 				Error::<T>::VaultNotRegistered
 			);
 			ensure!(

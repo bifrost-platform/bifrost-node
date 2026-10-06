@@ -1,11 +1,11 @@
 mod impls;
 
 use crate::{
-	BridgeStatus, ChainId, HistoryPage, ProductId, ReceiveEntry, ReceiveKind, RequestChainEntry,
-	RequestEntry, RequestId, RequestOpening, RequestStep, SettlementChainEntry,
-	SettlementFlowExtension, SettlementId, SettlementStep, TxRecord, WeightInfo, WhitelistEntry,
-	WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN, MAX_SETTLEMENT_EXTRA_LEN,
-	MAX_SETTLEMENT_REQUESTS,
+	is_valid_tx_hash, BridgeStatus, ChainAddress, ChainId, HistoryPage, ProductId, ReceiveEntry,
+	ReceiveKind, RequestChainEntry, RequestEntry, RequestId, RequestOpening, RequestStep,
+	SettlementChainEntry, SettlementFlowExtension, SettlementId, SettlementStep, TxHash, TxRecord,
+	WeightInfo, WhitelistEntry, WhitelistNonce, WhitelistStep, MAX_REQUEST_EXTRA_LEN,
+	MAX_SETTLEMENT_EXTRA_LEN, MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{
 	AdapterInspect, ProductInspect, VaultId, VaultInspect, MAX_MULTICHAIN_ADAPTERS,
@@ -14,7 +14,7 @@ use pallet_tranche_system::{
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
 use frame_system::pallet_prelude::*;
-use sp_core::{ConstU32, H160, H256, U256};
+use sp_core::{ConstU32, U256};
 use sp_std::vec::Vec;
 
 #[frame_support::pallet]
@@ -373,7 +373,7 @@ pub mod pallet {
 			bridge_status: Option<BridgeStatus>,
 			step: RequestStep,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			/// `Some` iff `step == RequestStep::Extended` — the raw bytes this
 			/// call decoded into the calling product's `FlowVersion` extension
 			/// payload, echoed verbatim. `None` for every other step.
@@ -400,7 +400,7 @@ pub mod pallet {
 			bridge_status: Option<BridgeStatus>,
 			step: SettlementStep,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			/// This chunk's 0-indexed position within its leg, and the leg's
 			/// total chunk count — meaningful iff `step` is one of the six
 			/// chain-scoped leg steps (`CollectBridgeExecuted`/`NavReported`/
@@ -418,24 +418,24 @@ pub mod pallet {
 		ReceiveTxRecorded {
 			product_id: ProductId,
 			vault: VaultId,
-			investor: H160,
-			receiver: H160,
+			investor: ChainAddress,
+			receiver: ChainAddress,
 			amount: U256,
 			kind: ReceiveKind,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 		},
 		/// `(product_id, request_id)` was automatically removed from `investor`'s
 		/// `InvestorActiveRequests` list — a side effect of `record_settlement_tx`
 		/// recording that request's own origin chain reaching
 		/// `SettlementStep::SettleApplied` for the settlement it was
 		/// approved into.
-		ActiveRequestClosed { product_id: ProductId, request_id: RequestId, investor: H160 },
+		ActiveRequestClosed { product_id: ProductId, request_id: RequestId, investor: ChainAddress },
 		/// One tx in a whitelist grant/revoke action's pipeline was recorded.
 		WhitelistTxRecorded {
 			product_id: ProductId,
 			vault: VaultId,
-			who: H160,
+			who: ChainAddress,
 			grant: bool,
 			nonce: WhitelistNonce,
 			/// `Some` iff `step == WhitelistStep::BridgeExecuted` — same convention
@@ -443,7 +443,7 @@ pub mod pallet {
 			bridge_status: Option<BridgeStatus>,
 			step: WhitelistStep,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 		},
 	}
 
@@ -553,10 +553,10 @@ pub mod pallet {
 	/// across many products concurrently shouldn't be capped by an arbitrary
 	/// limit; `#[pallet::unbounded]` is required since plain `Vec` has no
 	/// `MaxEncodedLen` impl, same pattern as `pallet_tranche_system::Products`
-	/// (see its own doc comment). Keyed by `H160`, not `T::AccountId` — same
+	/// (see its own doc comment). Keyed by `ChainAddress`, not `T::AccountId` — same
 	/// reasoning as `RequestEntry::investor`.
 	pub type InvestorActiveRequests<T: Config> =
-		StorageMap<_, Blake2_128Concat, H160, Vec<(ProductId, RequestId)>, ValueQuery>;
+		StorageMap<_, Blake2_128Concat, ChainAddress, Vec<(ProductId, RequestId)>, ValueQuery>;
 
 	#[pallet::storage]
 	/// Logical length of `(investor, product)`'s request history — total
@@ -565,8 +565,15 @@ pub mod pallet {
 	/// investor/product with no requests. Paired with `InvestorRequestHistoryPage`;
 	/// see [`bp_tranche::history`] for the paged-list design (append touches only
 	/// the tail page, reads only the pages they return).
-	pub type InvestorRequestHistoryLen<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, ProductId, u32, ValueQuery>;
+	pub type InvestorRequestHistoryLen<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ChainAddress,
+		Blake2_128Concat,
+		ProductId,
+		u32,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	/// One page of `(investor, product)`'s request history, append-only and
@@ -578,7 +585,7 @@ pub mod pallet {
 	pub type InvestorRequestHistoryPage<T: Config> = StorageNMap<
 		_,
 		(
-			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ChainAddress>,
 			NMapKey<Blake2_128Concat, ProductId>,
 			NMapKey<Blake2_128Concat, u32>,
 		),
@@ -738,9 +745,9 @@ pub mod pallet {
 	pub type ReceiveEntries<T: Config> = StorageNMap<
 		_,
 		(
-			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ChainAddress>,
 			NMapKey<Blake2_128Concat, VaultId>,
-			NMapKey<Blake2_128Concat, H256>,
+			NMapKey<Blake2_128Concat, TxHash>,
 		),
 		ReceiveEntry<BlockNumberFor<T>>,
 	>;
@@ -752,8 +759,15 @@ pub mod pallet {
 	/// `0` if none. Paired with `InvestorReceiveHistoryPage`; the receive-side
 	/// mirror of `InvestorRequestHistoryLen` (see it, and [`bp_tranche::history`],
 	/// for the paged-list design).
-	pub type InvestorReceiveHistoryLen<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, ProductId, u32, ValueQuery>;
+	pub type InvestorReceiveHistoryLen<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ChainAddress,
+		Blake2_128Concat,
+		ProductId,
+		u32,
+		ValueQuery,
+	>;
 
 	#[pallet::storage]
 	/// One page of `(investor, product)`'s receive history, append-only and
@@ -765,11 +779,11 @@ pub mod pallet {
 	pub type InvestorReceiveHistoryPage<T: Config> = StorageNMap<
 		_,
 		(
-			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ChainAddress>,
 			NMapKey<Blake2_128Concat, ProductId>,
 			NMapKey<Blake2_128Concat, u32>,
 		),
-		HistoryPage<(VaultId, H256)>,
+		HistoryPage<(VaultId, TxHash)>,
 		ValueQuery,
 	>;
 
@@ -784,7 +798,7 @@ pub mod pallet {
 	pub type WhitelistEntries<T: Config> = StorageNMap<
 		_,
 		(
-			NMapKey<Blake2_128Concat, H160>,
+			NMapKey<Blake2_128Concat, ChainAddress>,
 			NMapKey<Blake2_128Concat, VaultId>,
 			NMapKey<Blake2_128Concat, WhitelistNonce>,
 		),
@@ -805,8 +819,14 @@ pub mod pallet {
 	/// one (e.g. from watching `WhitelistTxRecorded`), but only the latest is
 	/// discoverable on-chain without already knowing it — full history
 	/// browsing is an indexer's job, not something this pallet carries itself.
-	pub type LatestWhitelistNonce<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, H160, Blake2_128Concat, VaultId, WhitelistNonce>;
+	pub type LatestWhitelistNonce<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		ChainAddress,
+		Blake2_128Concat,
+		VaultId,
+		WhitelistNonce,
+	>;
 
 	// -----------------------------------------------------------------------
 	// Extrinsics
@@ -868,18 +888,18 @@ pub mod pallet {
 			adapter_chain_ids: Option<BoundedVec<ChainId, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>,
 			step: RequestStep,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			bridge_status: Option<BridgeStatus>,
 			extra: Option<BoundedVec<u8, ConstU32<MAX_REQUEST_EXTRA_LEN>>>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
-			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::TxHashRequired);
 			if step != RequestStep::Extended {
 				ensure!(extra.is_none(), Error::<T>::UnexpectedRequestExtra);
 			}
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
-			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			let tx = TxRecord { chain_id, tx_hash: tx_hash.clone(), recorded_at };
 			let local_chain_id = Self::local_chain_id(product_id);
 
 			match step {
@@ -1082,14 +1102,14 @@ pub mod pallet {
 			request_ids: Option<BoundedVec<RequestId, ConstU32<MAX_SETTLEMENT_REQUESTS>>>,
 			step: SettlementStep,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			bridge_status: Option<BridgeStatus>,
 			chunk_index: u32,
 			chunk_count: u32,
 			extra: Option<BoundedVec<u8, ConstU32<MAX_SETTLEMENT_EXTRA_LEN>>>,
 		) -> DispatchResultWithPostInfo {
 			T::RecorderOrigin::ensure_origin(origin)?;
-			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::TxHashRequired);
 			if step != SettlementStep::Extended {
 				ensure!(extra.is_none(), Error::<T>::UnexpectedSettlementExtra);
 			}
@@ -1107,7 +1127,7 @@ pub mod pallet {
 			}
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
-			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			let tx = TxRecord { chain_id, tx_hash: tx_hash.clone(), recorded_at };
 			// Captured before `request_ids` is moved into the `SettlementTxRecorded`
 			// event below — this is the same `n` the pre-dispatch weight above
 			// already declared, reused here to compute the actual (refunded) weight.
@@ -1243,32 +1263,32 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			product_id: ProductId,
 			vault: VaultId,
-			investor: H160,
-			receiver: H160,
+			investor: ChainAddress,
+			receiver: ChainAddress,
 			amount: U256,
 			kind: ReceiveKind,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
-			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::TxHashRequired);
 
 			ensure!(
 				T::Vaults::vault_belongs_to_product(product_id, &vault),
 				Error::<T>::VaultNotRegistered
 			);
 			ensure!(
-				!ReceiveEntries::<T>::contains_key((investor, vault.clone(), tx_hash)),
+				!ReceiveEntries::<T>::contains_key((investor, vault.clone(), tx_hash.clone())),
 				Error::<T>::ReceiveAlreadyRecorded
 			);
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
-			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			let tx = TxRecord { chain_id, tx_hash: tx_hash.clone(), recorded_at };
 			ReceiveEntries::<T>::insert(
-				(investor, vault.clone(), tx_hash),
+				(investor, vault.clone(), tx_hash.clone()),
 				ReceiveEntry { investor, vault: vault.clone(), receiver, amount, tx, kind },
 			);
-			Self::push_receive_history(investor, product_id, (vault.clone(), tx_hash));
+			Self::push_receive_history(investor, product_id, (vault.clone(), tx_hash.clone()));
 
 			Self::deposit_event(Event::ReceiveTxRecorded {
 				product_id,
@@ -1317,19 +1337,19 @@ pub mod pallet {
 		pub fn record_whitelist_tx(
 			origin: OriginFor<T>,
 			vault: VaultId,
-			who: H160,
+			who: ChainAddress,
 			grant: bool,
 			nonce: WhitelistNonce,
 			step: WhitelistStep,
 			chain_id: ChainId,
-			tx_hash: H256,
+			tx_hash: TxHash,
 			bridge_status: Option<BridgeStatus>,
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
-			ensure!(!tx_hash.is_zero(), Error::<T>::TxHashRequired);
+			ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::TxHashRequired);
 
 			let recorded_at = frame_system::Pallet::<T>::block_number();
-			let tx = TxRecord { chain_id, tx_hash, recorded_at };
+			let tx = TxRecord { chain_id, tx_hash: tx_hash.clone(), recorded_at };
 
 			let product_id = match step {
 				WhitelistStep::WhitelistRequested => Self::handle_whitelist_requested(

@@ -8,7 +8,7 @@ pub mod weights;
 pub use pallet::pallet::*;
 pub use weights::WeightInfo;
 
-use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
+use pallet_tranche_system::{AdapterKey, ChainAddress, ProductId, VaultId};
 
 /// Benchmark-only setup hook — seeds the pallet-tranche-system reverse indexes
 /// (`Vaults`/`MultichainAdapterIndex`/`AdapterIndex`) that this pallet reads
@@ -29,7 +29,7 @@ impl BenchmarkHelper for () {
 }
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, H160, H256, U256};
+use sp_core::{ConstU32, H256, U256};
 use sp_runtime::{BoundedVec, RuntimeDebug};
 use sp_std::marker::PhantomData;
 
@@ -123,7 +123,7 @@ pub struct RequestedInvestment<BlockNumber> {
 	/// approved within the same window it arrived in.
 	pub settlement_id: SettlementId,
 	pub vault: VaultId,
-	pub investor_address: H160,
+	pub investor_address: ChainAddress,
 	/// Investor's full requested amount (18-decimal), pre-allocation.
 	pub amount: U256,
 	pub order_type: OrderType,
@@ -217,7 +217,7 @@ pub struct AdapterValuation {
 	/// struct's field names/casing intentionally follow interface.sol's
 	/// `AdapterValuation`, not pallet-tranche-system's convention).
 	pub chain_id: u64,
-	pub adapter: H160,
+	pub adapter: ChainAddress,
 	/// Adapter's own local epoch/settlement counter.
 	pub epoch_id: U256,
 	/// Timestamp this valuation was struck as-of.
@@ -234,7 +234,7 @@ pub struct AdapterValuation {
 pub struct AssetPosition {
 	/// Asset's token address on the parent `AdapterValuation`'s `chain_id`
 	/// (native to that chain, not a Hub address).
-	pub asset: H160,
+	pub asset: ChainAddress,
 	/// Held amount, in `asset`'s own decimals.
 	pub amount: U256,
 	/// Price at valuation time, FixedU128-style 1e18 fixed-point (sourced

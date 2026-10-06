@@ -42,11 +42,11 @@ impl BenchmarkHelper for () {
 
 pub use bp_tranche::{
 	history::{self, HistoryPage, PagedInvestorHistory},
-	ChainId, ProductId, TxRecord,
+	is_valid_tx_hash, ChainAddress, ChainId, ProductId, TxHash, TxRecord, MAX_TX_HASH_LEN,
 };
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
-use sp_core::{ConstU32, H160, H256};
+use sp_core::{ConstU32, H256};
 use sp_runtime::{BoundedVec, RuntimeDebug};
 
 // ---------------------------------------------------------------------------
@@ -373,7 +373,7 @@ pub struct SlotRecord<BlockNumber> {
 pub struct FlowInstance<BlockNumber> {
 	pub opened_at: BlockNumber,
 	/// `Some` only when `descriptor.investor_scoped`.
-	pub investor: Option<H160>,
+	pub investor: Option<ChainAddress>,
 	/// Lanes that still need to reach `done`. Init = `non_optional_lane_count`;
 	/// `0` ⇒ `closed`.
 	pub pending_lanes: u16,
