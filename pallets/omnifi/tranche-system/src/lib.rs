@@ -12,7 +12,7 @@ pub use weights::WeightInfo;
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_core::{ConstU32, H160, U256};
-use sp_runtime::{BoundedBTreeMap, BoundedVec, RuntimeDebug};
+use sp_runtime::{BoundedBTreeMap, BoundedVec, DispatchResult, RuntimeDebug};
 use sp_std::marker::PhantomData;
 
 // ---------------------------------------------------------------------------
@@ -71,6 +71,11 @@ pub const MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER: u32 = 10;
 /// top-level routing entries, not what's nested inside each one.
 pub const MAX_TOTAL_ADAPTERS: u32 = MAX_MULTICHAIN_ADAPTERS * MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER;
 
+/// Maximum adapter reverse-index entries one multichain product can own: every
+/// MultichainAdapter (`MultichainAdapterIndex`) plus every nested adapter
+/// (`AdapterIndex`). The `a` weight component of the product extrinsics.
+pub const MAX_ADAPTER_INDEX_ENTRIES: u32 = MAX_MULTICHAIN_ADAPTERS + MAX_TOTAL_ADAPTERS;
+
 /// Maximum number of per-chain TrancheManager bindings per product (see
 /// `MultichainProductDetails::multichain_tranche_managers`). Reuses
 /// `MAX_TRANCHE_CHAINS` as its cap; a manager chain needn't have a tranche.
@@ -101,6 +106,41 @@ pub const MAX_COLLATERALS: u32 = 10;
 /// "investors settled together in one cycle", not a per-product structural
 /// count like `MAX_ALLOCATIONS`.
 pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
+
+// ---------------------------------------------------------------------------
+// ProductId namespaces
+// ---------------------------------------------------------------------------
+
+/// A `ProductId` is `(prefix: u32) << 32 | (seq: u32)`; the prefix names the
+/// product's model and how it was created.
+///
+/// Curated (`1`/`2`): sudo picks the id and grants its ProductAdmin before the
+/// admin calls `create_product`/`create_single_chain_product`.
+/// Permissionless (`3`/`4`): the ProductFactory contract allocates the id (it
+/// tracks `seq`) and registers the product through
+/// `create_single_chain_product_permissionless`/`create_product_permissionless`,
+/// which also install the product's admin. The curated create paths reject
+/// permissionless prefixes and vice versa, so neither can squat the other's ids.
+pub const PRODUCT_ID_PREFIX_SINGLE_CHAIN: u32 = 1;
+/// See [`PRODUCT_ID_PREFIX_SINGLE_CHAIN`].
+pub const PRODUCT_ID_PREFIX_MULTICHAIN: u32 = 2;
+/// See [`PRODUCT_ID_PREFIX_SINGLE_CHAIN`].
+pub const PRODUCT_ID_PREFIX_PERMISSIONLESS_SINGLE_CHAIN: u32 = 3;
+/// See [`PRODUCT_ID_PREFIX_SINGLE_CHAIN`].
+pub const PRODUCT_ID_PREFIX_PERMISSIONLESS_MULTICHAIN: u32 = 4;
+
+/// The upper 32 bits of `product_id`.
+pub fn product_id_prefix(product_id: ProductId) -> u32 {
+	(product_id >> 32) as u32
+}
+
+/// `true` iff `product_id` lives in a ProductFactory-owned namespace.
+pub fn is_permissionless_product_id(product_id: ProductId) -> bool {
+	matches!(
+		product_id_prefix(product_id),
+		PRODUCT_ID_PREFIX_PERMISSIONLESS_SINGLE_CHAIN | PRODUCT_ID_PREFIX_PERMISSIONLESS_MULTICHAIN
+	)
+}
 
 // ---------------------------------------------------------------------------
 // VaultId — tranche identity
@@ -839,6 +879,16 @@ pub trait ProductInspect {
 	fn settlement_flow_version(product_id: ProductId) -> Option<FlowVersion>;
 }
 
+/// Implemented by pallet-tranche-permissions (it owns `ProductAdmins`). Consumed
+/// by the permissionless create extrinsics to install the new product's admin
+/// (the per-product Manager contract) in the same transaction that registers
+/// the product, so a factory product is never left without one.
+pub trait ProductAdminRegistry<AccountId> {
+	/// Make `admin` the ProductAdmin of `product_id`. Fails if the slot is
+	/// already occupied.
+	fn assign_product_admin(product_id: ProductId, admin: &AccountId) -> DispatchResult;
+}
+
 // ---------------------------------------------------------------------------
 // ProductAdmin origin
 // ---------------------------------------------------------------------------
@@ -863,6 +913,7 @@ where
 	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
 		match o.into() {
 			Ok(Origin::ProductAdmin(who)) => Ok(who),
+			Ok(other) => Err(other.into()),
 			Err(o) => Err(o),
 		}
 	}
@@ -870,5 +921,33 @@ where
 	#[cfg(feature = "runtime-benchmarks")]
 	fn try_successful_origin() -> Result<OuterOrigin, ()> {
 		Ok(OuterOrigin::from(Origin::ProductAdmin(T::AccountId::default())))
+	}
+}
+
+/// `EnsureOrigin` that accepts only the `ProductFactory` pallet origin, yielding
+/// the factory's `AccountId`. The tranche-system precompile creates this origin
+/// only after confirming the caller is the global ProductFactory (see
+/// pallet-tranche-permissions' `ProductFactory`).
+/// Wire as `type ProductFactoryOrigin = pallet_tranche_system::EnsureProductFactory<Runtime>`.
+pub struct EnsureProductFactory<T>(PhantomData<T>);
+
+impl<OuterOrigin, T> frame_support::traits::EnsureOrigin<OuterOrigin> for EnsureProductFactory<T>
+where
+	T: Config,
+	T::AccountId: Default,
+	OuterOrigin: Into<Result<Origin<T>, OuterOrigin>> + From<Origin<T>>,
+{
+	type Success = T::AccountId;
+	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
+		match o.into() {
+			Ok(Origin::ProductFactory(who)) => Ok(who),
+			Ok(other) => Err(other.into()),
+			Err(o) => Err(o),
+		}
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<OuterOrigin, ()> {
+		Ok(OuterOrigin::from(Origin::ProductFactory(T::AccountId::default())))
 	}
 }

@@ -1,6 +1,19 @@
 [
     {
         "type": "function",
+        "name": "get_product_factory",
+        "inputs": [],
+        "outputs": [
+            {
+                "name": "factory",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
         "name": "grant_permission",
         "inputs": [
             {
@@ -71,6 +84,25 @@
                 "type": "uint8",
                 "internalType": "enum TranchePermissionsUniversal.Role"
             },
+            {
+                "name": "who",
+                "type": "address",
+                "internalType": "address"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool",
+                "internalType": "bool"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "is_product_factory",
+        "inputs": [
             {
                 "name": "who",
                 "type": "address",

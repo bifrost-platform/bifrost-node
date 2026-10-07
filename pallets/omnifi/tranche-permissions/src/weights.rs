@@ -66,6 +66,8 @@ pub trait WeightInfo {
 	fn revoke_permission() -> Weight;
 	fn grant_tranche_investor() -> Weight;
 	fn revoke_tranche_investor() -> Weight;
+	fn set_product_factory() -> Weight;
+	fn force_set_product_admin() -> Weight;
 }
 
 /// Weights for `pallet_tranche_permissions` using the Substrate node and recommended hardware.
@@ -115,6 +117,18 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(4_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
+	// PLACEHOLDERS (not benchmarked yet).
+	fn set_product_factory() -> Weight {
+		Weight::from_parts(15_000_000, 1505)
+			.saturating_add(T::DbWeight::get().reads(1_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
+	// Two reads: `TrancheSystem::Products` (permissionless ids) + `ProductAdmins`.
+	fn force_set_product_admin() -> Weight {
+		Weight::from_parts(15_000_000, 3509)
+			.saturating_add(T::DbWeight::get().reads(2_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
 }
 
 // For backwards compatibility and tests.
@@ -161,6 +175,18 @@ impl WeightInfo for () {
 	fn revoke_tranche_investor() -> Weight {
 		Weight::from_parts(27_000_000, 3889)
 			.saturating_add(RocksDbWeight::get().reads(4_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	// PLACEHOLDERS (not benchmarked yet).
+	fn set_product_factory() -> Weight {
+		Weight::from_parts(15_000_000, 1505)
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	// Two reads: `TrancheSystem::Products` (permissionless ids) + `ProductAdmins`.
+	fn force_set_product_admin() -> Weight {
+		Weight::from_parts(15_000_000, 3509)
+			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
 }

@@ -1,11 +1,13 @@
 mod impls;
 
 use crate::{migrations, Role, WeightInfo};
-use pallet_tranche_system::{ChainAddress, ProductId, ProductInspect, VaultId, VaultInspect};
+use pallet_tranche_system::{
+	is_permissionless_product_id, ChainAddress, ProductId, ProductInspect, VaultId, VaultInspect,
+};
 
 use frame_support::{
 	pallet_prelude::*,
-	traits::{Hooks, OnRuntimeUpgrade, StorageVersion},
+	traits::{EnsureOrigin, Hooks, OnRuntimeUpgrade, StorageVersion},
 };
 use frame_system::pallet_prelude::*;
 
@@ -21,6 +23,15 @@ pub mod pallet {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
+		/// Origin of the admin-gated extrinsics (`grant_permission`/`revoke_permission`
+		/// for `OracleFeeder`, `grant_tranche_investor`/`revoke_tranche_investor`),
+		/// yielding the caller's account, which this pallet then checks against
+		/// `ProductAdmins`. Wire as `pallet_tranche_system::EnsureProductAdmin<Runtime>`:
+		/// only the tranche-permissions precompiles construct that origin, so these
+		/// calls can't be sent as plain signed extrinsics — which would skip the
+		/// precompile's Orchestrator `sendWhitelist` propagation and leave the Hub
+		/// and Spoke whitelists out of sync.
+		type ProductAdminOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 		/// Vault inspector — implemented by pallet-tranche-system (it owns the
 		/// `Vaults` reverse index). Used to verify a vault actually belongs to
 		/// `product_id` before granting `Role::TrancheInvestor` for it.
@@ -55,6 +66,14 @@ pub mod pallet {
 		/// `SingleChain` product's own TrancheManager Contract manages investor
 		/// whitelisting directly, never through this pallet.
 		TrancheInvestorMultichainOnly,
+		/// `grant_permission(ProductAdmin)` targeted a permissionless `product_id`
+		/// (prefix `3`/`4`) — those admins are installed by the ProductFactory at
+		/// creation; root overrides them with `force_set_product_admin`.
+		PermissionlessProductId,
+		/// `force_set_product_admin` targeted a permissionless `product_id` that
+		/// isn't registered yet — that would occupy the admin slot and block the
+		/// ProductFactory's own create for that id.
+		ProductNotFound,
 	}
 
 	// -----------------------------------------------------------------------
@@ -72,6 +91,14 @@ pub mod pallet {
 		TrancheInvestorGranted { product_id: ProductId, vault: VaultId, investor: ChainAddress },
 		/// `investor` was removed from `vault`'s whitelist of `product_id`.
 		TrancheInvestorRevoked { product_id: ProductId, vault: VaultId, investor: ChainAddress },
+		/// Root replaced (or cleared) the global ProductFactory.
+		ProductFactorySet { old: Option<T::AccountId>, new: Option<T::AccountId> },
+		/// Root replaced (or cleared) `product_id`'s ProductAdmin.
+		ProductAdminForceSet {
+			product_id: ProductId,
+			old: Option<T::AccountId>,
+			new: Option<T::AccountId>,
+		},
 	}
 
 	// -----------------------------------------------------------------------
@@ -79,9 +106,12 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 
 	#[pallet::storage]
-	/// The single ProductAdmin per product. Only writable by sudo — see
-	/// pallet-tranche-system's `create_product`, which is only callable by
-	/// whoever already holds this role for the `product_id` they supply.
+	/// The single ProductAdmin per product. For curated products, written by sudo
+	/// before creation (see pallet-tranche-system's `create_product`, only callable
+	/// by whoever already holds this role for the `product_id` they supply). For
+	/// permissionless products, installed by pallet-tranche-system's
+	/// `create_*_permissionless` (the product's Manager contract). Root can
+	/// override either with `force_set_product_admin`.
 	pub type ProductAdmins<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, T::AccountId>;
 
 	#[pallet::storage]
@@ -117,6 +147,18 @@ pub mod pallet {
 		(),
 	>;
 
+	#[pallet::storage]
+	/// The single, global ProductFactory contract — the only account allowed to
+	/// register permissionless products (prefixes `3`/`4`) through
+	/// pallet-tranche-system's `create_*_permissionless`, and to make
+	/// address-introducing changes to them. `None` disables permissionless
+	/// creation. Root-only (`set_product_factory`).
+	///
+	/// Replacing it hands every permissionless product over to the new factory at
+	/// once (the factory role is global, not per product); the old factory loses
+	/// all access immediately, including any creations still in flight.
+	pub type ProductFactory<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
 	// -----------------------------------------------------------------------
 	// Hooks
 	// -----------------------------------------------------------------------
@@ -139,10 +181,11 @@ pub mod pallet {
 		///
 		/// Authorization:
 		/// - `Role::ProductAdmin` — caller must be sudo (root). The tranche-permissions precompile
-		///   always dispatches as a signed origin, so a `grant_permission`/`revoke_permission` call
-		///   routed through it with `role == ProductAdmin` reverts here naturally — no
+		///   always dispatches as `ProductAdminOrigin`, so a `grant_permission`/`revoke_permission`
+		///   call routed through it with `role == ProductAdmin` reverts here naturally — no
 		///   special-casing needed at the precompile boundary.
-		/// - `Role::OracleFeeder` — caller must hold `ProductAdmin` for the given product.
+		/// - `Role::OracleFeeder` — origin must be `ProductAdminOrigin` (precompile-only) carrying
+		///   `product_id`'s admin.
 		///
 		/// Tranche investors are granted with `grant_tranche_investor`.
 		#[pallet::call_index(0)]
@@ -219,6 +262,49 @@ pub mod pallet {
 			ensure!(TrancheInvestors::<T>::contains_key(&key), Error::<T>::NotGranted);
 			TrancheInvestors::<T>::remove(key);
 			Self::deposit_event(Event::TrancheInvestorRevoked { product_id, vault, investor });
+			Ok(())
+		}
+
+		/// Set (or clear, with `None`) the global ProductFactory. Root-only. Products
+		/// already created keep their admins (their Manager contracts); only the
+		/// factory-only powers move to the new account. See `ProductFactory`.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_product_factory())]
+		pub fn set_product_factory(
+			origin: OriginFor<T>,
+			new: Option<T::AccountId>,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			let old = ProductFactory::<T>::get();
+			ProductFactory::<T>::set(new.clone());
+			Self::deposit_event(Event::ProductFactorySet { old, new });
+			Ok(())
+		}
+
+		/// Emergency override: replace `product_id`'s ProductAdmin with `new_admin`,
+		/// or clear it (`None`). Root-only; works on curated and permissionless
+		/// products alike, but a permissionless id must already be registered (see
+		/// `Error::ProductNotFound`).
+		///
+		/// Clearing the admin stops admin actions only. On a permissionless product
+		/// the ProductFactory can still call every product-management extrinsic, so
+		/// freezing such a product completely also needs `set_product_factory(None)`
+		/// (which affects every permissionless product).
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::force_set_product_admin())]
+		pub fn force_set_product_admin(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			new_admin: Option<T::AccountId>,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			ensure!(
+				!is_permissionless_product_id(product_id) || T::Products::is_registered(product_id),
+				Error::<T>::ProductNotFound
+			);
+			let old = ProductAdmins::<T>::get(product_id);
+			ProductAdmins::<T>::set(product_id, new_admin.clone());
+			Self::deposit_event(Event::ProductAdminForceSet { product_id, old, new: new_admin });
 			Ok(())
 		}
 	}

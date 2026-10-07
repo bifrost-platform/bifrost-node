@@ -92,7 +92,8 @@ type EvmSingleChainProductDetails =
 // ---------------------------------------------------------------------------
 
 /// A precompile that wraps `pallet_tranche_system`'s `create_product`/
-/// `set_tranche`/`set_adapters`/`set_multichain_adapters` extrinsics.
+/// `set_tranche`/`set_adapters`/`set_multichain_adapters` extrinsics, plus the
+/// ProductFactory-only `create_*_permissionless` ones (universal interface only).
 ///
 /// Called directly by ProductAdmin EOAs — not by a Gateway — so origins are
 /// resolved from `handle.context().caller`. Every one of these four functions
@@ -313,7 +314,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
 		let decoded_action = decode_crud_action(action)?;
 		let (tranche_type_byte, apr, vault, asset, shares, priority) = tranche;
 		let (vault_chain_id, vault_address) = vault;
@@ -345,12 +346,7 @@ where
 			shares,
 			priority,
 		};
-		RuntimeHelper::<Runtime>::try_dispatch(
-			handle,
-			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
-			call,
-			0,
-		)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, origin.into(), call, 0)?;
 
 		let event = log1(
 			handle.context().address,
@@ -421,7 +417,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
 		let bounded_adapters = decode_adapters(&adapters)?;
 
 		let call = TrancheSystemCall::<Runtime>::set_adapters {
@@ -430,12 +426,7 @@ where
 			parent_chain_id,
 			adapters: bounded_adapters,
 		};
-		RuntimeHelper::<Runtime>::try_dispatch(
-			handle,
-			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
-			call,
-			0,
-		)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, origin.into(), call, 0)?;
 
 		let event = log1(
 			handle.context().address,
@@ -469,19 +460,14 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
 		let bounded_multichain_adapters = decode_multichain_adapters(&multichain_adapters)?;
 
 		let call = TrancheSystemCall::<Runtime>::set_multichain_adapters {
 			product_id,
 			multichain_adapters: bounded_multichain_adapters,
 		};
-		RuntimeHelper::<Runtime>::try_dispatch(
-			handle,
-			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
-			call,
-			0,
-		)?;
+		RuntimeHelper::<Runtime>::try_dispatch(handle, origin.into(), call, 0)?;
 
 		let event = log1(
 			handle.context().address,
@@ -509,7 +495,7 @@ where
 	) -> EvmResult {
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
-		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
 		let bounded_multichain_tranche_managers =
 			decode_multichain_tranche_managers(&multichain_tranche_managers)?;
 
@@ -517,17 +503,180 @@ where
 			product_id,
 			multichain_tranche_managers: bounded_multichain_tranche_managers,
 		};
+		RuntimeHelper::<Runtime>::try_dispatch(handle, origin.into(), call, 0)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET,
+			solidity::encode_event_data((product_id, multichain_tranche_managers)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Register a multichain product the ProductFactory created (permissionless
+	/// creation). Caller must be the ProductFactory; `product_id` must carry
+	/// the permissionless multichain prefix (`4`); `product_admin` (the product's
+	/// Manager contract) becomes its ProductAdmin. See
+	/// `pallet_tranche_system::create_product_permissionless`.
+	///
+	/// @param product_id Factory-allocated product ID (`4 << 32 | seq`)
+	/// @param product_admin The product's Manager contract — becomes its ProductAdmin
+	/// @param valuation, tranches, multichain_adapters, multichain_tranche_managers Same as
+	/// `create_product`
+	#[precompile::public(
+		"create_product_permissionless(uint64,address,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,bytes32),bytes32,bytes32,uint8)[],(bytes32,uint64,uint16,(uint8,bytes32,uint16,bytes32,(uint64,bytes32,uint256)[])[])[],(uint64,bytes32)[])"
+	)]
+	fn create_product_permissionless(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		product_admin: Address,
+		valuation: EvmValuationInput,
+		tranches: Vec<EvmTrancheInput>,
+		multichain_adapters: Vec<EvmMultichainAdapterInput>,
+		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+	) -> EvmResult {
+		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		ensure_caller_is_product_factory::<Runtime>(handle, &caller_account)?;
+		if product_admin.0.is_zero() {
+			return Err(revert("product_admin is the zero address"));
+		}
+		if product_admin.0 == handle.context().caller {
+			return Err(revert("product_admin must be the product's Manager, not the factory"));
+		}
+
+		let (
+			base_asset,
+			valuation_address,
+			settlement_start_timestamp,
+			settlement_length_secs,
+			settlement_offset_secs,
+		) = valuation;
+		let call = TrancheSystemCall::<Runtime>::create_product_permissionless {
+			product_id,
+			product_admin: Runtime::AddressMapping::into_account_id(product_admin.0),
+			valuation: ValuationInfo {
+				base_asset: base_asset.0,
+				valuation_address: valuation_address.0,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			},
+			tranches: decode_tranches::<ConstU32<MAX_TRANCHE_INPUTS>>(&tranches)?,
+			multichain_adapters: decode_multichain_adapters(&multichain_adapters)?,
+			multichain_tranche_managers: decode_multichain_tranche_managers(
+				&multichain_tranche_managers,
+			)?,
+		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductFactory(caller_account).into(),
 			call,
 			0,
 		)?;
 
 		let event = log1(
 			handle.context().address,
-			SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET,
-			solidity::encode_event_data((product_id, multichain_tranche_managers)),
+			SELECTOR_LOG_PRODUCT_CREATED,
+			solidity::encode_event_data((
+				product_id,
+				product_admin,
+				base_asset,
+				valuation_address,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Register a single-chain product the ProductFactory created — the
+	/// permissionless counterpart of `create_single_chain_product`. Same rules as
+	/// `create_product_permissionless`, with the single-chain prefix (`3`).
+	///
+	/// @param product_id Factory-allocated product ID (`3 << 32 | seq`)
+	/// @param product_admin The product's Manager contract — becomes its ProductAdmin
+	/// @param chain_id, valuation, tranches, tranche_manager, adapters, ledger Same as
+	/// `create_single_chain_product`
+	#[precompile::public(
+		"create_single_chain_product_permissionless(uint64,address,uint64,(bytes32,bytes32,(bool,uint64,uint64,uint64)),(uint8,uint256,(uint64,bytes32),bytes32,bytes32,uint8)[],bytes32,(uint8,bytes32,uint16,bytes32,(uint64,bytes32,uint256)[])[],bytes32)"
+	)]
+	fn create_single_chain_product_permissionless(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		product_admin: Address,
+		chain_id: u64,
+		valuation: EvmSingleChainValuationInput,
+		tranches: Vec<EvmTrancheInput>,
+		tranche_manager: H256,
+		adapters: Vec<EvmAdapterInput>,
+		ledger: H256,
+	) -> EvmResult {
+		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
+		ensure_caller_is_product_factory::<Runtime>(handle, &caller_account)?;
+		if product_admin.0.is_zero() {
+			return Err(revert("product_admin is the zero address"));
+		}
+		if product_admin.0 == handle.context().caller {
+			return Err(revert("product_admin must be the product's Manager, not the factory"));
+		}
+
+		let (base_asset, valuation_address, settlement_mode) = valuation;
+		let (is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs) =
+			settlement_mode;
+		let decoded_settlement_mode = if is_sync {
+			SettlementMode::Sync
+		} else {
+			SettlementMode::Async {
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			}
+		};
+
+		let call = TrancheSystemCall::<Runtime>::create_single_chain_product_permissionless {
+			product_id,
+			product_admin: Runtime::AddressMapping::into_account_id(product_admin.0),
+			chain_id,
+			valuation: SingleChainValuationInfo {
+				base_asset,
+				valuation_address,
+				settlement_mode: decoded_settlement_mode,
+			},
+			tranches: decode_tranches::<ConstU32<MAX_TRANCHES_PER_CHAIN>>(&tranches)?,
+			tranche_manager,
+			adapters: decode_adapters(&adapters)?,
+			ledger,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductFactory(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_SINGLE_CHAIN_PRODUCT_CREATED,
+			solidity::encode_event_data((
+				product_id,
+				product_admin,
+				chain_id,
+				base_asset,
+				valuation_address,
+				tranche_manager,
+				ledger,
+				is_sync,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			)),
 		);
 		handle.record_log_costs(&[&event])?;
 		event.record(handle)?;
@@ -959,6 +1108,53 @@ where
 		return Err(revert("caller does not hold ProductAdmin for product_id"));
 	}
 	Ok(())
+}
+
+/// Reads `pallet-tranche-permissions`' `ProductFactory` to confirm the caller
+/// is the global ProductFactory, before constructing
+/// `Origin::ProductFactory` for the permissionless create functions.
+fn ensure_caller_is_product_factory<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	caller_account: &Runtime::AccountId,
+) -> EvmResult
+where
+	Runtime: pallet_tranche_permissions::Config + pallet_evm::Config,
+{
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	if !pallet_tranche_permissions::Pallet::<Runtime>::is_product_factory(caller_account) {
+		return Err(revert("caller does not hold ProductFactory"));
+	}
+	Ok(())
+}
+
+/// Origin for the product-management functions (`set_tranche`, `set_adapters`,
+/// …). On a permissionless product the ProductFactory is checked first, so a
+/// caller holding both roles (e.g. root handed a product to the factory with
+/// `force_set_product_admin`) gets the wider `ProductFactory` origin rather than
+/// being held to the admin's restrictions. Otherwise `ProductAdmin` if the caller
+/// is `product_id`'s admin. Reverts if neither.
+fn product_authority_origin<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+	caller_account: Runtime::AccountId,
+) -> EvmResult<pallet_tranche_system::Origin<Runtime>>
+where
+	Runtime:
+		pallet_tranche_system::Config + pallet_tranche_permissions::Config + pallet_evm::Config,
+{
+	if pallet_tranche_system::is_permissionless_product_id(product_id) {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		if pallet_tranche_permissions::Pallet::<Runtime>::is_product_factory(&caller_account) {
+			return Ok(pallet_tranche_system::Origin::<Runtime>::ProductFactory(caller_account));
+		}
+	}
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	if pallet_tranche_permissions::ProductAdmins::<Runtime>::get(product_id).as_ref()
+		== Some(&caller_account)
+	{
+		return Ok(pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account));
+	}
+	Err(revert("caller does not hold ProductAdmin for product_id"))
 }
 
 fn decode_crud_action(action: u8) -> EvmResult<CrudAction> {

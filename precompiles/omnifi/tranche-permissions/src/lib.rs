@@ -44,11 +44,14 @@ type EvmVaultInput = (u64, Address);
 /// `revoke_permission` extrinsics.
 ///
 /// Called directly by ProductAdmin EOAs — not by a Gateway — so origins are
-/// resolved from `handle.context().caller` as signed substrate accounts.
-/// `Role::ProductAdmin` grants/revokes always revert through this precompile:
-/// the pallet requires a root origin for that role, and a precompile-dispatched
-/// call can only ever construct a signed origin (see `grant_permission`'s
-/// doc comment in `pallet_tranche_permissions`).
+/// resolved from `handle.context().caller` and dispatched as
+/// `pallet_tranche_system::Origin::ProductAdmin(caller)` — the pallet's
+/// `ProductAdminOrigin`, which only these precompiles construct, so the admin
+/// calls can't bypass the precompile (and its Orchestrator propagation) as plain
+/// signed extrinsics. The pallet still checks the carried account against
+/// `ProductAdmins`. `Role::ProductAdmin` grants/revokes always revert through
+/// this precompile: the pallet requires a root origin for that role (see
+/// `grant_permission`'s doc comment in `pallet_tranche_permissions`).
 pub struct TranchePermissionsPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
@@ -60,6 +63,7 @@ where
 		+ frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	Runtime::RuntimeCall: From<TranchePermissionsCall<Runtime>>,
+	Runtime::RuntimeOrigin: From<pallet_tranche_system::Origin<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	/// Grant `role` to `who` for `product_id`. See `Role`'s encoding below and
@@ -101,7 +105,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;
@@ -167,7 +171,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;

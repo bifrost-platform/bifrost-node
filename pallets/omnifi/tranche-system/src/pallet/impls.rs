@@ -1,11 +1,17 @@
 use crate::{
-	AdapterInspect, AdapterKey, ChainAddress, ChainTranches, CrudAction, FlowVersion,
-	MultichainAdapterInfo, ProductDetails, ProductId, ProductInspect, Tranche, TrancheType,
-	VaultId, VaultInspect, VaultRegistration,
+	is_permissionless_product_id, AdapterInfo, AdapterInspect, AdapterKey, ChainAddress,
+	ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo, ProductDetails, ProductId,
+	ProductInspect, Tranche, TrancheType, VaultId, VaultInspect, VaultRegistration, WeightInfo,
 };
 
 use super::pallet::*;
-use frame_support::{ensure, pallet_prelude::DispatchResult};
+use frame_support::{
+	ensure,
+	pallet_prelude::{DispatchResult, Weight},
+	traits::{EnsureOrigin, Get},
+	BoundedBTreeMap,
+};
+use frame_system::pallet_prelude::OriginFor;
 use sp_runtime::DispatchError;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -14,7 +20,165 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 /// See `cascade_tranche_type_rename`'s own doc comment.
 pub(crate) type CascadedTrancheUpdate = (VaultId, TrancheType, ChainAddress, ChainAddress, u8);
 
+/// Which authority a product-management call was made under — see
+/// `Pallet::ensure_product_authority`. Two independent roles, not a hierarchy:
+///
+/// - `Admin`: whoever holds `ProductAdmins[product_id]` in pallet-tranche-permissions. For a
+///   curated product that's the admin sudo granted; for a permissionless product it's the
+///   per-product **Manager contract** the ProductFactory deployed at creation (the Manager is
+///   just "the admin account" of that product — this pallet doesn't know it's a contract).
+/// - `Factory`: the global ProductFactory contract itself (a account in
+///   `ProductFactory`), acting on one of the permissionless products it created.
+///
+/// On a permissionless product the two split the work: `Admin` may reweight, reorder,
+/// re-rate and remove; only `Factory` may introduce new addresses (see
+/// `Error::RequiresProductFactory`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProductAuthority {
+	Admin,
+	Factory,
+}
+
 impl<T: Config> Pallet<T> {
+	/// Origin check shared by every product-management extrinsic: either the
+	/// product's admin (`ProductAdminOrigin`, verified against `product_id` by the
+	/// precompile) or the ProductFactory (`ProductFactoryOrigin`) — the latter only
+	/// on a permissionless product, since the factory acts just on the products it
+	/// created. See `ProductAuthority`.
+	pub(crate) fn ensure_product_authority(
+		origin: OriginFor<T>,
+		product_id: ProductId,
+	) -> Result<ProductAuthority, DispatchError> {
+		match T::ProductFactoryOrigin::try_origin(origin) {
+			Ok(_) => {
+				ensure!(
+					is_permissionless_product_id(product_id),
+					Error::<T>::NotPermissionlessProduct
+				);
+				Ok(ProductAuthority::Factory)
+			},
+			Err(origin) => {
+				T::ProductAdminOrigin::ensure_origin(origin)?;
+				Ok(ProductAuthority::Admin)
+			},
+		}
+	}
+
+	/// On a permissionless product, only the ProductFactory may make a change
+	/// that introduces a new address (see `Error::RequiresProductFactory`) —
+	/// otherwise the product's admin could point it at contracts the factory never
+	/// deployed. Curated products are unrestricted.
+	pub(crate) fn ensure_may_introduce_addresses(
+		authority: ProductAuthority,
+		product_id: ProductId,
+		introduces_address: bool,
+	) -> DispatchResult {
+		ensure!(
+			!introduces_address
+				|| authority == ProductAuthority::Factory
+				|| !is_permissionless_product_id(product_id),
+			Error::<T>::RequiresProductFactory
+		);
+		Ok(())
+	}
+
+	/// `set_tranche`: `Add` always introduces an address; `Update` does when it
+	/// changes the tranche's `asset` or `shares`; `Remove` never does. An unknown
+	/// `vault` reports `false` and fails later with `VaultNotFound`.
+	pub(crate) fn set_tranche_introduces_address(
+		product: &ProductDetails,
+		action: CrudAction,
+		vault: &VaultId,
+		asset: ChainAddress,
+		shares: ChainAddress,
+	) -> bool {
+		match action {
+			CrudAction::Add => true,
+			CrudAction::Remove => false,
+			CrudAction::Update => {
+				let existing = match product {
+					ProductDetails::Multichain(product) => product
+						.tranches
+						.get(&vault.chain_id)
+						.and_then(|chain| chain.iter().find(|t| &t.vault == vault)),
+					ProductDetails::SingleChain(product) => {
+						product.tranches.iter().find(|t| &t.vault == vault)
+					},
+				};
+				existing.map_or(false, |t| t.asset != asset || t.shares != shares)
+			},
+		}
+	}
+
+	/// An adapter set introduces an address when it adds an adapter that isn't
+	/// in `old`, or changes an existing one's `source_type` (borrower/collateral
+	/// addresses). Weight-only changes and removals don't.
+	pub(crate) fn adapters_introduce_address<S1: Get<u32>, S2: Get<u32>>(
+		old: &BoundedBTreeMap<ChainAddress, AdapterInfo, S1>,
+		new: &BoundedBTreeMap<ChainAddress, AdapterInfo, S2>,
+	) -> bool {
+		new.iter().any(|(address, info)| {
+			old.get(address).map_or(true, |old| old.source_type != info.source_type)
+		})
+	}
+
+	/// `adapters_introduce_address`, one level up: a new MultichainAdapter, or a
+	/// nested change that introduces an address under an existing one.
+	pub(crate) fn multichain_adapters_introduce_address<S1: Get<u32>, S2: Get<u32>>(
+		old: &BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, S1>,
+		new: &BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, S2>,
+	) -> bool {
+		new.iter().any(|(key, info)| {
+			old.get(key)
+				.map_or(true, |old| Self::adapters_introduce_address(&old.adapters, &info.adapters))
+		})
+	}
+
+	/// A TrancheManager table introduces an address when it binds a chain to a
+	/// non-zero address it wasn't already bound to (zero is the "not bound yet"
+	/// placeholder).
+	pub(crate) fn tranche_managers_introduce_address<S1: Get<u32>, S2: Get<u32>>(
+		old: &BoundedBTreeMap<u64, ChainAddress, S1>,
+		new: &BoundedBTreeMap<u64, ChainAddress, S2>,
+	) -> bool {
+		new.iter()
+			.any(|(chain_id, address)| !address.is_zero() && old.get(chain_id) != Some(address))
+	}
+
+	/// The `a` weight component of `create_product`/`create_product_permissionless`:
+	/// one `MultichainAdapterIndex` entry per MultichainAdapter plus one
+	/// `AdapterIndex` entry per nested adapter — each is one index read + write.
+	pub(crate) fn adapter_index_entries<S: Get<u32>>(
+		multichain_adapters: &BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, S>,
+	) -> u32 {
+		multichain_adapters.values().fold(multichain_adapters.len() as u32, |n, info| {
+			n.saturating_add(info.adapters.len() as u32)
+		})
+	}
+
+	/// `set_adapters`' weight: the benchmarked part (product size `t`/`a`, `n` new
+	/// adapters — measured replacing a single old adapter) plus one index removal
+	/// per `replaced` old adapter.
+	pub(crate) fn set_adapters_weight(t: u32, a: u32, n: u32, replaced: u32) -> Weight {
+		<T as Config>::WeightInfo::set_adapters(t, a, n)
+			.saturating_add(<T as frame_system::Config>::DbWeight::get().writes(replaced as u64))
+	}
+
+	/// A stored product's size as the `(t, a)` weight components of the
+	/// product-management extrinsics: `t` = tranches across all chains, `a` =
+	/// adapter reverse-index entries (MultichainAdapters + nested adapters; a
+	/// single-chain product's flat adapters). Decoding and re-encoding the
+	/// product scale with both.
+	pub(crate) fn product_size(product: &ProductDetails) -> (u32, u32) {
+		match product {
+			ProductDetails::Multichain(p) => (
+				p.tranches.values().map(|chain| chain.len() as u32).sum(),
+				Self::adapter_index_entries(&p.multichain_adapters),
+			),
+			ProductDetails::SingleChain(p) => (p.tranches.len() as u32, p.adapters.len() as u32),
+		}
+	}
+
 	/// Checks a `weightBps` set sums to exactly 10_000 (100%) — shared by
 	/// `create_product`/`set_multichain_adapters` (top-level and, per parent,
 	/// nested) and `set_adapters` (one parent's nested set). Accumulates as

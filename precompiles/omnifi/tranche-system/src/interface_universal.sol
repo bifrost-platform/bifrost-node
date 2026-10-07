@@ -130,6 +130,20 @@ pragma solidity >=0.8.0;
  *     precompile constructs after checking ProductAdmin itself, so calling the
  *     pallet directly (bypassing this precompile) is impossible regardless of
  *     role — there is no signed-origin fallback path.
+ *   - Permissionless products (added 2026-10-07): product IDs are
+ *     `uint64(prefix) << 32 | seq` — prefix 1 = single-chain curated, 2 =
+ *     multichain curated (sudo picks the ID and grants ProductAdmin first), 3 =
+ *     single-chain permissionless, 4 = multichain permissionless (the
+ *     ProductFactory contract allocates `seq`). Only the ProductFactory
+ *     (a single global account in pallet-tranche-permissions, set by root) may call
+ *     create_product_permissionless / create_single_chain_product_permissionless,
+ *     which install the product's Manager contract as its ProductAdmin. The
+ *     curated create functions reject prefixes 3/4. On a permissionless product
+ *     the ProductAdmin (Manager) may reweight, reorder, re-rate and remove, but any
+ *     change that introduces a new address (set_tranche Add, Update changing
+ *     asset/shares, a new adapter or a changed source_type, a new non-zero
+ *     TrancheManager binding) must come from the ProductFactory, which may call the
+ *     set_* functions on the products it created.
  *   - `multichain_tranche_managers` (added 2026-08-14): each product independently
  *     binds its own TrancheManager contract address per chain one of its vaults is
  *     deployed on — distinct from `MultichainAdapterInput`'s per-chain table
@@ -519,6 +533,56 @@ interface TrancheSystemUniversal {
      */
     function create_single_chain_product(
         uint64 product_id,
+        uint64 chain_id,
+        SingleChainValuationInput calldata valuation,
+        TrancheInput[] calldata tranches,
+        bytes32 tranche_manager,
+        AdapterInput[] calldata adapters,
+        bytes32 ledger
+    ) external;
+
+    /**
+     * @notice Register a multichain product created through the ProductFactory
+     *         (permissionless creation).
+     * @dev Caller must be the ProductFactory. `product_id` must carry prefix 4
+     *      (`4 << 32 | seq`, seq allocated by the factory). `product_admin` — the
+     *      product's Manager contract — becomes its ProductAdmin in the same call
+     *      (reverts if the slot is taken, or if it is the zero address). Otherwise the
+     *      same validation as create_product. Emits ProductCreated with
+     *      `product_admin` as the admin.
+     * @param product_id                  Factory-allocated product ID
+     * @param product_admin               The product's Manager contract
+     * @param valuation                   Same as create_product
+     * @param tranches                    Same as create_product
+     * @param multichain_adapters         Same as create_product
+     * @param multichain_tranche_managers Same as create_product
+     */
+    function create_product_permissionless(
+        uint64 product_id,
+        address product_admin,
+        ValuationInput calldata valuation,
+        TrancheInput[] calldata tranches,
+        MultichainAdapterInput[] calldata multichain_adapters,
+        MultichainTrancheManagerInput[] calldata multichain_tranche_managers
+    ) external;
+
+    /**
+     * @notice Register a single-chain product created through the ProductFactory —
+     *         the permissionless counterpart of create_single_chain_product.
+     * @dev Same rules as create_product_permissionless, with prefix 3. Emits
+     *      SingleChainProductCreated with `product_admin` as the admin.
+     * @param product_id      Factory-allocated product ID
+     * @param product_admin   The product's Manager contract
+     * @param chain_id        Same as create_single_chain_product
+     * @param valuation       Same as create_single_chain_product
+     * @param tranches        Same as create_single_chain_product
+     * @param tranche_manager Same as create_single_chain_product
+     * @param adapters        Same as create_single_chain_product
+     * @param ledger          Same as create_single_chain_product
+     */
+    function create_single_chain_product_permissionless(
+        uint64 product_id,
+        address product_admin,
         uint64 chain_id,
         SingleChainValuationInput calldata valuation,
         TrancheInput[] calldata tranches,
