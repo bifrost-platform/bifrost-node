@@ -62,15 +62,17 @@ use core::marker::PhantomData;
 
 /// Weight functions needed for `pallet_tranche_system`.
 pub trait WeightInfo {
-	fn create_product() -> Weight;
-	fn create_single_chain_product() -> Weight;
-	fn set_tranche() -> Weight;
-	fn set_adapters() -> Weight;
-	fn set_multichain_adapters() -> Weight;
+	fn create_product(t: u32, a: u32) -> Weight;
+	fn create_single_chain_product(t: u32, a: u32) -> Weight;
+	fn set_tranche(t: u32, a: u32) -> Weight;
+	fn set_adapters(t: u32, a: u32, n: u32) -> Weight;
+	fn set_multichain_adapters(t: u32, o: u32, n: u32) -> Weight;
 	fn set_orchestrator_address() -> Weight;
-	fn set_multichain_tranche_managers() -> Weight;
+	fn set_multichain_tranche_managers(t: u32, a: u32) -> Weight;
 	fn set_request_flow_version() -> Weight;
 	fn set_settlement_flow_version() -> Weight;
+	fn create_product_permissionless(t: u32, a: u32) -> Weight;
+	fn create_single_chain_product_permissionless(t: u32, a: u32) -> Weight;
 }
 
 /// Weights for `pallet_tranche_system` using the Substrate node and recommended hardware.
@@ -81,85 +83,148 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `Timestamp::Now` (r:1 w:0)
 	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::Vaults` (r:100 w:100)
-	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(53), added: 2528, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::MultichainAdapterIndex` (r:10 w:10)
-	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	/// Storage: `TrancheSystem::AdapterIndex` (r:100 w:100)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:99 w:99)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn create_product() -> Weight {
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn create_product(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `251`
-		//  Estimated: `253790`
-		// Minimum execution time: 1_244_000_000 picoseconds.
-		Weight::from_parts(1_278_000_000, 253790)
-			.saturating_add(T::DbWeight::get().reads(212_u64))
-			.saturating_add(T::DbWeight::get().writes(213_u64))
+		//  Estimated: `3716 + a * (2317 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 396_000_000 picoseconds.
+		Weight::from_parts(31_271_690, 3716)
+			// Standard Error: 39_073
+			.saturating_add(Weight::from_parts(3_602_937, 0).saturating_mul(t.into()))
+			// Standard Error: 35_736
+			.saturating_add(Weight::from_parts(6_102_851, 0).saturating_mul(a.into()))
+			.saturating_add(T::DbWeight::get().reads(2_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(T::DbWeight::get().writes(3_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2317).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
 	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::Vaults` (r:10 w:10)
-	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(53), added: 2528, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:10)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn create_single_chain_product() -> Weight {
+	/// The range of component `t` is `[1, 10]`.
+	/// The range of component `a` is `[1, 10]`.
+	fn create_single_chain_product(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `251`
-		//  Estimated: `26270`
-		// Minimum execution time: 89_000_000 picoseconds.
-		Weight::from_parts(100_000_000, 26270)
-			.saturating_add(T::DbWeight::get().reads(22_u64))
-			.saturating_add(T::DbWeight::get().writes(23_u64))
+		//  Estimated: `3716 + a * (2539 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 55_000_000 picoseconds.
+		Weight::from_parts(15_189_678, 3716)
+			// Standard Error: 6_718
+			.saturating_add(Weight::from_parts(3_468_214, 0).saturating_mul(t.into()))
+			// Standard Error: 6_718
+			.saturating_add(Weight::from_parts(5_940_083, 0).saturating_mul(a.into()))
+			.saturating_add(T::DbWeight::get().reads(2_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(T::DbWeight::get().writes(3_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2539).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `TrancheSystem::Vaults` (r:1 w:1)
-	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(53), added: 2528, mode: `MaxEncodedLen`)
-	fn set_tranche() -> Weight {
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 99]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn set_tranche(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `75717`
-		//  Estimated: `79182`
-		// Minimum execution time: 403_000_000 picoseconds.
-		Weight::from_parts(438_000_000, 79182)
+		//  Measured:  `1156 + a * (720 ±0) + t * (138 ±0)`
+		//  Estimated: `4290 + a * (724 ±0) + t * (136 ±0)`
+		// Minimum execution time: 73_000_000 picoseconds.
+		Weight::from_parts(15_976_773, 4290)
+			// Standard Error: 2_379
+			.saturating_add(Weight::from_parts(522_704, 0).saturating_mul(t.into()))
+			// Standard Error: 2_149
+			.saturating_add(Weight::from_parts(2_869_591, 0).saturating_mul(a.into()))
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(2_u64))
+			.saturating_add(Weight::from_parts(0, 724).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 136).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:20)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	fn set_adapters() -> Weight {
+	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:11)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 99]`.
+	/// The range of component `n` is `[1, 10]`.
+	fn set_adapters(t: u32, a: u32, n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `77276`
-		//  Estimated: `80741`
-		// Minimum execution time: 456_000_000 picoseconds.
-		Weight::from_parts(472_000_000, 80741)
-			.saturating_add(T::DbWeight::get().reads(11_u64))
-			.saturating_add(T::DbWeight::get().writes(21_u64))
+		//  Measured:  `251 + a * (738 ±0) + n * (137 ±0) + t * (134 ±0)`
+		//  Estimated: `3794 + a * (741 ±0) + n * (2539 ±1) + t * (134 ±0)`
+		// Minimum execution time: 131_000_000 picoseconds.
+		Weight::from_parts(7_856_726, 3794)
+			// Standard Error: 2_253
+			.saturating_add(Weight::from_parts(516_045, 0).saturating_mul(t.into()))
+			// Standard Error: 2_283
+			.saturating_add(Weight::from_parts(2_942_569, 0).saturating_mul(a.into()))
+			// Standard Error: 23_316
+			.saturating_add(Weight::from_parts(6_892_406, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(1_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().writes(2_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 741).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2539).saturating_mul(n.into()))
+			.saturating_add(Weight::from_parts(0, 134).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `TrancheSystem::MultichainAdapterIndex` (r:10 w:20)
-	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	/// Storage: `TrancheSystem::AdapterIndex` (r:100 w:200)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	fn set_multichain_adapters() -> Weight {
+	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:99 w:199)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `o` is `[2, 110]`.
+	/// The range of component `n` is `[2, 110]`.
+	fn set_multichain_adapters(t: u32, o: u32, n: u32, ) -> Weight {
+		// Generated with `--output-analysis median-slopes`: min-squares extrapolated a
+		// spurious 322M ps intercept from the max-held sweeps.
 		// Proof Size summary in bytes:
-		//  Measured:  `79374`
-		//  Estimated: `253690`
-		// Minimum execution time: 878_000_000 picoseconds.
-		Weight::from_parts(907_000_000, 253690)
-			.saturating_add(T::DbWeight::get().reads(111_u64))
-			.saturating_add(T::DbWeight::get().writes(221_u64))
+		//  Measured:  `0 + n * (23 ±0) + o * (761 ±0) + t * (134 ±0)`
+		//  Estimated: `1715 + n * (2308 ±0) + o * (761 ±0) + t * (134 ±0)`
+		// Minimum execution time: 322_000_000 picoseconds.
+		Weight::from_parts(0, 1715)
+			// Standard Error: 0
+			.saturating_add(Weight::from_parts(500_000, 0).saturating_mul(t.into()))
+			// Standard Error: 0
+			.saturating_add(Weight::from_parts(2_710_843, 0).saturating_mul(o.into()))
+			// Standard Error: 0
+			.saturating_add(Weight::from_parts(6_715_909, 0).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().reads(1_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(o.into())))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 2308).saturating_mul(n.into()))
+			.saturating_add(Weight::from_parts(0, 761).saturating_mul(o.into()))
+			.saturating_add(Weight::from_parts(0, 134).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::OrchestratorAddress` (r:0 w:1)
 	/// Proof: `TrancheSystem::OrchestratorAddress` (`max_values`: Some(1), `max_size`: Some(20), added: 515, mode: `MaxEncodedLen`)
@@ -173,14 +238,22 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	fn set_multichain_tranche_managers() -> Weight {
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn set_multichain_tranche_managers(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `75224`
-		//  Estimated: `78689`
-		// Minimum execution time: 410_000_000 picoseconds.
-		Weight::from_parts(433_000_000, 78689)
+		//  Measured:  `757 + a * (720 ±0) + t * (134 ±0)`
+		//  Estimated: `4013 + a * (723 ±0) + t * (132 ±0)`
+		// Minimum execution time: 67_000_000 picoseconds.
+		Weight::from_parts(11_351_897, 4013)
+			// Standard Error: 3_964
+			.saturating_add(Weight::from_parts(514_035, 0).saturating_mul(t.into()))
+			// Standard Error: 3_626
+			.saturating_add(Weight::from_parts(2_850_782, 0).saturating_mul(a.into()))
 			.saturating_add(T::DbWeight::get().reads(1_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
+			.saturating_add(Weight::from_parts(0, 723).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 132).saturating_mul(t.into()))
 	}
 	fn set_request_flow_version() -> Weight {
 		// Proof Size summary in bytes:
@@ -195,6 +268,78 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		//  Estimated: `0`
 		// Minimum execution time: 1_000_000 picoseconds.
 		Weight::from_parts(2_000_000, 0)
+	}
+	/// Storage: `TranchePermissions::ProductAdmins` (r:1 w:1)
+	/// Proof: `TranchePermissions::ProductAdmins` (`max_values`: None, `max_size`: Some(44), added: 2519, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Products` (r:1 w:1)
+	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Timestamp::Now` (r:1 w:0)
+	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Vaults` (r:100 w:100)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::MultichainAdapterIndex` (r:10 w:10)
+	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:99 w:99)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn create_product_permissionless(t: u32, a: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `292`
+		//  Estimated: `3757 + a * (2317 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 402_000_000 picoseconds.
+		Weight::from_parts(20_371_053, 3757)
+			// Standard Error: 9_513
+			.saturating_add(Weight::from_parts(3_708_289, 0).saturating_mul(t.into()))
+			// Standard Error: 8_701
+			.saturating_add(Weight::from_parts(6_201_524, 0).saturating_mul(a.into()))
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2317).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
+	}
+	/// Storage: `TranchePermissions::ProductAdmins` (r:1 w:1)
+	/// Proof: `TranchePermissions::ProductAdmins` (`max_values`: None, `max_size`: Some(44), added: 2519, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Products` (r:1 w:1)
+	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Timestamp::Now` (r:1 w:0)
+	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Vaults` (r:10 w:10)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:10)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 10]`.
+	/// The range of component `a` is `[1, 10]`.
+	fn create_single_chain_product_permissionless(t: u32, a: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `292`
+		//  Estimated: `3757 + a * (2539 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 59_000_000 picoseconds.
+		Weight::from_parts(19_819_184, 3757)
+			// Standard Error: 7_719
+			.saturating_add(Weight::from_parts(3_478_904, 0).saturating_mul(t.into()))
+			// Standard Error: 7_719
+			.saturating_add(Weight::from_parts(5_988_847, 0).saturating_mul(a.into()))
+			.saturating_add(T::DbWeight::get().reads(3_u64))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(T::DbWeight::get().writes(4_u64))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(T::DbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2539).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
 	}
 }
 
@@ -205,85 +350,148 @@ impl WeightInfo for () {
 	/// Storage: `Timestamp::Now` (r:1 w:0)
 	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::Vaults` (r:100 w:100)
-	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(53), added: 2528, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::MultichainAdapterIndex` (r:10 w:10)
-	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	/// Storage: `TrancheSystem::AdapterIndex` (r:100 w:100)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:99 w:99)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn create_product() -> Weight {
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn create_product(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `251`
-		//  Estimated: `253790`
-		// Minimum execution time: 1_244_000_000 picoseconds.
-		Weight::from_parts(1_278_000_000, 253790)
-			.saturating_add(RocksDbWeight::get().reads(212_u64))
-			.saturating_add(RocksDbWeight::get().writes(213_u64))
+		//  Estimated: `3716 + a * (2317 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 396_000_000 picoseconds.
+		Weight::from_parts(31_271_690, 3716)
+			// Standard Error: 39_073
+			.saturating_add(Weight::from_parts(3_602_937, 0).saturating_mul(t.into()))
+			// Standard Error: 35_736
+			.saturating_add(Weight::from_parts(6_102_851, 0).saturating_mul(a.into()))
+			.saturating_add(RocksDbWeight::get().reads(2_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2317).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `Timestamp::Now` (r:1 w:0)
 	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::Vaults` (r:10 w:10)
-	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(53), added: 2528, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:10)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
 	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
 	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	fn create_single_chain_product() -> Weight {
+	/// The range of component `t` is `[1, 10]`.
+	/// The range of component `a` is `[1, 10]`.
+	fn create_single_chain_product(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `251`
-		//  Estimated: `26270`
-		// Minimum execution time: 89_000_000 picoseconds.
-		Weight::from_parts(100_000_000, 26270)
-			.saturating_add(RocksDbWeight::get().reads(22_u64))
-			.saturating_add(RocksDbWeight::get().writes(23_u64))
+		//  Estimated: `3716 + a * (2539 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 55_000_000 picoseconds.
+		Weight::from_parts(15_189_678, 3716)
+			// Standard Error: 6_718
+			.saturating_add(Weight::from_parts(3_468_214, 0).saturating_mul(t.into()))
+			// Standard Error: 6_718
+			.saturating_add(Weight::from_parts(5_940_083, 0).saturating_mul(a.into()))
+			.saturating_add(RocksDbWeight::get().reads(2_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(RocksDbWeight::get().writes(3_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2539).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `TrancheSystem::Vaults` (r:1 w:1)
-	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(53), added: 2528, mode: `MaxEncodedLen`)
-	fn set_tranche() -> Weight {
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 99]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn set_tranche(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `75717`
-		//  Estimated: `79182`
-		// Minimum execution time: 403_000_000 picoseconds.
-		Weight::from_parts(438_000_000, 79182)
+		//  Measured:  `1156 + a * (720 ±0) + t * (138 ±0)`
+		//  Estimated: `4290 + a * (724 ±0) + t * (136 ±0)`
+		// Minimum execution time: 73_000_000 picoseconds.
+		Weight::from_parts(15_976_773, 4290)
+			// Standard Error: 2_379
+			.saturating_add(Weight::from_parts(522_704, 0).saturating_mul(t.into()))
+			// Standard Error: 2_149
+			.saturating_add(Weight::from_parts(2_869_591, 0).saturating_mul(a.into()))
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(2_u64))
+			.saturating_add(Weight::from_parts(0, 724).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 136).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:20)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	fn set_adapters() -> Weight {
+	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:11)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 99]`.
+	/// The range of component `n` is `[1, 10]`.
+	fn set_adapters(t: u32, a: u32, n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `77276`
-		//  Estimated: `80741`
-		// Minimum execution time: 456_000_000 picoseconds.
-		Weight::from_parts(472_000_000, 80741)
-			.saturating_add(RocksDbWeight::get().reads(11_u64))
-			.saturating_add(RocksDbWeight::get().writes(21_u64))
+		//  Measured:  `251 + a * (738 ±0) + n * (137 ±0) + t * (134 ±0)`
+		//  Estimated: `3794 + a * (741 ±0) + n * (2539 ±1) + t * (134 ±0)`
+		// Minimum execution time: 131_000_000 picoseconds.
+		Weight::from_parts(7_856_726, 3794)
+			// Standard Error: 2_253
+			.saturating_add(Weight::from_parts(516_045, 0).saturating_mul(t.into()))
+			// Standard Error: 2_283
+			.saturating_add(Weight::from_parts(2_942_569, 0).saturating_mul(a.into()))
+			// Standard Error: 23_316
+			.saturating_add(Weight::from_parts(6_892_406, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(RocksDbWeight::get().writes(2_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 741).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2539).saturating_mul(n.into()))
+			.saturating_add(Weight::from_parts(0, 134).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
 	/// Storage: `TrancheSystem::MultichainAdapterIndex` (r:10 w:20)
-	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	/// Storage: `TrancheSystem::AdapterIndex` (r:100 w:200)
-	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
-	fn set_multichain_adapters() -> Weight {
+	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:99 w:199)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `o` is `[2, 110]`.
+	/// The range of component `n` is `[2, 110]`.
+	fn set_multichain_adapters(t: u32, o: u32, n: u32, ) -> Weight {
+		// Generated with `--output-analysis median-slopes`: min-squares extrapolated a
+		// spurious 322M ps intercept from the max-held sweeps.
 		// Proof Size summary in bytes:
-		//  Measured:  `79374`
-		//  Estimated: `253690`
-		// Minimum execution time: 878_000_000 picoseconds.
-		Weight::from_parts(907_000_000, 253690)
-			.saturating_add(RocksDbWeight::get().reads(111_u64))
-			.saturating_add(RocksDbWeight::get().writes(221_u64))
+		//  Measured:  `0 + n * (23 ±0) + o * (761 ±0) + t * (134 ±0)`
+		//  Estimated: `1715 + n * (2308 ±0) + o * (761 ±0) + t * (134 ±0)`
+		// Minimum execution time: 322_000_000 picoseconds.
+		Weight::from_parts(0, 1715)
+			// Standard Error: 0
+			.saturating_add(Weight::from_parts(500_000, 0).saturating_mul(t.into()))
+			// Standard Error: 0
+			.saturating_add(Weight::from_parts(2_710_843, 0).saturating_mul(o.into()))
+			// Standard Error: 0
+			.saturating_add(Weight::from_parts(6_715_909, 0).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().reads(1_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(n.into())))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(o.into())))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 2308).saturating_mul(n.into()))
+			.saturating_add(Weight::from_parts(0, 761).saturating_mul(o.into()))
+			.saturating_add(Weight::from_parts(0, 134).saturating_mul(t.into()))
 	}
 	/// Storage: `TrancheSystem::OrchestratorAddress` (r:0 w:1)
 	/// Proof: `TrancheSystem::OrchestratorAddress` (`max_values`: Some(1), `max_size`: Some(20), added: 515, mode: `MaxEncodedLen`)
@@ -297,14 +505,22 @@ impl WeightInfo for () {
 	}
 	/// Storage: `TrancheSystem::Products` (r:1 w:1)
 	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
-	fn set_multichain_tranche_managers() -> Weight {
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn set_multichain_tranche_managers(t: u32, a: u32, ) -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `75224`
-		//  Estimated: `78689`
-		// Minimum execution time: 410_000_000 picoseconds.
-		Weight::from_parts(433_000_000, 78689)
+		//  Measured:  `757 + a * (720 ±0) + t * (134 ±0)`
+		//  Estimated: `4013 + a * (723 ±0) + t * (132 ±0)`
+		// Minimum execution time: 67_000_000 picoseconds.
+		Weight::from_parts(11_351_897, 4013)
+			// Standard Error: 3_964
+			.saturating_add(Weight::from_parts(514_035, 0).saturating_mul(t.into()))
+			// Standard Error: 3_626
+			.saturating_add(Weight::from_parts(2_850_782, 0).saturating_mul(a.into()))
 			.saturating_add(RocksDbWeight::get().reads(1_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
+			.saturating_add(Weight::from_parts(0, 723).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 132).saturating_mul(t.into()))
 	}
 	fn set_request_flow_version() -> Weight {
 		// Proof Size summary in bytes:
@@ -319,5 +535,77 @@ impl WeightInfo for () {
 		//  Estimated: `0`
 		// Minimum execution time: 1_000_000 picoseconds.
 		Weight::from_parts(2_000_000, 0)
+	}
+	/// Storage: `TranchePermissions::ProductAdmins` (r:1 w:1)
+	/// Proof: `TranchePermissions::ProductAdmins` (`max_values`: None, `max_size`: Some(44), added: 2519, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Products` (r:1 w:1)
+	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Timestamp::Now` (r:1 w:0)
+	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Vaults` (r:100 w:100)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::MultichainAdapterIndex` (r:10 w:10)
+	/// Proof: `TrancheSystem::MultichainAdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:99 w:99)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 100]`.
+	/// The range of component `a` is `[2, 110]`.
+	fn create_product_permissionless(t: u32, a: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `292`
+		//  Estimated: `3757 + a * (2317 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 402_000_000 picoseconds.
+		Weight::from_parts(20_371_053, 3757)
+			// Standard Error: 9_513
+			.saturating_add(Weight::from_parts(3_708_289, 0).saturating_mul(t.into()))
+			// Standard Error: 8_701
+			.saturating_add(Weight::from_parts(6_201_524, 0).saturating_mul(a.into()))
+			.saturating_add(RocksDbWeight::get().reads(3_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(RocksDbWeight::get().writes(4_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2317).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
+	}
+	/// Storage: `TranchePermissions::ProductAdmins` (r:1 w:1)
+	/// Proof: `TranchePermissions::ProductAdmins` (`max_values`: None, `max_size`: Some(44), added: 2519, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Products` (r:1 w:1)
+	/// Proof: `TrancheSystem::Products` (`max_values`: None, `max_size`: None, mode: `Measured`)
+	/// Storage: `Timestamp::Now` (r:1 w:0)
+	/// Proof: `Timestamp::Now` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::Vaults` (r:10 w:10)
+	/// Proof: `TrancheSystem::Vaults` (`max_values`: None, `max_size`: Some(65), added: 2540, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::AdapterIndex` (r:10 w:10)
+	/// Proof: `TrancheSystem::AdapterIndex` (`max_values`: None, `max_size`: Some(64), added: 2539, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::RequestFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::RequestFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// Storage: `TrancheSystem::SettlementFlowVersion` (r:0 w:1)
+	/// Proof: `TrancheSystem::SettlementFlowVersion` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
+	/// The range of component `t` is `[1, 10]`.
+	/// The range of component `a` is `[1, 10]`.
+	fn create_single_chain_product_permissionless(t: u32, a: u32, ) -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `292`
+		//  Estimated: `3757 + a * (2539 ±0) + t * (2540 ±0)`
+		// Minimum execution time: 59_000_000 picoseconds.
+		Weight::from_parts(19_819_184, 3757)
+			// Standard Error: 7_719
+			.saturating_add(Weight::from_parts(3_478_904, 0).saturating_mul(t.into()))
+			// Standard Error: 7_719
+			.saturating_add(Weight::from_parts(5_988_847, 0).saturating_mul(a.into()))
+			.saturating_add(RocksDbWeight::get().reads(3_u64))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().reads((1_u64).saturating_mul(a.into())))
+			.saturating_add(RocksDbWeight::get().writes(4_u64))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(t.into())))
+			.saturating_add(RocksDbWeight::get().writes((1_u64).saturating_mul(a.into())))
+			.saturating_add(Weight::from_parts(0, 2539).saturating_mul(a.into()))
+			.saturating_add(Weight::from_parts(0, 2540).saturating_mul(t.into()))
 	}
 }

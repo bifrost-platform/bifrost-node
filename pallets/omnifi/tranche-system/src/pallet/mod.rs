@@ -1,12 +1,14 @@
 mod impls;
 
 use crate::{
-	AdapterInfo, AdapterKey, ChainAddress, ChainTranches, CrudAction, FlowVersion,
-	MultichainAdapterInfo, MultichainProductDetails, ProductDetails, ProductId, SettlementMode,
-	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
-	ValuationInfo, VaultId, VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
-	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_MULTICHAIN_ADAPTERS, MAX_TRANCHES_PER_CHAIN,
-	MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
+	is_permissionless_product_id, product_id_prefix, AdapterInfo, AdapterKey, ChainAddress,
+	ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo, MultichainProductDetails,
+	ProductAdminRegistry, ProductDetails, ProductId, SettlementMode, SingleChainProductDetails,
+	SingleChainValuationInfo, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
+	VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_ADAPTER_INDEX_ENTRIES, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_CHAINS, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
+	PRODUCT_ID_PREFIX_PERMISSIONLESS_MULTICHAIN, PRODUCT_ID_PREFIX_PERMISSIONLESS_SINGLE_CHAIN,
 };
 
 use frame_support::{pallet_prelude::*, traits::StorageVersion};
@@ -42,19 +44,27 @@ pub mod pallet {
 		/// pallet-tranche-permissions). Carries that verified account so
 		/// `create_product` can populate `ProductCreated`'s `product_admin`
 		/// field without re-deriving it — mirrors
-		/// `frame_system::RawOrigin::Signed`. The only accepted origin for
-		/// every extrinsic in this pallet, ensuring none of them can be
-		/// called except through the precompile.
+		/// `frame_system::RawOrigin::Signed`. Together with `ProductFactory`
+		/// below, the only origins this pallet's product extrinsics accept,
+		/// ensuring none of them can be called except through the precompile.
 		ProductAdmin(T::AccountId),
+		/// Dispatched by the tranche-system precompile after verifying the
+		/// caller is the global ProductFactory (via
+		/// pallet-tranche-permissions' `ProductFactory`). Accepted by the
+		/// permissionless create extrinsics, and by the product-management
+		/// extrinsics on permissionless products only (see
+		/// `is_permissionless_product_id`).
+		ProductFactory(T::AccountId),
 	}
 
 	#[pallet::config]
 	pub trait Config:
 		frame_system::Config + pallet_timestamp::Config<Moment = u64> + pallet_evm::Config
 	{
-		/// Only accepted origin for every extrinsic in this pallet
-		/// (`create_product`, `set_tranche`, `set_adapters`,
-		/// `set_multichain_adapters`) — none of them can be called via a plain
+		/// Origin of the curated create extrinsics and of every
+		/// product-management extrinsic (`set_tranche`, `set_adapters`, …;
+		/// the latter also accept `ProductFactoryOrigin` on permissionless
+		/// products) — none of them can be called via a plain
 		/// signed extrinsic. The tranche-system precompile constructs this
 		/// origin itself, after verifying the caller holds ProductAdmin for
 		/// the product being acted on (via pallet-tranche-permissions), so
@@ -66,6 +76,17 @@ pub mod pallet {
 			Self::RuntimeOrigin,
 			Success = Self::AccountId,
 		>;
+		/// Origin of the permissionless create extrinsics. Wire as
+		/// `pallet_tranche_system::EnsureProductFactory<Runtime>` — constructed
+		/// only by the tranche-system precompile, after it checks the caller
+		/// is the ProductFactory.
+		type ProductFactoryOrigin: frame_support::traits::EnsureOrigin<
+			Self::RuntimeOrigin,
+			Success = Self::AccountId,
+		>;
+		/// Installs a permissionless product's admin at creation — implemented
+		/// by pallet-tranche-permissions.
+		type ProductAdmins: ProductAdminRegistry<Self::AccountId>;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -215,6 +236,20 @@ pub mod pallet {
 		/// `ProductAdminOrigin`-gated, correctly shaped) so the call surface
 		/// is stable ahead of time; only their bodies are disabled.
 		FlowVersionChangeNotYetSupported,
+		/// `product_id`'s prefix doesn't fit the create path: the curated
+		/// `create_product`/`create_single_chain_product` reject the
+		/// permissionless prefixes (`3`/`4`), and the permissionless ones accept
+		/// only their own (`4` multichain, `3` single-chain).
+		InvalidProductIdPrefix,
+		/// A `ProductFactory` origin acted on a curated product — the factory only
+		/// manages the products it created (permissionless prefixes).
+		NotPermissionlessProduct,
+		/// On a permissionless product, a change that introduces a new address
+		/// (adding a tranche, changing a tranche's asset/shares, adding an adapter
+		/// or changing its source, binding a TrancheManager) must come from the
+		/// ProductFactory, which deploys those contracts. The product's admin may
+		/// only reweight, reorder, re-rate, or remove.
+		RequiresProductFactory,
 	}
 
 	// -----------------------------------------------------------------------
@@ -405,7 +440,10 @@ pub mod pallet {
 		/// no "same product re-adding its own removed vault" exception here.
 		///
 		#[pallet::call_index(0)]
-		#[pallet::weight(<T as Config>::WeightInfo::create_product())]
+		#[pallet::weight(<T as Config>::WeightInfo::create_product(
+			tranches.len() as u32,
+			Pallet::<T>::adapter_index_entries(multichain_adapters),
+		))]
 		pub fn create_product(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -424,6 +462,611 @@ pub mod pallet {
 		) -> DispatchResult {
 			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
 
+			ensure!(!is_permissionless_product_id(product_id), Error::<T>::InvalidProductIdPrefix);
+			Self::do_create_product(
+				product_id,
+				product_admin,
+				valuation,
+				tranches,
+				multichain_adapters,
+				multichain_tranche_managers,
+			)
+		}
+
+		/// Create a new single-chain product: every contract (Vault(s),
+		/// TrancheManager, Valuation, Adapters, Ledger) lives on one EVM
+		/// chain (`chain_id`, not necessarily the Hub) — see
+		/// `SingleChainProductDetails`'s doc comment for the model this
+		/// differs from `create_product`'s hub-spoke one in.
+		///
+		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
+		/// as `create_product`.
+		///
+		/// `tranches` uses the same `priority`-sort-and-validate rules
+		/// `create_product` applies within one chain's own group (sort by
+		/// `priority`, reject duplicates, require every `Senior` before every
+		/// `Junior`, at most one `Junior`, at least one `Senior`, no two
+		/// entries at the exact same `tranche_type`) — applied directly to
+		/// the whole flat input here, without `create_product`'s
+		/// chain-grouping step, since every entry's `vault.chain_id` must
+		/// equal `chain_id` anyway (reverts with
+		/// `SingleChainTranchesMustShareChain` otherwise) — there's only ever
+		/// the one chain to group by. Same vault-registration rule as
+		/// `create_product` too — every entry's `vault` must be unclaimed by
+		/// any product (see `VaultRegistration`'s doc comment). `adapters`'
+		/// `weight_bps` must sum to exactly 10_000, same invariant as one
+		/// `MultichainAdapterInfo`'s nested `adapters`.
+		#[pallet::call_index(6)]
+		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product(
+			tranches.len() as u32,
+			adapters.len() as u32,
+		))]
+		pub fn create_single_chain_product(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			chain_id: u64,
+			valuation: SingleChainValuationInfo,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
+			tranche_manager: ChainAddress,
+			adapters: BoundedBTreeMap<
+				ChainAddress,
+				AdapterInfo,
+				ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
+			>,
+			ledger: ChainAddress,
+		) -> DispatchResult {
+			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
+
+			ensure!(!is_permissionless_product_id(product_id), Error::<T>::InvalidProductIdPrefix);
+			Self::do_create_single_chain_product(
+				product_id,
+				product_admin,
+				chain_id,
+				valuation,
+				tranches,
+				tranche_manager,
+				adapters,
+				ledger,
+			)
+		}
+
+		/// Add, remove, or update a tranche on an existing product — Multichain or
+		/// single-chain alike, identified by its vault. Origin must be
+		/// `ProductAdminOrigin` — same precompile-only gating as `create_product`.
+		///
+		/// Field usage differs by `action`, mirroring interface.sol's
+		/// `set_tranche`. Every branch re-validates, on the resulting list for
+		/// `vault.chain_id`'s own chain (Multichain — a `Remove`/`Update` on a
+		/// chain with no existing tranches reverts with `VaultNotFound`
+		/// before even reaching this; SingleChain — the product's one and
+		/// only list): that all `Senior` tranches on that chain still precede
+		/// all `Junior` ones on that same chain; that chain's own list still
+		/// holds at most one `Junior`; and, if that chain's own list is still
+		/// non-empty after the mutation, that it holds at least one `Senior`
+		/// — reverts if the requested change would break any of these. All
+		/// per-chain checks, not product-wide (see `TrancheInput`'s doc
+		/// comment). Emptying a chain's list entirely (its last tranche
+		/// removed) is fine — that chain's own entry is then dropped, not
+		/// left around violating the "at least one Senior" rule vacuously
+		/// (e.g. retiring a Hub-deployed vault while keeping Spoke ones, or
+		/// vice versa). Two additional checks ARE product-wide, checked once
+		/// here rather than per-chain: `Remove` reverts with
+		/// `Error::ProductMustHaveAtLeastOneTranche` if it would take the
+		/// product's absolute last tranche, summed across every chain — a
+		/// product must always retain at least one tranche *somewhere*, even
+		/// though any single chain may be emptied out entirely. `Remove` also
+		/// reverts with `Error::TrancheTypeMustExistSomewhere` if the removed
+		/// vault held the product's *last* live instance of that exact
+		/// `tranche_type` (see that error's own doc comment) — a `Senior { apr
+		/// }` tranche can be removed from one chain as long as another chain
+		/// still carries a vault at that same `apr`. For a single-chain
+		/// product, `Add`/`Update` additionally revert unless `vault.chain_id`
+		/// equals the product's own `chain_id` (same constraint
+		/// `create_single_chain_product` enforces at creation time).
+		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
+		///   any product). `tranche_type`, `asset`, `shares`, and `priority` are used. If
+		///   `priority` is already occupied within `vault.chain_id`'s own list, the existing
+		///   tranche at that slot (and everything after it, on that same chain) shifts down by
+		///   one. For a Multichain product, `vault.chain_id` need not already have any tranches
+		///   — a fresh per-chain entry is created on first use.
+		/// - `Remove`: only `vault` is used, to find which tranche to remove — searched within
+		///   `vault.chain_id`'s own list. Every tranche after it, on that same chain, shifts up
+		///   by one, closing the gap. For a Multichain product, removing a chain's last tranche
+		///   drops that chain's entry entirely (never left around empty). NOT YET CHECKED
+		///   (deferred): interface.sol also specifies this should revert if the tranche has
+		///   outstanding investments — pallet-tranche-investments doesn't expose an inspection
+		///   trait for this yet.
+		/// - `Update`: `vault` identifies which tranche to update (reverts if not found, searched
+		///   within `vault.chain_id`'s own list); `asset`, `shares`, and `priority` are applied
+		///   as new values using the same insert-and-shift semantics as `Add` for `priority`
+		///   (still scoped to that same chain — `Update` never moves a tranche to a different
+		///   chain, only `Remove` then `Add` can). `tranche_type`'s Junior/Senior discriminant is
+		///   immutable — reverts if it doesn't match the existing tranche's; `apr` (carried
+		///   inside `tranche_type` for `Senior`) may still change, since only the discriminant is
+		///   checked. Changing `apr` is product-wide, not just-this-vault: a `tranche_type` is a
+		///   shared class across the whole product (e.g. "Senior at 5%" spanning several chains'
+		///   vaults), so once `vault`'s own entry is updated, every *other* vault anywhere in the
+		///   product still carrying the OLD `tranche_type` is renamed to the NEW one too — only
+		///   that other vault's `tranche_type` field changes, its own `asset`/`shares`/`priority`
+		///   stay exactly as they were. If `vault` was the only one at the old rate, nothing else
+		///   is touched (this is also why `Update` can never trip
+		///   `Error::TrancheTypeMustExistSomewhere` — the type moves as one group, never drops to
+		///   zero). Each renamed vault gets its own `Event::TrancheSet` (see that event's doc
+		///   comment).
+		///
+		/// Weight: charged up front for the largest possible product, then refunded to
+		/// the target product's actual size (`t` tranches, `a` adapter-index entries)
+		/// — decoding/re-encoding it dominates.
+		#[pallet::call_index(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_tranche(
+			MAX_TRANCHE_INPUTS,
+			MAX_ADAPTER_INDEX_ENTRIES,
+		))]
+		pub fn set_tranche(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			action: CrudAction,
+			vault: VaultId,
+			tranche_type: TrancheType,
+			asset: ChainAddress,
+			shares: ChainAddress,
+			priority: u8,
+		) -> DispatchResultWithPostInfo {
+			let authority = Self::ensure_product_authority(origin, product_id)?;
+
+			// See `apply_set_tranche`'s own doc comment for the full logic —
+			// Multichain-vs-SingleChain dispatch, the `Remove`-only
+			// product-wide floors, and the `Update` cross-chain
+			// `tranche_type` cascade all live there, kept out of this
+			// extrinsic body so it stays a thin origin-check-then-event
+			// wrapper, same shape as every other extrinsic in this pallet.
+			let (cascaded, (t, a)) = Products::<T>::try_mutate(product_id, |maybe_product| {
+				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+				let size = Self::product_size(product);
+				Self::ensure_may_introduce_addresses(
+					authority,
+					product_id,
+					Self::set_tranche_introduces_address(product, action, &vault, asset, shares),
+				)?;
+				Self::apply_set_tranche(
+					product_id,
+					product,
+					action,
+					&vault,
+					&tranche_type,
+					asset,
+					shares,
+					priority,
+				)
+				.map(|cascaded| (cascaded, size))
+			})?;
+
+			Self::deposit_event(Event::TrancheSet {
+				product_id,
+				action,
+				vault,
+				tranche_type,
+				asset,
+				shares,
+				priority,
+			});
+			for (cascaded_vault, new_type, cascaded_asset, cascaded_shares, cascaded_priority) in
+				cascaded
+			{
+				Self::deposit_event(Event::TrancheSet {
+					product_id,
+					action: CrudAction::Update,
+					vault: cascaded_vault,
+					tranche_type: new_type,
+					asset: cascaded_asset,
+					shares: cascaded_shares,
+					priority: cascaded_priority,
+				});
+			}
+			Ok(Some(<T as Config>::WeightInfo::set_tranche(t, a)).into())
+		}
+
+		/// Replace, atomically, a product's entire flat individual-Adapter set —
+		/// Multichain or single-chain alike. Origin must be `ProductAdminOrigin`
+		/// — same precompile-only gating as `create_product`.
+		///
+		/// For a Multichain product, this replaces one MultichainAdapter's
+		/// nested `adapters` (identified by `parent_adapter_address`,
+		/// `parent_chain_id` — reverts with `MultichainAdapterNotFound` if no
+		/// such parent exists). For a single-chain product, `parent_adapter_address`/
+		/// `parent_chain_id` are ignored (there's no MultichainAdapter parent
+		/// concept at all) — this replaces the product's whole flat `adapters`
+		/// map instead.
+		///
+		/// Weight: charged up front for the largest possible product and replaced set,
+		/// then refunded to the product's actual size (`t`, `a`), the `n` new adapters
+		/// (index read + write each) and the replaced ones (index removal each).
+		#[pallet::call_index(2)]
+		#[pallet::weight(Pallet::<T>::set_adapters_weight(
+			MAX_TRANCHE_INPUTS,
+			MAX_ADAPTER_INDEX_ENTRIES,
+			adapters.len() as u32,
+			MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER.max(MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT),
+		))]
+		pub fn set_adapters(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			parent_adapter_address: ChainAddress,
+			parent_chain_id: u64,
+			adapters: BoundedBTreeMap<
+				ChainAddress,
+				AdapterInfo,
+				ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
+			>,
+		) -> DispatchResultWithPostInfo {
+			let authority = Self::ensure_product_authority(origin, product_id)?;
+
+			Self::ensure_weights_sum_to_10000(adapters.values().map(|a| a.weight_bps))?;
+			let n = adapters.len() as u32;
+
+			let (t, a, replaced) = Products::<T>::try_mutate(
+				product_id,
+				|maybe_product| -> Result<(u32, u32, u32), DispatchError> {
+					let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+					let (t, a) = Self::product_size(product);
+					let replaced = match product {
+						ProductDetails::Multichain(product) => {
+							let parent_key = AdapterKey {
+								address: parent_adapter_address,
+								chain_id: parent_chain_id,
+							};
+							let parent = product
+								.multichain_adapters
+								.get_mut(&parent_key)
+								.ok_or(Error::<T>::MultichainAdapterNotFound)?;
+							Self::ensure_may_introduce_addresses(
+								authority,
+								product_id,
+								Self::adapters_introduce_address(&parent.adapters, &adapters),
+							)?;
+							Self::replace_adapter_index(
+								product_id,
+								parent_chain_id,
+								parent.adapters.keys(),
+								adapters.keys(),
+							)?;
+							let replaced = parent.adapters.len() as u32;
+							parent.adapters = adapters;
+							replaced
+						},
+						ProductDetails::SingleChain(product) => {
+							// `parent_adapter_address`/`parent_chain_id` are ignored here —
+							// a single-chain product has no MultichainAdapter parent
+							// concept at all, so this replaces the product's whole flat
+							// `adapters` map instead of one parent's nested set.
+							Self::ensure_may_introduce_addresses(
+								authority,
+								product_id,
+								Self::adapters_introduce_address(&product.adapters, &adapters),
+							)?;
+							Self::replace_adapter_index(
+								product_id,
+								product.chain_id,
+								product.adapters.keys(),
+								adapters.keys(),
+							)?;
+							let replaced = product.adapters.len() as u32;
+							product.adapters = adapters;
+							replaced
+						},
+					};
+					Ok((t, a, replaced))
+				},
+			)?;
+
+			Self::deposit_event(Event::AdaptersSet {
+				product_id,
+				parent_adapter_address,
+				parent_chain_id,
+			});
+			Ok(Some(Self::set_adapters_weight(t, a, n, replaced)).into())
+		}
+
+		/// Replace a product's entire MultichainAdapter routing table
+		/// atomically — deep replace, including every entry's nested
+		/// `adapters`. Origin must be `ProductAdminOrigin` — same
+		/// precompile-only gating as `create_product`.
+		///
+		/// Weight: the `n` new index entries are known up front; the product's tranche
+		/// count `t` and the `o` replaced entries are charged at their maximum, then
+		/// refunded to their actual values.
+		#[pallet::call_index(3)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_adapters(
+			MAX_TRANCHE_INPUTS,
+			MAX_ADAPTER_INDEX_ENTRIES,
+			Pallet::<T>::adapter_index_entries(multichain_adapters),
+		))]
+		pub fn set_multichain_adapters(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			multichain_adapters: BoundedBTreeMap<
+				AdapterKey,
+				MultichainAdapterInfo,
+				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
+			>,
+		) -> DispatchResultWithPostInfo {
+			let authority = Self::ensure_product_authority(origin, product_id)?;
+
+			Self::ensure_weights_sum_to_10000(
+				multichain_adapters.values().map(|info| info.weight_bps),
+			)?;
+			for info in multichain_adapters.values() {
+				Self::ensure_weights_sum_to_10000(info.adapters.values().map(|a| a.weight_bps))?;
+			}
+			let n = Self::adapter_index_entries(&multichain_adapters);
+
+			let (t, o) = Products::<T>::try_mutate(
+				product_id,
+				|maybe_product| -> Result<(u32, u32), DispatchError> {
+					let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+					let size = Self::product_size(product);
+					let product = match product {
+						ProductDetails::Multichain(product) => product,
+						ProductDetails::SingleChain(_) => {
+							return Err(Error::<T>::WrongProductType.into())
+						},
+					};
+					Self::ensure_may_introduce_addresses(
+						authority,
+						product_id,
+						Self::multichain_adapters_introduce_address(
+							&product.multichain_adapters,
+							&multichain_adapters,
+						),
+					)?;
+
+					// Deep replace: drop every old entry's reverse-index rows first
+					// (top-level and nested), same reasoning as `set_adapters`.
+					for (old_key, old_info) in product.multichain_adapters.iter() {
+						MultichainAdapterIndex::<T>::remove(old_key);
+						for old_address in old_info.adapters.keys() {
+							AdapterIndex::<T>::remove(&AdapterKey {
+								address: *old_address,
+								chain_id: old_key.chain_id,
+							});
+						}
+					}
+
+					Self::ensure_multichain_adapters_are_unregistered(multichain_adapters.iter())?;
+					Self::insert_multichain_adapter_index(product_id, multichain_adapters.iter());
+
+					product.multichain_adapters = multichain_adapters;
+					Ok(size)
+				},
+			)?;
+
+			Self::deposit_event(Event::MultichainAdaptersSet { product_id });
+			Ok(Some(<T as Config>::WeightInfo::set_multichain_adapters(t, o, n)).into())
+		}
+
+		/// Set the single, global Orchestrator contract address. Root-only —
+		/// see `OrchestratorAddress`'s doc comment.
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_orchestrator_address())]
+		pub fn set_orchestrator_address(origin: OriginFor<T>, address: H160) -> DispatchResult {
+			ensure_root(origin)?;
+			OrchestratorAddress::<T>::put(address);
+			Self::deposit_event(Event::OrchestratorAddressSet { address });
+			Ok(())
+		}
+
+		/// Replace a product's entire per-chain TrancheManager table
+		/// atomically (Hub included, if the product has a Hub vault — see
+		/// `ProductDetails::multichain_tranche_managers`'s doc comment).
+		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
+		/// as `create_product`. A TrancheManager may be bound to any chain, including one
+		/// with no tranche (e.g. an adapter-only chain).
+		///
+		/// Weight: charged for the largest possible product, refunded to its actual size.
+		#[pallet::call_index(5)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_tranche_managers(
+			MAX_TRANCHE_INPUTS,
+			MAX_ADAPTER_INDEX_ENTRIES,
+		))]
+		pub fn set_multichain_tranche_managers(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			multichain_tranche_managers: BoundedBTreeMap<
+				u64,
+				ChainAddress,
+				ConstU32<MAX_TRANCHE_MANAGERS>,
+			>,
+		) -> DispatchResultWithPostInfo {
+			let authority = Self::ensure_product_authority(origin, product_id)?;
+
+			let (t, a) = Products::<T>::try_mutate(
+				product_id,
+				|maybe_product| -> Result<(u32, u32), DispatchError> {
+					let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
+					let size = Self::product_size(product);
+					let product = match product {
+						ProductDetails::Multichain(product) => product,
+						ProductDetails::SingleChain(_) => {
+							return Err(Error::<T>::WrongProductType.into())
+						},
+					};
+					Self::ensure_may_introduce_addresses(
+						authority,
+						product_id,
+						Self::tranche_managers_introduce_address(
+							&product.multichain_tranche_managers,
+							&multichain_tranche_managers,
+						),
+					)?;
+					product.multichain_tranche_managers = multichain_tranche_managers;
+					Ok(size)
+				},
+			)?;
+
+			Self::deposit_event(Event::MultichainTrancheManagersSet { product_id });
+			Ok(Some(<T as Config>::WeightInfo::set_multichain_tranche_managers(t, a)).into())
+		}
+
+		/// Register `product_id`'s request-pipeline `FlowVersion` as something
+		/// other than the `V1` it was created with. Origin must be
+		/// `ProductAdminOrigin` — same precompile-only gating as
+		/// `create_product`.
+		///
+		/// Stubbed to always reject with `Error::FlowVersionChangeNotYetSupported`
+		/// — no `FlowVersion` beyond `V1` has a real pipeline defined yet (see
+		/// `FlowVersion`'s own doc comment), so there is currently nothing a
+		/// genuine call here could legitimately do. The call surface (origin,
+		/// parameters, call_index) is stable ahead of time; only the body is
+		/// disabled — remove this stub once a real `V2` request pipeline is
+		/// designed.
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_request_flow_version())]
+		pub fn set_request_flow_version(
+			origin: OriginFor<T>,
+			// Named normally (not `_product_id`) despite going unused below —
+			// an underscore-prefixed parameter name here would leak into this
+			// call's on-chain metadata (the field name `#[pallet::call]`
+			// exposes to indexers/dApps), not just silence the compiler.
+			product_id: ProductId,
+			version: FlowVersion,
+		) -> DispatchResult {
+			Self::ensure_product_authority(origin, product_id)?;
+			let _ = (product_id, version);
+			Err(Error::<T>::FlowVersionChangeNotYetSupported.into())
+		}
+
+		/// Register `product_id`'s settlement-pipeline `FlowVersion` as
+		/// something other than the `V1` it was created with — independent of
+		/// `set_request_flow_version`. Same `ProductAdminOrigin` gating, and
+		/// same "stubbed until a real `V2` pipeline exists" rationale as that
+		/// extrinsic's own doc comment.
+		#[pallet::call_index(8)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_settlement_flow_version())]
+		pub fn set_settlement_flow_version(
+			origin: OriginFor<T>,
+			// Same naming rationale as `set_request_flow_version`'s own
+			// `product_id`/`version` parameters.
+			product_id: ProductId,
+			version: FlowVersion,
+		) -> DispatchResult {
+			Self::ensure_product_authority(origin, product_id)?;
+			let _ = (product_id, version);
+			Err(Error::<T>::FlowVersionChangeNotYetSupported.into())
+		}
+
+		/// Register a multichain product created through the ProductFactory
+		/// (permissionless creation). Same validation and storage effects as
+		/// `create_product`; additionally:
+		/// - origin must be `ProductFactoryOrigin` (the precompile checks the caller is the
+		///   ProductFactory);
+		/// - `product_id`'s prefix must be `PRODUCT_ID_PREFIX_PERMISSIONLESS_MULTICHAIN` (the
+		///   factory allocates the `seq` half);
+		/// - `product_admin` (the product's own Manager contract, deployed by the factory) is
+		///   installed as the product's ProductAdmin in the same transaction — fails if the slot
+		///   is somehow already taken.
+		///
+		/// Afterwards the admin may reweight, reorder, re-rate, and remove; any
+		/// change that introduces a new address must come from the factory again
+		/// (see `Error::RequiresProductFactory`).
+		#[pallet::call_index(9)]
+		#[pallet::weight(<T as Config>::WeightInfo::create_product_permissionless(
+			tranches.len() as u32,
+			Pallet::<T>::adapter_index_entries(multichain_adapters),
+		))]
+		pub fn create_product_permissionless(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			product_admin: T::AccountId,
+			valuation: ValuationInfo,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHE_INPUTS>>,
+			multichain_adapters: BoundedBTreeMap<
+				AdapterKey,
+				MultichainAdapterInfo,
+				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
+			>,
+			multichain_tranche_managers: BoundedBTreeMap<
+				u64,
+				ChainAddress,
+				ConstU32<MAX_TRANCHE_MANAGERS>,
+			>,
+		) -> DispatchResult {
+			T::ProductFactoryOrigin::ensure_origin(origin)?;
+			ensure!(
+				product_id_prefix(product_id) == PRODUCT_ID_PREFIX_PERMISSIONLESS_MULTICHAIN,
+				Error::<T>::InvalidProductIdPrefix
+			);
+			T::ProductAdmins::assign_product_admin(product_id, &product_admin)?;
+			Self::do_create_product(
+				product_id,
+				product_admin,
+				valuation,
+				tranches,
+				multichain_adapters,
+				multichain_tranche_managers,
+			)
+		}
+
+		/// Register a single-chain product created through the ProductFactory —
+		/// `create_single_chain_product`'s permissionless counterpart. Same extra
+		/// rules as `create_product_permissionless`, with
+		/// `PRODUCT_ID_PREFIX_PERMISSIONLESS_SINGLE_CHAIN` as the required prefix.
+		#[pallet::call_index(10)]
+		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product_permissionless(
+			tranches.len() as u32,
+			adapters.len() as u32,
+		))]
+		pub fn create_single_chain_product_permissionless(
+			origin: OriginFor<T>,
+			product_id: ProductId,
+			product_admin: T::AccountId,
+			chain_id: u64,
+			valuation: SingleChainValuationInfo,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
+			tranche_manager: ChainAddress,
+			adapters: BoundedBTreeMap<
+				ChainAddress,
+				AdapterInfo,
+				ConstU32<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
+			>,
+			ledger: ChainAddress,
+		) -> DispatchResult {
+			T::ProductFactoryOrigin::ensure_origin(origin)?;
+			ensure!(
+				product_id_prefix(product_id) == PRODUCT_ID_PREFIX_PERMISSIONLESS_SINGLE_CHAIN,
+				Error::<T>::InvalidProductIdPrefix
+			);
+			T::ProductAdmins::assign_product_admin(product_id, &product_admin)?;
+			Self::do_create_single_chain_product(
+				product_id,
+				product_admin,
+				chain_id,
+				valuation,
+				tranches,
+				tranche_manager,
+				adapters,
+				ledger,
+			)
+		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		/// `create_product`'s body, shared with `create_product_permissionless`.
+		pub(crate) fn do_create_product(
+			product_id: ProductId,
+			product_admin: T::AccountId,
+			valuation: ValuationInfo,
+			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHE_INPUTS>>,
+			multichain_adapters: BoundedBTreeMap<
+				AdapterKey,
+				MultichainAdapterInfo,
+				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
+			>,
+			multichain_tranche_managers: BoundedBTreeMap<
+				u64,
+				ChainAddress,
+				ConstU32<MAX_TRANCHE_MANAGERS>,
+			>,
+		) -> DispatchResult {
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
 			ensure!(
@@ -521,34 +1164,11 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Create a new single-chain product: every contract (Vault(s),
-		/// TrancheManager, Valuation, Adapters, Ledger) lives on one EVM
-		/// chain (`chain_id`, not necessarily the Hub) — see
-		/// `SingleChainProductDetails`'s doc comment for the model this
-		/// differs from `create_product`'s hub-spoke one in.
-		///
-		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
-		/// as `create_product`.
-		///
-		/// `tranches` uses the same `priority`-sort-and-validate rules
-		/// `create_product` applies within one chain's own group (sort by
-		/// `priority`, reject duplicates, require every `Senior` before every
-		/// `Junior`, at most one `Junior`, at least one `Senior`, no two
-		/// entries at the exact same `tranche_type`) — applied directly to
-		/// the whole flat input here, without `create_product`'s
-		/// chain-grouping step, since every entry's `vault.chain_id` must
-		/// equal `chain_id` anyway (reverts with
-		/// `SingleChainTranchesMustShareChain` otherwise) — there's only ever
-		/// the one chain to group by. Same vault-registration rule as
-		/// `create_product` too — every entry's `vault` must be unclaimed by
-		/// any product (see `VaultRegistration`'s doc comment). `adapters`'
-		/// `weight_bps` must sum to exactly 10_000, same invariant as one
-		/// `MultichainAdapterInfo`'s nested `adapters`.
-		#[pallet::call_index(6)]
-		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product())]
-		pub fn create_single_chain_product(
-			origin: OriginFor<T>,
+		/// `create_single_chain_product`'s body, shared with
+		/// `create_single_chain_product_permissionless`.
+		pub(crate) fn do_create_single_chain_product(
 			product_id: ProductId,
+			product_admin: T::AccountId,
 			chain_id: u64,
 			valuation: SingleChainValuationInfo,
 			tranches: BoundedVec<TrancheInput, ConstU32<MAX_TRANCHES_PER_CHAIN>>,
@@ -560,8 +1180,6 @@ pub mod pallet {
 			>,
 			ledger: ChainAddress,
 		) -> DispatchResult {
-			let product_admin = T::ProductAdminOrigin::ensure_origin(origin)?;
-
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
 			ensure!(
@@ -677,350 +1295,6 @@ pub mod pallet {
 			SettlementFlowVersion::<T>::insert(product_id, FlowVersion::V1);
 
 			Ok(())
-		}
-
-		/// Add, remove, or update a tranche on an existing product — Multichain or
-		/// single-chain alike, identified by its vault. Origin must be
-		/// `ProductAdminOrigin` — same precompile-only gating as `create_product`.
-		///
-		/// Field usage differs by `action`, mirroring interface.sol's
-		/// `set_tranche`. Every branch re-validates, on the resulting list for
-		/// `vault.chain_id`'s own chain (Multichain — a `Remove`/`Update` on a
-		/// chain with no existing tranches reverts with `VaultNotFound`
-		/// before even reaching this; SingleChain — the product's one and
-		/// only list): that all `Senior` tranches on that chain still precede
-		/// all `Junior` ones on that same chain; that chain's own list still
-		/// holds at most one `Junior`; and, if that chain's own list is still
-		/// non-empty after the mutation, that it holds at least one `Senior`
-		/// — reverts if the requested change would break any of these. All
-		/// per-chain checks, not product-wide (see `TrancheInput`'s doc
-		/// comment). Emptying a chain's list entirely (its last tranche
-		/// removed) is fine — that chain's own entry is then dropped, not
-		/// left around violating the "at least one Senior" rule vacuously
-		/// (e.g. retiring a Hub-deployed vault while keeping Spoke ones, or
-		/// vice versa). Two additional checks ARE product-wide, checked once
-		/// here rather than per-chain: `Remove` reverts with
-		/// `Error::ProductMustHaveAtLeastOneTranche` if it would take the
-		/// product's absolute last tranche, summed across every chain — a
-		/// product must always retain at least one tranche *somewhere*, even
-		/// though any single chain may be emptied out entirely. `Remove` also
-		/// reverts with `Error::TrancheTypeMustExistSomewhere` if the removed
-		/// vault held the product's *last* live instance of that exact
-		/// `tranche_type` (see that error's own doc comment) — a `Senior { apr
-		/// }` tranche can be removed from one chain as long as another chain
-		/// still carries a vault at that same `apr`. For a single-chain
-		/// product, `Add`/`Update` additionally revert unless `vault.chain_id`
-		/// equals the product's own `chain_id` (same constraint
-		/// `create_single_chain_product` enforces at creation time).
-		/// - `Add`: `vault` becomes the new tranche's identity (reverts if already registered to
-		///   any product). `tranche_type`, `asset`, `shares`, and `priority` are used. If
-		///   `priority` is already occupied within `vault.chain_id`'s own list, the existing
-		///   tranche at that slot (and everything after it, on that same chain) shifts down by
-		///   one. For a Multichain product, `vault.chain_id` need not already have any tranches
-		///   — a fresh per-chain entry is created on first use.
-		/// - `Remove`: only `vault` is used, to find which tranche to remove — searched within
-		///   `vault.chain_id`'s own list. Every tranche after it, on that same chain, shifts up
-		///   by one, closing the gap. For a Multichain product, removing a chain's last tranche
-		///   drops that chain's entry entirely (never left around empty). NOT YET CHECKED
-		///   (deferred): interface.sol also specifies this should revert if the tranche has
-		///   outstanding investments — pallet-tranche-investments doesn't expose an inspection
-		///   trait for this yet.
-		/// - `Update`: `vault` identifies which tranche to update (reverts if not found, searched
-		///   within `vault.chain_id`'s own list); `asset`, `shares`, and `priority` are applied
-		///   as new values using the same insert-and-shift semantics as `Add` for `priority`
-		///   (still scoped to that same chain — `Update` never moves a tranche to a different
-		///   chain, only `Remove` then `Add` can). `tranche_type`'s Junior/Senior discriminant is
-		///   immutable — reverts if it doesn't match the existing tranche's; `apr` (carried
-		///   inside `tranche_type` for `Senior`) may still change, since only the discriminant is
-		///   checked. Changing `apr` is product-wide, not just-this-vault: a `tranche_type` is a
-		///   shared class across the whole product (e.g. "Senior at 5%" spanning several chains'
-		///   vaults), so once `vault`'s own entry is updated, every *other* vault anywhere in the
-		///   product still carrying the OLD `tranche_type` is renamed to the NEW one too — only
-		///   that other vault's `tranche_type` field changes, its own `asset`/`shares`/`priority`
-		///   stay exactly as they were. If `vault` was the only one at the old rate, nothing else
-		///   is touched (this is also why `Update` can never trip
-		///   `Error::TrancheTypeMustExistSomewhere` — the type moves as one group, never drops to
-		///   zero). Each renamed vault gets its own `Event::TrancheSet` (see that event's doc
-		///   comment).
-		#[pallet::call_index(1)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_tranche())]
-		pub fn set_tranche(
-			origin: OriginFor<T>,
-			product_id: ProductId,
-			action: CrudAction,
-			vault: VaultId,
-			tranche_type: TrancheType,
-			asset: ChainAddress,
-			shares: ChainAddress,
-			priority: u8,
-		) -> DispatchResult {
-			T::ProductAdminOrigin::ensure_origin(origin)?;
-
-			// See `apply_set_tranche`'s own doc comment for the full logic —
-			// Multichain-vs-SingleChain dispatch, the `Remove`-only
-			// product-wide floors, and the `Update` cross-chain
-			// `tranche_type` cascade all live there, kept out of this
-			// extrinsic body so it stays a thin origin-check-then-event
-			// wrapper, same shape as every other extrinsic in this pallet.
-			let cascaded = Products::<T>::try_mutate(product_id, |maybe_product| {
-				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				Self::apply_set_tranche(
-					product_id,
-					product,
-					action,
-					&vault,
-					&tranche_type,
-					asset,
-					shares,
-					priority,
-				)
-			})?;
-
-			Self::deposit_event(Event::TrancheSet {
-				product_id,
-				action,
-				vault,
-				tranche_type,
-				asset,
-				shares,
-				priority,
-			});
-			for (cascaded_vault, new_type, cascaded_asset, cascaded_shares, cascaded_priority) in
-				cascaded
-			{
-				Self::deposit_event(Event::TrancheSet {
-					product_id,
-					action: CrudAction::Update,
-					vault: cascaded_vault,
-					tranche_type: new_type,
-					asset: cascaded_asset,
-					shares: cascaded_shares,
-					priority: cascaded_priority,
-				});
-			}
-			Ok(())
-		}
-
-		/// Replace, atomically, a product's entire flat individual-Adapter set —
-		/// Multichain or single-chain alike. Origin must be `ProductAdminOrigin`
-		/// — same precompile-only gating as `create_product`.
-		///
-		/// For a Multichain product, this replaces one MultichainAdapter's
-		/// nested `adapters` (identified by `parent_adapter_address`,
-		/// `parent_chain_id` — reverts with `MultichainAdapterNotFound` if no
-		/// such parent exists). For a single-chain product, `parent_adapter_address`/
-		/// `parent_chain_id` are ignored (there's no MultichainAdapter parent
-		/// concept at all) — this replaces the product's whole flat `adapters`
-		/// map instead.
-		#[pallet::call_index(2)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_adapters())]
-		pub fn set_adapters(
-			origin: OriginFor<T>,
-			product_id: ProductId,
-			parent_adapter_address: ChainAddress,
-			parent_chain_id: u64,
-			adapters: BoundedBTreeMap<
-				ChainAddress,
-				AdapterInfo,
-				ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
-			>,
-		) -> DispatchResult {
-			T::ProductAdminOrigin::ensure_origin(origin)?;
-
-			Self::ensure_weights_sum_to_10000(adapters.values().map(|a| a.weight_bps))?;
-
-			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
-				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				match product {
-					ProductDetails::Multichain(product) => {
-						let parent_key = AdapterKey {
-							address: parent_adapter_address,
-							chain_id: parent_chain_id,
-						};
-						let parent = product
-							.multichain_adapters
-							.get_mut(&parent_key)
-							.ok_or(Error::<T>::MultichainAdapterNotFound)?;
-						Self::replace_adapter_index(
-							product_id,
-							parent_chain_id,
-							parent.adapters.keys(),
-							adapters.keys(),
-						)?;
-						parent.adapters = adapters;
-					},
-					ProductDetails::SingleChain(product) => {
-						// `parent_adapter_address`/`parent_chain_id` are ignored here —
-						// a single-chain product has no MultichainAdapter parent
-						// concept at all, so this replaces the product's whole flat
-						// `adapters` map instead of one parent's nested set.
-						Self::replace_adapter_index(
-							product_id,
-							product.chain_id,
-							product.adapters.keys(),
-							adapters.keys(),
-						)?;
-						product.adapters = adapters;
-					},
-				}
-				Ok(())
-			})?;
-
-			Self::deposit_event(Event::AdaptersSet {
-				product_id,
-				parent_adapter_address,
-				parent_chain_id,
-			});
-			Ok(())
-		}
-
-		/// Replace a product's entire MultichainAdapter routing table
-		/// atomically — deep replace, including every entry's nested
-		/// `adapters`. Origin must be `ProductAdminOrigin` — same
-		/// precompile-only gating as `create_product`.
-		#[pallet::call_index(3)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_adapters())]
-		pub fn set_multichain_adapters(
-			origin: OriginFor<T>,
-			product_id: ProductId,
-			multichain_adapters: BoundedBTreeMap<
-				AdapterKey,
-				MultichainAdapterInfo,
-				ConstU32<MAX_MULTICHAIN_ADAPTERS>,
-			>,
-		) -> DispatchResult {
-			T::ProductAdminOrigin::ensure_origin(origin)?;
-
-			Self::ensure_weights_sum_to_10000(
-				multichain_adapters.values().map(|info| info.weight_bps),
-			)?;
-			for info in multichain_adapters.values() {
-				Self::ensure_weights_sum_to_10000(info.adapters.values().map(|a| a.weight_bps))?;
-			}
-
-			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
-				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				let product = match product {
-					ProductDetails::Multichain(product) => product,
-					ProductDetails::SingleChain(_) => {
-						return Err(Error::<T>::WrongProductType.into())
-					},
-				};
-
-				// Deep replace: drop every old entry's reverse-index rows first
-				// (top-level and nested), same reasoning as `set_adapters`.
-				for (old_key, old_info) in product.multichain_adapters.iter() {
-					MultichainAdapterIndex::<T>::remove(old_key);
-					for old_address in old_info.adapters.keys() {
-						AdapterIndex::<T>::remove(&AdapterKey {
-							address: *old_address,
-							chain_id: old_key.chain_id,
-						});
-					}
-				}
-
-				Self::ensure_multichain_adapters_are_unregistered(multichain_adapters.iter())?;
-				Self::insert_multichain_adapter_index(product_id, multichain_adapters.iter());
-
-				product.multichain_adapters = multichain_adapters;
-				Ok(())
-			})?;
-
-			Self::deposit_event(Event::MultichainAdaptersSet { product_id });
-			Ok(())
-		}
-
-		/// Set the single, global Orchestrator contract address. Root-only —
-		/// see `OrchestratorAddress`'s doc comment.
-		#[pallet::call_index(4)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_orchestrator_address())]
-		pub fn set_orchestrator_address(origin: OriginFor<T>, address: H160) -> DispatchResult {
-			ensure_root(origin)?;
-			OrchestratorAddress::<T>::put(address);
-			Self::deposit_event(Event::OrchestratorAddressSet { address });
-			Ok(())
-		}
-
-		/// Replace a product's entire per-chain TrancheManager table
-		/// atomically (Hub included, if the product has a Hub vault — see
-		/// `ProductDetails::multichain_tranche_managers`'s doc comment).
-		/// Origin must be `ProductAdminOrigin` — same precompile-only gating
-		/// as `create_product`. A TrancheManager may be bound to any chain, including one
-		/// with no tranche (e.g. an adapter-only chain).
-		#[pallet::call_index(5)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_multichain_tranche_managers())]
-		pub fn set_multichain_tranche_managers(
-			origin: OriginFor<T>,
-			product_id: ProductId,
-			multichain_tranche_managers: BoundedBTreeMap<
-				u64,
-				ChainAddress,
-				ConstU32<MAX_TRANCHE_MANAGERS>,
-			>,
-		) -> DispatchResult {
-			T::ProductAdminOrigin::ensure_origin(origin)?;
-
-			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
-				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-				let product = match product {
-					ProductDetails::Multichain(product) => product,
-					ProductDetails::SingleChain(_) => {
-						return Err(Error::<T>::WrongProductType.into())
-					},
-				};
-				product.multichain_tranche_managers = multichain_tranche_managers;
-				Ok(())
-			})?;
-
-			Self::deposit_event(Event::MultichainTrancheManagersSet { product_id });
-			Ok(())
-		}
-
-		/// Register `product_id`'s request-pipeline `FlowVersion` as something
-		/// other than the `V1` it was created with. Origin must be
-		/// `ProductAdminOrigin` — same precompile-only gating as
-		/// `create_product`.
-		///
-		/// Stubbed to always reject with `Error::FlowVersionChangeNotYetSupported`
-		/// — no `FlowVersion` beyond `V1` has a real pipeline defined yet (see
-		/// `FlowVersion`'s own doc comment), so there is currently nothing a
-		/// genuine call here could legitimately do. The call surface (origin,
-		/// parameters, call_index) is stable ahead of time; only the body is
-		/// disabled — remove this stub once a real `V2` request pipeline is
-		/// designed.
-		#[pallet::call_index(7)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_request_flow_version())]
-		pub fn set_request_flow_version(
-			origin: OriginFor<T>,
-			// Named normally (not `_product_id`) despite going unused below —
-			// an underscore-prefixed parameter name here would leak into this
-			// call's on-chain metadata (the field name `#[pallet::call]`
-			// exposes to indexers/dApps), not just silence the compiler.
-			product_id: ProductId,
-			version: FlowVersion,
-		) -> DispatchResult {
-			T::ProductAdminOrigin::ensure_origin(origin)?;
-			let _ = (product_id, version);
-			Err(Error::<T>::FlowVersionChangeNotYetSupported.into())
-		}
-
-		/// Register `product_id`'s settlement-pipeline `FlowVersion` as
-		/// something other than the `V1` it was created with — independent of
-		/// `set_request_flow_version`. Same `ProductAdminOrigin` gating, and
-		/// same "stubbed until a real `V2` pipeline exists" rationale as that
-		/// extrinsic's own doc comment.
-		#[pallet::call_index(8)]
-		#[pallet::weight(<T as Config>::WeightInfo::set_settlement_flow_version())]
-		pub fn set_settlement_flow_version(
-			origin: OriginFor<T>,
-			// Same naming rationale as `set_request_flow_version`'s own
-			// `product_id`/`version` parameters.
-			product_id: ProductId,
-			version: FlowVersion,
-		) -> DispatchResult {
-			T::ProductAdminOrigin::ensure_origin(origin)?;
-			let _ = (product_id, version);
-			Err(Error::<T>::FlowVersionChangeNotYetSupported.into())
 		}
 	}
 }

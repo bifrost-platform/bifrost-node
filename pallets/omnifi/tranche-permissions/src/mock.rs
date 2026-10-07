@@ -99,6 +99,7 @@ impl ProductInspect for MockProducts {
 }
 
 impl pallet_tranche_permissions::Config for Test {
+	type ProductAdminOrigin = frame_system::EnsureSigned<u64>;
 	type Vaults = MockVaults;
 	type Products = MockProducts;
 	type WeightInfo = ();

@@ -168,4 +168,17 @@ interface TranchePermissionsUniversal {
         Role role,
         address who
     ) external view returns (bool);
+
+    /**
+     * @notice Read whether `who` is the global ProductFactory — the single contract
+     *         allowed to register permissionless products (product ID prefixes 3/4)
+     *         on TrancheSystemUniversal. Set by root only.
+     * @param who EVM address to check
+     */
+    function is_product_factory(address who) external view returns (bool);
+
+    /**
+     * @notice Read the global ProductFactory address (zero address if unset).
+     */
+    function get_product_factory() external view returns (address factory);
 }

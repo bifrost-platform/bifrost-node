@@ -44,11 +44,14 @@ type EvmVaultInput = (u64, H256);
 /// A precompile that wraps `pallet_tranche_permissions`'s extrinsics.
 ///
 /// Called directly by ProductAdmin EOAs — not by a Gateway — so origins are
-/// resolved from `handle.context().caller` as signed substrate accounts.
-/// `Role::ProductAdmin` grants/revokes always revert through this precompile:
-/// the pallet requires a root origin for that role, and a precompile-dispatched
-/// call can only ever construct a signed origin (see `grant_permission`'s
-/// doc comment in `pallet_tranche_permissions`).
+/// resolved from `handle.context().caller` and dispatched as
+/// `pallet_tranche_system::Origin::ProductAdmin(caller)` — the pallet's
+/// `ProductAdminOrigin`, which only these precompiles construct, so the admin
+/// calls can't bypass the precompile (and its Orchestrator propagation) as plain
+/// signed extrinsics. The pallet still checks the carried account against
+/// `ProductAdmins`. `Role::ProductAdmin` grants/revokes always revert through
+/// this precompile: the pallet requires a root origin for that role (see
+/// `grant_permission`'s doc comment in `pallet_tranche_permissions`).
 pub struct TranchePermissionsUniversalPrecompile<Runtime>(PhantomData<Runtime>);
 
 #[precompile_utils::precompile]
@@ -60,7 +63,9 @@ where
 		+ frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	Runtime::RuntimeCall: From<TranchePermissionsCall<Runtime>>,
+	Runtime::RuntimeOrigin: From<pallet_tranche_system::Origin<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
+	Runtime::AccountId: Into<H160>,
 {
 	/// Grant `role` to `who` for `product_id`. See
 	/// `pallet_tranche_permissions::grant_permission`'s doc comment for full
@@ -89,7 +94,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;
@@ -130,7 +135,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;
@@ -238,6 +243,30 @@ where
 			_ => Err(revert("invalid role")),
 		}
 	}
+
+	/// Read whether `who` is the global ProductFactory (the contract allowed to
+	/// register permissionless products). Set by root only.
+	///
+	/// @param who EVM address to check
+	#[precompile::public("is_product_factory(address)")]
+	#[precompile::view]
+	fn is_product_factory(handle: &mut impl PrecompileHandle, who: Address) -> EvmResult<bool> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let who_account = Runtime::AddressMapping::into_account_id(who.0);
+		Ok(pallet_tranche_permissions::Pallet::<Runtime>::is_product_factory(&who_account))
+	}
+
+	/// Read the global ProductFactory address — the zero address if none is set.
+	#[precompile::public("get_product_factory()")]
+	#[precompile::view]
+	fn get_product_factory(handle: &mut impl PrecompileHandle) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		Ok(Address(
+			pallet_tranche_permissions::ProductFactory::<Runtime>::get()
+				.map(Into::into)
+				.unwrap_or_default(),
+		))
+	}
 }
 
 impl<Runtime> TranchePermissionsUniversalPrecompile<Runtime>
@@ -248,6 +277,7 @@ where
 		+ frame_system::Config,
 	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	Runtime::RuntimeCall: From<TranchePermissionsCall<Runtime>>,
+	Runtime::RuntimeOrigin: From<pallet_tranche_system::Origin<Runtime>>,
 	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
 {
 	/// Shared body of `grant_tranche_investor` (`grant == true`) and
@@ -280,7 +310,7 @@ where
 		};
 		RuntimeHelper::<Runtime>::try_dispatch(
 			handle,
-			frame_system::RawOrigin::Signed(caller_account).into(),
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
 			call,
 			0,
 		)?;

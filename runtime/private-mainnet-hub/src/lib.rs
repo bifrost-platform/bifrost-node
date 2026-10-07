@@ -727,10 +727,13 @@ impl pallet_base_fee::Config for Runtime {
 
 impl pallet_tranche_system::Config for Runtime {
 	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
+	type ProductFactoryOrigin = pallet_tranche_system::EnsureProductFactory<Runtime>;
+	type ProductAdmins = TranchePermissions;
 	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
 }
 
 impl pallet_tranche_permissions::Config for Runtime {
+	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
 	type Vaults = TrancheSystem;
 	type Products = TrancheSystem;
 	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
