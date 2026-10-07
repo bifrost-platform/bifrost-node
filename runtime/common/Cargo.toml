@@ -25,7 +25,17 @@ pallet-bfc-utility = { workspace = true }
 pallet-evm = { workspace = true }
 
 # Bifrost
-pallet-bifrost-evm-tx-payment = { path = "../../pallets/bifrost-evm-tx-payment", default-features = false }
+pallet-bifrost-evm-tx-payment = { workspace = true }
+precompile-bifrost-evm-tx-payment = { workspace = true }
+
+# OmniFi tranche-system
+pallet-tranche-system = { workspace = true }
+pallet-tranche-tx-registry = { workspace = true }
+pallet-tranche-tx-registry-v2 = { workspace = true }
+pallet-tranche-custom-flows = { workspace = true }
+precompile-tranche-tx-registry = { workspace = true }
+precompile-tranche-tx-registry-v2 = { workspace = true }
+precompile-tranche-custom-flows = { workspace = true }
 
 [features]
 default = ["std"]
@@ -41,5 +51,23 @@ std = [
 	"pallet-bfc-utility/std",
 	"pallet-evm/std",
 	"pallet-bifrost-evm-tx-payment/std",
+	"precompile-bifrost-evm-tx-payment/std",
+	"pallet-tranche-system/std",
+	"pallet-tranche-tx-registry/std",
+	"pallet-tranche-tx-registry-v2/std",
+	"pallet-tranche-custom-flows/std",
+	"precompile-tranche-tx-registry/std",
+	"precompile-tranche-tx-registry-v2/std",
+	"precompile-tranche-custom-flows/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
+runtime-benchmarks = [
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+	"pallet-evm/runtime-benchmarks",
+	"pallet-tranche-system/runtime-benchmarks",
+	"pallet-tranche-tx-registry/runtime-benchmarks",
+	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
+	"pallet-tranche-custom-flows/runtime-benchmarks",
+]

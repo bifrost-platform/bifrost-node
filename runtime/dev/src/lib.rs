@@ -8,6 +8,10 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 extern crate alloc;
+// `sp_io` is only used (qualified, no `use`) inside `IdentityBenchmarkHelper`, which is
+// entirely `#[cfg(feature = "runtime-benchmarks")]` — without this, a normal build (that
+// feature off) flags it as an unused dependency.
+use sp_io as _;
 
 pub use bifrost_dev_constants::{
 	currency::{GWEI, UNITS as BFC, *},
@@ -118,7 +122,8 @@ pub type TxExtension = (
 pub type UncheckedExtrinsic =
 	fp_self_contained::UncheckedExtrinsic<Address, RuntimeCall, Signature, TxExtension>;
 
-/// All migrations executed on runtime upgrade as a nested tuple of types implementing `OnRuntimeUpgrade`.
+/// All migrations executed on runtime upgrade as a nested tuple of types implementing
+/// `OnRuntimeUpgrade`.
 type SingleBlockMigrations = ();
 
 /// Executive: handles dispatch to the various modules.
@@ -240,13 +245,14 @@ pub struct SafeModeWhitelistedCalls;
 impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
 	fn contains(call: &RuntimeCall) -> bool {
 		match call {
-			RuntimeCall::System(_)
-			| RuntimeCall::Sudo(_)
-			| RuntimeCall::Timestamp(_)
-			| RuntimeCall::SafeMode(_)
-			| RuntimeCall::TxPause(_)
-			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
-			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
+			RuntimeCall::System(_) |
+			RuntimeCall::Sudo(_) |
+			RuntimeCall::Timestamp(_) |
+			RuntimeCall::SafeMode(_) |
+			RuntimeCall::TxPause(_) |
+			RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. }) |
+			RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) |
+			RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat_v2 { .. }) => true,
 			_ => false,
 		}
 	}
@@ -720,7 +726,21 @@ impl pallet_treasury::Config for Runtime {
 	type PayoutPeriod = ConstU32<0>;
 	type BlockNumberProvider = System;
 	#[cfg(feature = "runtime-benchmarks")]
-	type BenchmarkHelper = BenchmarkHelper;
+	type BenchmarkHelper = TreasuryBenchmarkHelper;
+}
+
+/// `AssetKind` is `()` (native-only treasury) and `Beneficiary` is an
+/// `AccountId20`, which `pallet_treasury`'s blanket `()` `ArgumentsFactory`
+/// can't build (it needs `FromEntropy`), so provide a trivial factory.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TreasuryBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_treasury::ArgumentsFactory<(), AccountId> for TreasuryBenchmarkHelper {
+	fn create_asset_kind(_seed: u32) {}
+	fn create_beneficiary(seed: [u8; 32]) -> AccountId {
+		AccountId::from(H160::from_slice(&seed[..20]))
+	}
 }
 
 parameter_types! {
@@ -759,6 +779,28 @@ impl pallet_identity::Config for Runtime {
 	type MaxSuffixLength = MaxSuffixLength;
 	type MaxUsernameLength = MaxUsernameLength;
 	type WeightInfo = pallet_identity::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = IdentityBenchmarkHelper;
+}
+
+/// `pallet_identity`'s `()` `BenchmarkHelper` only signs with sr25519/
+/// `MultiSignature`; this chain verifies `EthereumSignature`, so sign the
+/// username-ownership message with a freshly generated ECDSA key over its
+/// keccak hash (matching `EthereumSignature`'s `Verify` impl).
+#[cfg(feature = "runtime-benchmarks")]
+pub struct IdentityBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_identity::BenchmarkHelper<EthereumSigner, EthereumSignature>
+	for IdentityBenchmarkHelper
+{
+	fn sign_message(message: &[u8]) -> (EthereumSigner, EthereumSignature) {
+		let public = sp_io::crypto::ecdsa_generate(0.into(), None);
+		let hash = sp_io::hashing::keccak_256(message);
+		let sig = sp_io::crypto::ecdsa_sign_prehashed(0.into(), &public, &hash)
+			.expect("key was just generated; qed");
+		(EthereumSigner::from(public), EthereumSignature::new(sig))
+	}
 }
 
 parameter_types! {
@@ -837,6 +879,8 @@ impl pallet_relay_manager::Config for Runtime {
 	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayExecutives =
+		pallet_relay_manager::MembershipRelayExecutives<Runtime, pallet_membership::Instance3>;
 	type RelayQueue = CCCPRelayQueue;
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;
@@ -1035,7 +1079,10 @@ impl pallet_evm::Config for Runtime {
 	type CreateInnerOriginFilter = ();
 	type CreateOriginFilter = ();
 	type WeightInfo = pallet_evm::weights::SubstrateWeight<Runtime>;
-	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<Runtime>;
+	type FeelessCallFilter = bifrost_common_runtime::BifrostFeelessCalls<
+		Runtime,
+		bifrost_common_runtime::TxRegistryRecorder<Runtime>,
+	>;
 }
 
 parameter_types! {
@@ -1151,7 +1198,14 @@ parameter_types! {
 
 impl pallet_migrations::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	// `Migrations` must satisfy `MockedMigrations` under `runtime-benchmarks`
+	// (blanket-impl'd for tuples down to the 0-tuple, but not for
+	// `LazyMigrationV1ToV2` itself) — swapped to `()` only for that feature so
+	// normal (non-benchmark) builds keep the real migration unchanged.
+	#[cfg(not(feature = "runtime-benchmarks"))]
 	type Migrations = pallet_identity::migration::v2::LazyMigrationV1ToV2<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type Migrations = ();
 	type CursorMaxLen = ConstU32<65_536>;
 	type IdentifierMaxLen = ConstU32<256>;
 	type MigrationStatusHandler = ();
@@ -1162,6 +1216,164 @@ impl pallet_migrations::Config for Runtime {
 
 impl pallet_oracle_registry::Config for Runtime {
 	type WeightInfo = pallet_oracle_registry::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_tranche_system::Config for Runtime {
+	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
+	type ProductFactoryOrigin = pallet_tranche_system::EnsureProductFactory<Runtime>;
+	type ProductAdmins = TranchePermissions;
+	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
+}
+
+// Shared, not forked — `grant_permission`/`revoke_permission` are ordinary paid
+// EVM calls (unlike custom-flows' feeless recorder-only calls), but they're
+// called by product admins granting/revoking access, not on every investor
+// tx, so accurately benchmarking this in place doesn't carry the same "must
+// not perturb an already-live per-tx gas cost" risk that justified forking
+// investments/tx-registry/permissions-v2 (now merged back) — see
+// docs/precompile-gas-changes-2026-09-17.md §6.
+impl pallet_tranche_permissions::Config for Runtime {
+	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
+	type Vaults = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TranchePermissionsBenchmarkHelper;
+}
+
+/// Seeds the pallet-tranche-system state that `pallet-tranche-permissions`
+/// inspects (through `type Vaults`/`type Products`) so the `TrancheInvestor`
+/// grant/revoke benchmarks reach their storage write instead of bailing out in
+/// `ensure_tranche_investor_vault_registered`. Only compiled for benchmarks.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TranchePermissionsBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_permissions::BenchmarkHelper for TranchePermissionsBenchmarkHelper {
+	fn setup_multichain_vault(
+		product_id: pallet_tranche_system::ProductId,
+		vault: pallet_tranche_system::VaultId,
+	) {
+		pallet_tranche_system::Vaults::<Runtime>::insert(
+			vault,
+			pallet_tranche_system::VaultRegistration { product_id, removed: false },
+		);
+	}
+}
+
+impl pallet_tranche_investments::Config for Runtime {
+	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type WeightInfo = pallet_tranche_investments::weights::SubstrateWeight<Runtime>;
+}
+
+// v2 — same rationale: accurately weight-benchmarked fork, new products only, since
+// investments' `record_*` calls ARE called on every investor tx (unlike permissions
+// above). Shares one Valuation-contract identity with
+// v1 (single place to manage that address — same pattern
+// `pallet_tranche_tx_registry_v2::Config::RecorderOrigin` below already uses for the
+// recorder identity) and shares `TrancheSystem` with v1.
+impl pallet_tranche_investments_v2::Config for Runtime {
+	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type WeightInfo = pallet_tranche_investments_v2::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheV2BenchmarkHelper;
+}
+
+/// Seeds pallet-tranche-system's reverse indexes so the `record_*` benchmarks
+/// for both `pallet-tranche-investments-v2` and `pallet-tranche-tx-registry-v2`
+/// reach their bodies (they check vault/adapter ownership via `type Vaults`/
+/// `type Adapters`). Benchmarks only.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TrancheV2BenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_investments_v2::BenchmarkHelper for TrancheV2BenchmarkHelper {
+	fn register_vault(
+		product_id: pallet_tranche_system::ProductId,
+		vault: pallet_tranche_system::VaultId,
+	) {
+		pallet_tranche_system::Vaults::<Runtime>::insert(
+			vault,
+			pallet_tranche_system::VaultRegistration { product_id, removed: false },
+		);
+	}
+	fn register_multichain_adapter(
+		product_id: pallet_tranche_system::ProductId,
+		key: pallet_tranche_system::AdapterKey,
+	) {
+		pallet_tranche_system::MultichainAdapterIndex::<Runtime>::insert(key, product_id);
+	}
+	fn register_adapter(
+		product_id: pallet_tranche_system::ProductId,
+		key: pallet_tranche_system::AdapterKey,
+	) {
+		pallet_tranche_system::AdapterIndex::<Runtime>::insert(key, product_id);
+	}
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_tx_registry_v2::BenchmarkHelper for TrancheV2BenchmarkHelper {
+	fn register_vault(
+		product_id: pallet_tranche_system::ProductId,
+		vault: pallet_tranche_system::VaultId,
+	) {
+		pallet_tranche_system::Vaults::<Runtime>::insert(
+			vault,
+			pallet_tranche_system::VaultRegistration { product_id, removed: false },
+		);
+	}
+	fn seed_recorder() {
+		pallet_tranche_tx_registry::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
+}
+
+impl pallet_tranche_tx_registry::Config for Runtime {
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_tx_registry::weights::SubstrateWeight<Runtime>;
+}
+
+// v2 — chunked Collect/Response/Finalize settlement pipeline, new products only (see
+// docs/tranche-tx-registry/settlement-leg-chunking-design.md). Shares one recorder
+// identity with v1 (single place to manage the recorder address — same pattern
+// `pallet_tranche_custom_flows::Config` below already uses) and shares `TrancheSystem`
+// (products/vaults/adapters) with v1, same as every other tranche-* pallet — neither
+// is forked; only the settlement leg storage/extrinsics themselves are.
+impl pallet_tranche_tx_registry_v2::Config for Runtime {
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type Vaults = TrancheSystem;
+	type Adapters = TrancheSystem;
+	type Products = TrancheSystem;
+	type WeightInfo = pallet_tranche_tx_registry_v2::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheV2BenchmarkHelper;
+}
+
+impl pallet_tranche_custom_flows::Config for Runtime {
+	// Shares one recorder identity with pallet-tranche-tx-registry.
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type GovernanceOrigin = EnsureRoot<AccountId>;
+	type WeightInfo = pallet_tranche_custom_flows::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheCustomFlowsBenchmarkHelper;
+}
+
+/// Sets `pallet-tranche-tx-registry`'s `TxRecorder` (the shared recorder
+/// identity) so `record_flow_tx`'s `EnsureTxRecorder` origin resolves. Benchmarks only.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct TrancheCustomFlowsBenchmarkHelper;
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_custom_flows::BenchmarkHelper for TrancheCustomFlowsBenchmarkHelper {
+	fn seed_recorder() {
+		pallet_tranche_tx_registry::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -1295,6 +1507,27 @@ mod runtime {
 	#[runtime::pallet_index(65)]
 	pub type OracleRegistry = pallet_oracle_registry;
 
+	#[runtime::pallet_index(80)]
+	pub type TrancheSystem = pallet_tranche_system;
+
+	#[runtime::pallet_index(81)]
+	pub type TranchePermissions = pallet_tranche_permissions;
+
+	#[runtime::pallet_index(82)]
+	pub type TrancheInvestments = pallet_tranche_investments;
+
+	#[runtime::pallet_index(83)]
+	pub type TrancheTxRegistry = pallet_tranche_tx_registry;
+
+	#[runtime::pallet_index(84)]
+	pub type TrancheCustomFlows = pallet_tranche_custom_flows;
+
+	#[runtime::pallet_index(85)]
+	pub type TrancheTxRegistryV2 = pallet_tranche_tx_registry_v2;
+
+	#[runtime::pallet_index(86)]
+	pub type TrancheInvestmentsV2 = pallet_tranche_investments_v2;
+
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
 
@@ -1310,6 +1543,21 @@ mod benches {
 		[pallet_blaze, Blaze]
 		[pallet_btc_registration_pool, BtcRegistrationPool]
 		[pallet_btc_socket_queue, BtcSocketQueue]
+		// v1 tx-registry/investments deliberately excluded — their weights.rs stays
+		// untouched (dev placeholders), see
+		// docs/tranche-tx-registry/settlement-leg-chunking-design.md (their `record_*`
+		// calls run on every investor tx, so accurate weights would perturb an
+		// already-live per-tx gas cost). tx-registry-v2/investments-v2 (accurately
+		// weight-benchmarked forks, new products only), and pallet-tranche-system/
+		// -permissions/-custom-flows (none forked — their calls are either infrequent
+		// per-product admin actions or feeless, so accurate weights there don't
+		// perturb any live per-tx gas cost — see
+		// docs/precompile-gas-changes-2026-09-17.md §6) are benchmarked here.
+		[pallet_tranche_system, TrancheSystem]
+		[pallet_tranche_permissions, TranchePermissions]
+		[pallet_tranche_investments_v2, TrancheInvestmentsV2]
+		[pallet_tranche_tx_registry_v2, TrancheTxRegistryV2]
+		[pallet_tranche_custom_flows, TrancheCustomFlows]
 	);
 }
 

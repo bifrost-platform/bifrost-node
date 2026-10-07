@@ -1,0 +1,240 @@
+[package]
+name = "bifrost-private-mainnet-hub-runtime"
+version = "1.0.0"
+description = "The runtime for the Bifrost private hub chain of OmniFi mainnet"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+build = "build.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+# third-party dependencies
+parity-scale-codec = { workspace = true }
+scale-info = { workspace = true }
+num_enum = { workspace = true }
+ethereum = { workspace = true }
+log = { workspace = true }
+
+# Bifrost
+bifrost-common-runtime = { workspace = true }
+bifrost-private-mainnet-hub-constants = { workspace = true }
+bp-core = { workspace = true }
+bp-cccp = { workspace = true }
+precompile-utils = { workspace = true }
+
+# FRAME dependencies
+frame-system = { workspace = true }
+frame-support = { workspace = true }
+frame-executive = { workspace = true }
+frame-metadata-hash-extension = { workspace = true }
+frame-system-rpc-runtime-api = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
+frame-system-benchmarking = { workspace = true, optional = true }
+pallet-aura = { workspace = true }
+pallet-balances = { workspace = true, features = ["insecure_zero_ed"] }
+pallet-grandpa = { workspace = true }
+pallet-sudo = { workspace = true }
+pallet-timestamp = { workspace = true }
+pallet-transaction-payment = { workspace = true }
+pallet-transaction-payment-rpc-runtime-api = { workspace = true }
+pallet-session = { workspace = true, features = ["historical"] }
+pallet-authorship = { workspace = true }
+pallet-utility = { workspace = true }
+pallet-im-online = { workspace = true }
+pallet-offences = { workspace = true }
+pallet-safe-mode = { workspace = true }
+pallet-tx-pause = { workspace = true }
+
+# substrate primitives
+sp-api = { workspace = true }
+sp-block-builder = { workspace = true }
+sp-consensus-aura = { workspace = true, features = ["serde"] }
+sp-core = { workspace = true, features = ["serde"] }
+sp-inherents = { workspace = true }
+sp-offchain = { workspace = true }
+sp-runtime = { workspace = true, features = ["serde"] }
+sp-session = { workspace = true }
+sp-std = { workspace = true }
+sp-transaction-pool = { workspace = true }
+sp-version = { workspace = true, features = ["serde"] }
+sp-genesis-builder = { workspace = true }
+
+# Frontier
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
+pallet-ethereum = { workspace = true, features = ["forbid-evm-reentrancy"] }
+pallet-base-fee = { workspace = true }
+fp-self-contained = { workspace = true, features = ["serde"] }
+fp-rpc = { workspace = true }
+fp-rpc-debug = { workspace = true }
+fp-rpc-txpool = { workspace = true }
+fp-account = { workspace = true, features = ["serde"] }
+evm-tracer = { workspace = true, optional = true }
+
+# Custom Pallets
+pallet-bfc-utility = { workspace = true }
+pallet-permissioned-authority = { workspace = true }
+pallet-relay-manager = { workspace = true }
+pallet-cccp-relay-queue = { workspace = true }
+pallet-oracle-registry = { workspace = true }
+pallet-tranche-system = { workspace = true }
+pallet-tranche-permissions = { workspace = true }
+pallet-tranche-investments = { workspace = true }
+pallet-tranche-investments-v2 = { workspace = true }
+pallet-tranche-tx-registry = { workspace = true }
+pallet-tranche-tx-registry-v2 = { workspace = true }
+pallet-tranche-custom-flows = { workspace = true }
+
+# Precompiled Contracts
+pallet-evm-precompile-simple = { workspace = true }
+pallet-evm-precompile-bn128 = { workspace = true }
+pallet-evm-precompile-modexp = { workspace = true }
+pallet-evm-precompile-blake2 = { workspace = true }
+
+precompile-permissioned-authority = { workspace = true }
+precompile-relay-manager = { workspace = true }
+precompile-tranche-system = { workspace = true }
+precompile-tranche-permissions = { workspace = true }
+precompile-tranche-investments = { workspace = true }
+precompile-tranche-investments-v2 = { workspace = true }
+precompile-tranche-tx-registry = { workspace = true }
+precompile-tranche-tx-registry-v2 = { workspace = true }
+precompile-tranche-custom-flows = { workspace = true }
+
+[build-dependencies]
+substrate-wasm-builder = { workspace = true, optional = true }
+
+[features]
+default = ["std"]
+std = [
+	"parity-scale-codec/std",
+	"scale-info/std",
+	"num_enum/std",
+	"ethereum/std",
+	"log/std",
+	"bifrost-common-runtime/std",
+	"bifrost-private-mainnet-hub-constants/std",
+	"bp-core/std",
+	"bp-cccp/std",
+	"frame-executive/std",
+	"frame-support/std",
+	"frame-system-rpc-runtime-api/std",
+	"frame-system/std",
+	"frame-metadata-hash-extension/std",
+	"pallet-aura/std",
+	"pallet-balances/std",
+	"pallet-grandpa/std",
+	"pallet-sudo/std",
+	"pallet-timestamp/std",
+	"pallet-transaction-payment-rpc-runtime-api/std",
+	"pallet-transaction-payment/std",
+	"pallet-session/std",
+	"pallet-authorship/std",
+	"pallet-utility/std",
+	"pallet-im-online/std",
+	"pallet-offences/std",
+	"pallet-safe-mode/std",
+	"pallet-tx-pause/std",
+	"pallet-evm/std",
+	"pallet-ethereum/std",
+	"pallet-base-fee/std",
+	"pallet-bfc-utility/std",
+	"pallet-permissioned-authority/std",
+	"pallet-relay-manager/std",
+	"pallet-cccp-relay-queue/std",
+	"pallet-oracle-registry/std",
+	"pallet-tranche-system/std",
+	"pallet-tranche-permissions/std",
+	"pallet-tranche-investments/std",
+	"pallet-tranche-investments-v2/std",
+	"pallet-tranche-tx-registry/std",
+	"pallet-tranche-tx-registry-v2/std",
+	"pallet-tranche-custom-flows/std",
+	"pallet-evm-precompile-simple/std",
+	"pallet-evm-precompile-bn128/std",
+	"pallet-evm-precompile-modexp/std",
+	"pallet-evm-precompile-blake2/std",
+	"sp-api/std",
+	"sp-consensus-aura/std",
+	"sp-block-builder/std",
+	"sp-core/std",
+	"sp-inherents/std",
+	"sp-offchain/std",
+	"sp-runtime/std",
+	"sp-session/std",
+	"sp-std/std",
+	"sp-transaction-pool/std",
+	"sp-version/std",
+	"sp-genesis-builder/std",
+	"fp-self-contained/std",
+	"fp-rpc/std",
+	"fp-rpc-debug/std",
+	"fp-rpc-txpool/std",
+	"fp-account/std",
+	"evm-tracer/std",
+	"precompile-utils/std",
+	"precompile-permissioned-authority/std",
+	"precompile-relay-manager/std",
+	"precompile-tranche-system/std",
+	"precompile-tranche-permissions/std",
+	"precompile-tranche-investments/std",
+	"precompile-tranche-investments-v2/std",
+	"precompile-tranche-tx-registry/std",
+	"precompile-tranche-tx-registry-v2/std",
+	"precompile-tranche-custom-flows/std",
+	"substrate-wasm-builder",
+]
+evm-tracing = ["evm-tracer"]
+runtime-wasm = []
+runtime-benchmarks = [
+	"sp-runtime/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system-benchmarking",
+	"frame-system/runtime-benchmarks",
+	"frame-system-benchmarking/runtime-benchmarks",
+	"bifrost-common-runtime/runtime-benchmarks",
+	# Every FRAME pallet the runtime composes that carries a `runtime-benchmarks`
+	# feature must forward it here — see runtime/dev/Cargo.toml for why.
+	"pallet-balances/runtime-benchmarks",
+	"pallet-timestamp/runtime-benchmarks",
+	"pallet-utility/runtime-benchmarks",
+	"pallet-session/runtime-benchmarks",
+	"pallet-im-online/runtime-benchmarks",
+	"pallet-offences/runtime-benchmarks",
+	"pallet-safe-mode/runtime-benchmarks",
+	"pallet-tx-pause/runtime-benchmarks",
+	"pallet-relay-manager/runtime-benchmarks",
+	"pallet-cccp-relay-queue/runtime-benchmarks",
+	"pallet-oracle-registry/runtime-benchmarks",
+	"pallet-permissioned-authority/runtime-benchmarks",
+	"pallet-sudo/runtime-benchmarks",
+	"pallet-grandpa/runtime-benchmarks",
+	"pallet-transaction-payment/runtime-benchmarks",
+	"pallet-ethereum/runtime-benchmarks",
+	"pallet-evm/runtime-benchmarks",
+	"pallet-tranche-system/runtime-benchmarks",
+	"pallet-tranche-permissions/runtime-benchmarks",
+	"pallet-tranche-investments/runtime-benchmarks",
+	"pallet-tranche-investments-v2/runtime-benchmarks",
+	"pallet-tranche-tx-registry/runtime-benchmarks",
+	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
+	"pallet-tranche-custom-flows/runtime-benchmarks",
+]
+
+# Enable the metadata hash generation.
+#
+# This is hidden behind a feature because it increases the compile time.
+# The wasm binary needs to be compiled twice, once to fetch the metadata,
+# generate the metadata hash and then a second time with the
+# `RUNTIME_METADATA_HASH` environment variable set for the `CheckMetadataHash`
+# extension.
+metadata-hash = ["substrate-wasm-builder/metadata-hash"]
+
+# A convenience feature for enabling things when doing a build
+# for an on-chain release.
+on-chain-release-build = ["metadata-hash"]

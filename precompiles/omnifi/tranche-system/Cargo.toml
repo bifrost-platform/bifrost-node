@@ -1,0 +1,41 @@
+[package]
+name = "precompile-tranche-system"
+version = "1.0.0"
+description = "A precompile that makes pallet-tranche-system accessible to pallet-evm"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# OmniFi tranche-system
+pallet-tranche-system = { workspace = true }
+pallet-tranche-permissions = { workspace = true }
+precompile-utils = { workspace = true }
+
+# Substrate
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+
+# Frontier / EVM
+fp-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
+
+[features]
+default = ["std"]
+std = [
+	"fp-evm/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-tranche-system/std",
+	"pallet-tranche-permissions/std",
+	"pallet-evm/std",
+	"precompile-utils/std",
+	"sp-core/std",
+	"sp-runtime/std",
+	"sp-std/std",
+]

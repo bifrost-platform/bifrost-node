@@ -954,7 +954,15 @@ dependencies = [
  "pallet-bfc-utility",
  "pallet-bifrost-evm-tx-payment",
  "pallet-evm",
+ "pallet-tranche-custom-flows",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry",
+ "pallet-tranche-tx-registry-v2",
  "parity-scale-codec",
+ "precompile-bifrost-evm-tx-payment",
+ "precompile-tranche-custom-flows",
+ "precompile-tranche-tx-registry",
+ "precompile-tranche-tx-registry-v2",
  "scale-info",
  "sp-core",
  "sp-runtime",
@@ -1084,6 +1092,13 @@ dependencies = [
  "pallet-session",
  "pallet-sudo",
  "pallet-timestamp",
+ "pallet-tranche-custom-flows",
+ "pallet-tranche-investments",
+ "pallet-tranche-investments-v2",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry",
+ "pallet-tranche-tx-registry-v2",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-treasury",
@@ -1100,6 +1115,13 @@ dependencies = [
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
+ "precompile-tranche-custom-flows",
+ "precompile-tranche-investments",
+ "precompile-tranche-investments-v2",
+ "precompile-tranche-permissions",
+ "precompile-tranche-system",
+ "precompile-tranche-tx-registry",
+ "precompile-tranche-tx-registry-v2",
  "precompile-utils",
  "scale-info",
  "sp-api",
@@ -1108,6 +1130,7 @@ dependencies = [
  "sp-core",
  "sp-genesis-builder",
  "sp-inherents",
+ "sp-io",
  "sp-offchain",
  "sp-runtime",
  "sp-session",
@@ -1280,6 +1303,10 @@ dependencies = [
  "bifrost-dev-runtime",
  "bifrost-mainnet-node",
  "bifrost-mainnet-runtime",
+ "bifrost-private-mainnet-hub-node",
+ "bifrost-private-mainnet-hub-runtime",
+ "bifrost-private-testnet-hub-node",
+ "bifrost-private-testnet-hub-runtime",
  "bifrost-testnet-node",
  "bifrost-testnet-runtime",
  "clap",
@@ -1289,6 +1316,324 @@ dependencies = [
  "sc-service",
  "sp-runtime",
  "substrate-build-script-utils",
+]
+
+[[package]]
+name = "bifrost-private-mainnet-hub-constants"
+version = "1.0.0"
+dependencies = [
+ "bifrost-common-constants",
+ "frame-support",
+]
+
+[[package]]
+name = "bifrost-private-mainnet-hub-node"
+version = "1.0.0"
+dependencies = [
+ "bifrost-common-node",
+ "bifrost-private-mainnet-hub-constants",
+ "bifrost-private-mainnet-hub-runtime",
+ "bp-core",
+ "fc-db",
+ "fc-mapping-sync",
+ "fc-rpc",
+ "fc-rpc-core",
+ "fc-rpc-debug",
+ "fc-rpc-trace",
+ "fp-evm",
+ "fp-ext",
+ "fp-rpc",
+ "fp-rpc-txpool",
+ "frame-benchmarking",
+ "futures 0.3.31",
+ "hex-literal",
+ "jsonrpsee",
+ "pallet-ethereum",
+ "pallet-im-online",
+ "pallet-transaction-payment-rpc",
+ "sc-basic-authorship",
+ "sc-chain-spec",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-consensus-aura",
+ "sc-consensus-grandpa",
+ "sc-consensus-grandpa-rpc",
+ "sc-executor",
+ "sc-network",
+ "sc-network-sync",
+ "sc-offchain",
+ "sc-rpc",
+ "sc-service",
+ "sc-telemetry",
+ "sc-transaction-pool",
+ "sc-transaction-pool-api",
+ "serde_json",
+ "sp-api",
+ "sp-block-builder",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-consensus-aura",
+ "sp-consensus-grandpa",
+ "sp-core",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-timestamp",
+ "substrate-frame-rpc-system",
+]
+
+[[package]]
+name = "bifrost-private-mainnet-hub-runtime"
+version = "1.0.0"
+dependencies = [
+ "bifrost-common-runtime",
+ "bifrost-private-mainnet-hub-constants",
+ "bp-cccp",
+ "bp-core",
+ "ethereum",
+ "evm-tracer",
+ "fp-account",
+ "fp-rpc",
+ "fp-rpc-debug",
+ "fp-rpc-txpool",
+ "fp-self-contained",
+ "frame-benchmarking",
+ "frame-executive",
+ "frame-metadata-hash-extension",
+ "frame-support",
+ "frame-system",
+ "frame-system-benchmarking",
+ "frame-system-rpc-runtime-api",
+ "log",
+ "num_enum",
+ "pallet-aura",
+ "pallet-authorship",
+ "pallet-balances",
+ "pallet-base-fee",
+ "pallet-bfc-utility",
+ "pallet-cccp-relay-queue",
+ "pallet-ethereum",
+ "pallet-evm",
+ "pallet-evm-precompile-blake2",
+ "pallet-evm-precompile-bn128",
+ "pallet-evm-precompile-modexp",
+ "pallet-evm-precompile-simple",
+ "pallet-grandpa",
+ "pallet-im-online",
+ "pallet-offences",
+ "pallet-oracle-registry",
+ "pallet-permissioned-authority",
+ "pallet-relay-manager",
+ "pallet-safe-mode",
+ "pallet-session",
+ "pallet-sudo",
+ "pallet-timestamp",
+ "pallet-tranche-custom-flows",
+ "pallet-tranche-investments",
+ "pallet-tranche-investments-v2",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry",
+ "pallet-tranche-tx-registry-v2",
+ "pallet-transaction-payment",
+ "pallet-transaction-payment-rpc-runtime-api",
+ "pallet-tx-pause",
+ "pallet-utility",
+ "parity-scale-codec",
+ "precompile-permissioned-authority",
+ "precompile-relay-manager",
+ "precompile-tranche-custom-flows",
+ "precompile-tranche-investments",
+ "precompile-tranche-investments-v2",
+ "precompile-tranche-permissions",
+ "precompile-tranche-system",
+ "precompile-tranche-tx-registry",
+ "precompile-tranche-tx-registry-v2",
+ "precompile-utils",
+ "scale-info",
+ "sp-api",
+ "sp-block-builder",
+ "sp-consensus-aura",
+ "sp-core",
+ "sp-genesis-builder",
+ "sp-inherents",
+ "sp-offchain",
+ "sp-runtime",
+ "sp-session",
+ "sp-std",
+ "sp-transaction-pool",
+ "sp-version",
+ "substrate-wasm-builder",
+]
+
+[[package]]
+name = "bifrost-private-testnet-hub-constants"
+version = "1.0.0"
+dependencies = [
+ "bifrost-common-constants",
+ "frame-support",
+]
+
+[[package]]
+name = "bifrost-private-testnet-hub-node"
+version = "1.0.0"
+dependencies = [
+ "bifrost-common-node",
+ "bifrost-private-testnet-hub-constants",
+ "bifrost-private-testnet-hub-runtime",
+ "bp-core",
+ "fc-db",
+ "fc-mapping-sync",
+ "fc-rpc",
+ "fc-rpc-core",
+ "fc-rpc-debug",
+ "fc-rpc-trace",
+ "fp-evm",
+ "fp-ext",
+ "fp-rpc",
+ "fp-rpc-txpool",
+ "frame-benchmarking",
+ "futures 0.3.31",
+ "hex-literal",
+ "jsonrpsee",
+ "pallet-bfc-staking",
+ "pallet-ethereum",
+ "pallet-im-online",
+ "pallet-transaction-payment-rpc",
+ "sc-basic-authorship",
+ "sc-chain-spec",
+ "sc-client-api",
+ "sc-consensus",
+ "sc-consensus-aura",
+ "sc-consensus-grandpa",
+ "sc-consensus-grandpa-rpc",
+ "sc-consensus-manual-seal",
+ "sc-executor",
+ "sc-network",
+ "sc-network-sync",
+ "sc-offchain",
+ "sc-rpc",
+ "sc-service",
+ "sc-telemetry",
+ "sc-transaction-pool",
+ "sc-transaction-pool-api",
+ "serde_json",
+ "sp-api",
+ "sp-block-builder",
+ "sp-blockchain",
+ "sp-consensus",
+ "sp-consensus-aura",
+ "sp-consensus-grandpa",
+ "sp-core",
+ "sp-inherents",
+ "sp-runtime",
+ "sp-timestamp",
+ "substrate-frame-rpc-system",
+]
+
+[[package]]
+name = "bifrost-private-testnet-hub-runtime"
+version = "1.0.0"
+dependencies = [
+ "bifrost-common-runtime",
+ "bifrost-private-testnet-hub-constants",
+ "bp-btc-relay",
+ "bp-core",
+ "ethereum",
+ "evm-tracer",
+ "fp-account",
+ "fp-rpc",
+ "fp-rpc-debug",
+ "fp-rpc-txpool",
+ "fp-self-contained",
+ "frame-benchmarking",
+ "frame-executive",
+ "frame-metadata-hash-extension",
+ "frame-support",
+ "frame-system",
+ "frame-system-benchmarking",
+ "frame-system-rpc-runtime-api",
+ "log",
+ "num_enum",
+ "pallet-aura",
+ "pallet-authorship",
+ "pallet-balances",
+ "pallet-base-fee",
+ "pallet-bfc-offences",
+ "pallet-bfc-staking",
+ "pallet-bfc-utility",
+ "pallet-bifrost-evm-tx-payment",
+ "pallet-blaze",
+ "pallet-btc-registration-pool",
+ "pallet-btc-socket-queue",
+ "pallet-cccp-relay-queue",
+ "pallet-collective",
+ "pallet-democracy",
+ "pallet-ethereum",
+ "pallet-evm",
+ "pallet-evm-precompile-blake2",
+ "pallet-evm-precompile-bn128",
+ "pallet-evm-precompile-modexp",
+ "pallet-evm-precompile-simple",
+ "pallet-grandpa",
+ "pallet-identity",
+ "pallet-im-online",
+ "pallet-membership",
+ "pallet-migrations",
+ "pallet-offences",
+ "pallet-oracle-registry",
+ "pallet-preimage",
+ "pallet-relay-manager",
+ "pallet-safe-mode",
+ "pallet-scheduler",
+ "pallet-session",
+ "pallet-sudo",
+ "pallet-timestamp",
+ "pallet-tranche-custom-flows",
+ "pallet-tranche-investments",
+ "pallet-tranche-investments-v2",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry",
+ "pallet-tranche-tx-registry-v2",
+ "pallet-transaction-payment",
+ "pallet-transaction-payment-rpc-runtime-api",
+ "pallet-treasury",
+ "pallet-tx-pause",
+ "pallet-utility",
+ "parity-scale-codec",
+ "precompile-balance",
+ "precompile-bfc-offences",
+ "precompile-bfc-staking",
+ "precompile-bifrost-evm-tx-payment",
+ "precompile-blaze",
+ "precompile-btc-registration-pool",
+ "precompile-btc-socket-queue",
+ "precompile-collective",
+ "precompile-governance",
+ "precompile-relay-manager",
+ "precompile-tranche-custom-flows",
+ "precompile-tranche-investments",
+ "precompile-tranche-investments-v2",
+ "precompile-tranche-permissions",
+ "precompile-tranche-system",
+ "precompile-tranche-tx-registry",
+ "precompile-tranche-tx-registry-v2",
+ "precompile-utils",
+ "scale-info",
+ "sp-api",
+ "sp-block-builder",
+ "sp-consensus-aura",
+ "sp-core",
+ "sp-genesis-builder",
+ "sp-inherents",
+ "sp-io",
+ "sp-offchain",
+ "sp-runtime",
+ "sp-session",
+ "sp-std",
+ "sp-transaction-pool",
+ "sp-version",
+ "substrate-wasm-builder",
 ]
 
 [[package]]
@@ -1742,6 +2087,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bp-tranche"
+version = "0.0.1"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
 name = "bs58"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2135,6 +2491,8 @@ checksum = "3bb320cac8a0750d7f25280aa97b09c26edfe161164238ecbbb31092b079e735"
 dependencies = [
  "cfg-if",
  "cpufeatures",
+ "proptest",
+ "serde_core",
 ]
 
 [[package]]
@@ -8224,6 +8582,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-permissioned-authority"
+version = "1.0.0"
+dependencies = [
+ "bp-staking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-session",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-staking",
+ "sp-std",
+]
+
+[[package]]
 name = "pallet-preimage"
 version = "45.0.0"
 source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
@@ -8377,6 +8752,140 @@ dependencies = [
  "sp-runtime",
  "sp-storage",
  "sp-timestamp",
+]
+
+[[package]]
+name = "pallet-tranche-custom-flows"
+version = "1.0.0"
+dependencies = [
+ "bp-tranche",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-investments"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-timestamp",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-investments-v2"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-timestamp",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-permissions"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-system"
+version = "1.0.0"
+dependencies = [
+ "bp-tranche",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-evm",
+ "pallet-timestamp",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-tx-registry"
+version = "1.0.0"
+dependencies = [
+ "bp-tranche",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-evm",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-tranche-tx-registry-v2"
+version = "1.0.0"
+dependencies = [
+ "bp-tranche",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-evm",
+ "pallet-tranche-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]
@@ -9384,6 +9893,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-permissioned-authority"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-system",
+ "pallet-evm",
+ "pallet-permissioned-authority",
+ "precompile-utils",
+ "sp-core",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-relay-manager"
 version = "1.0.0"
 dependencies = [
@@ -9393,6 +9915,117 @@ dependencies = [
  "frame-system",
  "pallet-evm",
  "pallet-relay-manager",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-custom-flows"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-custom-flows",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-investments"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-investments",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-investments-v2"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-investments-v2",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-permissions"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-system"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-permissions",
+ "pallet-tranche-system",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-tx-registry"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry",
+ "precompile-utils",
+ "sp-core",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "precompile-tranche-tx-registry-v2"
+version = "1.0.0"
+dependencies = [
+ "fp-evm",
+ "frame-support",
+ "frame-system",
+ "pallet-evm",
+ "pallet-tranche-system",
+ "pallet-tranche-tx-registry-v2",
  "precompile-utils",
  "sp-core",
  "sp-runtime",
@@ -9624,6 +10257,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.111",
+]
+
+[[package]]
+name = "proptest"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b45fcc2344c680f5025fe57779faef368840d0bd1f42f216291f0dc4ace4744"
+dependencies = [
+ "bitflags 2.10.0",
+ "num-traits",
+ "rand 0.9.2",
+ "rand_chacha 0.9.0",
+ "rand_xorshift",
+ "regex-syntax",
+ "unarray",
 ]
 
 [[package]]
@@ -9965,6 +10613,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
 dependencies = [
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand_xorshift"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
+dependencies = [
+ "rand_core 0.9.3",
 ]
 
 [[package]]
@@ -14414,6 +15071,12 @@ dependencies = [
  "hex",
  "static_assertions",
 ]
+
+[[package]]
+name = "unarray"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
 
 [[package]]
 name = "unicode-ident"

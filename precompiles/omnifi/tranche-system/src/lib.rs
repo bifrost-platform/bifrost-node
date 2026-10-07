@@ -1,0 +1,1226 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#![warn(unused_crate_dependencies)]
+
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	traits::Get,
+};
+use pallet_evm::AddressMapping;
+use pallet_tranche_system::{
+	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
+	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
+	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
+	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
+};
+use precompile_utils::prelude::*;
+use sp_core::{ConstU32, H160, H256, U256};
+use sp_runtime::{traits::Dispatchable, BoundedBTreeMap, BoundedVec};
+use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, vec, vec::Vec};
+
+pub mod universal;
+pub use universal::TrancheSystemUniversalPrecompile;
+
+// ---------------------------------------------------------------------------
+// EVM-only <-> ChainAddress conversion
+// ---------------------------------------------------------------------------
+//
+// This is the original, EVM-only interface (`interface.sol`), kept byte-for-byte
+// ABI-compatible. Storage now holds 32-byte `ChainAddress`es, so inputs are
+// left-padded on the way in and outputs narrowed back on the way out; a stored
+// value that isn't EVM-shaped (e.g. a Solana/Stellar address) can't be expressed
+// here, so reading it reverts and points at the universal precompile.
+
+/// Left-pads an EVM address into a `ChainAddress`.
+fn chain(address: Address) -> H256 {
+	address.0.into()
+}
+
+/// Narrows a `ChainAddress` back to an EVM address, reverting if it isn't one.
+fn evm(address: &H256) -> EvmResult<Address> {
+	if address.as_bytes()[..12].iter().any(|b| *b != 0) {
+		return Err(revert(NON_EVM_VALUE));
+	}
+	Ok(Address(H160::from_slice(&address.as_bytes()[12..])))
+}
+
+pub(crate) const NON_EVM_VALUE: &str =
+	"non-EVM value; use the universal precompile at 0x0000000000000000000000000000000000000600";
+
+// ---------------------------------------------------------------------------
+// Event log selectors
+// ---------------------------------------------------------------------------
+
+pub(crate) const SELECTOR_LOG_PRODUCT_CREATED: [u8; 32] =
+	keccak256!("ProductCreated(uint64,address,address,address,uint64,uint64,uint64)");
+pub(crate) const SELECTOR_LOG_TRANCHE_SET: [u8; 32] =
+	keccak256!("TrancheSet(uint64,uint8,uint8,uint256,uint64,address,address,address,uint8)");
+pub(crate) const SELECTOR_LOG_ADAPTERS_SET: [u8; 32] = keccak256!(
+	"AdaptersSet(uint64,address,uint64,(uint8,address,uint16,address,(uint64,address,uint256)[])[])"
+);
+pub(crate) const SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET: [u8; 32] = keccak256!(
+	"MultichainAdaptersSet(uint64,(address,uint64,uint16,(uint8,address,uint16,address,(uint64,address,uint256)[])[])[])"
+);
+pub(crate) const SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET: [u8; 32] =
+	keccak256!("MultichainTrancheManagersSet(uint64,(uint64,address)[])");
+pub(crate) const SELECTOR_LOG_SINGLE_CHAIN_PRODUCT_CREATED: [u8; 32] = keccak256!(
+	"SingleChainProductCreated(uint64,address,uint64,address,address,address,address,bool,uint64,uint64,uint64)"
+);
+
+// ---------------------------------------------------------------------------
+// interface.sol struct <-> tuple mappings
+// ---------------------------------------------------------------------------
+
+/// `ValuationInput` — (base_asset, valuation_address, settlement_start_timestamp,
+/// settlement_length_secs, settlement_offset_secs)
+type EvmValuationInput = (Address, Address, u64, u64, u64);
+/// `VaultInput` — (chain_id, vault_address)
+type EvmVaultInput = (u64, Address);
+/// `TrancheInput` — (tranche_type, apr, vault, asset, shares, priority)
+type EvmTrancheInput = (u8, U256, EvmVaultInput, Address, Address, u8);
+/// `CollateralInput` — (chain_id, nft_contract, nft_token_id). `chain_id` is
+/// the EVM chain the NFT contract is deployed on — not necessarily Bifrost
+/// itself (2026-08-24).
+type EvmCollateralInput = (u64, Address, U256);
+/// `AdapterInput` — (source_type, source_address, weightBps, borrower, collaterals)
+type EvmAdapterInput = (u8, Address, u16, Address, Vec<EvmCollateralInput>);
+/// `MultichainAdapterInput` — (adapter_address, chain_id, weightBps, adapters)
+type EvmMultichainAdapterInput = (Address, u64, u16, Vec<EvmAdapterInput>);
+/// `MultichainTrancheManagerInput` — (chain_id, tranche_manager_address)
+type EvmMultichainTrancheManagerInput = (u64, Address);
+/// `SettlementModeInput` — (is_sync, settlement_start_timestamp, settlement_length_secs,
+/// settlement_offset_secs); the latter three are `0` and not meaningful when `is_sync`
+type EvmSettlementModeInput = (bool, u64, u64, u64);
+/// `SingleChainValuationInput` — (base_asset, valuation_address, settlement_mode). A
+/// parallel type to `ValuationInput`, not a reuse of it — see
+/// `pallet_tranche_system::SingleChainValuationInfo`'s doc comment for why.
+type EvmSingleChainValuationInput = (Address, Address, EvmSettlementModeInput);
+/// `AdaptersByChain` — (chain_id, adapters)
+type EvmAdaptersByChain = (u64, Vec<EvmAdapterInput>);
+/// `MultichainProductDetails` (return-only) — (valuation, tranches, multichain_adapters,
+/// multichain_tranche_managers), the same four fields `create_product` takes as input
+/// (see that function's signature), echoed back as a single bundle by
+/// `get_multichain_product_details`.
+type EvmMultichainProductDetails = (
+	EvmValuationInput,
+	Vec<EvmTrancheInput>,
+	Vec<EvmMultichainAdapterInput>,
+	Vec<EvmMultichainTrancheManagerInput>,
+);
+/// `SingleChainProductDetails` (return-only) — (chain_id, valuation, tranches,
+/// tranche_manager, adapters, ledger), the same fields `create_single_chain_product`
+/// takes as input (minus `product_id`, which the caller already supplies), echoed back
+/// as a single bundle by `get_singlechain_product_details`.
+type EvmSingleChainProductDetails = (
+	u64,
+	EvmSingleChainValuationInput,
+	Vec<EvmTrancheInput>,
+	Address,
+	Vec<EvmAdapterInput>,
+	Address,
+);
+
+// ---------------------------------------------------------------------------
+// Precompile
+// ---------------------------------------------------------------------------
+
+/// A precompile that wraps `pallet_tranche_system`'s `create_product`/
+/// `set_tranche`/`set_adapters`/`set_multichain_adapters` extrinsics.
+///
+/// Called directly by ProductAdmin EOAs — not by a Gateway — so origins are
+/// resolved from `handle.context().caller`. Every one of these four functions
+/// is gated by `pallet_tranche_system::Origin::ProductAdmin`, constructed here
+/// only after reading `pallet-tranche-permissions`' `ProductAdmins` storage
+/// directly to confirm the caller holds the role for `product_id` — the
+/// pallet itself has no other way to verify this, since that custom origin
+/// carries an already-authenticated account rather than re-deriving it. This
+/// is deliberately the *only* way into any of these four extrinsics: none of
+/// them accept a plain signed origin, so calling pallet-tranche-system
+/// directly (bypassing this precompile) is impossible regardless of role.
+pub struct TrancheSystemPrecompile<Runtime>(PhantomData<Runtime>);
+
+#[precompile_utils::precompile]
+impl<Runtime> TrancheSystemPrecompile<Runtime>
+where
+	Runtime: pallet_tranche_system::Config
+		+ pallet_tranche_permissions::Config
+		+ pallet_evm::Config
+		+ frame_system::Config,
+	Runtime::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+	Runtime::RuntimeCall: From<TrancheSystemCall<Runtime>>,
+	Runtime::RuntimeOrigin: From<pallet_tranche_system::Origin<Runtime>>,
+	<Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
+	Runtime::AccountId: Into<H160>,
+{
+	/// Create a new tranche-system product. See `pallet_tranche_system::create_product`'s
+	/// doc comment for full semantics.
+	///
+	/// @param product_id Hub product ID (already granted to the caller via ProductAdmin)
+	/// @param valuation (base_asset, valuation_address, settlement_start_timestamp,
+	/// settlement_length_secs, settlement_offset_secs)
+	/// @param tranches Tranche configs; each entry's `priority` (0 = highest) determines the
+	/// stored order, not array position — reverts if two entries share a `priority`, or if
+	/// sorting by `priority` doesn't put every Senior tranche before every Junior one
+	/// @param multichain_adapters MultichainAdapter routing entries, each carrying its own
+	/// nested individual-Adapter registrations
+	/// @param multichain_tranche_managers This product's per-chain TrancheManager
+	/// bindings (chain_id, tranche_manager_address); Hub included, if the product has a
+	/// Hub-deployed vault
+	#[precompile::public(
+		"create_product(uint64,(address,address,uint64,uint64,uint64),(uint8,uint256,(uint64,address),address,address,uint8)[],(address,uint64,uint16,(uint8,address,uint16,address,(uint64,address,uint256)[])[])[],(uint64,address)[])"
+	)]
+	fn create_product(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		valuation: EvmValuationInput,
+		tranches: Vec<EvmTrancheInput>,
+		multichain_adapters: Vec<EvmMultichainAdapterInput>,
+		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+
+		let (
+			base_asset,
+			valuation_address,
+			settlement_start_timestamp,
+			settlement_length_secs,
+			settlement_offset_secs,
+		) = valuation;
+		let valuation_info = ValuationInfo {
+			base_asset: base_asset.0,
+			valuation_address: valuation_address.0,
+			settlement_start_timestamp,
+			settlement_length_secs,
+			settlement_offset_secs,
+		};
+
+		let bounded_tranches = decode_tranches::<ConstU32<MAX_TRANCHE_INPUTS>>(&tranches)?;
+		let bounded_multichain_adapters = decode_multichain_adapters(&multichain_adapters)?;
+		let bounded_multichain_tranche_managers =
+			decode_multichain_tranche_managers(&multichain_tranche_managers)?;
+
+		let call = TrancheSystemCall::<Runtime>::create_product {
+			product_id,
+			valuation: valuation_info,
+			tranches: bounded_tranches,
+			multichain_adapters: bounded_multichain_adapters,
+			multichain_tranche_managers: bounded_multichain_tranche_managers,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_PRODUCT_CREATED,
+			solidity::encode_event_data((
+				product_id,
+				Address(caller),
+				base_asset,
+				valuation_address,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Create a new single-chain product — every contract (Vault(s),
+	/// TrancheManager, Valuation, Adapters, Ledger) lives on one EVM chain,
+	/// not necessarily the Hub. See
+	/// `pallet_tranche_system::create_single_chain_product`'s doc comment for
+	/// full semantics.
+	///
+	/// @param product_id Hub product ID (already granted to the caller via ProductAdmin)
+	/// @param chain_id The single EVM chain every contract in this product lives on
+	/// @param valuation (base_asset, valuation_address, settlement_mode) — see
+	/// SingleChainValuationInput
+	/// @param tranches Tranche configs (same rules as `create_product`'s `tranches`); every
+	/// entry's `vault.chain_id` must equal `chain_id`
+	/// @param tranche_manager The single TrancheManager contract address, on `chain_id`
+	/// @param adapters Flat individual-Adapter registrations, no MultichainAdapter routing
+	/// layer above them; `weightBps` across the whole array must sum to 10_000
+	/// @param ledger The Ledger contract address, on `chain_id` — mirrors
+	/// pallet-tranche-investments' interface locally for this product
+	#[precompile::public(
+		"create_single_chain_product(uint64,uint64,(address,address,(bool,uint64,uint64,uint64)),(uint8,uint256,(uint64,address),address,address,uint8)[],address,(uint8,address,uint16,address,(uint64,address,uint256)[])[],address)"
+	)]
+	fn create_single_chain_product(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		chain_id: u64,
+		valuation: EvmSingleChainValuationInput,
+		tranches: Vec<EvmTrancheInput>,
+		tranche_manager: Address,
+		adapters: Vec<EvmAdapterInput>,
+		ledger: Address,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+
+		let (base_asset, valuation_address, settlement_mode) = valuation;
+		let (is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs) =
+			settlement_mode;
+		let decoded_settlement_mode = if is_sync {
+			SettlementMode::Sync
+		} else {
+			SettlementMode::Async {
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			}
+		};
+
+		let bounded_tranches = decode_tranches::<ConstU32<MAX_TRANCHES_PER_CHAIN>>(&tranches)?;
+		let bounded_adapters = decode_adapters(&adapters)?;
+
+		let call = TrancheSystemCall::<Runtime>::create_single_chain_product {
+			product_id,
+			chain_id,
+			valuation: SingleChainValuationInfo {
+				base_asset: chain(base_asset),
+				valuation_address: chain(valuation_address),
+				settlement_mode: decoded_settlement_mode,
+			},
+			tranches: bounded_tranches,
+			tranche_manager: chain(tranche_manager),
+			adapters: bounded_adapters,
+			ledger: chain(ledger),
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_SINGLE_CHAIN_PRODUCT_CREATED,
+			solidity::encode_event_data((
+				product_id,
+				Address(caller),
+				chain_id,
+				base_asset,
+				valuation_address,
+				tranche_manager,
+				ledger,
+				is_sync,
+				settlement_start_timestamp,
+				settlement_length_secs,
+				settlement_offset_secs,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Add, remove, or update a tranche. See
+	/// `pallet_tranche_system::set_tranche`'s doc comment for full semantics.
+	///
+	/// @param product_id The product whose tranche is being mutated
+	/// @param action     0 = Add, 1 = Remove, 2 = Update
+	/// @param tranche    (tranche_type, apr, vault, asset, shares, priority); field usage
+	/// differs by `action`
+	#[precompile::public(
+		"set_tranche(uint64,uint8,(uint8,uint256,(uint64,address),address,address,uint8))"
+	)]
+	fn set_tranche(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		action: u8,
+		tranche: EvmTrancheInput,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let decoded_action = decode_crud_action(action)?;
+		let (tranche_type_byte, apr, vault, asset, shares, priority) = tranche;
+		let (vault_chain_id, vault_address) = vault;
+		let tranche_type = decode_tranche_type(tranche_type_byte, apr)?;
+		let vault_id = VaultId { chain_id: vault_chain_id, vault_address: chain(vault_address) };
+
+		// `Update` can cascade an actual `tranche_type` change to every OTHER
+		// vault anywhere in the product that currently shares `vault_id`'s
+		// OLD type (see `pallet_tranche_system::set_tranche`'s own doc
+		// comment) — read that set from storage *before* dispatching, while
+		// it still reflects the pre-mutation state, so we can emit one EVM
+		// `TrancheSet` log per affected vault below, mirroring the pallet's
+		// own per-vault `Event::TrancheSet` emissions. Reading it after a
+		// successful dispatch would be too late — the pallet's own rename
+		// has already happened by then.
+		let cascaded = if decoded_action == CrudAction::Update {
+			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+			cascaded_tranche_targets::<Runtime>(product_id, &vault_id, &tranche_type)
+		} else {
+			Vec::new()
+		};
+
+		let call = TrancheSystemCall::<Runtime>::set_tranche {
+			product_id,
+			action: decoded_action,
+			vault: vault_id,
+			tranche_type,
+			asset: chain(asset),
+			shares: chain(shares),
+			priority,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_TRANCHE_SET,
+			solidity::encode_event_data((
+				product_id,
+				action,
+				tranche_type_byte,
+				apr,
+				vault_chain_id,
+				vault_address,
+				asset,
+				shares,
+				priority,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		for (
+			cascaded_vault_chain_id,
+			cascaded_vault_address,
+			cascaded_asset,
+			cascaded_shares,
+			cascaded_priority,
+		) in cascaded
+		{
+			let cascaded_event = log1(
+				handle.context().address,
+				SELECTOR_LOG_TRANCHE_SET,
+				solidity::encode_event_data((
+					product_id,
+					action,
+					tranche_type_byte,
+					apr,
+					cascaded_vault_chain_id,
+					cascaded_vault_address,
+					cascaded_asset,
+					cascaded_shares,
+					cascaded_priority,
+				)),
+			);
+			handle.record_log_costs(&[&cascaded_event])?;
+			cascaded_event.record(handle)?;
+		}
+
+		Ok(())
+	}
+
+	/// Replace, atomically, a product's entire flat individual-Adapter set —
+	/// Multichain (one parent's nested Adapters) or single-chain (the whole flat
+	/// set) alike. See `pallet_tranche_system::set_adapters`'s doc comment for
+	/// full semantics.
+	///
+	/// @param product_id             The product whose adapters are being replaced
+	/// @param parent_adapter_address The parent MultichainAdapter's contract address
+	/// @param parent_chain_id        The parent MultichainAdapter's chain ID
+	/// @param adapters               The full intended end-state list of nested adapters
+	#[precompile::public(
+		"set_adapters(uint64,address,uint64,(uint8,address,uint16,address,(uint64,address,uint256)[])[])"
+	)]
+	fn set_adapters(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		parent_adapter_address: Address,
+		parent_chain_id: u64,
+		adapters: Vec<EvmAdapterInput>,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let bounded_adapters = decode_adapters(&adapters)?;
+
+		let call = TrancheSystemCall::<Runtime>::set_adapters {
+			product_id,
+			parent_adapter_address: chain(parent_adapter_address),
+			parent_chain_id,
+			adapters: bounded_adapters,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_ADAPTERS_SET,
+			solidity::encode_event_data((
+				product_id,
+				parent_adapter_address,
+				parent_chain_id,
+				adapters,
+			)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Replace a product's entire MultichainAdapter routing table atomically.
+	/// See `pallet_tranche_system::set_multichain_adapters`'s doc comment for
+	/// full semantics.
+	///
+	/// @param product_id          The product whose MultichainAdapter table is being replaced
+	/// @param multichain_adapters The full intended end-state list of routing entries
+	#[precompile::public(
+		"set_multichain_adapters(uint64,(address,uint64,uint16,(uint8,address,uint16,address,(uint64,address,uint256)[])[])[])"
+	)]
+	fn set_multichain_adapters(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		multichain_adapters: Vec<EvmMultichainAdapterInput>,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let bounded_multichain_adapters = decode_multichain_adapters(&multichain_adapters)?;
+
+		let call = TrancheSystemCall::<Runtime>::set_multichain_adapters {
+			product_id,
+			multichain_adapters: bounded_multichain_adapters,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_MULTICHAIN_ADAPTERS_SET,
+			solidity::encode_event_data((product_id, multichain_adapters)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Replace a product's entire per-chain TrancheManager table atomically. See
+	/// `pallet_tranche_system::set_multichain_tranche_managers`'s doc comment for full
+	/// semantics.
+	///
+	/// @param product_id                  The product whose TrancheManager table is being replaced
+	/// @param multichain_tranche_managers The full intended end-state list of per-chain
+	/// bindings
+	#[precompile::public("set_multichain_tranche_managers(uint64,(uint64,address)[])")]
+	fn set_multichain_tranche_managers(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+	) -> EvmResult {
+		let caller = handle.context().caller;
+		let caller_account = Runtime::AddressMapping::into_account_id(caller);
+		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
+		let bounded_multichain_tranche_managers =
+			decode_multichain_tranche_managers(&multichain_tranche_managers)?;
+
+		let call = TrancheSystemCall::<Runtime>::set_multichain_tranche_managers {
+			product_id,
+			multichain_tranche_managers: bounded_multichain_tranche_managers,
+		};
+		RuntimeHelper::<Runtime>::try_dispatch(
+			handle,
+			pallet_tranche_system::Origin::<Runtime>::ProductAdmin(caller_account).into(),
+			call,
+			0,
+		)?;
+
+		let event = log1(
+			handle.context().address,
+			SELECTOR_LOG_MULTICHAIN_TRANCHE_MANAGERS_SET,
+			solidity::encode_event_data((product_id, multichain_tranche_managers)),
+		);
+		handle.record_log_costs(&[&event])?;
+		event.record(handle)?;
+
+		Ok(())
+	}
+
+	/// Read a product's Valuation binding and settlement-cadence config. Works for both
+	/// Multichain and single-chain products.
+	///
+	/// @param product_id The product to look up
+	/// @return base_asset, valuation_address, settlement_start_timestamp, settlement_length_secs,
+	/// settlement_offset_secs — for a single-chain product settling SYNC (see
+	/// SettlementModeInput), the three settlement_* fields are all 0 and not meaningful; treat
+	/// all-zero as SYNC
+	#[precompile::public("get_product(uint64)")]
+	#[precompile::view]
+	fn get_product(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<(Address, Address, u64, u64, u64)> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let (
+			base_asset,
+			valuation_address,
+			settlement_start_timestamp,
+			settlement_length_secs,
+			settlement_offset_secs,
+		) = match product {
+			ProductDetails::Multichain(product) => (
+				product.valuation.base_asset,
+				product.valuation.valuation_address,
+				product.valuation.settlement_start_timestamp,
+				product.valuation.settlement_length_secs,
+				product.valuation.settlement_offset_secs,
+			),
+			ProductDetails::SingleChain(product) => {
+				let (start, length, offset) = match product.valuation.settlement_mode {
+					SettlementMode::Sync => (0, 0, 0),
+					SettlementMode::Async {
+						settlement_start_timestamp,
+						settlement_length_secs,
+						settlement_offset_secs,
+					} => {
+						(settlement_start_timestamp, settlement_length_secs, settlement_offset_secs)
+					},
+				};
+				(
+					evm(&product.valuation.base_asset)?.0,
+					evm(&product.valuation.valuation_address)?.0,
+					start,
+					length,
+					offset,
+				)
+			},
+		};
+		Ok((
+			Address(base_asset),
+			Address(valuation_address),
+			settlement_start_timestamp,
+			settlement_length_secs,
+			settlement_offset_secs,
+		))
+	}
+
+	/// Read a product's tranches, in waterfall priority order (index 0 = highest priority).
+	/// Works for both Multichain and single-chain products.
+	///
+	/// @param product_id The product to look up
+	/// @return Tranche configs; `priority` in each entry reflects stored order within
+	/// its own `vault.chain_id` (NOT a product-wide position — two entries on different
+	/// chains may share the same `priority`), not the original
+	/// create_product/create_single_chain_product input. For a Multichain product, entries
+	/// are grouped by chain (ascending `chain_id`), each chain's own group in its own
+	/// priority order; for a single-chain product there's only ever the one chain's group.
+	#[precompile::public("get_tranches(uint64)")]
+	#[precompile::view]
+	fn get_tranches(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<Vec<EvmTrancheInput>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let tranches = match &product {
+			ProductDetails::Multichain(product) => product
+				.tranches
+				.values()
+				.flat_map(|chain_tranches| chain_tranches.iter().enumerate())
+				.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+				.collect::<EvmResult<Vec<_>>>()?,
+			ProductDetails::SingleChain(product) => product
+				.tranches
+				.iter()
+				.enumerate()
+				.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+				.collect::<EvmResult<Vec<_>>>()?,
+		};
+		Ok(tranches)
+	}
+
+	/// Read a Multichain product's MultichainAdapter routing table, each entry carrying its
+	/// own nested individual-Adapter registrations.
+	///
+	/// @param product_id The product to look up; reverts if it doesn't exist or is a
+	/// single-chain product (see get_single_chain_adapters for that case)
+	#[precompile::public("get_multichain_adapters(uint64)")]
+	#[precompile::view]
+	fn get_multichain_adapters(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<Vec<EvmMultichainAdapterInput>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			ProductDetails::Multichain(product) => product,
+			ProductDetails::SingleChain(_) => {
+				return Err(revert("product is a single-chain product; use get_adapters"))
+			},
+		};
+		product
+			.multichain_adapters
+			.iter()
+			.map(|(key, info)| {
+				Ok((
+					evm(&key.address)?,
+					key.chain_id,
+					info.weight_bps,
+					encode_adapters(&info.adapters)?,
+				))
+			})
+			.collect::<EvmResult<Vec<_>>>()
+	}
+
+	/// Read a product's Adapters, grouped by the chain they live on — a simpler,
+	/// model-agnostic alternative to get_multichain_adapters/get_single_chain_adapters
+	/// (removed). Works for both Multichain and single-chain products.
+	///
+	/// For a Multichain product, one entry per MultichainAdapter routing entry — `chain_id`
+	/// is that entry's own `chain_id`, `adapters` its nested individual-Adapter list. The
+	/// MultichainAdapter's own routing address/weightBps aren't included here — use
+	/// get_multichain_adapters for that full detail. For a single-chain product, always
+	/// exactly one entry: the product's single `chain_id` and its flat Adapter list.
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_adapters(uint64)")]
+	#[precompile::view]
+	fn get_adapters(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<Vec<EvmAdaptersByChain>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		Ok(match product {
+			ProductDetails::Multichain(product) => product
+				.multichain_adapters
+				.iter()
+				.map(|(key, info)| Ok((key.chain_id, encode_adapters(&info.adapters)?)))
+				.collect::<EvmResult<Vec<_>>>()?,
+			ProductDetails::SingleChain(product) => {
+				vec![(product.chain_id, encode_adapters(&product.adapters)?)]
+			},
+		})
+	}
+
+	/// Read a single-chain product's single TrancheManager contract address. Only applies
+	/// to single-chain products — reverts if `product_id` is a Multichain product (which has
+	/// a per-chain table instead — see get_multichain_tranche_managers).
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_tranche_manager(uint64)")]
+	#[precompile::view]
+	fn get_tranche_manager(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		match product {
+			ProductDetails::SingleChain(product) => evm(&product.tranche_manager),
+			ProductDetails::Multichain(_) => {
+				Err(revert("product is a Multichain product; use get_multichain_tranche_managers"))
+			},
+		}
+	}
+
+	/// Read a single-chain product's Ledger contract address — mirrors
+	/// pallet-tranche-investments' interface locally for this product (see
+	/// `SingleChainProductDetails`'s doc comment). Only applies to single-chain products —
+	/// reverts if `product_id` is a Multichain product (which has no Ledger contract at all;
+	/// it interacts with pallet-tranche-investments directly).
+	///
+	/// @param product_id The product to look up
+	#[precompile::public("get_ledger(uint64)")]
+	#[precompile::view]
+	fn get_ledger(handle: &mut impl PrecompileHandle, product_id: ProductId) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		match product {
+			ProductDetails::SingleChain(product) => evm(&product.ledger),
+			ProductDetails::Multichain(_) => Err(revert(
+				"product is a Multichain product; no Ledger contract (it interacts with pallet-tranche-investments directly)",
+			)),
+		}
+	}
+
+	/// Read a Multichain product's per-chain TrancheManager bindings — see
+	/// `MultichainProductDetails::multichain_tranche_managers`'s doc comment.
+	///
+	/// @param product_id The product to look up; reverts if it doesn't exist or is a
+	/// single-chain product (which has a single `tranche_manager` address instead — see
+	/// get_tranche_manager)
+	#[precompile::public("get_multichain_tranche_managers(uint64)")]
+	#[precompile::view]
+	fn get_multichain_tranche_managers(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<Vec<EvmMultichainTrancheManagerInput>> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			ProductDetails::Multichain(product) => product,
+			ProductDetails::SingleChain(_) => {
+				return Err(revert("product is a single-chain product; use get_tranche_manager"))
+			},
+		};
+		product
+			.multichain_tranche_managers
+			.iter()
+			.map(|(chain_id, address)| Ok((*chain_id, evm(address)?)))
+			.collect::<EvmResult<Vec<_>>>()
+	}
+
+	/// Read a Multichain product's entire configuration in one call — the same four
+	/// fields `create_product` takes as input (`valuation`/`tranches`/
+	/// `multichain_adapters`/`multichain_tranche_managers`), bundled together instead
+	/// of requiring separate `get_product`/`get_tranches`/`get_multichain_adapters`/
+	/// `get_multichain_tranche_managers` calls. Reads `Products` exactly once (unlike
+	/// calling all four of those separately, which reads it four times) and builds
+	/// every field from that single decoded value.
+	///
+	/// Each field is built exactly the way its own dedicated getter builds it (see
+	/// `get_product`, `get_tranches`, `get_multichain_adapters`,
+	/// `get_multichain_tranche_managers` for the full field-by-field contract on each)
+	/// — this function adds no new semantics, only bundling.
+	///
+	/// @param product_id The product to look up; reverts if it doesn't exist or is a
+	/// single-chain product (see get_singlechain_product_details for that case)
+	/// @return details `(valuation, tranches, multichain_adapters, multichain_tranche_managers)`
+	#[precompile::public("get_multichain_product_details(uint64)")]
+	#[precompile::view]
+	fn get_multichain_product_details(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<EvmMultichainProductDetails> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			ProductDetails::Multichain(product) => product,
+			ProductDetails::SingleChain(_) => {
+				return Err(revert(
+					"product is a single-chain product; use get_singlechain_product_details",
+				))
+			},
+		};
+
+		let valuation = (
+			Address(product.valuation.base_asset),
+			Address(product.valuation.valuation_address),
+			product.valuation.settlement_start_timestamp,
+			product.valuation.settlement_length_secs,
+			product.valuation.settlement_offset_secs,
+		);
+		let tranches = product
+			.tranches
+			.values()
+			.flat_map(|chain_tranches| chain_tranches.iter().enumerate())
+			.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+			.collect::<EvmResult<Vec<_>>>()?;
+		let multichain_adapters = product
+			.multichain_adapters
+			.iter()
+			.map(|(key, info)| {
+				Ok((
+					evm(&key.address)?,
+					key.chain_id,
+					info.weight_bps,
+					encode_adapters(&info.adapters)?,
+				))
+			})
+			.collect::<EvmResult<Vec<_>>>()?;
+		let multichain_tranche_managers = product
+			.multichain_tranche_managers
+			.iter()
+			.map(|(chain_id, address)| Ok((*chain_id, evm(address)?)))
+			.collect::<EvmResult<Vec<_>>>()?;
+
+		Ok((valuation, tranches, multichain_adapters, multichain_tranche_managers))
+	}
+
+	/// Read a single-chain product's entire configuration in one call — the same
+	/// fields `create_single_chain_product` takes as input (`chain_id`/`valuation`/
+	/// `tranches`/`tranche_manager`/`adapters`/`ledger`, minus `product_id` itself),
+	/// bundled together instead of requiring separate `get_product`/`get_tranches`/
+	/// `get_adapters`/`get_tranche_manager`/`get_ledger` calls. Reads `Products`
+	/// exactly once (unlike calling all of those separately) and builds every field
+	/// from that single decoded value.
+	///
+	/// Each field is built exactly the way its own dedicated getter builds it (see
+	/// `get_product`, `get_tranches`, `get_adapters`, `get_tranche_manager`,
+	/// `get_ledger` for the full field-by-field contract on each) — this function
+	/// adds no new semantics, only bundling. In particular, `valuation`'s nested
+	/// `settlement_mode.is_sync` is what `get_product`'s "all-zero settlement fields
+	/// means SYNC" convention exists to work around — this function doesn't need
+	/// that workaround, since `SettlementModeInput` carries `is_sync` explicitly.
+	///
+	/// @param product_id The product to look up; reverts if it doesn't exist or is a
+	/// Multichain product (see get_multichain_product_details for that case)
+	/// @return details `(chain_id, valuation, tranches, tranche_manager, adapters, ledger)`
+	#[precompile::public("get_singlechain_product_details(uint64)")]
+	#[precompile::view]
+	fn get_singlechain_product_details(
+		handle: &mut impl PrecompileHandle,
+		product_id: ProductId,
+	) -> EvmResult<EvmSingleChainProductDetails> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
+			.ok_or_else(|| revert("product not found"))?;
+		let product = match product {
+			ProductDetails::SingleChain(product) => product,
+			ProductDetails::Multichain(_) => {
+				return Err(revert(
+					"product is a Multichain product; use get_multichain_product_details",
+				))
+			},
+		};
+
+		let (is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs) =
+			match product.valuation.settlement_mode {
+				SettlementMode::Sync => (true, 0, 0, 0),
+				SettlementMode::Async {
+					settlement_start_timestamp,
+					settlement_length_secs,
+					settlement_offset_secs,
+				} => (
+					false,
+					settlement_start_timestamp,
+					settlement_length_secs,
+					settlement_offset_secs,
+				),
+			};
+		let valuation = (
+			evm(&product.valuation.base_asset)?,
+			evm(&product.valuation.valuation_address)?,
+			(is_sync, settlement_start_timestamp, settlement_length_secs, settlement_offset_secs),
+		);
+		let tranches = product
+			.tranches
+			.iter()
+			.enumerate()
+			.map(|(idx, tranche)| encode_tranche_input(tranche, idx as u8))
+			.collect::<EvmResult<Vec<_>>>()?;
+		let adapters = encode_adapters(&product.adapters)?;
+
+		Ok((
+			product.chain_id,
+			valuation,
+			tranches,
+			evm(&product.tranche_manager)?,
+			adapters,
+			evm(&product.ledger)?,
+		))
+	}
+
+	/// Read the single, global Hub-chain Orchestrator contract address — see
+	/// `pallet_tranche_system::OrchestratorAddress`'s doc comment. Not
+	/// per-product; same value regardless of caller. Never reverts — defaults
+	/// to the zero address until root calls `set_orchestrator_address`.
+	#[precompile::public("get_orchestrator()")]
+	#[precompile::view]
+	fn get_orchestrator(handle: &mut impl PrecompileHandle) -> EvmResult<Address> {
+		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+		Ok(Address(pallet_tranche_system::OrchestratorAddress::<Runtime>::get()))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Encodes a flat set of individual Adapters (either a Multichain entry's nested
+/// `adapters`, or a single-chain product's own flat `adapters`) into `AdapterInput[]`.
+/// Shared by `get_multichain_adapters`, `get_adapters`.
+fn encode_adapters<'a>(
+	adapters: impl IntoIterator<Item = (&'a H256, &'a AdapterInfo)>,
+) -> EvmResult<Vec<EvmAdapterInput>> {
+	adapters
+		.into_iter()
+		.map(|(address, adapter_info)| {
+			let (source_type, borrower, collaterals) = match &adapter_info.source_type {
+				SourceType::OffchainSource { borrower, collaterals } => (
+					0u8,
+					evm(borrower)?,
+					collaterals
+						.iter()
+						.map(|c| Ok((c.chain_id, evm(&c.nft_contract)?, c.nft_token_id)))
+						.collect::<EvmResult<Vec<EvmCollateralInput>>>()?,
+				),
+				SourceType::OnchainSource => (1u8, Address(H160::zero()), Vec::new()),
+			};
+			Ok((source_type, evm(address)?, adapter_info.weight_bps, borrower, collaterals))
+		})
+		.collect()
+}
+
+/// Reads `pallet-tranche-permissions`' storage directly to confirm the caller
+/// holds `ProductAdmin` for `product_id`, before constructing
+/// `Origin::ProductAdmin` — shared by all four extrinsics in this precompile.
+fn ensure_caller_is_product_admin<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+	caller_account: &Runtime::AccountId,
+) -> EvmResult
+where
+	Runtime: pallet_tranche_permissions::Config + pallet_evm::Config,
+{
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let is_admin = pallet_tranche_permissions::ProductAdmins::<Runtime>::get(product_id).as_ref()
+		== Some(caller_account);
+	if !is_admin {
+		return Err(revert("caller does not hold ProductAdmin for product_id"));
+	}
+	Ok(())
+}
+
+fn decode_crud_action(action: u8) -> EvmResult<CrudAction> {
+	match action {
+		0 => Ok(CrudAction::Add),
+		1 => Ok(CrudAction::Remove),
+		2 => Ok(CrudAction::Update),
+		_ => Err(revert("invalid action")),
+	}
+}
+
+fn decode_tranche_type(tranche_type: u8, apr: U256) -> EvmResult<TrancheType> {
+	match tranche_type {
+		0 => Ok(TrancheType::Junior),
+		1 => Ok(TrancheType::Senior { apr }),
+		_ => Err(revert("invalid tranche_type")),
+	}
+}
+
+/// `get_tranches`-only: encodes one stored `Tranche` back into the wire tuple
+/// shape, with the given `priority` (the caller's job to compute — within
+/// `vault.chain_id`'s own group for a Multichain product, or the product's
+/// one flat group for a single-chain one).
+fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmResult<EvmTrancheInput> {
+	let (tranche_type, apr) = match &tranche.tranche_type {
+		TrancheType::Junior => (0u8, U256::zero()),
+		TrancheType::Senior { apr } => (1u8, *apr),
+	};
+	Ok((
+		tranche_type,
+		apr,
+		(tranche.vault.chain_id, evm(&tranche.vault.vault_address)?),
+		evm(&tranche.asset)?,
+		evm(&tranche.shares)?,
+		priority,
+	))
+}
+
+/// `set_tranche`'s `Update`-only helper: finds every OTHER vault anywhere in
+/// `product_id` that currently shares `vault`'s pre-update `tranche_type` —
+/// the exact set `pallet_tranche_system::cascade_tranche_type_rename` will
+/// rename to `new_type` if this update actually changes the type. Called
+/// from `set_tranche` *before* dispatching (this reads the pre-mutation
+/// storage snapshot) so the precompile can emit one EVM `TrancheSet` log per
+/// affected vault after a successful dispatch, mirroring the pallet's own
+/// per-vault `Event::TrancheSet` emissions — see that event's own doc
+/// comment for why each cascaded vault gets a separate event rather than
+/// being silently folded into the one for `vault` itself.
+///
+/// Read-only and safe to compute ahead of the actual mutation: a cascade
+/// only ever changes a tranche's `tranche_type` field, never its own
+/// `vault`/`asset`/`shares`/position, so those values read here are still
+/// accurate immediately after the dispatch succeeds. Returns `(vault_chain_id,
+/// vault_address, asset, shares, priority)` per affected vault — empty if
+/// `product_id` doesn't exist, `vault` isn't found in it, or `new_type`
+/// matches `vault`'s current type (nothing to cascade).
+fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
+	product_id: ProductId,
+	vault: &VaultId,
+	new_type: &TrancheType,
+) -> Vec<(u64, Address, Address, Address, u8)> {
+	let Some(product) = pallet_tranche_system::Products::<Runtime>::get(product_id) else {
+		return Vec::new();
+	};
+
+	let old_type = match &product {
+		ProductDetails::Multichain(product) => product
+			.tranches
+			.get(&vault.chain_id)
+			.and_then(|chain| chain.iter().find(|t| &t.vault == vault))
+			.map(|t| t.tranche_type.clone()),
+		ProductDetails::SingleChain(product) => product
+			.tranches
+			.iter()
+			.find(|t| &t.vault == vault)
+			.map(|t| t.tranche_type.clone()),
+	};
+	let Some(old_type) = old_type else {
+		return Vec::new();
+	};
+	if &old_type == new_type {
+		return Vec::new();
+	}
+
+	let mut targets = Vec::new();
+	let chain_groups: Vec<&[Tranche]> = match &product {
+		ProductDetails::Multichain(product) => {
+			product.tranches.values().map(|chain| chain.as_slice()).collect()
+		},
+		ProductDetails::SingleChain(product) => vec![product.tranches.as_slice()],
+	};
+	for chain_tranches in chain_groups {
+		for (idx, t) in chain_tranches.iter().enumerate() {
+			if &t.vault != vault && t.tranche_type == old_type {
+				// A cascaded vault this EVM-only interface can't express (non-EVM
+				// address) gets no legacy `TrancheSet` log here — the pallet's own
+				// `Event::TrancheSet` still records it.
+				if let (Ok(vault_address), Ok(asset), Ok(shares)) =
+					(evm(&t.vault.vault_address), evm(&t.asset), evm(&t.shares))
+				{
+					targets.push((t.vault.chain_id, vault_address, asset, shares, idx as u8));
+				}
+			}
+		}
+	}
+	targets
+}
+
+/// `create_product`-only: each entry's `priority` is passed straight through
+/// (not derived from array position) — the pallet sorts by it and reverts if
+/// two entries share a `priority` or if the sorted order doesn't put every
+/// Senior tranche before every Junior one. See `TrancheInput`'s doc comment.
+/// Generic over the target bound `S` — `create_product` needs
+/// `ConstU32<MAX_TRANCHE_INPUTS>` (its flat input spans every chain's
+/// tranches at once), while `create_single_chain_product` needs the smaller
+/// `ConstU32<MAX_TRANCHES_PER_CHAIN>` (inherently one chain) — see `MAX_TRANCHE_INPUTS`'s
+/// doc comment in `pallet_tranche_system`.
+fn decode_tranches<S: Get<u32>>(
+	tranches: &[EvmTrancheInput],
+) -> EvmResult<BoundedVec<TrancheInput, S>> {
+	let mut bounded = BoundedVec::<TrancheInput, S>::default();
+	for (tranche_type, apr, vault, asset, shares, priority) in tranches.iter().cloned() {
+		let (chain_id, vault_address) = vault;
+		let tranche_type = decode_tranche_type(tranche_type, apr)?;
+		let vault_id = VaultId { chain_id, vault_address: chain(vault_address) };
+		bounded
+			.try_push(TrancheInput {
+				priority,
+				tranche_type,
+				vault: vault_id,
+				asset: chain(asset),
+				shares: chain(shares),
+			})
+			.map_err(|_| revert("too many tranches"))?;
+	}
+	Ok(bounded)
+}
+
+/// Decodes `SourceType` + `borrower`/`collaterals` (only meaningful when
+/// `source_type == OffchainSource`, per interface.sol).
+fn decode_source_type(
+	source_type: u8,
+	borrower: Address,
+	collaterals: &[EvmCollateralInput],
+) -> EvmResult<SourceType> {
+	match source_type {
+		0 => {
+			let mut bounded_collaterals =
+				BoundedVec::<CollateralAsset, ConstU32<MAX_COLLATERALS>>::default();
+			for (chain_id, nft_contract, nft_token_id) in collaterals.iter().cloned() {
+				bounded_collaterals
+					.try_push(CollateralAsset {
+						chain_id,
+						nft_contract: chain(nft_contract),
+						nft_token_id,
+					})
+					.map_err(|_| revert("too many collaterals"))?;
+			}
+			Ok(SourceType::OffchainSource {
+				borrower: chain(borrower),
+				collaterals: bounded_collaterals,
+			})
+		},
+		1 => Ok(SourceType::OnchainSource),
+		_ => Err(revert("invalid source_type")),
+	}
+}
+
+/// Decodes one parent MultichainAdapter's nested `adapters` array — shared by
+/// `set_adapters` (standalone) and `decode_multichain_adapters` (nested
+/// within `create_product`/`set_multichain_adapters`). Reverts on a duplicate
+/// `source_address` — the incoming array has no uniqueness guarantee the way
+/// a `BoundedBTreeMap` would, unlike `pallet_tranche_system`'s own storage.
+fn decode_adapters(
+	adapters: &[EvmAdapterInput],
+) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>>> {
+	let mut map = BTreeMap::new();
+	for (source_type, source_address, weight_bps, borrower, collaterals) in adapters.iter().cloned()
+	{
+		let decoded_source_type = decode_source_type(source_type, borrower, &collaterals)?;
+		let info = AdapterInfo { source_type: decoded_source_type, weight_bps };
+		if map.insert(chain(source_address), info).is_some() {
+			return Err(revert("duplicate source_address in adapters"));
+		}
+	}
+	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many adapters"))
+}
+
+/// Decodes a `multichain_adapters` array. Reverts on a duplicate
+/// `(adapter_address, chain_id)` pair, same reasoning as `decode_adapters`.
+fn decode_multichain_adapters(
+	multichain_adapters: &[EvmMultichainAdapterInput],
+) -> EvmResult<BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, ConstU32<MAX_MULTICHAIN_ADAPTERS>>>
+{
+	let mut map = BTreeMap::new();
+	for (adapter_address, chain_id, weight_bps, adapters) in multichain_adapters.iter().cloned() {
+		let key = AdapterKey { address: chain(adapter_address), chain_id };
+		let decoded_adapters = decode_adapters(&adapters)?;
+		let info = MultichainAdapterInfo { weight_bps, adapters: decoded_adapters };
+		if map.insert(key, info).is_some() {
+			return Err(revert("duplicate (adapter_address, chain_id) in multichain_adapters"));
+		}
+	}
+	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many multichain_adapters"))
+}
+
+/// Decodes a `multichain_tranche_managers` array. Reverts on a duplicate
+/// `chain_id`, same reasoning as `decode_multichain_adapters` — the incoming
+/// array has no uniqueness guarantee the way a `BoundedBTreeMap` would. Hub
+/// is a valid `chain_id` here (no exclusion) — see
+/// `ProductDetails::multichain_tranche_managers`'s doc comment.
+fn decode_multichain_tranche_managers(
+	multichain_tranche_managers: &[EvmMultichainTrancheManagerInput],
+) -> EvmResult<BoundedBTreeMap<u64, H256, ConstU32<MAX_TRANCHE_MANAGERS>>> {
+	let mut map = BTreeMap::new();
+	for (chain_id, tranche_manager_address) in multichain_tranche_managers.iter().cloned() {
+		if map.insert(chain_id, chain(tranche_manager_address)).is_some() {
+			return Err(revert("duplicate chain_id in multichain_tranche_managers"));
+		}
+	}
+	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many multichain_tranche_managers"))
+}
