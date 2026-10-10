@@ -731,6 +731,24 @@ pub enum ProductDetails {
 	SingleChain(SingleChainProductDetails),
 }
 
+impl ProductDetails {
+	/// `true` if this product has a non-zero TrancheManager bound on `chain_id`.
+	/// Zero is `multichain_tranche_managers`' "not bound yet" placeholder (see
+	/// `tranche_managers_introduce_address`), so it doesn't count. A
+	/// `SingleChain` product's one TrancheManager is on its own `chain_id`.
+	pub fn has_tranche_manager_on(&self, chain_id: u64) -> bool {
+		match self {
+			ProductDetails::Multichain(product) => product
+				.multichain_tranche_managers
+				.get(&chain_id)
+				.is_some_and(|manager| !manager.is_zero()),
+			ProductDetails::SingleChain(product) => {
+				product.chain_id == chain_id && !product.tranche_manager.is_zero()
+			},
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // FlowVersion
 // ---------------------------------------------------------------------------
@@ -830,9 +848,10 @@ pub trait AdapterInspect {
 	/// `chain_id` at a time) so an implementation can fetch `product_id`'s details once
 	/// and check the whole batch against it. Consumed by pallet-tranche-tx-registry to
 	/// validate a request's declared `adapter_chain_ids` (an Adapter leg always
-	/// targets a yield-source chain, never a vault) and a settlement Trigger's declared
-	/// `collect_response_chain_ids` (Collect/Response query NAV from an Adapter, never a
-	/// vault).
+	/// targets a yield-source chain, never a vault), and by pallet-tranche-tx-registry
+	/// v1 (only) to validate a settlement Trigger's declared
+	/// `collect_response_chain_ids` — v2 checks that set with
+	/// `ProductInspect::tranche_manager_chains_belong_to_product` instead.
 	fn adapter_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
 }
 
@@ -863,6 +882,15 @@ pub trait ProductInspect {
 	/// chain its entire stack lives on. `None` if it's `Multichain` (there's no
 	/// single answer to "which chain" for that model).
 	fn single_chain_id(product_id: ProductId) -> Option<u64>;
+	/// Returns `true` if every id in `chain_ids` is a chain where `product_id` has a
+	/// TrancheManager bound (see `ProductDetails::has_tranche_manager_on`) — whether
+	/// that chain holds vaults, Adapters, or both. Same slice convention as
+	/// `VaultInspect::vault_chains_belong_to_product`. Consumed by
+	/// pallet-tranche-tx-registry-v2 to validate a settlement Trigger's declared
+	/// `collect_response_chain_ids`: the Hub sends COLLECT to every chain's
+	/// TrancheManager, and RESPONSE carries that chain's NAV and payout budget even
+	/// when it has no Adapter (a vault-only chain).
+	fn tranche_manager_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool;
 	/// `product_id`'s registered request-pipeline `FlowVersion` — see
 	/// `RequestFlowVersion`'s storage doc comment. `None` iff `product_id` isn't
 	/// registered at all (every registered product gets `Some(FlowVersion::V1)`
@@ -949,5 +977,67 @@ where
 	#[cfg(feature = "runtime-benchmarks")]
 	fn try_successful_origin() -> Result<OuterOrigin, ()> {
 		Ok(OuterOrigin::from(Origin::ProductFactory(T::AccountId::default())))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use sp_core::H256;
+
+	const HUB: u64 = 1;
+	const SOLANA: u64 = 2;
+	const BASE: u64 = 3;
+
+	fn multichain(managers: &[(u64, ChainAddress)]) -> ProductDetails {
+		ProductDetails::Multichain(MultichainProductDetails {
+			valuation: ValuationInfo {
+				base_asset: H160::repeat_byte(1),
+				valuation_address: H160::repeat_byte(2),
+				settlement_start_timestamp: 1,
+				settlement_length_secs: 10,
+				settlement_offset_secs: 0,
+			},
+			tranches: BoundedBTreeMap::new(),
+			multichain_adapters: BoundedBTreeMap::new(),
+			multichain_tranche_managers: BoundedBTreeMap::try_from(
+				managers
+					.iter()
+					.cloned()
+					.collect::<sp_std::collections::btree_map::BTreeMap<_, _>>(),
+			)
+			.unwrap(),
+		})
+	}
+
+	#[test]
+	fn multichain_manager_chain_needs_a_non_zero_manager() {
+		let product =
+			multichain(&[(SOLANA, H256::repeat_byte(0xaa)), (BASE, H256::repeat_byte(0xbb))]);
+		// Neither chain needs a tranche or an Adapter registered here.
+		assert!(product.has_tranche_manager_on(SOLANA));
+		assert!(product.has_tranche_manager_on(BASE));
+		assert!(!product.has_tranche_manager_on(HUB));
+
+		let unbound = multichain(&[(BASE, H256::zero())]);
+		assert!(!unbound.has_tranche_manager_on(BASE));
+	}
+
+	#[test]
+	fn single_chain_manager_is_on_its_own_chain() {
+		let product = ProductDetails::SingleChain(SingleChainProductDetails {
+			valuation: SingleChainValuationInfo {
+				base_asset: H256::repeat_byte(1),
+				valuation_address: H256::repeat_byte(2),
+				settlement_mode: SettlementMode::Sync,
+			},
+			chain_id: BASE,
+			tranches: BoundedVec::new(),
+			tranche_manager: H256::repeat_byte(0xcc),
+			adapters: BoundedBTreeMap::new(),
+			ledger: H256::repeat_byte(3),
+		});
+		assert!(product.has_tranche_manager_on(BASE));
+		assert!(!product.has_tranche_manager_on(SOLANA));
 	}
 }

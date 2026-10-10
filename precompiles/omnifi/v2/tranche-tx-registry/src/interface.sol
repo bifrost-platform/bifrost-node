@@ -61,7 +61,7 @@ pragma solidity >=0.8.0;
  *    SettlementStep's dev notes).
  *  - Settlement (per settlement_id, fanned out per chain): a single settle_started_tx
  *    (Hub-local tryUpdateNAV) that also declares two independent chain sets —
- *    collect_response_chain_ids (chains with a registered Adapter, excluding Hub
+ *    collect_response_chain_ids (chains with a bound TrancheManager, excluding Hub
  *    itself) and finalize_chain_ids (chains with a registered vault, excluding Hub) —
  *    then, per chain, whichever leg kind(s) its role calls for: Collect (Hub->Spoke NAV
  *    request) + Response (Spoke->Hub NAV report) for a collect_response chain, Finalize
@@ -376,7 +376,7 @@ interface TrancheTxRegistryV2 {
     ///      Each chain's own terminal step depends on its role, declared at SettleStarted time
     ///      (see record_settlement_tx's dev notes): `SettleApplied` if it's in
     ///      `finalize_chain_ids` (it has a vault to deliver a result to), otherwise
-    ///      `NavReceived` (it only has an Adapter — Collect/Response-only chains
+    ///      `NavReceived` (it has no vault — Collect/Response-only chains
     ///      never get a Finalize leg to begin with, and never have Finalize entries in
     ///      get_settlement's `steps` array at all). get_settlement's `status == Settled`
     ///      once every chain has reached its own terminal step.
@@ -789,12 +789,12 @@ interface TrancheTxRegistryV2 {
      *      both physically execute on the Hub (see get_settlement's dev notes) even though
      *      `spoke_chain_id` there still names the chain being responded for.
      *      `collect_response_chain_ids` declares every chain (excluding Hub) with a
-     *      registered Adapter this settlement queries NAV from — a CollectBridgeExecuted/
+     *      bound TrancheManager this settlement queries NAV from — a CollectBridgeExecuted/
      *      NavReported/ResponseBridgeExecuted/NavReceived call is only
      *      valid for a chain in this set. `finalize_chain_ids` declares every chain
      *      (excluding Hub) with a registered vault this settlement delivers a result to — a
      *      FinalizeBridgeExecuted/SettleApplied call is only valid for a chain in
-     *      this set. A chain may appear in both (it has both a registered Adapter and a
+     *      this set. A chain may appear in both (it reports NAV and has a
      *      registered vault) or just one. `step == SettleStarted` must be recorded exactly once
      *      per (product_id, settlement_id), before any leg step for that settlement — but NOT
      *      necessarily before a `RequestsApproved` call for it: a SingleChain SYNC product's

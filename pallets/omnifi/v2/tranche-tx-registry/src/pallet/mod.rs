@@ -90,10 +90,10 @@ pub mod pallet {
 		/// The vault does not belong to `product_id`.
 		VaultNotRegistered,
 		/// One of the declared chains doesn't have the role required for the set it
-		/// was declared in: `adapter_chain_ids` (Request) or
-		/// `collect_response_chain_ids` (Settlement) requires a registered
-		/// MultichainAdapter on that chain; `finalize_chain_ids` (Settlement)
-		/// requires a registered tranche vault.
+		/// was declared in: `adapter_chain_ids` (Request) requires a registered
+		/// MultichainAdapter on that chain; `collect_response_chain_ids`
+		/// (Settlement) requires a bound TrancheManager on that chain;
+		/// `finalize_chain_ids` (Settlement) requires a registered tranche vault.
 		SpokeChainNotRegistered,
 		/// A registry entry already exists for this (product_id, request_id).
 		RequestAlreadyOpened,
@@ -662,9 +662,9 @@ pub mod pallet {
 
 	#[pallet::storage]
 	/// The chains registered for a settlement's Collect/Response legs at
-	/// SettleStarted time (those with a registered Adapter, excluding Hub
-	/// itself — an Adapter on Hub is queried locally, no Bridge&Call leg
-	/// needed), in the order the recorder supplied them. A chain never
+	/// SettleStarted time (those with a bound TrancheManager, excluding Hub
+	/// itself — Hub is queried locally, no Bridge&Call leg needed), in the
+	/// order the recorder supplied them. A chain never
 	/// reaches `NavReceived` unless it's in this set. Always written
 	/// alongside `SettlementTriggers` and `SettlementFinalizeChains` (all by
 	/// the same `record_settlement_tx` call for `step ==
@@ -1003,9 +1003,9 @@ pub mod pallet {
 		/// `docs/tranche-tx-registry/settlement-leg-chunking-design.md`.
 		///
 		/// The two chain-id sets declare, per chain, which leg kind(s) it needs —
-		/// Collect/Response for a chain with a registered Adapter, Finalize for a
-		/// chain with a registered vault, both for a chain with both (excluding Hub
-		/// itself in either case — see `SettlementCollectResponseChains`/
+		/// Collect/Response for a chain with a bound TrancheManager (vaults,
+		/// Adapters, or both), Finalize for a chain with a registered vault
+		/// (excluding Hub itself in either case — see `SettlementCollectResponseChains`/
 		/// `SettlementFinalizeChains`'s doc comments). A chain absent from
 		/// `finalize_chain_ids` never blocks completion on a Finalize leg it was
 		/// never going to get — completion waits on `NavReceived` for it instead

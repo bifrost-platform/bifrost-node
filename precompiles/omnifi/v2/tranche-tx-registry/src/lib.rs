@@ -274,7 +274,7 @@ where
 	/// @param spoke_chain_id  The spoke chain this leg step is for — 0 if step ==
 	/// SettleStarted, RequestsApproved, or Settled (all settlement-wide, not chain-scoped)
 	/// @param collect_response_chain_ids Chains needing a Collect/Response leg (have a
-	/// registered Adapter) — meaningful (and may be empty) iff step == SettleStarted
+	/// bound TrancheManager) — meaningful (and may be empty) iff step == SettleStarted
 	/// @param finalize_chain_ids Chains needing a Finalize leg (have a registered vault) —
 	/// meaningful (and may be empty) iff step == SettleStarted
 	/// @param request_ids Every request_id Valuation approved into this settlement —
@@ -1539,7 +1539,7 @@ fn encode_bridge_attempts<BlockNumber: Into<U256> + Clone>(
 /// `a` followed by every id in `b` not already in `a`, deduplicated — used to
 /// enumerate a settlement's full chain set for `get_settlement`, since
 /// `SettlementCollectResponseChains` and `SettlementFinalizeChains` may overlap
-/// (a chain with both a registered Adapter and a registered vault) but
+/// (a chain that both reports NAV and has a registered vault) but
 /// `get_settlement` returns one flat, chain-ordered array rather than the two
 /// sets separately.
 fn union_chain_ids(a: &[pallet_tranche_tx_registry_v2::ChainId], b: &[u64]) -> Vec<u64> {
