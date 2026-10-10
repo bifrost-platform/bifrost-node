@@ -636,8 +636,14 @@ impl<T: Config> Pallet<T> {
 				&& !finalize_chains.contains(&local_chain_id),
 			Error::<T>::LocalChainAsSpokeChain
 		);
+		// TrancheManager-based, not Adapter-based: the Hub sends COLLECT to every
+		// chain's TrancheManager, including a vault-only chain with no Adapter,
+		// whose RESPONSE still carries its NAV and payout budget.
 		ensure!(
-			T::Adapters::adapter_chains_belong_to_product(product_id, &collect_response_chains),
+			T::Products::tranche_manager_chains_belong_to_product(
+				product_id,
+				&collect_response_chains
+			),
 			Error::<T>::SpokeChainNotRegistered
 		);
 		ensure!(

@@ -90,6 +90,9 @@ impl ProductInspect for MockProducts {
 	fn single_chain_id(_: ProductId) -> Option<u64> {
 		None
 	}
+	fn tranche_manager_chains_belong_to_product(_: ProductId, _: &[u64]) -> bool {
+		true
+	}
 	fn request_flow_version(_: ProductId) -> Option<FlowVersion> {
 		Some(FlowVersion::V1)
 	}

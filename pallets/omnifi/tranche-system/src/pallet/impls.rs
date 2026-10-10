@@ -787,6 +787,15 @@ impl<T: Config> ProductInspect for Pallet<T> {
 		}
 	}
 
+	fn tranche_manager_chains_belong_to_product(product_id: ProductId, chain_ids: &[u64]) -> bool {
+		let product = Products::<T>::get(product_id);
+		chain_ids.iter().all(|chain_id| {
+			product
+				.as_ref()
+				.is_some_and(|product| product.has_tranche_manager_on(*chain_id))
+		})
+	}
+
 	fn request_flow_version(product_id: ProductId) -> Option<FlowVersion> {
 		RequestFlowVersion::<T>::get(product_id)
 	}
