@@ -109,6 +109,8 @@ pragma solidity >=0.8.0;
  *     (2026-07-27): a single MultichainAdapter's nested `adapters` weightBps must
  *     always sum to exactly 10_000 — see `set_adapters` for why that's a
  *     full-array replace scoped to one parent, mirroring `set_multichain_adapters`.
+ *     The nested `adapters` may also be empty (2026-10-12): a MultichainAdapter
+ *     deployed with no yield sources yet. A single-chain product's flat list may not.
  *   - `weightBps`/`apr` unit conventions differ: `apr` (Senior tranche) is a
  *     FixedU128 inner value (1e18 = 100%);
  *     `weightBps` (both `MultichainAdapterInput` and `AdapterInput`) is
@@ -289,7 +291,7 @@ interface TrancheSystemUniversal {
     /// @param weightBps      This adapter's sub-allocation weight within its parent
     ///                       MultichainAdapter's internal split (e.g. Compound vs. Morpho vs.
     ///                       Aave), basis points (10_000 = 100%); across one parent's nested
-    ///                       `adapters`, must sum to exactly 10_000, see notes above
+    ///                       `adapters`, must sum to exactly 10_000 (or the set is empty), see notes above
     /// @param borrower       OffchainSource only: the institution's address on this adapter's
     ///                       chain, as bytes32 (EVM addresses left-padded); bytes32(0) otherwise
     /// @param collaterals    OffchainSource only: collateral NFTs backing the loan book; empty otherwise
@@ -474,8 +476,8 @@ interface TrancheSystemUniversal {
      *      notes above; `create_product` only ever registers brand-new vaults, so this
      *      never has a legitimate "same product re-adding" exception the way
      *      set_tranche's Add does), weightBps across `multichain_adapters` don't sum to
-     *      100% (10_000 bps), any entry's nested `adapters` weightBps don't themselves
-     *      sum to 100%, the same nested Adapter (address, chain_id) appears under two
+     *      100% (10_000 bps), any entry's non-empty nested `adapters` weightBps don't
+     *      themselves sum to 100% (an empty nested `adapters` is allowed), the same nested Adapter (address, chain_id) appears under two
      *      different `multichain_adapters` entries,
      *      `valuation.settlement_offset_secs >= valuation.settlement_length_secs`,
      *      `valuation.settlement_start_timestamp` is not strictly after the current
@@ -706,7 +708,8 @@ interface TrancheSystemUniversal {
      *      (see below), a single-entity add/remove can't preserve it without either
      *      silently rescaling every other entry or leaving the sum temporarily
      *      wrong between calls.
-     *      Reverts unless `sum(adapters[i].weightBps) == 10_000`, if `adapters`
+     *      Reverts unless `sum(adapters[i].weightBps) == 10_000` (an empty `adapters`
+     *      is allowed for a MultichainAdapter parent, not for a single-chain product), if `adapters`
      *      contains a duplicate `source_address`, or if a `source_address` is
      *      already registered elsewhere (an Adapter address belongs to at most one
      *      such set globally — re-registering the same `source_address` in *this*
@@ -748,7 +751,9 @@ interface TrancheSystemUniversal {
      *      `set_adapters` would leave it — callers changing only e.g. a top-level
      *      weightBps must still resupply that entry's unchanged `adapters` array,
      *      or they'll be wiped.
-     *      Reverts unless `sum(multichain_adapters[i].weightBps) == 10_000`, if
+     *      Reverts unless `sum(multichain_adapters[i].weightBps) == 10_000`, if any
+     *      entry's non-empty nested `adapters` weightBps don't sum to 10_000 (an empty
+     *      nested `adapters` is allowed), if
      *      `multichain_adapters` contains a duplicate (`adapter_address`, `chain_id`)
      *      pair, if any entry's nested `adapters` contains a duplicate
      *      `source_address`, or if the same nested `source_address` (chain-aware,

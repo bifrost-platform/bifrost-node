@@ -136,9 +136,10 @@ pub mod pallet {
 		/// under a different parent MultichainAdapter, a different product, or
 		/// (for `create_product`) duplicated within the same call.
 		AdapterAlreadyRegistered,
-		/// A `weightBps` set (top-level `multichain_adapters`, or one parent's
-		/// nested `adapters`) was empty — checked before
-		/// `WeightsMustSumTo10000` so an empty set reports "you need at least
+		/// A `weightBps` set (top-level `multichain_adapters`, or a single-chain
+		/// product's flat `adapters`) was empty. A MultichainAdapter's nested
+		/// `adapters` may be empty (2026-10-12), so it never reports this.
+		/// Checked before `WeightsMustSumTo10000` so an empty set reports "you need at least
 		/// one entry" rather than the misleading "your percentages don't sum
 		/// to 100%" (security-review 2026-09-18 L2 — an empty set's sum is
 		/// vacuously `0`, which would otherwise fail that check instead for
@@ -713,7 +714,6 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let authority = Self::ensure_product_authority(origin, product_id)?;
 
-			Self::ensure_weights_sum_to_10000(adapters.values().map(|a| a.weight_bps))?;
 			let n = adapters.len() as u32;
 
 			let (t, a, replaced) = Products::<T>::try_mutate(
@@ -731,6 +731,7 @@ pub mod pallet {
 								.multichain_adapters
 								.get_mut(&parent_key)
 								.ok_or(Error::<T>::MultichainAdapterNotFound)?;
+							Self::ensure_nested_adapter_weights(&adapters)?;
 							Self::ensure_may_introduce_addresses(
 								authority,
 								product_id,
@@ -751,6 +752,9 @@ pub mod pallet {
 							// a single-chain product has no MultichainAdapter parent
 							// concept at all, so this replaces the product's whole flat
 							// `adapters` map instead of one parent's nested set.
+							Self::ensure_weights_sum_to_10000(
+								adapters.values().map(|a| a.weight_bps),
+							)?;
 							Self::ensure_may_introduce_addresses(
 								authority,
 								product_id,
@@ -808,7 +812,7 @@ pub mod pallet {
 				multichain_adapters.values().map(|info| info.weight_bps),
 			)?;
 			for info in multichain_adapters.values() {
-				Self::ensure_weights_sum_to_10000(info.adapters.values().map(|a| a.weight_bps))?;
+				Self::ensure_nested_adapter_weights(&info.adapters)?;
 			}
 			let n = Self::adapter_index_entries(&multichain_adapters);
 
@@ -1099,7 +1103,7 @@ pub mod pallet {
 				multichain_adapters.values().map(|info| info.weight_bps),
 			)?;
 			for info in multichain_adapters.values() {
-				Self::ensure_weights_sum_to_10000(info.adapters.values().map(|a| a.weight_bps))?;
+				Self::ensure_nested_adapter_weights(&info.adapters)?;
 			}
 
 			// Group by chain first — priority/duplicate/Senior-before-Junior are all

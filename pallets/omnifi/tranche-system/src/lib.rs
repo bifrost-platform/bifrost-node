@@ -479,6 +479,8 @@ pub struct AdapterInfo {
 	/// `adapters`, these must always sum to exactly 10_000 (2026-07-27, same
 	/// invariant as `MultichainAdapterInfo::weight_bps`) — mirrors interface.sol's
 	/// `AdapterInput.weightBps` and `set_adapters`' full-array-replace rationale.
+	/// The nested set may also be empty (2026-10-12): a MultichainAdapter with no
+	/// yield sources yet. A single-chain product's flat `adapters` may not.
 	pub weight_bps: u16,
 }
 
