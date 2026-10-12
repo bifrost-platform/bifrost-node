@@ -179,9 +179,10 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// Checks a `weightBps` set sums to exactly 10_000 (100%) — shared by
-	/// `create_product`/`set_multichain_adapters` (top-level and, per parent,
-	/// nested) and `set_adapters` (one parent's nested set). Accumulates as
+	/// Checks a `weightBps` set is non-empty and sums to exactly 10_000 (100%) —
+	/// used for `create_product`/`set_multichain_adapters`' top-level set and a
+	/// single-chain product's flat `adapters`; a MultichainAdapter's nested set
+	/// goes through `ensure_nested_adapter_weights` instead. Accumulates as
 	/// `u32` since up to `MAX_MULTICHAIN_ADAPTERS`/`MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER`
 	/// entries of up to `u16::MAX` each could otherwise overflow a `u16` sum.
 	pub(crate) fn ensure_weights_sum_to_10000(
@@ -199,6 +200,21 @@ impl<T: Config> Pallet<T> {
 		ensure!(count > 0, Error::<T>::EmptyWeights);
 		ensure!(sum == 10_000, Error::<T>::WeightsMustSumTo10000);
 		Ok(())
+	}
+
+	/// One MultichainAdapter's nested `adapters`: empty, or summing to exactly
+	/// 10_000 (2026-10-12). Empty is a chain whose MultichainAdapter is deployed
+	/// but has no yield sources yet — the Hub registers a MultichainAdapter for
+	/// every product chain and the spoke deploys it either way, adding sources
+	/// later. A single-chain product's flat `adapters` has no such parent, so it
+	/// still goes through `ensure_weights_sum_to_10000` (non-empty).
+	pub(crate) fn ensure_nested_adapter_weights<S: Get<u32>>(
+		adapters: &BoundedBTreeMap<ChainAddress, AdapterInfo, S>,
+	) -> DispatchResult {
+		if adapters.is_empty() {
+			return Ok(());
+		}
+		Self::ensure_weights_sum_to_10000(adapters.values().map(|a| a.weight_bps))
 	}
 
 	/// `create_product`/`create_single_chain_product`-only: checks none of the
