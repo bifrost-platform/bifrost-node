@@ -781,7 +781,10 @@ impl pallet_tranche_investments::Config for Runtime {
 }
 
 impl pallet_tranche_investments_v2::Config for Runtime {
-	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	// v2's own `EnsureValuation`: the v2 precompile dispatches
+	// `pallet_tranche_investments_v2::Origin::Valuation`, which v1's
+	// `EnsureValuation` (matching only v1's `Origin`) rejects with `BadOrigin`.
+	type ValuationOrigin = pallet_tranche_investments_v2::EnsureValuation<Runtime>;
 	type Vaults = TrancheSystem;
 	type Adapters = TrancheSystem;
 	type WeightInfo = pallet_tranche_investments_v2::weights::SubstrateWeight<Runtime>;
