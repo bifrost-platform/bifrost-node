@@ -1270,12 +1270,13 @@ impl pallet_tranche_investments::Config for Runtime {
 
 // v2 — same rationale: accurately weight-benchmarked fork, new products only, since
 // investments' `record_*` calls ARE called on every investor tx (unlike permissions
-// above). Shares one Valuation-contract identity with
-// v1 (single place to manage that address — same pattern
-// `pallet_tranche_tx_registry_v2::Config::RecorderOrigin` below already uses for the
-// recorder identity) and shares `TrancheSystem` with v1.
+// above). Shares `TrancheSystem` with v1; the Valuation identity itself lives there
+// (each product's `valuation_address`, checked by the precompile before dispatch).
 impl pallet_tranche_investments_v2::Config for Runtime {
-	type ValuationOrigin = pallet_tranche_investments::EnsureValuation<Runtime>;
+	// v2's own `EnsureValuation`: the v2 precompile dispatches
+	// `pallet_tranche_investments_v2::Origin::Valuation`, which v1's
+	// `EnsureValuation` (matching only v1's `Origin`) rejects with `BadOrigin`.
+	type ValuationOrigin = pallet_tranche_investments_v2::EnsureValuation<Runtime>;
 	type Vaults = TrancheSystem;
 	type Adapters = TrancheSystem;
 	type WeightInfo = pallet_tranche_investments_v2::weights::SubstrateWeight<Runtime>;
