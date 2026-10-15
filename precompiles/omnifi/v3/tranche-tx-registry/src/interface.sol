@@ -133,7 +133,7 @@ interface TrancheTxRegistryV3 {
     ///                        (e.g. the vault); `get_latest_by_scope` resolves the newest instance per scope.
     ///                        Reverts if given on the opening attestation of a non-investor-scoped flow;
     ///                        ignored on later attestations.
-    /// @param declare_lanes   Lanes this instance has (e.g. a deposit's allocation chains at RouteReceived)
+    /// @param declare_lanes   Lanes this instance has (e.g. a settlement's ROUTE lanes at Settled)
     /// @param link_flow_id    With `link_key`, another instance this one references (request -> settlement)
     function record_tx(
         uint64 product_id,
