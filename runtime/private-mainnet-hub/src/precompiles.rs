@@ -16,6 +16,7 @@ use precompile_tranche_permissions::{
 use precompile_tranche_system::{TrancheSystemPrecompile, TrancheSystemUniversalPrecompile};
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
 use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2Precompile;
+use precompile_tranche_tx_registry_v3::TrancheTxRegistryV3Precompile;
 
 use precompile_utils::precompile_set::*;
 
@@ -64,6 +65,9 @@ pub type BifrostPrecompilesAt<R> = (
 	// OmniFi tranche-* v2 precompiles (0x0300 block, same per-pallet offsets as v1):
 	PrecompileAt<AddressU64<769>, TrancheInvestmentsV2Precompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<771>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
+	// v3 tx-registry — a new 0x0700 block at the tx-registry offset (+3); universal
+	// (bytes32 address / bytes tx hash) ABI only. See docs/tranche-tx-registry-v3/design.md.
+	PrecompileAt<AddressU64<1795>, TrancheTxRegistryV3Precompile<R>, BifrostPrecompilesChecks>,
 	// Non-EVM-compatible ("universal") interfaces of tranche-system/permissions/custom-flows
 	// — the 0x0600 block, same per-pallet offsets as the EVM-only 0x0200 block. Same
 	// storage; spoke-chain addresses are `bytes32` and foreign tx hashes `bytes` here,

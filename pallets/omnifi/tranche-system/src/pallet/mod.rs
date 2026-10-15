@@ -3,7 +3,7 @@ mod impls;
 use crate::{
 	is_permissionless_product_id, migrations, product_id_prefix, AdapterInfo, AdapterKey,
 	ChainAddress, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
-	MultichainProductDetails, ProductAdminRegistry, ProductDetails, ProductId, SettlementMode,
+	MultichainProductDetails, OnProductCreated, ProductAdminRegistry, ProductDetails, ProductId, SettlementMode,
 	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
 	ValuationInfo, VaultId, VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
 	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_ADAPTER_INDEX_ENTRIES, MAX_MULTICHAIN_ADAPTERS,
@@ -90,6 +90,9 @@ pub mod pallet {
 		/// Installs a permissionless product's admin at creation — implemented
 		/// by pallet-tranche-permissions.
 		type ProductAdmins: ProductAdminRegistry<Self::AccountId>;
+		/// Notified after every product registration — wire
+		/// pallet-tranche-tx-registry-v3's default-template assignment here.
+		type OnProductCreated: OnProductCreated;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 	}
@@ -456,7 +459,8 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::create_product(
 			tranches.len() as u32,
 			Pallet::<T>::adapter_index_entries(multichain_adapters),
-		))]
+		)
+		.saturating_add(T::OnProductCreated::weight()))]
 		pub fn create_product(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -513,7 +517,8 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product(
 			tranches.len() as u32,
 			adapters.len() as u32,
-		))]
+		)
+		.saturating_add(T::OnProductCreated::weight()))]
 		pub fn create_single_chain_product(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -988,7 +993,8 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::create_product_permissionless(
 			tranches.len() as u32,
 			Pallet::<T>::adapter_index_entries(multichain_adapters),
-		))]
+		)
+		.saturating_add(T::OnProductCreated::weight()))]
 		pub fn create_product_permissionless(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -1030,7 +1036,8 @@ pub mod pallet {
 		#[pallet::weight(<T as Config>::WeightInfo::create_single_chain_product_permissionless(
 			tranches.len() as u32,
 			adapters.len() as u32,
-		))]
+		)
+		.saturating_add(T::OnProductCreated::weight()))]
 		pub fn create_single_chain_product_permissionless(
 			origin: OriginFor<T>,
 			product_id: ProductId,
@@ -1176,6 +1183,7 @@ pub mod pallet {
 			// their own doc comments) since no other flow exists yet.
 			RequestFlowVersion::<T>::insert(product_id, FlowVersion::V1);
 			SettlementFlowVersion::<T>::insert(product_id, FlowVersion::V1);
+			T::OnProductCreated::on_product_created(product_id, None);
 
 			Ok(())
 		}
@@ -1309,6 +1317,7 @@ pub mod pallet {
 			// Same reasoning as `create_product`'s own FlowVersion writes above.
 			RequestFlowVersion::<T>::insert(product_id, FlowVersion::V1);
 			SettlementFlowVersion::<T>::insert(product_id, FlowVersion::V1);
+			T::OnProductCreated::on_product_created(product_id, Some(chain_id));
 
 			Ok(())
 		}

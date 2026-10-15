@@ -22,6 +22,7 @@ use precompile_tranche_custom_flows::{
 };
 use precompile_tranche_tx_registry::TrancheTxRegistryPrecompileCall;
 use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2PrecompileCall;
+use precompile_tranche_tx_registry_v3::TrancheTxRegistryV3PrecompileCall;
 use sp_core::{H160, U256};
 use sp_runtime::traits::{Dispatchable, Saturating, Zero};
 use sp_std::marker::PhantomData;
@@ -306,6 +307,12 @@ fn is_tranche_recorder_feeless<R: TxRegistryRecorderCheck>(
 	const TX_REGISTRY_PRECOMPILE_V2: H160 =
 		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x03, 0x03]);
 
+	// TrancheTxRegistryV3 precompile address: 0x0000000000000000000000000000000000000703
+	// — template-driven registry for every flow (see docs/tranche-tx-registry-v3/design.md),
+	// same recorder identity as v1/v2.
+	const TX_REGISTRY_PRECOMPILE_V3: H160 =
+		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07, 0x03]);
+
 	// TrancheCustomFlows precompile address: 0x0000000000000000000000000000000000000204
 	const CUSTOM_FLOWS_PRECOMPILE: H160 =
 		H160([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x02, 0x04]);
@@ -335,6 +342,10 @@ fn is_tranche_recorder_feeless<R: TxRegistryRecorderCheck>(
 	// vice versa.
 	if target == TX_REGISTRY_PRECOMPILE_V2 {
 		return Some(R::is_record_call_selector_v2(selector) && R::is_tx_recorder(caller));
+	}
+
+	if target == TX_REGISTRY_PRECOMPILE_V3 {
+		return Some(R::is_record_call_selector_v3(selector) && R::is_tx_recorder(caller));
 	}
 
 	// Same recorder account, same "only one caller can ever reach it"
@@ -407,6 +418,10 @@ pub trait TxRegistryRecorderCheck {
 	/// its ABI signature — and therefore its selector — differs from v1's even
 	/// for the "same" logical function.
 	fn is_record_call_selector_v2(selector: u32) -> bool;
+	/// `true` iff `selector` is one of pallet-tranche-tx-registry-v3's three
+	/// recorder functions (`record_tx`/`record_tx_batch`/`close_instance`),
+	/// checked against the v3 precompile address (0x0703).
+	fn is_record_call_selector_v3(selector: u32) -> bool;
 	/// `true` iff `selector` is `pallet-tranche-custom-flows`'s single
 	/// `record_flow_tx` precompile function — the custom-flows analogue of
 	/// `is_record_call_selector`, checked against the custom-flows precompile
@@ -434,6 +449,9 @@ impl TxRegistryRecorderCheck for () {
 		false
 	}
 	fn is_record_call_selector_v2(_selector: u32) -> bool {
+		false
+	}
+	fn is_record_call_selector_v3(_selector: u32) -> bool {
 		false
 	}
 	fn is_custom_flow_record_selector(_selector: u32) -> bool {
@@ -470,11 +488,13 @@ where
 		+ pallet_tranche_tx_registry_v2::Config
 		+ pallet_tranche_system::Config
 		+ pallet_tranche_custom_flows::Config
+		+ pallet_tranche_tx_registry_v3::Config
 		+ frame_system::Config,
 	T::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
 	T::RuntimeCall: From<pallet_tranche_tx_registry::Call<T>>,
 	T::RuntimeCall: From<pallet_tranche_tx_registry_v2::Call<T>>,
 	T::RuntimeCall: From<pallet_tranche_custom_flows::Call<T>>,
+	T::RuntimeCall: From<pallet_tranche_tx_registry_v3::Call<T>>,
 	BlockNumberFor<T>: Into<U256>,
 	<T as pallet_evm::Config>::AddressMapping: AddressMapping<T::AccountId>,
 {
@@ -497,6 +517,13 @@ where
 			|| CallV2::<T>::record_settlement_tx_selectors().contains(&selector)
 			|| CallV2::<T>::record_receive_tx_selectors().contains(&selector)
 			|| CallV2::<T>::record_whitelist_tx_selectors().contains(&selector)
+	}
+
+	fn is_record_call_selector_v3(selector: u32) -> bool {
+		type CallV3<T> = TrancheTxRegistryV3PrecompileCall<T>;
+		CallV3::<T>::record_tx_selectors().contains(&selector)
+			|| CallV3::<T>::record_tx_batch_selectors().contains(&selector)
+			|| CallV3::<T>::close_instance_selectors().contains(&selector)
 	}
 
 	fn is_custom_flow_record_selector(selector: u32) -> bool {
