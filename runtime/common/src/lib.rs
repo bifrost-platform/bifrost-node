@@ -534,3 +534,47 @@ where
 			.contains(&selector)
 	}
 }
+
+/// `TxRegistryRecorderCheck` for a runtime that carries tx-registry **v3 alone** (no v1
+/// registry, so no shared recorder identity — e.g. `private-mainnet-hub`): the recorder is
+/// v3's own `pallet_tranche_tx_registry_v3::TxRecorder` (the account its
+/// `EnsureTxRecorder` accepts), and only v3's `record_*` selectors are recorder calls.
+/// Pass as `TrancheRecorderFeelessCalls<TxRegistryV3Recorder<Runtime>>`.
+pub struct TxRegistryV3Recorder<T>(PhantomData<T>);
+
+impl<T> TxRegistryRecorderCheck for TxRegistryV3Recorder<T>
+where
+	T: pallet_evm::Config + pallet_tranche_tx_registry_v3::Config + frame_system::Config,
+	T::RuntimeCall: Dispatchable<PostInfo = PostDispatchInfo> + GetDispatchInfo,
+	T::RuntimeCall: From<pallet_tranche_tx_registry_v3::Call<T>>,
+	BlockNumberFor<T>: Into<U256>,
+	<T as pallet_evm::Config>::AddressMapping: AddressMapping<T::AccountId>,
+{
+	fn is_tx_recorder(caller: H160) -> bool {
+		let caller_account = <T as pallet_evm::Config>::AddressMapping::into_account_id(caller);
+		pallet_tranche_tx_registry_v3::TxRecorder::<T>::get() == Some(caller_account)
+	}
+
+	fn is_record_call_selector(_selector: u32) -> bool {
+		false
+	}
+
+	fn is_record_call_selector_v2(_selector: u32) -> bool {
+		false
+	}
+
+	fn is_record_call_selector_v3(selector: u32) -> bool {
+		type CallV3<T> = TrancheTxRegistryV3PrecompileCall<T>;
+		CallV3::<T>::record_tx_selectors().contains(&selector)
+			|| CallV3::<T>::record_tx_batch_selectors().contains(&selector)
+			|| CallV3::<T>::close_instance_selectors().contains(&selector)
+	}
+
+	fn is_custom_flow_record_selector(_selector: u32) -> bool {
+		false
+	}
+
+	fn is_custom_flow_universal_record_selector(_selector: u32) -> bool {
+		false
+	}
+}

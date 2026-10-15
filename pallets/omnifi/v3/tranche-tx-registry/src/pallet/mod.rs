@@ -103,6 +103,8 @@ pub mod pallet {
 		PartCountMismatch,
 		/// The instance is already completed or failed.
 		InstanceAlreadyClosed,
+		/// `set_tx_recorder` was given the account already stored.
+		NoWritingSameValue,
 	}
 
 	// -----------------------------------------------------------------------
@@ -161,11 +163,19 @@ pub mod pallet {
 			instance_key: InstanceKey,
 			outcome: CloseOutcome,
 		},
+		/// This pallet's own recorder account was (re)configured.
+		TxRecorderSet { old: Option<T::AccountId>, new: T::AccountId },
 	}
 
 	// -----------------------------------------------------------------------
 	// Storage
 	// -----------------------------------------------------------------------
+
+	/// This pallet's own recorder account, read by [`crate::EnsureTxRecorder`].
+	/// Only consulted by runtimes that wire `RecorderOrigin` to it — runtimes
+	/// sharing v1's recorder identity leave it empty.
+	#[pallet::storage]
+	pub type TxRecorder<T: Config> = StorageValue<_, T::AccountId>;
 
 	/// Registered templates — immutable once inserted.
 	#[pallet::storage]
@@ -327,17 +337,19 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 
 	#[pallet::genesis_config]
-	pub struct GenesisConfig<T> {
+	pub struct GenesisConfig<T: Config> {
 		/// Register the built-in default templates (`crate::defaults`) and
 		/// the default flow maps.
 		pub seed_default_templates: bool,
+		/// Initial [`TxRecorder`] (see `set_tx_recorder`).
+		pub tx_recorder: Option<T::AccountId>,
 		#[serde(skip)]
 		pub _config: PhantomData<T>,
 	}
 
 	impl<T: Config> Default for GenesisConfig<T> {
 		fn default() -> Self {
-			Self { seed_default_templates: true, _config: PhantomData }
+			Self { seed_default_templates: true, tx_recorder: None, _config: PhantomData }
 		}
 	}
 
@@ -346,6 +358,9 @@ pub mod pallet {
 		fn build(&self) {
 			if self.seed_default_templates {
 				crate::defaults::seed::<T>();
+			}
+			if let Some(recorder) = &self.tx_recorder {
+				TxRecorder::<T>::put(recorder);
 			}
 		}
 	}
@@ -555,6 +570,21 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::RecorderOrigin::ensure_origin(origin)?;
 			Self::do_close_instance(product_id, flow_id, instance_key, outcome)
+		}
+
+		/// Set this pallet's own recorder account ([`crate::EnsureTxRecorder`]),
+		/// replacing any previous one. Only meaningful in a runtime whose
+		/// `RecorderOrigin` is `EnsureTxRecorder<Self>`; not exposed through the
+		/// precompile.
+		#[pallet::call_index(7)]
+		#[pallet::weight(<T as Config>::WeightInfo::set_tx_recorder())]
+		pub fn set_tx_recorder(origin: OriginFor<T>, recorder: T::AccountId) -> DispatchResult {
+			T::GovernanceOrigin::ensure_origin(origin)?;
+			let old = TxRecorder::<T>::get();
+			ensure!(old.as_ref() != Some(&recorder), Error::<T>::NoWritingSameValue);
+			TxRecorder::<T>::put(&recorder);
+			Self::deposit_event(Event::TxRecorderSet { old, new: recorder });
+			Ok(())
 		}
 	}
 }
