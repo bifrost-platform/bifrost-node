@@ -918,6 +918,24 @@ pub trait ProductAdminRegistry<AccountId> {
 	fn assign_product_admin(product_id: ProductId, admin: &AccountId) -> DispatchResult;
 }
 
+/// Notified right after a product is registered (any of the four create
+/// extrinsics). The runtime wires pallet-tranche-tx-registry-v3 here so every
+/// new product receives its default tx-flow templates in the same
+/// transaction. `single_chain_id` is `Some` for a single-chain product.
+pub trait OnProductCreated {
+	fn on_product_created(product_id: ProductId, single_chain_id: Option<u64>);
+	/// Upper bound on `on_product_created`'s cost, added to every create
+	/// extrinsic's declared weight.
+	fn weight() -> frame_support::weights::Weight;
+}
+
+impl OnProductCreated for () {
+	fn on_product_created(_: ProductId, _: Option<u64>) {}
+	fn weight() -> frame_support::weights::Weight {
+		frame_support::weights::Weight::zero()
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ProductAdmin origin
 // ---------------------------------------------------------------------------

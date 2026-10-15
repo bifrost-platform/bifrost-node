@@ -88,6 +88,7 @@ pallet-tranche-investments-v2 = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
 pallet-tranche-tx-registry-v2 = { workspace = true }
 pallet-tranche-custom-flows = { workspace = true }
+pallet-tranche-tx-registry-v3 = { workspace = true }
 
 # Precompiled Contracts
 pallet-evm-precompile-simple = { workspace = true }
@@ -104,6 +105,7 @@ precompile-tranche-investments-v2 = { workspace = true }
 precompile-tranche-tx-registry = { workspace = true }
 precompile-tranche-tx-registry-v2 = { workspace = true }
 precompile-tranche-custom-flows = { workspace = true }
+precompile-tranche-tx-registry-v3 = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -154,6 +156,7 @@ std = [
 	"pallet-tranche-tx-registry/std",
 	"pallet-tranche-tx-registry-v2/std",
 	"pallet-tranche-custom-flows/std",
+	"pallet-tranche-tx-registry-v3/std",
 	"pallet-evm-precompile-simple/std",
 	"pallet-evm-precompile-bn128/std",
 	"pallet-evm-precompile-modexp/std",
@@ -186,6 +189,7 @@ std = [
 	"precompile-tranche-tx-registry/std",
 	"precompile-tranche-tx-registry-v2/std",
 	"precompile-tranche-custom-flows/std",
+	"precompile-tranche-tx-registry-v3/std",
 	"substrate-wasm-builder",
 ]
 evm-tracing = ["evm-tracer"]
@@ -224,6 +228,7 @@ runtime-benchmarks = [
 	"pallet-tranche-tx-registry/runtime-benchmarks",
 	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
 	"pallet-tranche-custom-flows/runtime-benchmarks",
+	"pallet-tranche-tx-registry-v3/runtime-benchmarks",
 ]
 
 # Enable the metadata hash generation.

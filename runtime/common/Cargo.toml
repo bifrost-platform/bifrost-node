@@ -33,9 +33,11 @@ pallet-tranche-system = { workspace = true }
 pallet-tranche-tx-registry = { workspace = true }
 pallet-tranche-tx-registry-v2 = { workspace = true }
 pallet-tranche-custom-flows = { workspace = true }
+pallet-tranche-tx-registry-v3 = { workspace = true }
 precompile-tranche-tx-registry = { workspace = true }
 precompile-tranche-tx-registry-v2 = { workspace = true }
 precompile-tranche-custom-flows = { workspace = true }
+precompile-tranche-tx-registry-v3 = { workspace = true }
 
 [features]
 default = ["std"]
@@ -56,9 +58,11 @@ std = [
 	"pallet-tranche-tx-registry/std",
 	"pallet-tranche-tx-registry-v2/std",
 	"pallet-tranche-custom-flows/std",
+	"pallet-tranche-tx-registry-v3/std",
 	"precompile-tranche-tx-registry/std",
 	"precompile-tranche-tx-registry-v2/std",
 	"precompile-tranche-custom-flows/std",
+	"precompile-tranche-tx-registry-v3/std",
 ]
 try-runtime = ["frame-support/try-runtime"]
 runtime-benchmarks = [
@@ -70,4 +74,5 @@ runtime-benchmarks = [
 	"pallet-tranche-tx-registry/runtime-benchmarks",
 	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
 	"pallet-tranche-custom-flows/runtime-benchmarks",
+	"pallet-tranche-tx-registry-v3/runtime-benchmarks",
 ]

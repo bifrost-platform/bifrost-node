@@ -729,6 +729,7 @@ impl pallet_tranche_system::Config for Runtime {
 	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
 	type ProductFactoryOrigin = pallet_tranche_system::EnsureProductFactory<Runtime>;
 	type ProductAdmins = TranchePermissions;
+	type OnProductCreated = AssignDefaultTxFlows;
 	type WeightInfo = pallet_tranche_system::weights::SubstrateWeight<Runtime>;
 }
 
@@ -869,6 +870,47 @@ impl pallet_tranche_custom_flows::BenchmarkHelper for TrancheCustomFlowsBenchmar
 	}
 }
 
+// v3 — template-driven registry for every flow (requests, settlements, whitelists,
+// receives, product-specific flows); supersedes custom-flows for new products. Shares
+// the one recorder identity with v1/v2/custom-flows. See
+// docs/tranche-tx-registry-v3/design.md.
+impl pallet_tranche_tx_registry_v3::Config for Runtime {
+	type GovernanceOrigin = EnsureRoot<AccountId>;
+	type RecorderOrigin = pallet_tranche_tx_registry::EnsureTxRecorder<Runtime>;
+	type WeightInfo = pallet_tranche_tx_registry_v3::weights::SubstrateWeight<Runtime>;
+	#[cfg(feature = "runtime-benchmarks")]
+	type BenchmarkHelper = TrancheCustomFlowsBenchmarkHelper;
+}
+
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_tranche_tx_registry_v3::BenchmarkHelper for TrancheCustomFlowsBenchmarkHelper {
+	fn seed_recorder() {
+		pallet_tranche_tx_registry::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
+}
+
+/// Gives every newly registered product its default tx-registry-v3 flow templates
+/// (`pallet_tranche_system::Config::OnProductCreated`).
+pub struct AssignDefaultTxFlows;
+
+impl pallet_tranche_system::OnProductCreated for AssignDefaultTxFlows {
+	fn on_product_created(product_id: u64, single_chain_id: Option<u64>) {
+		let model = if single_chain_id.is_some() {
+			pallet_tranche_tx_registry_v3::ProductModel::SingleChain
+		} else {
+			pallet_tranche_tx_registry_v3::ProductModel::Multichain
+		};
+		TrancheTxRegistryV3::do_assign_default_flows(product_id, model);
+	}
+
+	fn weight() -> Weight {
+		<pallet_tranche_tx_registry_v3::weights::SubstrateWeight<Runtime> as
+			pallet_tranche_tx_registry_v3::WeightInfo>::assign_default_flows(
+			pallet_tranche_tx_registry_v3::MAX_DEFAULT_FLOWS,
+		)
+	}
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 // Pallet indices match the public Bifrost runtimes for every pallet they share, so call
 // encodings (and tooling built on them) are identical across the two chains.
@@ -975,6 +1017,9 @@ mod runtime {
 	#[runtime::pallet_index(86)]
 	pub type TrancheInvestmentsV2 = pallet_tranche_investments_v2;
 
+	#[runtime::pallet_index(87)]
+	pub type TrancheTxRegistryV3 = pallet_tranche_tx_registry_v3;
+
 	#[runtime::pallet_index(99)]
 	pub type Sudo = pallet_sudo;
 }
@@ -988,6 +1033,7 @@ mod benches {
 		[pallet_tranche_investments_v2, TrancheInvestmentsV2]
 		[pallet_tranche_tx_registry_v2, TrancheTxRegistryV2]
 		[pallet_tranche_custom_flows, TrancheCustomFlows]
+		[pallet_tranche_tx_registry_v3, TrancheTxRegistryV3]
 	);
 }
 

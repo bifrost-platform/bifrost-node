@@ -32,6 +32,7 @@ members = [
 	"pallets/omnifi/v2/tranche-investments",
 	"pallets/omnifi/v1/tranche-tx-registry",
 	"pallets/omnifi/v2/tranche-tx-registry",
+	"pallets/omnifi/v3/tranche-tx-registry",
 	"precompiles/bfc-staking",
 	"precompiles/bfc-offences",
 	"precompiles/relay-manager",
@@ -50,6 +51,7 @@ members = [
 	"precompiles/omnifi/v2/tranche-investments",
 	"precompiles/omnifi/v1/tranche-tx-registry",
 	"precompiles/omnifi/v2/tranche-tx-registry",
+	"precompiles/omnifi/v3/tranche-tx-registry",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
@@ -165,6 +167,10 @@ pallet-tranche-tx-registry = { default-features = false, path = "pallets/omnifi/
 # docs/tranche-tx-registry/settlement-leg-chunking-design.md.
 pallet-tranche-investments-v2 = { default-features = false, path = "pallets/omnifi/v2/tranche-investments" }
 pallet-tranche-tx-registry-v2 = { default-features = false, path = "pallets/omnifi/v2/tranche-tx-registry" }
+# v3 — template-driven, append-only evidence registry for every flow (requests, settlements,
+# whitelists, receives, product-specific flows); supersedes pallet-tranche-custom-flows for new
+# products. See docs/tranche-tx-registry-v3/design.md.
+pallet-tranche-tx-registry-v3 = { default-features = false, path = "pallets/omnifi/v3/tranche-tx-registry" }
 
 # Bifrost Precompile
 precompile-bfc-staking = { default-features = false, path = "precompiles/bfc-staking" }
@@ -189,6 +195,8 @@ precompile-tranche-tx-registry = { default-features = false, path = "precompiles
 # v2 — accurately weight-benchmarked forks, new products only.
 precompile-tranche-investments-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-investments" }
 precompile-tranche-tx-registry-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-tx-registry" }
+# v3 — template-driven registry, universal (bytes32 address / bytes tx hash) ABI only.
+precompile-tranche-tx-registry-v3 = { default-features = false, path = "precompiles/omnifi/v3/tranche-tx-registry" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }
