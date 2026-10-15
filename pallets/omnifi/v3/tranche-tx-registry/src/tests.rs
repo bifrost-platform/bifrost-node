@@ -5,7 +5,7 @@ use crate::{
 };
 use frame_support::{
 	assert_noop, assert_ok,
-	traits::{GetStorageVersion, OnRuntimeUpgrade, StorageVersion},
+	traits::{BeforeAllRuntimeMigrations, GetStorageVersion, OnRuntimeUpgrade, StorageVersion},
 	BoundedVec,
 };
 use sp_core::H256;
@@ -414,28 +414,37 @@ fn template_validation() {
 	});
 }
 
+/// The pallet added to a live chain by a runtime upgrade: FRAME first sets the
+/// new pallet's on-chain storage version to the in-code one, then runs the
+/// pallet's `on_runtime_upgrade` — which must still seed.
 #[test]
-fn migration_seeds_once_and_never_resurrects_removed_defaults() {
-	// no pallet genesis → on-chain storage version 0, nothing seeded
+fn upgrade_adding_the_pallet_seeds_once_and_never_resurrects_removed_defaults() {
+	// no pallet genesis → no pallet keys at all, nothing seeded
 	let storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 	sp_io::TestExternalities::new(storage).execute_with(|| {
 		assert_eq!(Registry::on_chain_storage_version(), StorageVersion::new(0));
 		assert!(!Templates::<Test>::contains_key(MC_DEPOSIT_V1));
 
-		crate::migrations::v1::SeedDefaultTemplates::<Test>::on_runtime_upgrade();
+		let upgrade = || {
+			<Registry as BeforeAllRuntimeMigrations>::before_all_runtime_migrations();
+			<Registry as OnRuntimeUpgrade>::on_runtime_upgrade();
+		};
+		upgrade();
 		assert_eq!(Registry::on_chain_storage_version(), StorageVersion::new(1));
 		for (id, _) in templates() {
 			assert!(Templates::<Test>::contains_key(id));
 		}
+		assert_eq!(DefaultFlows::<Test>::get(ProductModel::Multichain).len(), 5);
+		assert_eq!(DefaultFlows::<Test>::get(ProductModel::SingleChain).len(), 5);
 
-		// governance removes a default; a re-run (version-gated) must not bring it back
+		// governance removes a default; a later upgrade must not bring it back
 		assert_ok!(Registry::set_default_flow(
 			RuntimeOrigin::root(),
 			ProductModel::Multichain,
 			FLOW_RECEIVE,
 			None
 		));
-		crate::migrations::v1::SeedDefaultTemplates::<Test>::on_runtime_upgrade();
+		upgrade();
 		assert!(!DefaultFlows::<Test>::get(ProductModel::Multichain).contains_key(&FLOW_RECEIVE));
 	});
 }
