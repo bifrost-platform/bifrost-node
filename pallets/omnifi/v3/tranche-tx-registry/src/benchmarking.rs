@@ -331,5 +331,15 @@ mod benchmarks {
 		assert_eq!(InvestorHistoryLen::<T>::get((INVESTOR, PID, BENCH_FLOW)), HISTORY_PAGE_SIZE);
 	}
 
+	#[benchmark]
+	fn set_tx_recorder() {
+		// replacing an existing recorder (the read and the event both carry `old`)
+		TxRecorder::<T>::put(account::<T::AccountId>("old", 0, 0));
+		let new: T::AccountId = account("new", 0, 0);
+		#[extrinsic_call]
+		_(gov::<T>() as T::RuntimeOrigin, new.clone());
+		assert_eq!(TxRecorder::<T>::get(), Some(new));
+	}
+
 	impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext(), crate::mock::Test);
 }

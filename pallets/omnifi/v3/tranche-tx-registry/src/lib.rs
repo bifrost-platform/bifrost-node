@@ -52,6 +52,37 @@ use scale_info::TypeInfo;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{BoundedVec, RuntimeDebug};
 
+/// `EnsureOrigin` that accepts only a signed origin from this pallet's own
+/// [`pallet::pallet::TxRecorder`]. For a runtime that carries v3 alone (no v1
+/// registry to share a recorder identity with): `type RecorderOrigin =
+/// pallet_tranche_tx_registry_v3::EnsureTxRecorder<Runtime>`, set the account
+/// with `set_tx_recorder` or the genesis `tx_recorder`.
+pub struct EnsureTxRecorder<T>(sp_std::marker::PhantomData<T>);
+
+impl<OuterOrigin, T> frame_support::traits::EnsureOrigin<OuterOrigin> for EnsureTxRecorder<T>
+where
+	T: pallet::pallet::Config,
+	OuterOrigin: Into<Result<frame_system::RawOrigin<T::AccountId>, OuterOrigin>>
+		+ From<frame_system::RawOrigin<T::AccountId>>,
+{
+	type Success = T::AccountId;
+
+	fn try_origin(o: OuterOrigin) -> Result<Self::Success, OuterOrigin> {
+		o.into().and_then(|raw| match raw {
+			frame_system::RawOrigin::Signed(who)
+				if pallet::pallet::TxRecorder::<T>::get().as_ref() == Some(&who) =>
+				Ok(who),
+			raw => Err(OuterOrigin::from(raw)),
+		})
+	}
+
+	#[cfg(feature = "runtime-benchmarks")]
+	fn try_successful_origin() -> Result<OuterOrigin, ()> {
+		let recorder = pallet::pallet::TxRecorder::<T>::get().ok_or(())?;
+		Ok(OuterOrigin::from(frame_system::RawOrigin::Signed(recorder)))
+	}
+}
+
 #[cfg(feature = "runtime-benchmarks")]
 pub trait BenchmarkHelper {
 	/// Seeds the shared recorder identity `RecorderOrigin` checks.

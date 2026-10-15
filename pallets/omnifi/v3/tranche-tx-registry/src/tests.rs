@@ -1116,3 +1116,47 @@ fn single_chain_flows() {
 		assert_eq!(instance(FLOW_REDEEM, q).status, InstanceStatus::Completed);
 	});
 }
+
+#[test]
+fn own_tx_recorder_is_governance_set_and_gates_ensure_tx_recorder() {
+	use frame_support::traits::EnsureOrigin;
+	type Ensure = crate::EnsureTxRecorder<Test>;
+	new_test_ext().execute_with(|| {
+		// nobody passes before a recorder is set
+		assert!(Ensure::try_origin(RuntimeOrigin::signed(RECORDER)).is_err());
+		assert_noop!(
+			Registry::set_tx_recorder(RuntimeOrigin::signed(OTHER), RECORDER),
+			DispatchError::BadOrigin
+		);
+		assert_ok!(Registry::set_tx_recorder(RuntimeOrigin::root(), RECORDER));
+		assert_eq!(TxRecorder::<Test>::get(), Some(RECORDER));
+		assert_noop!(
+			Registry::set_tx_recorder(RuntimeOrigin::root(), RECORDER),
+			Error::<Test>::NoWritingSameValue
+		);
+		assert_eq!(Ensure::try_origin(RuntimeOrigin::signed(RECORDER)).ok(), Some(RECORDER));
+		assert!(Ensure::try_origin(RuntimeOrigin::signed(OTHER)).is_err());
+		assert!(Ensure::try_origin(RuntimeOrigin::root()).is_err());
+
+		// replacing it moves the gate
+		assert_ok!(Registry::set_tx_recorder(RuntimeOrigin::root(), OTHER));
+		assert!(System::events().iter().any(|r| matches!(
+			r.event,
+			RuntimeEvent::Registry(Event::TxRecorderSet { old: Some(RECORDER), new: OTHER })
+		)));
+		assert!(Ensure::try_origin(RuntimeOrigin::signed(RECORDER)).is_err());
+		assert_eq!(Ensure::try_origin(RuntimeOrigin::signed(OTHER)).ok(), Some(OTHER));
+	});
+}
+
+#[test]
+fn genesis_sets_the_own_tx_recorder() {
+	let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+	crate::GenesisConfig::<Test> { tx_recorder: Some(RECORDER), ..Default::default() }
+		.assimilate_storage(&mut storage)
+		.unwrap();
+	sp_io::TestExternalities::new(storage).execute_with(|| {
+		assert_eq!(TxRecorder::<Test>::get(), Some(RECORDER));
+		assert!(Templates::<Test>::contains_key(MC_DEPOSIT_V1));
+	});
+}
