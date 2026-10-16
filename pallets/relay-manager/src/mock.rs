@@ -309,6 +309,7 @@ impl pallet_relay_manager::Config for Test {
 	type RelayQueue = MockRelayQueue;
 	type SocketQueue = MockSocketQueue;
 	type RegistrationPool = MockPoolManager;
+	type RelayExecutives = ();
 	type ValidatorSet = MockValidatorSet;
 	type ReportUnresponsiveness = MockReportUnresponsiveness;
 	type StorageCacheLifetimeInRounds = StorageCacheLifetimeInRounds;

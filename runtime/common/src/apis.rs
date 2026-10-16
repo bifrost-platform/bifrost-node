@@ -66,11 +66,20 @@ macro_rules! impl_common_runtime_apis {
 				}
 
 				fn get_preset(id: &Option<PresetId>) -> Option<Vec<u8>> {
-					get_preset::<RuntimeGenesisConfig>(id, |_| None)
+					// `id == None` -> `get_preset` helper returns the full default
+					// `RuntimeGenesisConfig` JSON. The `development` preset is an
+					// empty patch over that default — all
+					// `frame-benchmarking-cli --genesis-builder=runtime` needs
+					// (each benchmark seeds its own storage). Real chain genesis is
+					// assembled node-side in `chain_spec.rs`.
+					get_preset::<RuntimeGenesisConfig>(id, |name| match name.as_ref() {
+						sp_genesis_builder::DEV_RUNTIME_PRESET => Some(b"{}".to_vec()),
+						_ => None,
+					})
 				}
 
 				fn preset_names() -> Vec<sp_genesis_builder::PresetId> {
-					vec!["development".into()]
+					vec![sp_genesis_builder::DEV_RUNTIME_PRESET.into()]
 				}
 			}
 			impl fp_rpc_debug::DebugRuntimeApi<Block> for Runtime {

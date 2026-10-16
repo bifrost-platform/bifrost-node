@@ -15,11 +15,29 @@ use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
+use precompile_tranche_custom_flows::{
+	TrancheCustomFlowsPrecompile, TrancheCustomFlowsUniversalPrecompile,
+};
+use precompile_tranche_investments::TrancheInvestmentsPrecompile;
+use precompile_tranche_investments_v2::TrancheInvestmentsV2Precompile;
+use precompile_tranche_permissions::{
+	TranchePermissionsPrecompile, TranchePermissionsUniversalPrecompile,
+};
+use precompile_tranche_system::{TrancheSystemPrecompile, TrancheSystemUniversalPrecompile};
+use precompile_tranche_tx_registry::TrancheTxRegistryPrecompile;
+use precompile_tranche_tx_registry_v2::TrancheTxRegistryV2Precompile;
+use precompile_tranche_tx_registry_v3::TrancheTxRegistryV3Precompile;
 
 use precompile_utils::precompile_set::*;
 
 type EthereumPrecompilesChecks = (AcceptDelegateCall, CallableByContract, CallableByPrecompile);
 type BifrostPrecompilesChecks = (CallableByContract, CallableByPrecompile);
+// TranchePermissions calls out to the Hub-chain Orchestrator contract
+// (Orchestrator.sendWhitelist) as a subcall when propagating a TrancheInvestor
+// grant/revoke to a Spoke chain — needs `SubcallWithMaxNesting` or
+// `handle.call` is rejected before it ever reaches Orchestrator.
+type TranchePermissionsPrecompilesChecks =
+	(CallableByContract, CallableByPrecompile, SubcallWithMaxNesting<0>);
 
 #[precompile_utils::precompile_name_from_address]
 pub type BifrostPrecompilesAt<R> = (
@@ -62,6 +80,45 @@ pub type BifrostPrecompilesAt<R> = (
 	PrecompileAt<
 		AddressU64<2064>,
 		BifrostTransactionPaymentPrecompile<R>,
+		BifrostPrecompilesChecks,
+	>,
+	PrecompileAt<AddressU64<512>, TrancheSystemPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<513>, TrancheInvestmentsPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<
+		AddressU64<514>,
+		TranchePermissionsPrecompile<R>,
+		TranchePermissionsPrecompilesChecks,
+	>,
+	PrecompileAt<AddressU64<515>, TrancheTxRegistryPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<516>, TrancheCustomFlowsPrecompile<R>, BifrostPrecompilesChecks>,
+	// v2 — a new 0x0300 block rather than continuing the 0x0200 tranche block (a fresh,
+	// independent address range for pallets with their own storage/extrinsics, not an
+	// addition to the existing v1 contracts) — laid out with the *same offsets as v1*
+	// for whichever slot each v2 pallet corresponds to (system=+0, investments=+1,
+	// permissions=+2, tx-registry=+3, custom-flows=+4), so only investments and
+	// tx-registry (the two actually forked into v1/v2 — see
+	// docs/tranche-tx-registry/settlement-leg-chunking-design.md) occupy a slot here;
+	// 0x0300 (system's slot), 0x0302 (permissions' — freed when permissions was
+	// un-forked back to the shared pallet) and 0x0304 (custom-flows') stay unused,
+	// since none of those three are forked.
+	PrecompileAt<AddressU64<769>, TrancheInvestmentsV2Precompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<AddressU64<771>, TrancheTxRegistryV2Precompile<R>, BifrostPrecompilesChecks>,
+	// v3 tx-registry — a new 0x0700 block at the tx-registry offset (+3); universal
+	// (bytes32 address / bytes tx hash) ABI only. See docs/tranche-tx-registry-v3/design.md.
+	PrecompileAt<AddressU64<1795>, TrancheTxRegistryV3Precompile<R>, BifrostPrecompilesChecks>,
+	// Non-EVM-compatible ("universal") interfaces of tranche-system/permissions/custom-flows
+	// — the 0x0600 block, same per-pallet offsets as the EVM-only 0x0200 block. Same
+	// storage; spoke-chain addresses are `bytes32` and foreign tx hashes `bytes` here,
+	// while the 0x0200 precompiles keep their original EVM-only ABI.
+	PrecompileAt<AddressU64<1536>, TrancheSystemUniversalPrecompile<R>, BifrostPrecompilesChecks>,
+	PrecompileAt<
+		AddressU64<1538>,
+		TranchePermissionsUniversalPrecompile<R>,
+		TranchePermissionsPrecompilesChecks,
+	>,
+	PrecompileAt<
+		AddressU64<1540>,
+		TrancheCustomFlowsUniversalPrecompile<R>,
 		BifrostPrecompilesChecks,
 	>,
 );

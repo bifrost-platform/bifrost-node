@@ -14,7 +14,7 @@ use frame_system::pallet_prelude::*;
 
 use bp_btc_relay::traits::{BlazeManager, PoolManager, SocketQueueManager};
 use bp_cccp::traits::RelayQueueManager;
-use bp_staking::{RoundIndex, MAX_AUTHORITIES};
+use bp_staking::{traits::RelayExecutiveManager, RoundIndex, MAX_AUTHORITIES};
 use sp_runtime::Perbill;
 use sp_staking::{offence::ReportOffence, SessionIndex};
 use sp_std::{collections::btree_map::BTreeMap, prelude::*};
@@ -42,6 +42,10 @@ pub mod pallet {
 		type SocketQueue: SocketQueueManager<Self::AccountId>;
 		/// Interface of Bitcoin Registration Pool pallet.
 		type RegistrationPool: PoolManager<Self::AccountId>;
+		/// Interface of the relay executive member list (kept in sync on relayer replacement).
+		/// `MembershipRelayExecutives<Runtime, Instance>` for a `pallet_membership` instance, or
+		/// `()` on chains without relay executives.
+		type RelayExecutives: RelayExecutiveManager<Self::AccountId>;
 		/// A type for retrieving the validators supposed to be well-behaved in a session.
 		type ValidatorSet: ValidatorSetWithIdentification<Self::AccountId>;
 		/// A type that gives us the ability to submit unresponsiveness offence reports.
@@ -318,16 +322,7 @@ pub mod pallet {
 		/// - origin should be the controller account
 		pub fn set_relayer(origin: OriginFor<T>, new: T::AccountId) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
-			let old = BondedController::<T>::get(&controller).ok_or(Error::<T>::ControllerDNE)?;
-			ensure!(old != new, Error::<T>::NoWritingSameValue);
-			ensure!(Self::is_relayer(&old), Error::<T>::RelayerDNE);
-			ensure!(!Self::is_relayer(&new), Error::<T>::RelayerAlreadyJoined);
-			ensure!(
-				!Self::is_relayer_set_requested(old.clone()),
-				Error::<T>::AlreadyRelayerSetRequested
-			);
-			Self::add_to_relayer_sets(old.clone(), new.clone())?;
-			Self::deposit_event(Event::RelayerSet { old, new });
+			Self::do_set_relayer(&controller, new)?;
 			Ok(().into())
 		}
 
@@ -337,11 +332,7 @@ pub mod pallet {
 		/// - origin should be the controller account.
 		pub fn cancel_relayer_set(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let controller = ensure_signed(origin)?;
-			let relayer =
-				BondedController::<T>::get(&controller).ok_or(Error::<T>::ControllerDNE)?;
-			ensure!(Self::is_relayer_set_requested(relayer.clone()), Error::<T>::RelayerSetDNE);
-			Self::remove_relayer_set(&relayer)?;
-			Self::deposit_event(Event::RelayerSetCancelled { relayer });
+			Self::do_cancel_relayer_set(&controller)?;
 			Ok(().into())
 		}
 

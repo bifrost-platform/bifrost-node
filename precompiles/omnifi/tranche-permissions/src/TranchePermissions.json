@@ -1,0 +1,226 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "indexed": false,
+                "internalType": "enum TranchePermissions.Role",
+                "name": "role",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "who",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint64",
+                "name": "vault_chain_id",
+                "type": "uint64"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "vault_address",
+                "type": "address"
+            }
+        ],
+        "name": "PermissionGranted",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "indexed": false,
+                "internalType": "enum TranchePermissions.Role",
+                "name": "role",
+                "type": "uint8"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "who",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint64",
+                "name": "vault_chain_id",
+                "type": "uint64"
+            },
+            {
+                "indexed": false,
+                "internalType": "address",
+                "name": "vault_address",
+                "type": "address"
+            }
+        ],
+        "name": "PermissionRevoked",
+        "type": "event"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "internalType": "enum TranchePermissions.Role",
+                "name": "role",
+                "type": "uint8"
+            },
+            {
+                "internalType": "address",
+                "name": "who",
+                "type": "address"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint64",
+                        "name": "chain_id",
+                        "type": "uint64"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "vault_address",
+                        "type": "address"
+                    }
+                ],
+                "internalType": "struct TranchePermissions.VaultInput",
+                "name": "vault",
+                "type": "tuple"
+            }
+        ],
+        "name": "grant_permission",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "internalType": "enum TranchePermissions.Role",
+                "name": "role",
+                "type": "uint8"
+            },
+            {
+                "internalType": "address",
+                "name": "who",
+                "type": "address"
+            }
+        ],
+        "name": "has_role",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint64",
+                        "name": "chain_id",
+                        "type": "uint64"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "vault_address",
+                        "type": "address"
+                    }
+                ],
+                "internalType": "struct TranchePermissions.VaultInput",
+                "name": "vault",
+                "type": "tuple"
+            },
+            {
+                "internalType": "address",
+                "name": "who",
+                "type": "address"
+            }
+        ],
+        "name": "is_tranche_investor",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint64",
+                "name": "product_id",
+                "type": "uint64"
+            },
+            {
+                "internalType": "enum TranchePermissions.Role",
+                "name": "role",
+                "type": "uint8"
+            },
+            {
+                "internalType": "address",
+                "name": "who",
+                "type": "address"
+            },
+            {
+                "components": [
+                    {
+                        "internalType": "uint64",
+                        "name": "chain_id",
+                        "type": "uint64"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "vault_address",
+                        "type": "address"
+                    }
+                ],
+                "internalType": "struct TranchePermissions.VaultInput",
+                "name": "vault",
+                "type": "tuple"
+            }
+        ],
+        "name": "revoke_permission",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]
