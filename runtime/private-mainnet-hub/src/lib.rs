@@ -158,7 +158,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	authoring_version: 1,
 	// The version of the runtime spec, encoded as semver `MAJOR_MINOR_PATCH` with three digits
 	// per minor/patch: `1_000_000` = v1.0.0, `1_002_003` = v1.2.3.
-	spec_version: 1_000_000,
+	spec_version: 1_000_001,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
