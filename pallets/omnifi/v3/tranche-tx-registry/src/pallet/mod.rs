@@ -1,13 +1,17 @@
 mod impls;
 
 use crate::{
-	AttemptMetadata, BatchKeys, ChainAddress, ChainId, CloseOutcome, FlowId, HistoryPage, Instance,
-	InstanceKey, InstanceMetadata, InstanceRef, InstanceScope, Lane, LaneDeclarations, LaneState,
-	Part, ProductId, ProductModel, SlotId, SlotRecord, Template, TemplateId, TxHash, WeightInfo,
-	MAX_DEFAULT_FLOWS, MAX_TEMPLATE_SLOTS,
+	migrations, AttemptMetadata, BatchKeys, ChainAddress, ChainId, CloseOutcome, FlowId,
+	HistoryPage, Instance, InstanceKey, InstanceMetadata, InstanceRef, InstanceScope, Lane,
+	LaneDeclarations, LaneState, Part, ProductId, ProductModel, SlotId, SlotRecord, Template,
+	TemplateId, TxHash, WeightInfo, MAX_DEFAULT_FLOWS, MAX_TEMPLATE_SLOTS,
 };
 
-use frame_support::{pallet_prelude::*, traits::StorageVersion, BoundedBTreeMap};
+use frame_support::{
+	pallet_prelude::*,
+	traits::{OnRuntimeUpgrade, StorageVersion},
+	BoundedBTreeMap,
+};
 use frame_system::pallet_prelude::*;
 use sp_core::ConstU32;
 use sp_std::marker::PhantomData;
@@ -16,11 +20,19 @@ use sp_std::marker::PhantomData;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
 	pub struct Pallet<T>(_);
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			migrations::v1::SeedDefaultTemplates::<T>::on_runtime_upgrade()
+				.saturating_add(migrations::v2::AdoptClaimSlots::<T>::on_runtime_upgrade())
+		}
+	}
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {

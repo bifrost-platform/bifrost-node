@@ -3,7 +3,11 @@ use crate::{
 	InstanceStatus, Lane, Part, ProductModel, SlotDef, Template, TemplateId, TrackDef, TxHash,
 	MAX_ATTEMPTS, MAX_INSTANCE_LANES, MAX_LINKS,
 };
-use frame_support::{assert_noop, assert_ok, BoundedVec};
+use frame_support::{
+	assert_noop, assert_ok,
+	traits::{BeforeAllRuntimeMigrations, GetStorageVersion, OnRuntimeUpgrade, StorageVersion},
+	BoundedVec,
+};
 use sp_core::H256;
 use sp_runtime::{BuildStorage, DispatchError};
 
@@ -21,6 +25,7 @@ mod dep {
 	pub const BATCH_ROUTED: u8 = 3;
 	pub const APPROVED: u8 = 4;
 	pub const SETTLE_APPLIED: u8 = 5;
+	pub const CLAIMED: u8 = 6; // v2
 }
 mod red {
 	pub const REQUESTED: u8 = 0;
@@ -29,6 +34,7 @@ mod red {
 	pub const HELD: u8 = 4;
 	pub const APPROVED: u8 = 5;
 	pub const SETTLE_APPLIED: u8 = 6;
+	pub const CLAIMED: u8 = 7; // v2
 }
 mod set {
 	pub const STARTED: u8 = 0;
@@ -232,7 +238,8 @@ fn genesis_seeds_default_templates_and_flows() {
 			assert!(Templates::<Test>::contains_key(id));
 		}
 		let mc = DefaultFlows::<Test>::get(ProductModel::Multichain);
-		assert_eq!(mc.get(&FLOW_DEPOSIT), Some(&MC_DEPOSIT_V1));
+		assert_eq!(mc.get(&FLOW_DEPOSIT), Some(&MC_DEPOSIT_V2));
+		assert_eq!(mc.get(&FLOW_REDEEM), Some(&MC_REDEEM_V2));
 		assert_eq!(mc.get(&FLOW_RECEIVE), Some(&RECEIVE_V1));
 		let sc = DefaultFlows::<Test>::get(ProductModel::SingleChain);
 		assert_eq!(sc.get(&FLOW_SETTLEMENT), Some(&SC_SETTLEMENT_V1));
@@ -290,6 +297,17 @@ fn genesis_seeds_default_templates_and_flows() {
 			]
 		);
 		assert_eq!(names(SC_SETTLEMENT_V1), vec![(0, "Settled".into(), true)]);
+
+		// v2 = v1 + an optional `RequestClaimed`; the required set is unchanged
+		for (v1, v2, claimed) in [(MC_DEPOSIT_V1, MC_DEPOSIT_V2, 6), (MC_REDEEM_V1, MC_REDEEM_V2, 7)] {
+			let mut want = names(v1);
+			want.push((claimed, "RequestClaimed".into(), false));
+			assert_eq!(names(v2), want);
+			assert_eq!(
+				Templates::<Test>::get(v2).unwrap().main_required_count,
+				Templates::<Test>::get(v1).unwrap().main_required_count
+			);
+		}
 	});
 }
 
@@ -410,9 +428,98 @@ fn template_validation() {
 	});
 }
 
+/// The pallet added to a live chain by a runtime upgrade: FRAME first sets the
+/// new pallet's on-chain storage version to the in-code one, then runs the
+/// pallet's `on_runtime_upgrade` — which must still seed.
+#[test]
+fn upgrade_adding_the_pallet_seeds_once_and_never_resurrects_removed_defaults() {
+	// no pallet genesis → no pallet keys at all, nothing seeded
+	let storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+	sp_io::TestExternalities::new(storage).execute_with(|| {
+		assert_eq!(Registry::on_chain_storage_version(), StorageVersion::new(0));
+		assert!(!Templates::<Test>::contains_key(MC_DEPOSIT_V1));
+
+		let upgrade = || {
+			<Registry as BeforeAllRuntimeMigrations>::before_all_runtime_migrations();
+			<Registry as OnRuntimeUpgrade>::on_runtime_upgrade();
+		};
+		upgrade();
+		assert_eq!(Registry::on_chain_storage_version(), StorageVersion::new(2));
+		for (id, _) in templates() {
+			assert!(Templates::<Test>::contains_key(id));
+		}
+		assert_eq!(DefaultFlows::<Test>::get(ProductModel::Multichain).len(), 5);
+		assert_eq!(DefaultFlows::<Test>::get(ProductModel::SingleChain).len(), 5);
+
+		// governance removes a default; a later upgrade must not bring it back
+		assert_ok!(Registry::set_default_flow(
+			RuntimeOrigin::root(),
+			ProductModel::Multichain,
+			FLOW_RECEIVE,
+			None
+		));
+		upgrade();
+		assert!(!DefaultFlows::<Test>::get(ProductModel::Multichain).contains_key(&FLOW_RECEIVE));
+	});
+}
+
 // ---------------------------------------------------------------------------
 // recording rules
 // ---------------------------------------------------------------------------
+
+/// A chain already running the pallet at storage version 1 (only the v1
+/// templates, v1 defaults): the upgrade registers the v2s and moves the built-in
+/// v1 deposit / redeem assignments to v2, but leaves governance overrides and
+/// already-open instances alone.
+#[test]
+fn v2_migration_moves_builtin_v1_flows_only() {
+	new_test_ext().execute_with(|| {
+		const PID2: u64 = 0x0000_0004_0000_0002;
+		let custom = TemplateId { name: slug("mc-redeem"), version: 9 };
+		assert_ok!(Registry::register_template(RuntimeOrigin::root(), custom, mc_redeem()));
+		// roll the chain back to what v1 left
+		StorageVersion::new(1).put::<Registry>();
+		Templates::<Test>::remove(MC_DEPOSIT_V2);
+		Templates::<Test>::remove(MC_REDEEM_V2);
+		DefaultFlows::<Test>::mutate(ProductModel::Multichain, |d| {
+			d.try_insert(FLOW_DEPOSIT, MC_DEPOSIT_V1).unwrap();
+			d.try_insert(FLOW_REDEEM, custom).unwrap(); // governance override
+		});
+		ProductFlows::<Test>::insert(PID, FLOW_DEPOSIT, MC_DEPOSIT_V1);
+		ProductFlows::<Test>::insert(PID, FLOW_REDEEM, MC_REDEEM_V1);
+		ProductFlows::<Test>::insert(PID, FLOW_SETTLEMENT, MC_SETTLEMENT_V1);
+		ProductFlows::<Test>::insert(PID2, FLOW_REDEEM, custom);
+		// a request opened before the upgrade
+		assert_ok!(rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, B, tx(1)).investor().send());
+
+		<Registry as OnRuntimeUpgrade>::on_runtime_upgrade();
+
+		assert_eq!(Registry::on_chain_storage_version(), StorageVersion::new(2));
+		assert!(Templates::<Test>::contains_key(MC_DEPOSIT_V2));
+		assert!(Templates::<Test>::contains_key(MC_REDEEM_V2));
+		let mc = DefaultFlows::<Test>::get(ProductModel::Multichain);
+		assert_eq!(mc.get(&FLOW_DEPOSIT), Some(&MC_DEPOSIT_V2));
+		assert_eq!(mc.get(&FLOW_REDEEM), Some(&custom));
+		assert_eq!(ProductFlows::<Test>::get(PID, FLOW_DEPOSIT), Some(MC_DEPOSIT_V2));
+		assert_eq!(ProductFlows::<Test>::get(PID, FLOW_REDEEM), Some(MC_REDEEM_V2));
+		assert_eq!(ProductFlows::<Test>::get(PID, FLOW_SETTLEMENT), Some(MC_SETTLEMENT_V1));
+		assert_eq!(ProductFlows::<Test>::get(PID2, FLOW_REDEEM), Some(custom));
+
+		// the open request stays on v1 (no slot 6); a new one opens on v2
+		assert_eq!(instance(FLOW_DEPOSIT, key(1)).template, MC_DEPOSIT_V1);
+		assert_noop!(
+			rec(FLOW_DEPOSIT, key(1), dep::CLAIMED, B, tx(2)).send(),
+			Error::<Test>::UnknownSlot
+		);
+		assert_ok!(rec(FLOW_DEPOSIT, key(2), dep::REQUESTED, B, tx(3)).investor().send());
+		assert_eq!(instance(FLOW_DEPOSIT, key(2)).template, MC_DEPOSIT_V2);
+
+		// runs once
+		ProductFlows::<Test>::insert(PID2, FLOW_DEPOSIT, MC_DEPOSIT_V1);
+		<Registry as OnRuntimeUpgrade>::on_runtime_upgrade();
+		assert_eq!(ProductFlows::<Test>::get(PID2, FLOW_DEPOSIT), Some(MC_DEPOSIT_V1));
+	});
+}
 
 #[test]
 fn opening_rules() {
@@ -785,6 +892,46 @@ fn redeem_links_every_deferring_round_and_completes_on_approval() {
 			(vec![(FLOW_REDEEM, r)], 1)
 		);
 		assert_eq!(Registry::read_history(investor(), PID, FLOW_REDEEM, 0, 10).1, 1);
+	});
+}
+
+/// One claim tx claims every settled request of a (vault, controller): the
+/// Manager emits one `RequestClaimed` per request, recorded on each request's
+/// own (already completed) instance under the same tx hash.
+#[test]
+fn request_claimed_lands_on_completed_requests_sharing_one_claim_tx() {
+	new_test_ext().execute_with(|| {
+		assign_multichain();
+		let claim = tx(0xc1);
+		let settled = key(0x50);
+		for r in [key(1), key(2)] {
+			assert_ok!(rec(FLOW_DEPOSIT, r, dep::REQUESTED, B, tx(1)).investor().send());
+			assert_ok!(rec(FLOW_DEPOSIT, r, dep::QUEUED, HUB, tx(2)).send());
+		}
+		assert_ok!(batch(FLOW_DEPOSIT, vec![key(1), key(2)], dep::APPROVED, HUB, tx(3), Some((FLOW_SETTLEMENT, settled))));
+		assert_ok!(batch(FLOW_DEPOSIT, vec![key(1), key(2)], dep::SETTLE_APPLIED, B, tx(4), None));
+		// a third request, not settled yet, is not part of this claim
+		assert_ok!(rec(FLOW_DEPOSIT, key(3), dep::REQUESTED, B, tx(5)).investor().send());
+
+		for r in [key(1), key(2)] {
+			assert_eq!(instance(FLOW_DEPOSIT, r).status, InstanceStatus::Completed);
+			assert_ok!(rec(FLOW_DEPOSIT, r, dep::CLAIMED, B, claim.clone()).send());
+			let i = instance(FLOW_DEPOSIT, r);
+			assert_eq!((i.status, i.main_done), (InstanceStatus::Completed, 4));
+			let s = slot(FLOW_DEPOSIT, r, Lane::Main, dep::CLAIMED);
+			assert_eq!(s.attempts.len(), 1);
+			assert_eq!(s.attempts[0].tx.tx_hash, claim);
+		}
+		assert!(slot(FLOW_DEPOSIT, key(3), Lane::Main, dep::CLAIMED).attempts.is_empty());
+
+		// redeem: same slot name, id 7
+		let r = key(4);
+		assert_ok!(rec(FLOW_REDEEM, r, red::REQUESTED, B, tx(6)).investor().send());
+		assert_ok!(rec(FLOW_REDEEM, r, red::QUEUED, HUB, tx(7)).send());
+		assert_ok!(rec(FLOW_REDEEM, r, red::APPROVED, HUB, tx(8)).send());
+		assert_ok!(rec(FLOW_REDEEM, r, red::SETTLE_APPLIED, B, tx(9)).send());
+		assert_ok!(rec(FLOW_REDEEM, r, red::CLAIMED, B, tx(0xc2)).send());
+		assert_eq!(instance(FLOW_REDEEM, r).status, InstanceStatus::Completed);
 	});
 }
 
