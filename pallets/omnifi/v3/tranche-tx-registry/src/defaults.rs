@@ -15,23 +15,25 @@ use crate::{
 use frame_support::{traits::Get, weights::Weight, BoundedVec};
 use sp_std::{vec, vec::Vec};
 
-// ---- flow ids (product-scoped) ----
-pub const FLOW_DEPOSIT: FlowId = slug("deposit");
-pub const FLOW_REDEEM: FlowId = slug("redeem");
-pub const FLOW_SETTLEMENT: FlowId = slug("settlement");
-pub const FLOW_WHITELIST: FlowId = slug("whitelist");
-pub const FLOW_RECEIVE: FlowId = slug("receive");
+// ---- flow ids (product-scoped; bytes16, ASCII left-aligned, zero-padded) ----
+pub const FLOW_DEPOSIT: FlowId = slug("deposit"); // 0x6465706f736974000000000000000000
+pub const FLOW_REDEEM: FlowId = slug("redeem"); // 0x72656465656d00000000000000000000
+pub const FLOW_SETTLEMENT: FlowId = slug("settlement"); // 0x736574746c656d656e74000000000000
+pub const FLOW_WHITELIST: FlowId = slug("whitelist"); // 0x77686974656c69737400000000000000
+pub const FLOW_RECEIVE: FlowId = slug("receive"); // 0x72656365697665000000000000000000
 
-// ---- template ids ----
-pub const MC_DEPOSIT_V1: TemplateId = TemplateId { name: slug("mc-deposit"), version: 1 };
-pub const MC_REDEEM_V1: TemplateId = TemplateId { name: slug("mc-redeem"), version: 1 };
-pub const MC_SETTLEMENT_V1: TemplateId = TemplateId { name: slug("mc-settlement"), version: 1 };
-pub const MC_WHITELIST_V1: TemplateId = TemplateId { name: slug("mc-whitelist"), version: 1 };
-pub const SC_DEPOSIT_V1: TemplateId = TemplateId { name: slug("sc-deposit"), version: 1 };
-pub const SC_REDEEM_V1: TemplateId = TemplateId { name: slug("sc-redeem"), version: 1 };
-pub const SC_SETTLEMENT_V1: TemplateId = TemplateId { name: slug("sc-settlement"), version: 1 };
-pub const SC_WHITELIST_V1: TemplateId = TemplateId { name: slug("sc-whitelist"), version: 1 };
-pub const RECEIVE_V1: TemplateId = TemplateId { name: slug("receive"), version: 1 };
+// ---- template ids (name is bytes16, same padding as flow ids) ----
+pub const MC_DEPOSIT_V1: TemplateId = TemplateId { name: slug("mc-deposit"), version: 1 }; // 0x6d632d6465706f736974000000000000
+pub const MC_REDEEM_V1: TemplateId = TemplateId { name: slug("mc-redeem"), version: 1 }; // 0x6d632d72656465656d00000000000000
+pub const MC_DEPOSIT_V2: TemplateId = TemplateId { name: slug("mc-deposit"), version: 2 }; // 0x6d632d6465706f736974000000000000
+pub const MC_REDEEM_V2: TemplateId = TemplateId { name: slug("mc-redeem"), version: 2 }; // 0x6d632d72656465656d00000000000000
+pub const MC_SETTLEMENT_V1: TemplateId = TemplateId { name: slug("mc-settlement"), version: 1 }; // 0x6d632d736574746c656d656e74000000
+pub const MC_WHITELIST_V1: TemplateId = TemplateId { name: slug("mc-whitelist"), version: 1 }; // 0x6d632d77686974656c69737400000000
+pub const SC_DEPOSIT_V1: TemplateId = TemplateId { name: slug("sc-deposit"), version: 1 }; // 0x73632d6465706f736974000000000000
+pub const SC_REDEEM_V1: TemplateId = TemplateId { name: slug("sc-redeem"), version: 1 }; // 0x73632d72656465656d00000000000000
+pub const SC_SETTLEMENT_V1: TemplateId = TemplateId { name: slug("sc-settlement"), version: 1 }; // 0x73632d736574746c656d656e74000000
+pub const SC_WHITELIST_V1: TemplateId = TemplateId { name: slug("sc-whitelist"), version: 1 }; // 0x73632d77686974656c69737400000000
+pub const RECEIVE_V1: TemplateId = TemplateId { name: slug("receive"), version: 1 }; // 0x72656365697665000000000000000000
 
 fn slot(id: SlotId, name: &str, required: bool) -> SlotDef {
 	SlotDef { id, name: BoundedVec::truncate_from(name.as_bytes().to_vec()), required }
@@ -74,6 +76,19 @@ pub fn mc_deposit() -> Template {
 	)
 }
 
+/// `mc-deposit` v2 = v1 + slot 6 `RequestClaimed`: the vault spoke Manager's
+/// `RequestClaimed(requestId, …)` in the claim tx that minted this request's
+/// shares (2026-10-19, mainnet deployments only). Optional — seed deposits are
+/// never claimed, and the claim usually lands after the instance completed
+/// (a closed instance still takes evidence). One claim tx carries one
+/// `RequestClaimed` per request it claimed, so the same tx hash appears on
+/// several instances.
+pub fn mc_deposit_v2() -> Template {
+	let mut t = mc_deposit();
+	t.main.force_push(slot(6, "RequestClaimed", false));
+	t
+}
+
 /// Multichain redeem. Queueing only records the request; the payout is pulled
 /// by the round-close batch ROUTE (per chain, not per request — recorded on
 /// the settlement instance's `pull` / `hold` lanes) and the request is
@@ -95,6 +110,14 @@ pub fn mc_redeem() -> Template {
 		],
 		vec![],
 	)
+}
+
+/// `mc-redeem` v2 = v1 + slot 7 `RequestClaimed`: the claim tx that paid out
+/// this request's assets. Same rules as `mc_deposit_v2`'s slot 6.
+pub fn mc_redeem_v2() -> Template {
+	let mut t = mc_redeem();
+	t.main.force_push(slot(7, "RequestClaimed", false));
+	t
 }
 
 /// Multichain settlement. `collect-response` lanes = every spoke asked for a
@@ -212,6 +235,8 @@ pub fn templates() -> Vec<(TemplateId, Template)> {
 	vec![
 		(MC_DEPOSIT_V1, mc_deposit()),
 		(MC_REDEEM_V1, mc_redeem()),
+		(MC_DEPOSIT_V2, mc_deposit_v2()),
+		(MC_REDEEM_V2, mc_redeem_v2()),
 		(MC_SETTLEMENT_V1, mc_settlement()),
 		(MC_WHITELIST_V1, mc_whitelist()),
 		(SC_DEPOSIT_V1, sc_deposit()),
@@ -224,8 +249,8 @@ pub fn templates() -> Vec<(TemplateId, Template)> {
 
 pub fn default_flows() -> Vec<(ProductModel, FlowId, TemplateId)> {
 	vec![
-		(ProductModel::Multichain, FLOW_DEPOSIT, MC_DEPOSIT_V1),
-		(ProductModel::Multichain, FLOW_REDEEM, MC_REDEEM_V1),
+		(ProductModel::Multichain, FLOW_DEPOSIT, MC_DEPOSIT_V2),
+		(ProductModel::Multichain, FLOW_REDEEM, MC_REDEEM_V2),
 		(ProductModel::Multichain, FLOW_SETTLEMENT, MC_SETTLEMENT_V1),
 		(ProductModel::Multichain, FLOW_WHITELIST, MC_WHITELIST_V1),
 		(ProductModel::Multichain, FLOW_RECEIVE, RECEIVE_V1),
@@ -242,6 +267,23 @@ pub fn default_flows() -> Vec<(ProductModel, FlowId, TemplateId)> {
 /// the weight used and how many templates were newly registered.
 pub fn seed<T: Config>() -> (Weight, u32) {
 	let db = T::DbWeight::get();
+	let (mut weight, registered) = register_templates::<T>();
+	for (model, flow_id, template) in default_flows() {
+		weight = weight.saturating_add(db.reads_writes(1, 1));
+		DefaultFlows::<T>::mutate(model, |defaults| {
+			if !defaults.contains_key(&flow_id) {
+				let _ = defaults.try_insert(flow_id, template);
+			}
+		});
+	}
+	(weight, registered)
+}
+
+/// Registers every built-in template that isn't registered yet; leaves the
+/// default flow maps alone. Returns the weight used and how many templates
+/// were newly registered.
+pub fn register_templates<T: Config>() -> (Weight, u32) {
+	let db = T::DbWeight::get();
 	let mut weight = Weight::zero();
 	let mut registered = 0u32;
 	for (id, template) in templates() {
@@ -254,14 +296,6 @@ pub fn seed<T: Config>() -> (Weight, u32) {
 		Templates::<T>::insert(id, template);
 		registered = registered.saturating_add(1);
 		weight = weight.saturating_add(db.writes(1));
-	}
-	for (model, flow_id, template) in default_flows() {
-		weight = weight.saturating_add(db.reads_writes(1, 1));
-		DefaultFlows::<T>::mutate(model, |defaults| {
-			if !defaults.contains_key(&flow_id) {
-				let _ = defaults.try_insert(flow_id, template);
-			}
-		});
 	}
 	(weight, registered)
 }

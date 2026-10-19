@@ -20,7 +20,7 @@ use sp_std::marker::PhantomData;
 pub mod pallet {
 	use super::*;
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -30,6 +30,7 @@ pub mod pallet {
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
 			migrations::v1::SeedDefaultTemplates::<T>::on_runtime_upgrade()
+				.saturating_add(migrations::v2::AdoptClaimSlots::<T>::on_runtime_upgrade())
 		}
 	}
 
