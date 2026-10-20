@@ -245,7 +245,7 @@ where
 	}
 
 	/// Read whether `who` is the global ProductFactory (the contract allowed to
-	/// register permissionless products). Set by root only.
+	/// register curated products). Set by root only.
 	///
 	/// @param who EVM address to check
 	#[precompile::public("is_product_factory(address)")]

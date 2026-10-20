@@ -171,7 +171,7 @@ interface TranchePermissionsUniversal {
 
     /**
      * @notice Read whether `who` is the global ProductFactory — the single contract
-     *         allowed to register permissionless products (product ID prefixes 3/4)
+     *         allowed to register curated products (product ID prefixes 3/4)
      *         on TrancheSystemUniversal. Set by root only.
      * @param who EVM address to check
      */

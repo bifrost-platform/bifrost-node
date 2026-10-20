@@ -54,8 +54,8 @@ pub mod pallet {
 		/// Dispatched by the tranche-system precompile after verifying the
 		/// caller is the global ProductFactory (via
 		/// pallet-tranche-permissions' `ProductFactory`). Accepted by the
-		/// permissionless create extrinsics, and by the product-management
-		/// extrinsics on permissionless products only (see
+		/// curated create extrinsics, and by the product-management
+		/// extrinsics on curated products only (see
 		/// `is_permissionless_product_id`).
 		ProductFactory(T::AccountId),
 	}
@@ -64,9 +64,9 @@ pub mod pallet {
 	pub trait Config:
 		frame_system::Config + pallet_timestamp::Config<Moment = u64> + pallet_evm::Config
 	{
-		/// Origin of the curated create extrinsics and of every
+		/// Origin of the admin create extrinsics and of every
 		/// product-management extrinsic (`set_tranche`, `set_adapters`, …;
-		/// the latter also accept `ProductFactoryOrigin` on permissionless
+		/// the latter also accept `ProductFactoryOrigin` on curated
 		/// products) — none of them can be called via a plain
 		/// signed extrinsic. The tranche-system precompile constructs this
 		/// origin itself, after verifying the caller holds ProductAdmin for
@@ -79,7 +79,7 @@ pub mod pallet {
 			Self::RuntimeOrigin,
 			Success = Self::AccountId,
 		>;
-		/// Origin of the permissionless create extrinsics. Wire as
+		/// Origin of the curated create extrinsics. Wire as
 		/// `pallet_tranche_system::EnsureProductFactory<Runtime>` — constructed
 		/// only by the tranche-system precompile, after it checks the caller
 		/// is the ProductFactory.
@@ -87,7 +87,7 @@ pub mod pallet {
 			Self::RuntimeOrigin,
 			Success = Self::AccountId,
 		>;
-		/// Installs a permissionless product's admin at creation — implemented
+		/// Installs a curated product's admin at creation — implemented
 		/// by pallet-tranche-permissions.
 		type ProductAdmins: ProductAdminRegistry<Self::AccountId>;
 		/// Notified after every product registration — wire
@@ -243,15 +243,15 @@ pub mod pallet {
 		/// `ProductAdminOrigin`-gated, correctly shaped) so the call surface
 		/// is stable ahead of time; only their bodies are disabled.
 		FlowVersionChangeNotYetSupported,
-		/// `product_id`'s prefix doesn't fit the create path: the curated
+		/// `product_id`'s prefix doesn't fit the create path: the admin
 		/// `create_product`/`create_single_chain_product` reject the
-		/// permissionless prefixes (`3`/`4`), and the permissionless ones accept
+		/// curated prefixes (`3`/`4`), and the curated ones accept
 		/// only their own (`4` multichain, `3` single-chain).
 		InvalidProductIdPrefix,
-		/// A `ProductFactory` origin acted on a curated product — the factory only
-		/// manages the products it created (permissionless prefixes).
+		/// A `ProductFactory` origin acted on an admin product — the factory only
+		/// manages the products it created (curated prefixes).
 		NotPermissionlessProduct,
-		/// On a permissionless product, a change that introduces a new address
+		/// On a curated product, a change that introduces a new address
 		/// (adding a tranche, changing a tranche's asset/shares, adding an adapter
 		/// or changing its source, binding a TrancheManager) must come from the
 		/// ProductFactory, which deploys those contracts. The product's admin may
@@ -976,7 +976,7 @@ pub mod pallet {
 		}
 
 		/// Register a multichain product created through the ProductFactory
-		/// (permissionless creation). Same validation and storage effects as
+		/// (curated creation). Same validation and storage effects as
 		/// `create_product`; additionally:
 		/// - origin must be `ProductFactoryOrigin` (the precompile checks the caller is the
 		///   ProductFactory);
@@ -1029,7 +1029,7 @@ pub mod pallet {
 		}
 
 		/// Register a single-chain product created through the ProductFactory —
-		/// `create_single_chain_product`'s permissionless counterpart. Same extra
+		/// `create_single_chain_product`'s curated counterpart. Same extra
 		/// rules as `create_product_permissionless`, with
 		/// `PRODUCT_ID_PREFIX_PERMISSIONLESS_SINGLE_CHAIN` as the required prefix.
 		#[pallet::call_index(10)]

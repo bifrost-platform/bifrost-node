@@ -114,13 +114,18 @@ pub const MAX_SETTLEMENT_REQUESTS: u32 = 1_000;
 /// A `ProductId` is `(prefix: u32) << 32 | (seq: u32)`; the prefix names the
 /// product's model and how it was created.
 ///
-/// Curated (`1`/`2`): sudo picks the id and grants its ProductAdmin before the
+/// Admin (`1`/`2`): sudo picks the id and grants its ProductAdmin before the
 /// admin calls `create_product`/`create_single_chain_product`.
-/// Permissionless (`3`/`4`): the ProductFactory contract allocates the id (it
+/// Curated (`3`/`4`): the ProductFactory contract allocates the id (it
 /// tracks `seq`) and registers the product through
 /// `create_single_chain_product_permissionless`/`create_product_permissionless`,
-/// which also install the product's admin. The curated create paths reject
-/// permissionless prefixes and vice versa, so neither can squat the other's ids.
+/// which also install the product's admin. The admin create paths reject
+/// curated prefixes and vice versa, so neither can squat the other's ids.
+///
+/// Naming: the curated path was called "permissionless" when it was added, and
+/// its identifiers (`create_*_permissionless`, `PRODUCT_ID_PREFIX_PERMISSIONLESS_*`,
+/// `is_permissionless_product_id`, …) keep that name — they are part of the call,
+/// precompile and error ABI.
 pub const PRODUCT_ID_PREFIX_SINGLE_CHAIN: u32 = 1;
 /// See [`PRODUCT_ID_PREFIX_SINGLE_CHAIN`].
 pub const PRODUCT_ID_PREFIX_MULTICHAIN: u32 = 2;
@@ -910,7 +915,7 @@ pub trait ProductInspect {
 }
 
 /// Implemented by pallet-tranche-permissions (it owns `ProductAdmins`). Consumed
-/// by the permissionless create extrinsics to install the new product's admin
+/// by the curated create extrinsics to install the new product's admin
 /// (the per-product Manager contract) in the same transaction that registers
 /// the product, so a factory product is never left without one.
 pub trait ProductAdminRegistry<AccountId> {

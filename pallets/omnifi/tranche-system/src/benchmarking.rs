@@ -36,7 +36,7 @@ fn factory_origin<T: Config>() -> T::RuntimeOrigin {
 	T::ProductFactoryOrigin::try_successful_origin().expect("ProductFactoryOrigin benchmark helper")
 }
 
-/// `seq` 1 under the permissionless prefix `prefix`.
+/// `seq` 1 under the curated prefix `prefix`.
 fn permissionless_pid(prefix: u32) -> ProductId {
 	((prefix as u64) << 32) | 1
 }
