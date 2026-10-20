@@ -510,15 +510,15 @@ impl pallet_relay_manager::Config for Runtime {
 
 parameter_types! {
 	/// Maximum byte size of a single CCCP message accepted by `CCCPRelayQueue`. A runtime
-	/// `storage` parameter (same 2 KiB default as the public chains' `BtcSocketQueue`
-	/// setting), so `Sudo` can change it without a runtime upgrade:
+	/// `storage` parameter, so `Sudo` can change it without a runtime upgrade:
 	///
 	/// - key:   `twox_128(":MaxCccpMessageBytes:")` = `0x86e6336b46c0f69167a6b85c7a80a15d`
-	/// - value: SCALE-encoded `u32` (little-endian), e.g. 4 KiB = `0x00100000`
+	/// - value: SCALE-encoded `u32` (little-endian), e.g. 20 KiB = `0x00500000`
 	///
-	/// `sudo(system.setStorage([(key, value)]))`. Until it is first set, the key is absent and
-	/// the 2 KiB default applies; `system.killStorage([key])` restores the default.
-	pub storage MaxCccpMessageBytes: u32 = 2 * 1024;
+	/// `sudo(system.setStorage([(key, value)]))`. While the key is absent the 20 KiB default
+	/// applies; `system.killStorage([key])` restores the default. The default is 20 KiB, not
+	/// the public chains' 2 KiB, because OmniFi CCCP-v2 messages carry payloads over 2 KiB.
+	pub storage MaxCccpMessageBytes: u32 = 20 * 1024;
 }
 
 /// `pallet-cccp-relay-queue`'s `SocketQueue` hook without `pallet-btc-socket-queue`: the
