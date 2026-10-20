@@ -23,14 +23,14 @@ pub(crate) type CascadedTrancheUpdate = (VaultId, TrancheType, ChainAddress, Cha
 /// Which authority a product-management call was made under — see
 /// `Pallet::ensure_product_authority`. Two independent roles, not a hierarchy:
 ///
-/// - `Admin`: whoever holds `ProductAdmins[product_id]` in pallet-tranche-permissions. For a
-///   curated product that's the admin sudo granted; for a permissionless product it's the
+/// - `Admin`: whoever holds `ProductAdmins[product_id]` in pallet-tranche-permissions. For an
+///   admin product that's the account sudo granted; for a curated product it's the
 ///   per-product **Manager contract** the ProductFactory deployed at creation (the Manager is
 ///   just "the admin account" of that product — this pallet doesn't know it's a contract).
 /// - `Factory`: the global ProductFactory contract itself (a account in
-///   `ProductFactory`), acting on one of the permissionless products it created.
+///   `ProductFactory`), acting on one of the curated products it created.
 ///
-/// On a permissionless product the two split the work: `Admin` may reweight, reorder,
+/// On a curated product the two split the work: `Admin` may reweight, reorder,
 /// re-rate and remove; only `Factory` may introduce new addresses (see
 /// `Error::RequiresProductFactory`).
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ impl<T: Config> Pallet<T> {
 	/// Origin check shared by every product-management extrinsic: either the
 	/// product's admin (`ProductAdminOrigin`, verified against `product_id` by the
 	/// precompile) or the ProductFactory (`ProductFactoryOrigin`) — the latter only
-	/// on a permissionless product, since the factory acts just on the products it
+	/// on a curated product, since the factory acts just on the products it
 	/// created. See `ProductAuthority`.
 	pub(crate) fn ensure_product_authority(
 		origin: OriginFor<T>,
@@ -64,10 +64,10 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	/// On a permissionless product, only the ProductFactory may make a change
+	/// On a curated product, only the ProductFactory may make a change
 	/// that introduces a new address (see `Error::RequiresProductFactory`) —
 	/// otherwise the product's admin could point it at contracts the factory never
-	/// deployed. Curated products are unrestricted.
+	/// deployed. Admin products are unrestricted.
 	pub(crate) fn ensure_may_introduce_addresses(
 		authority: ProductAuthority,
 		product_id: ProductId,

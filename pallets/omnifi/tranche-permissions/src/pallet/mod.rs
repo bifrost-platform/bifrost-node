@@ -66,11 +66,11 @@ pub mod pallet {
 		/// `SingleChain` product's own TrancheManager Contract manages investor
 		/// whitelisting directly, never through this pallet.
 		TrancheInvestorMultichainOnly,
-		/// `grant_permission(ProductAdmin)` targeted a permissionless `product_id`
+		/// `grant_permission(ProductAdmin)` targeted a curated `product_id`
 		/// (prefix `3`/`4`) — those admins are installed by the ProductFactory at
 		/// creation; root overrides them with `force_set_product_admin`.
 		PermissionlessProductId,
-		/// `force_set_product_admin` targeted a permissionless `product_id` that
+		/// `force_set_product_admin` targeted a curated `product_id` that
 		/// isn't registered yet — that would occupy the admin slot and block the
 		/// ProductFactory's own create for that id.
 		ProductNotFound,
@@ -106,10 +106,10 @@ pub mod pallet {
 	// -----------------------------------------------------------------------
 
 	#[pallet::storage]
-	/// The single ProductAdmin per product. For curated products, written by sudo
+	/// The single ProductAdmin per product. For admin products, written by sudo
 	/// before creation (see pallet-tranche-system's `create_product`, only callable
 	/// by whoever already holds this role for the `product_id` they supply). For
-	/// permissionless products, installed by pallet-tranche-system's
+	/// curated products, installed by pallet-tranche-system's
 	/// `create_*_permissionless` (the product's Manager contract). Root can
 	/// override either with `force_set_product_admin`.
 	pub type ProductAdmins<T: Config> = StorageMap<_, Blake2_128Concat, ProductId, T::AccountId>;
@@ -149,12 +149,12 @@ pub mod pallet {
 
 	#[pallet::storage]
 	/// The single, global ProductFactory contract — the only account allowed to
-	/// register permissionless products (prefixes `3`/`4`) through
+	/// register curated products (prefixes `3`/`4`) through
 	/// pallet-tranche-system's `create_*_permissionless`, and to make
-	/// address-introducing changes to them. `None` disables permissionless
+	/// address-introducing changes to them. `None` disables curated
 	/// creation. Root-only (`set_product_factory`).
 	///
-	/// Replacing it hands every permissionless product over to the new factory at
+	/// Replacing it hands every curated product over to the new factory at
 	/// once (the factory role is global, not per product); the old factory loses
 	/// all access immediately, including any creations still in flight.
 	pub type ProductFactory<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
@@ -274,14 +274,14 @@ pub mod pallet {
 		}
 
 		/// Emergency override: replace `product_id`'s ProductAdmin with `new_admin`,
-		/// or clear it (`None`). Root-only; works on curated and permissionless
-		/// products alike, but a permissionless id must already be registered (see
+		/// or clear it (`None`). Root-only; works on admin and curated
+		/// products alike, but a curated id must already be registered (see
 		/// `Error::ProductNotFound`).
 		///
-		/// Clearing the admin stops admin actions only. On a permissionless product
+		/// Clearing the admin stops admin actions only. On a curated product
 		/// the ProductFactory can still call every product-management extrinsic, so
 		/// freezing such a product completely also needs `set_product_factory(None)`
-		/// (which affects every permissionless product).
+		/// (which affects every curated product).
 		#[pallet::call_index(5)]
 		#[pallet::weight(<T as Config>::WeightInfo::force_set_product_admin())]
 		pub fn force_set_product_admin(

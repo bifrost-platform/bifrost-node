@@ -132,15 +132,16 @@ pragma solidity >=0.8.0;
  *     precompile constructs after checking ProductAdmin itself, so calling the
  *     pallet directly (bypassing this precompile) is impossible regardless of
  *     role — there is no signed-origin fallback path.
- *   - Permissionless products (added 2026-10-07): product IDs are
- *     `uint64(prefix) << 32 | seq` — prefix 1 = single-chain curated, 2 =
- *     multichain curated (sudo picks the ID and grants ProductAdmin first), 3 =
- *     single-chain permissionless, 4 = multichain permissionless (the
+ *   - Curated products (ProductFactory, added 2026-10-07; the functions keep
+ *     their original `_permissionless` names): product IDs are
+ *     `uint64(prefix) << 32 | seq` — prefix 1 = single-chain admin, 2 =
+ *     multichain admin (sudo picks the ID and grants ProductAdmin first), 3 =
+ *     single-chain curated, 4 = multichain curated (the
  *     ProductFactory contract allocates `seq`). Only the ProductFactory
  *     (a single global account in pallet-tranche-permissions, set by root) may call
  *     create_product_permissionless / create_single_chain_product_permissionless,
  *     which install the product's Manager contract as its ProductAdmin. The
- *     curated create functions reject prefixes 3/4. On a permissionless product
+ *     admin create functions reject prefixes 3/4. On a curated product
  *     the ProductAdmin (Manager) may reweight, reorder, re-rate and remove, but any
  *     change that introduces a new address (set_tranche Add, Update changing
  *     asset/shares, a new adapter or a changed source_type, a new non-zero
@@ -545,7 +546,7 @@ interface TrancheSystemUniversal {
 
     /**
      * @notice Register a multichain product created through the ProductFactory
-     *         (permissionless creation).
+     *         (curated creation).
      * @dev Caller must be the ProductFactory. `product_id` must carry prefix 4
      *      (`4 << 32 | seq`, seq allocated by the factory). `product_admin` — the
      *      product's Manager contract — becomes its ProductAdmin in the same call
@@ -570,7 +571,7 @@ interface TrancheSystemUniversal {
 
     /**
      * @notice Register a single-chain product created through the ProductFactory —
-     *         the permissionless counterpart of create_single_chain_product.
+     *         the curated counterpart of create_single_chain_product.
      * @dev Same rules as create_product_permissionless, with prefix 3. Emits
      *      SingleChainProductCreated with `product_admin` as the admin.
      * @param product_id      Factory-allocated product ID

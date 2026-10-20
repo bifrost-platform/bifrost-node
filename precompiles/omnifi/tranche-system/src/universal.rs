@@ -516,9 +516,9 @@ where
 		Ok(())
 	}
 
-	/// Register a multichain product the ProductFactory created (permissionless
+	/// Register a multichain product the ProductFactory created (curated
 	/// creation). Caller must be the ProductFactory; `product_id` must carry
-	/// the permissionless multichain prefix (`4`); `product_admin` (the product's
+	/// the curated multichain prefix (`4`); `product_admin` (the product's
 	/// Manager contract) becomes its ProductAdmin. See
 	/// `pallet_tranche_system::create_product_permissionless`.
 	///
@@ -597,7 +597,7 @@ where
 	}
 
 	/// Register a single-chain product the ProductFactory created — the
-	/// permissionless counterpart of `create_single_chain_product`. Same rules as
+	/// curated counterpart of `create_single_chain_product`. Same rules as
 	/// `create_product_permissionless`, with the single-chain prefix (`3`).
 	///
 	/// @param product_id Factory-allocated product ID (`3 << 32 | seq`)
@@ -1112,7 +1112,7 @@ where
 
 /// Reads `pallet-tranche-permissions`' `ProductFactory` to confirm the caller
 /// is the global ProductFactory, before constructing
-/// `Origin::ProductFactory` for the permissionless create functions.
+/// `Origin::ProductFactory` for the curated create functions.
 fn ensure_caller_is_product_factory<Runtime>(
 	handle: &mut impl PrecompileHandle,
 	caller_account: &Runtime::AccountId,
@@ -1128,7 +1128,7 @@ where
 }
 
 /// Origin for the product-management functions (`set_tranche`, `set_adapters`,
-/// …). On a permissionless product the ProductFactory is checked first, so a
+/// …). On a curated product the ProductFactory is checked first, so a
 /// caller holding both roles (e.g. root handed a product to the factory with
 /// `force_set_product_admin`) gets the wider `ProductFactory` origin rather than
 /// being held to the admin's restrictions. Otherwise `ProductAdmin` if the caller
