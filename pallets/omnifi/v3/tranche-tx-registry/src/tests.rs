@@ -196,6 +196,24 @@ fn slot(flow: FlowId, k: InstanceKey, lane: Lane, id: u8) -> crate::SlotRecord<u
 	Slots::<Test>::get((PID, flow, k, lane, id))
 }
 
+// `mc-settle-cccp` v1 — ids up to 13 match `mc-settlement` v1 (`set`)
+mod cccp {
+	pub const PAYOUT_HUB_BRIDGED: u8 = 14;
+	pub const PAYOUT_RELAYED: u8 = 15;
+	pub const PAYOUT_DST_BRIDGED: u8 = 16;
+	pub const PAYOUT_RECEIVED: u8 = 17;
+	pub const HOLD_ROUTE_RECEIVED: u8 = 19;
+	pub const HOLD_HUB_BRIDGED: u8 = 20;
+	pub const HOLD_RELAYED: u8 = 21;
+	pub const HOLD_RECEIVED: u8 = 23;
+	pub const WITHDRAW_REQUESTED: u8 = 25;
+	// tracks
+	pub const PAYOUT_MOVE_CCCP: u8 = 3;
+	pub const HOLD: u8 = 4;
+	pub const HOLD_CCCP: u8 = 5;
+	pub const PULL: u8 = 6;
+}
+
 fn sub(track: u8, chain: u64) -> Lane {
 	Lane::Sub { track, chain }
 }
@@ -299,7 +317,9 @@ fn genesis_seeds_default_templates_and_flows() {
 		assert_eq!(names(SC_SETTLEMENT_V1), vec![(0, "Settled".into(), true)]);
 
 		// v2 = v1 + an optional `RequestClaimed`; the required set is unchanged
-		for (v1, v2, claimed) in [(MC_DEPOSIT_V1, MC_DEPOSIT_V2, 6), (MC_REDEEM_V1, MC_REDEEM_V2, 7)] {
+		for (v1, v2, claimed) in
+			[(MC_DEPOSIT_V1, MC_DEPOSIT_V2, 6), (MC_REDEEM_V1, MC_REDEEM_V2, 7)]
+		{
 			let mut want = names(v1);
 			want.push((claimed, "RequestClaimed".into(), false));
 			assert_eq!(names(v2), want);
@@ -908,7 +928,14 @@ fn request_claimed_lands_on_completed_requests_sharing_one_claim_tx() {
 			assert_ok!(rec(FLOW_DEPOSIT, r, dep::REQUESTED, B, tx(1)).investor().send());
 			assert_ok!(rec(FLOW_DEPOSIT, r, dep::QUEUED, HUB, tx(2)).send());
 		}
-		assert_ok!(batch(FLOW_DEPOSIT, vec![key(1), key(2)], dep::APPROVED, HUB, tx(3), Some((FLOW_SETTLEMENT, settled))));
+		assert_ok!(batch(
+			FLOW_DEPOSIT,
+			vec![key(1), key(2)],
+			dep::APPROVED,
+			HUB,
+			tx(3),
+			Some((FLOW_SETTLEMENT, settled))
+		));
 		assert_ok!(batch(FLOW_DEPOSIT, vec![key(1), key(2)], dep::SETTLE_APPLIED, B, tx(4), None));
 		// a third request, not settled yet, is not part of this claim
 		assert_ok!(rec(FLOW_DEPOSIT, key(3), dep::REQUESTED, B, tx(5)).investor().send());
@@ -1085,6 +1112,173 @@ fn settlement_waits_for_finalize_chunks_routes_and_cctp_arrivals() {
 				.tx
 				.chain_id,
 			C
+		);
+	});
+}
+
+#[test]
+fn cccp_settlement_template_shape_and_opt_in() {
+	new_test_ext().execute_with(|| {
+		let t = Templates::<Test>::get(MC_SETTLE_CCCP_V1).unwrap();
+		assert_eq!(t.main_required_count, 2);
+		let tracks = t
+			.tracks
+			.iter()
+			.map(|t| {
+				(
+					String::from_utf8(t.name.to_vec()).unwrap(),
+					t.slots
+						.iter()
+						.map(|s| (s.id, String::from_utf8(s.name.to_vec()).unwrap(), s.required))
+						.collect::<Vec<_>>(),
+				)
+			})
+			.collect::<Vec<_>>();
+		let names = tracks.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>();
+		assert_eq!(
+			names,
+			vec![
+				"collect-response",
+				"finalize",
+				"payout-move",
+				"payout-move-cccp",
+				"hold",
+				"hold-cccp",
+				"pull"
+			]
+		);
+		// collect-response / finalize / payout-move are `mc-settlement` v1's
+		let v1 = Templates::<Test>::get(MC_SETTLEMENT_V1).unwrap();
+		assert_eq!(t.main, v1.main);
+		assert_eq!(t.tracks[..3], v1.tracks[..3]);
+		assert_eq!(
+			tracks[5].1,
+			vec![
+				(20, "HoldHubBridged".into(), false),
+				(21, "HoldBridgeRelayed".into(), false),
+				(22, "HoldDstBridged".into(), false),
+				(23, "HoldCccpBridgeReceived".into(), true),
+			]
+		);
+		// opt-in: no product model gets it by default
+		for model in [ProductModel::Multichain, ProductModel::SingleChain] {
+			assert!(!DefaultFlows::<Test>::get(model).values().any(|t| *t == MC_SETTLE_CCCP_V1));
+		}
+		assign_multichain();
+		assert_eq!(ProductFlows::<Test>::get(PID, FLOW_SETTLEMENT), Some(MC_SETTLEMENT_V1));
+		assert_ok!(Registry::assign_flow(
+			RuntimeOrigin::root(),
+			PID,
+			FLOW_SETTLEMENT,
+			Some(MC_SETTLE_CCCP_V1)
+		));
+		assert_eq!(ProductFlows::<Test>::get(PID, FLOW_SETTLEMENT), Some(MC_SETTLE_CCCP_V1));
+	});
+}
+
+#[test]
+fn cccp_settlement_waits_for_every_relayed_arrival() {
+	new_test_ext().execute_with(|| {
+		assign_multichain();
+		assert_ok!(Registry::assign_flow(
+			RuntimeOrigin::root(),
+			PID,
+			FLOW_SETTLEMENT,
+			Some(MC_SETTLE_CCCP_V1)
+		));
+		let s = key(0x60);
+		assert_ok!(rec(FLOW_SETTLEMENT, s, set::STARTED, HUB, tx(1))
+			.declare(vec![(set::COLLECT, A), (set::COLLECT, B), (set::COLLECT, C)])
+			.send());
+		assert_eq!(instance(FLOW_SETTLEMENT, s).template, MC_SETTLE_CCCP_V1);
+		for (chain, n) in [(A, 10u8), (B, 20u8), (C, 30u8)] {
+			assert_ok!(rec(FLOW_SETTLEMENT, s, set::NAV_REPORTED, chain, tx(n)).lane(chain).send());
+			assert_ok!(rec(FLOW_SETTLEMENT, s, set::NAV_RECEIVED, HUB, tx(n + 1))
+				.lane(chain)
+				.send());
+		}
+		// close tx without FINALIZE: payout move C → B, A's hold batched, B pulled
+		assert_ok!(rec(FLOW_SETTLEMENT, s, set::SETTLED, HUB, tx(40))
+			.declare(vec![(set::PAYOUT_MOVE, C), (cccp::HOLD, A), (cccp::PULL, B)])
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::WITHDRAW_REQUESTED, B, tx(41)).lane(B).send());
+
+		// C's payout ROUTE hook tx: one CccpBridgeSent (→ B)
+		assert_ok!(rec(FLOW_SETTLEMENT, s, set::PAYOUT_ROUTE_RECEIVED, C, tx(42))
+			.lane(C)
+			.declare(vec![(cccp::PAYOUT_MOVE_CCCP, C)])
+			.send());
+		// A's hold ROUTE hook tx: CccpBridgeSent → B and → C
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::HOLD_ROUTE_RECEIVED, A, tx(43))
+			.lane(A)
+			.declare(vec![(cccp::HOLD_CCCP, A)])
+			.send());
+		let i = instance(FLOW_SETTLEMENT, s);
+		assert_eq!((i.status, i.pending_lanes), (InstanceStatus::Open, 2));
+
+		// payout C → B: hub hop (Reverted, then re-sent), relay, destination hop, arrival
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::PAYOUT_HUB_BRIDGED, HUB, tx(50))
+			.lane(C)
+			.part(0, 1)
+			.failed()
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::PAYOUT_HUB_BRIDGED, HUB, tx(51))
+			.lane(C)
+			.part(0, 1)
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::PAYOUT_RELAYED, HUB, tx(52))
+			.lane(C)
+			.part(0, 1)
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::PAYOUT_DST_BRIDGED, B, tx(53))
+			.lane(C)
+			.part(0, 1)
+			.send());
+		// the optional hops alone never close the lane
+		assert!(
+			!Lanes::<Test>::get((PID, FLOW_SETTLEMENT, s, sub(cccp::PAYOUT_MOVE_CCCP, C)))
+				.unwrap()
+				.done
+		);
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::PAYOUT_RECEIVED, B, tx(54))
+			.lane(C)
+			.part(0, 1)
+			.send());
+		assert_eq!(instance(FLOW_SETTLEMENT, s).pending_lanes, 1);
+
+		// hold A → {B, C}: arrivals in either order, each on the sender's lane
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::HOLD_HUB_BRIDGED, HUB, tx(60))
+			.lane(A)
+			.part(1, 2)
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::HOLD_RELAYED, HUB, tx(61))
+			.lane(A)
+			.part(1, 2)
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::HOLD_RECEIVED, C, tx(62))
+			.lane(A)
+			.part(1, 2)
+			.send());
+		assert_eq!(instance(FLOW_SETTLEMENT, s).status, InstanceStatus::Open);
+		assert_noop!(
+			rec(FLOW_SETTLEMENT, s, cccp::HOLD_RECEIVED, B, tx(63)).lane(A).send(),
+			Error::<Test>::PartCountMismatch
+		);
+		assert_ok!(rec(FLOW_SETTLEMENT, s, cccp::HOLD_RECEIVED, B, tx(63))
+			.lane(A)
+			.part(0, 2)
+			.send());
+		assert_eq!(instance(FLOW_SETTLEMENT, s).status, InstanceStatus::Completed);
+		let arrivals = slot(FLOW_SETTLEMENT, s, sub(cccp::HOLD_CCCP, A), cccp::HOLD_RECEIVED);
+		assert_eq!(arrivals.attempts.iter().map(|a| a.tx.chain_id).collect::<Vec<_>>(), vec![C, B]);
+		// hub hops land on the hub
+		assert_eq!(
+			slot(FLOW_SETTLEMENT, s, sub(cccp::PAYOUT_MOVE_CCCP, C), cccp::PAYOUT_HUB_BRIDGED)
+				.attempts
+				.iter()
+				.map(|a| (a.tx.chain_id, a.completes))
+				.collect::<Vec<_>>(),
+			vec![(HUB, false), (HUB, true)]
 		);
 	});
 }

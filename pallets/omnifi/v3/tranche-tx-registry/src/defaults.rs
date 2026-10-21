@@ -5,8 +5,11 @@
 //! (`…Bridged` for a CCCP bridge tx, `…Received` for a hook tx with no domain
 //! event of its own). Slot ids are contiguous in typical chronological order;
 //! changing a flow means a new template version, renumbered from scratch.
-//! The defaults cover products whose transfer method is CCTP or none. Step-by-
-//! step recorder guidance lives in `docs/tranche-tx-registry-v3/default-templates.md`.
+//! The defaults cover products whose transfer method is CCTP or none. A
+//! product that moves assets over CCCP instead (`BRIDGE_CCCP`, e.g. one with a
+//! spoke CCTP doesn't reach) is assigned the opt-in [`mc_settle_cccp`] for its
+//! settlement flow. Step-by-step recorder guidance lives in
+//! `docs/tranche-tx-registry-v3/default-templates.md`.
 
 use crate::{
 	slug, Config, DefaultFlows, FlowId, Pallet, ProductModel, SlotDef, SlotId, Template,
@@ -28,6 +31,8 @@ pub const MC_REDEEM_V1: TemplateId = TemplateId { name: slug("mc-redeem"), versi
 pub const MC_DEPOSIT_V2: TemplateId = TemplateId { name: slug("mc-deposit"), version: 2 }; // 0x6d632d6465706f736974000000000000
 pub const MC_REDEEM_V2: TemplateId = TemplateId { name: slug("mc-redeem"), version: 2 }; // 0x6d632d72656465656d00000000000000
 pub const MC_SETTLEMENT_V1: TemplateId = TemplateId { name: slug("mc-settlement"), version: 1 }; // 0x6d632d736574746c656d656e74000000
+/// Opt-in settlement template for `BRIDGE_CCCP` products — never a default flow.
+pub const MC_SETTLE_CCCP_V1: TemplateId = TemplateId { name: slug("mc-settle-cccp"), version: 1 }; // 0x6d632d736574746c652d636363700000
 pub const MC_WHITELIST_V1: TemplateId = TemplateId { name: slug("mc-whitelist"), version: 1 }; // 0x6d632d77686974656c69737400000000
 pub const SC_DEPOSIT_V1: TemplateId = TemplateId { name: slug("sc-deposit"), version: 1 }; // 0x73632d6465706f736974000000000000
 pub const SC_REDEEM_V1: TemplateId = TemplateId { name: slug("sc-redeem"), version: 1 }; // 0x73632d72656465656d00000000000000
@@ -59,7 +64,9 @@ fn template(investor_scoped: bool, main: Vec<SlotDef>, tracks: Vec<TrackDef>) ->
 /// Multichain deposit. The vault spoke holds the cash until the first round
 /// close after `DepositQueued` places every held deposit of that chain in one
 /// ROUTE (`BatchRouted`, ref = settlement id) — that placement is recorded on
-/// the settlement instance (`hold` / `hold-cctp` lanes) and linked from slot 3.
+/// the settlement instance (`hold` lane, plus `hold-cctp` — or `hold-cccp` on
+/// a `BRIDGE_CCCP` product's `mc-settle-cccp` — for legs to other chains) and
+/// linked from slot 3.
 /// No lanes: nothing after queueing is per request until approval.
 pub fn mc_deposit() -> Template {
 	template(
@@ -173,6 +180,78 @@ pub fn mc_settlement() -> Template {
 	)
 }
 
+/// Multichain settlement for a product whose transfer method is CCCP
+/// (`BRIDGE_CCCP` — every spoke's product asset is the CCCP token). Same as
+/// [`mc_settlement`] up to the ROUTE hook txs; a leg to another chain then
+/// leaves the sending spoke as a CCCP BRIDGE message (`CccpBridgeSent`), the
+/// hub Orchestrator relays it in its hook tx (`BridgeRelayed`) and the
+/// destination spoke's hook tx lands it (`CccpBridgeReceived`). Each move is
+/// two CCCP messages (sender → hub → destination), so a `*-cccp` lane — lane =
+/// the SENDING chain, declared by a ROUTE hook tx that emits `CccpBridgeSent`
+/// — carries a part per `CccpBridgeSent` on every slot. A leg below the hub
+/// route's minimum stays put (`BridgeKeptLocal`) and is not a part.
+pub fn mc_settle_cccp() -> Template {
+	template(
+		false,
+		vec![
+			slot(0, "SettleStarted", true),
+			slot(1, "CollectAborted", false),
+			slot(9, "Settled", true),
+		],
+		vec![
+			track(
+				"collect-response",
+				vec![
+					slot(2, "CollectBridged", false),
+					slot(3, "DepositGateSet", false),
+					slot(4, "NavReported", true),
+					slot(5, "ResponseBridged", false),
+					slot(6, "ResponseChunkApplied", false),
+					slot(7, "NavReceived", true),
+				],
+			),
+			track(
+				"finalize",
+				vec![
+					slot(8, "FinalizeStarted", false),
+					slot(10, "FinalizeBridged", false),
+					slot(11, "SettleApplied", true),
+				],
+			),
+			track(
+				"payout-move",
+				vec![slot(12, "PayoutRouteBridged", false), slot(13, "PayoutRouteReceived", true)],
+			),
+			track(
+				"payout-move-cccp",
+				vec![
+					slot(14, "PayoutHubBridged", false),
+					slot(15, "PayoutBridgeRelayed", false),
+					slot(16, "PayoutDstBridged", false),
+					slot(17, "PayoutCccpBridgeReceived", true),
+				],
+			),
+			track(
+				"hold",
+				vec![slot(18, "HoldRouteBridged", false), slot(19, "HoldRouteReceived", true)],
+			),
+			track(
+				"hold-cccp",
+				vec![
+					slot(20, "HoldHubBridged", false),
+					slot(21, "HoldBridgeRelayed", false),
+					slot(22, "HoldDstBridged", false),
+					slot(23, "HoldCccpBridgeReceived", true),
+				],
+			),
+			track(
+				"pull",
+				vec![slot(24, "PullRouteBridged", false), slot(25, "WithdrawRequested", true)],
+			),
+		],
+	)
+}
+
 /// Multichain whitelist grant/revoke, scoped to the investor it targets
 /// (`investor = who`, `scope = vault`). The message goes to the one chain the
 /// vault lives on, so there are no lanes.
@@ -238,6 +317,7 @@ pub fn templates() -> Vec<(TemplateId, Template)> {
 		(MC_DEPOSIT_V2, mc_deposit_v2()),
 		(MC_REDEEM_V2, mc_redeem_v2()),
 		(MC_SETTLEMENT_V1, mc_settlement()),
+		(MC_SETTLE_CCCP_V1, mc_settle_cccp()),
 		(MC_WHITELIST_V1, mc_whitelist()),
 		(SC_DEPOSIT_V1, sc_deposit()),
 		(SC_REDEEM_V1, sc_redeem()),
