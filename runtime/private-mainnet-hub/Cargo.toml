@@ -98,6 +98,7 @@ precompile-tranche-system = { workspace = true }
 precompile-tranche-permissions = { workspace = true }
 precompile-tranche-investments-v2 = { workspace = true }
 precompile-tranche-tx-registry-v3 = { workspace = true }
+precompile-svm-pda = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -174,6 +175,7 @@ std = [
 	"precompile-tranche-permissions/std",
 	"precompile-tranche-investments-v2/std",
 	"precompile-tranche-tx-registry-v3/std",
+	"precompile-svm-pda/std",
 	"substrate-wasm-builder",
 ]
 evm-tracing = ["evm-tracer"]

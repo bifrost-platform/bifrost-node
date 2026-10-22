@@ -52,6 +52,7 @@ members = [
 	"precompiles/omnifi/v1/tranche-tx-registry",
 	"precompiles/omnifi/v2/tranche-tx-registry",
 	"precompiles/omnifi/v3/tranche-tx-registry",
+	"precompiles/svm-pda",
 	"primitives/core",
 	"primitives/bfc-staking",
 	"primitives/btc-relay",
@@ -104,6 +105,7 @@ miniscript = { version = "12.3.1", default-features = false, features = [
 ] }
 ethabi-decode = { version = "2.0.0", default-features = false }
 hex-literal = "0.4.1"
+curve25519-dalek = { version = "4.1.3", default-features = false }
 serde_json = "1.0"
 futures = "0.3.31"
 tokio = "1.45.0"
@@ -197,6 +199,7 @@ precompile-tranche-investments-v2 = { default-features = false, path = "precompi
 precompile-tranche-tx-registry-v2 = { default-features = false, path = "precompiles/omnifi/v2/tranche-tx-registry" }
 # v3 — template-driven registry, universal (bytes32 address / bytes tx hash) ABI only.
 precompile-tranche-tx-registry-v3 = { default-features = false, path = "precompiles/omnifi/v3/tranche-tx-registry" }
+precompile-svm-pda = { default-features = false, path = "precompiles/svm-pda" }
 
 # Substrate Client
 sc-cli = { git = "https://github.com/bifrost-platform/polkadot-sdk", branch = "bifrost-polkadot-stable2512" }

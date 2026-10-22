@@ -128,6 +128,7 @@ precompile-tranche-tx-registry = { workspace = true }
 precompile-tranche-tx-registry-v2 = { workspace = true }
 precompile-tranche-custom-flows = { workspace = true }
 precompile-tranche-tx-registry-v3 = { workspace = true }
+precompile-svm-pda = { workspace = true }
 
 [build-dependencies]
 substrate-wasm-builder = { workspace = true, optional = true }
@@ -228,6 +229,7 @@ std = [
 	"precompile-tranche-tx-registry-v2/std",
 	"precompile-tranche-custom-flows/std",
 	"precompile-tranche-tx-registry-v3/std",
+	"precompile-svm-pda/std",
 	"substrate-wasm-builder",
 	"pallet-migrations/std",
 ]
