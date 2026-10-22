@@ -1,0 +1,31 @@
+[
+    {
+        "type": "function",
+        "name": "derive_pda",
+        "inputs": [
+            {
+                "name": "programId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "seeds",
+                "type": "bytes[]",
+                "internalType": "bytes[]"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "addr",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "bump",
+                "type": "uint8",
+                "internalType": "uint8"
+            }
+        ],
+        "stateMutability": "view"
+    }
+]

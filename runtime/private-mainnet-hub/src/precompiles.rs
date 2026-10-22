@@ -5,6 +5,7 @@ use pallet_evm_precompile_simple::{ECRecover, Identity, Ripemd160, Sha256};
 
 use precompile_permissioned_authority::PermissionedAuthorityPrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
+use precompile_svm_pda::SvmPdaPrecompile;
 use precompile_tranche_investments_v2::TrancheInvestmentsV2Precompile;
 use precompile_tranche_permissions::TranchePermissionsUniversalPrecompile;
 use precompile_tranche_system::TrancheSystemUniversalPrecompile;
@@ -45,6 +46,9 @@ pub type BifrostPrecompilesAt<R> = (
 	// precompile's address on the public chains; here it serves the same `round_info()` /
 	// `latest_round()` ABI from `PermissionedAuthority`.
 	PrecompileAt<AddressU64<1024>, PermissionedAuthorityPrecompile<R>, BifrostPrecompilesChecks>,
+	// Solana PDA derivation (Agave `find_program_address`) at 0x0900 — a stateless view the hub
+	// uses to predict a Solana spoke's accounts at product creation.
+	PrecompileAt<AddressU64<2304>, SvmPdaPrecompile, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
 	// OmniFi investments v2 (0x0300 block, investments offset +1):
 	PrecompileAt<AddressU64<769>, TrancheInvestmentsV2Precompile<R>, BifrostPrecompilesChecks>,

@@ -15,6 +15,7 @@ use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
+use precompile_svm_pda::SvmPdaPrecompile;
 use precompile_tranche_custom_flows::{
 	TrancheCustomFlowsPrecompile, TrancheCustomFlowsUniversalPrecompile,
 };
@@ -75,6 +76,9 @@ pub type BifrostPrecompilesAt<R> = (
 		BifrostPrecompilesChecks,
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
+	// Solana PDA derivation (Agave `find_program_address`) at 0x0900 — a stateless view the hub
+	// uses to predict a Solana spoke's accounts at product creation.
+	PrecompileAt<AddressU64<2304>, SvmPdaPrecompile, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
 	// Bifrost Transaction Payment Precompile at 0x0810 (2064)
 	PrecompileAt<

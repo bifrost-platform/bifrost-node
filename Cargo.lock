@@ -1119,6 +1119,7 @@ dependencies = [
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
+ "precompile-svm-pda",
  "precompile-tranche-custom-flows",
  "precompile-tranche-investments",
  "precompile-tranche-investments-v2",
@@ -1443,6 +1444,7 @@ dependencies = [
  "parity-scale-codec",
  "precompile-permissioned-authority",
  "precompile-relay-manager",
+ "precompile-svm-pda",
  "precompile-tranche-investments-v2",
  "precompile-tranche-permissions",
  "precompile-tranche-system",
@@ -1611,6 +1613,7 @@ dependencies = [
  "precompile-collective",
  "precompile-governance",
  "precompile-relay-manager",
+ "precompile-svm-pda",
  "precompile-tranche-custom-flows",
  "precompile-tranche-investments",
  "precompile-tranche-investments-v2",
@@ -2107,6 +2110,17 @@ checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
 dependencies = [
  "sha2 0.10.9",
  "tinyvec",
+]
+
+[[package]]
+name = "bstr"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
+dependencies = [
+ "memchr",
+ "regex-automata",
+ "serde_core",
 ]
 
 [[package]]
@@ -3412,6 +3426,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -9964,6 +9979,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "precompile-svm-pda"
+version = "1.0.0"
+dependencies = [
+ "curve25519-dalek",
+ "fp-evm",
+ "precompile-utils",
+ "sp-core",
+ "sp-io",
+ "sp-std",
+]
+
+[[package]]
 name = "precompile-tranche-custom-flows"
 version = "1.0.0"
 dependencies = [
@@ -10095,18 +10122,23 @@ name = "precompile-utils"
 version = "0.1.0"
 source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
 dependencies = [
+ "derive_more 1.0.0",
  "environmental",
  "evm",
  "fp-evm",
  "frame-support",
  "frame-system",
  "hex",
+ "hex-literal",
  "impl-trait-for-tuples",
  "log",
  "num_enum",
  "pallet-evm",
  "parity-scale-codec",
  "precompile-utils-macro",
+ "scale-info",
+ "serde",
+ "similar-asserts",
  "sp-core",
  "sp-io",
  "sp-runtime",
@@ -12835,6 +12867,26 @@ dependencies = [
  "num-traits",
  "paste",
  "wide",
+]
+
+[[package]]
+name = "similar"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
+dependencies = [
+ "bstr",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "similar-asserts"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5b441962c817e33508847a22bd82f03a30cff43642dc2fae8b050566121eb9a"
+dependencies = [
+ "console",
+ "similar",
 ]
 
 [[package]]
