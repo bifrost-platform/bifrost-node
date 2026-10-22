@@ -47,7 +47,6 @@ pallet-session = { workspace = true, features = ["historical"] }
 pallet-authorship = { workspace = true }
 pallet-utility = { workspace = true }
 pallet-collective = { workspace = true }
-pallet-democracy = { workspace = true }
 pallet-membership = { workspace = true }
 pallet-im-online = { workspace = true }
 pallet-offences = { workspace = true }
@@ -113,7 +112,6 @@ pallet-evm-precompile-blake2 = { workspace = true }
 precompile-bfc-staking = { workspace = true }
 precompile-bfc-offences = { workspace = true }
 precompile-relay-manager = { workspace = true }
-precompile-governance = { workspace = true }
 precompile-collective = { workspace = true }
 precompile-balance = { workspace = true }
 precompile-btc-registration-pool = { workspace = true }
@@ -158,7 +156,6 @@ std = [
 	"pallet-authorship/std",
 	"pallet-utility/std",
 	"pallet-collective/std",
-	"pallet-democracy/std",
 	"pallet-membership/std",
 	"pallet-evm/std",
 	"pallet-ethereum/std",
@@ -214,7 +211,6 @@ std = [
 	"precompile-bfc-staking/std",
 	"precompile-bfc-offences/std",
 	"precompile-relay-manager/std",
-	"precompile-governance/std",
 	"precompile-collective/std",
 	"precompile-balance/std",
 	"precompile-btc-registration-pool/std",
@@ -251,7 +247,6 @@ runtime-benchmarks = [
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-utility/runtime-benchmarks",
 	"pallet-collective/runtime-benchmarks",
-	"pallet-democracy/runtime-benchmarks",
 	"pallet-identity/runtime-benchmarks",
 	"pallet-im-online/runtime-benchmarks",
 	"pallet-membership/runtime-benchmarks",

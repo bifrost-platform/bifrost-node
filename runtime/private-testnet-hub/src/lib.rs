@@ -93,7 +93,7 @@ pub use frame_support::{
 	},
 	ConsensusEngineId, PalletId, StorageValue,
 };
-use frame_system::{EnsureRoot, EnsureRootWithSuccess, EnsureSigned};
+use frame_system::{EnsureRoot, EnsureRootWithSuccess};
 
 mod precompiles;
 pub use precompiles::BifrostPrecompiles;
@@ -130,10 +130,25 @@ impl frame_support::traits::Get<Vec<H160>> for PrecompileAddresses {
 	}
 }
 
+parameter_types! {
+	/// The removed `pallet_democracy` (index 51), whose storage `RemoveDemocracy` clears.
+	pub const DemocracyPalletName: &'static str = "Democracy";
+}
+
+/// Clears the removed Democracy pallet's storage (on the live chain: the storage version and the
+/// three zero counters — no proposals, referenda, votes, locks or deposits). A no-op once run, so
+/// it can be dropped from the tuple after the upgrade.
+pub type RemoveDemocracy = frame_support::migrations::RemovePallet<
+	DemocracyPalletName,
+	<Runtime as frame_system::Config>::DbWeight,
+>;
+
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing
 /// `OnRuntimeUpgrade`.
-type SingleBlockMigrations =
-	(bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,);
+type SingleBlockMigrations = (
+	bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,
+	RemoveDemocracy,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -172,7 +187,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 1_000_007,
+	spec_version: 1_000_008,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -613,74 +628,6 @@ impl pallet_membership::Config<pallet_membership::Instance3> for Runtime {
 	type ResetOrigin = MoreThanTwoThirdsRelayExecutives;
 	type SwapOrigin = MoreThanTwoThirdsRelayExecutives;
 	type WeightInfo = ();
-}
-
-parameter_types! {
-	pub const LaunchPeriod: BlockNumber = 1 * MINUTES;
-	pub const VotingPeriod: BlockNumber = 1 * MINUTES;
-	pub const VoteLockingPeriod: BlockNumber = 1 * MINUTES;
-	pub const FastTrackVotingPeriod: BlockNumber = 1 * MINUTES;
-	pub const EnactmentPeriod: BlockNumber = 1 * MINUTES;
-	pub const CooloffPeriod: BlockNumber = 3 * MINUTES;
-	pub const MinimumDeposit: Balance = 4 * SUPPLY_FACTOR * BFC;
-	pub const MaxVotes: u32 = 100;
-	pub const MaxProposals: u32 = 100;
-	pub const MaxDeposits: u32 = 1_000;
-	pub const MaxBlacklisted: u32 = 1_000;
-	pub const InstantAllowed: bool = true;
-}
-
-/// The core module that supports governance functionality to this network
-impl pallet_democracy::Config for Runtime {
-	type RuntimeEvent = RuntimeEvent;
-	type Currency = Balances;
-	type EnactmentPeriod = EnactmentPeriod;
-	type LaunchPeriod = LaunchPeriod;
-	type VotingPeriod = VotingPeriod;
-	type VoteLockingPeriod = VoteLockingPeriod;
-	type FastTrackVotingPeriod = FastTrackVotingPeriod;
-	type MinimumDeposit = MinimumDeposit;
-	/// To decide what their next motion is.
-	type ExternalOrigin =
-		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 1, 2>;
-	/// To have the next scheduled referendum be a straight majority-carries vote.
-	type ExternalMajorityOrigin =
-		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>;
-	/// To have the next scheduled referendum be a straight default-carries (NTB) vote.
-	type ExternalDefaultOrigin =
-		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>;
-	/// To allow a shorter voting/enactment period for external proposals.
-	type FastTrackOrigin =
-		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 1, 2>;
-	/// To instant fast track.
-	type InstantOrigin =
-		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 3, 5>;
-	// To cancel a proposal which has been passed.
-	type CancellationOrigin = EitherOfDiverse<
-		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionAtLeast<AccountId, CouncilInstance, 3, 5>,
-	>;
-	// To cancel a proposal before it has been passed.
-	type CancelProposalOrigin = EitherOfDiverse<
-		EnsureRoot<AccountId>,
-		pallet_collective::EnsureProportionAtLeast<AccountId, TechCommitteeInstance, 3, 5>,
-	>;
-	type BlacklistOrigin = EnsureRoot<AccountId>;
-	type SubmitOrigin = EnsureSigned<AccountId>;
-	// Any single technical committee member may veto a coming council proposal, however they can
-	// only do it once and it lasts only for the cooloff period.
-	type VetoOrigin = pallet_collective::EnsureMember<AccountId, TechCommitteeInstance>;
-	type CooloffPeriod = CooloffPeriod;
-	type Slash = Treasury;
-	type InstantAllowed = InstantAllowed;
-	type Scheduler = Scheduler;
-	type MaxVotes = MaxVotes;
-	type PalletsOrigin = OriginCaller;
-	type WeightInfo = pallet_democracy::weights::SubstrateWeight<Runtime>;
-	type MaxProposals = MaxProposals;
-	type Preimages = Preimage;
-	type MaxDeposits = MaxDeposits;
-	type MaxBlacklisted = MaxBlacklisted;
 }
 
 parameter_types! {
@@ -1514,8 +1461,7 @@ mod runtime {
 	#[runtime::pallet_index(50)]
 	pub type Scheduler = pallet_scheduler;
 
-	#[runtime::pallet_index(51)]
-	pub type Democracy = pallet_democracy;
+	// 51: Democracy — removed (storage cleared by `RemoveDemocracy`, see `SingleBlockMigrations`).
 
 	#[runtime::pallet_index(52)]
 	pub type Council = pallet_collective<Instance1>;

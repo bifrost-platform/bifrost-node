@@ -13,7 +13,6 @@ use precompile_blaze::BlazePrecompile;
 use precompile_btc_registration_pool::BtcRegistrationPoolPrecompile;
 use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
-use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
 use precompile_svm_pda::SvmPdaPrecompile;
 use precompile_tranche_custom_flows::{
@@ -59,7 +58,7 @@ pub type BifrostPrecompilesAt<R> = (
 	PrecompileAt<AddressU64<258>, BlazePrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<1024>, BfcStakingPrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<1280>, BfcOffencesPrecompile<R>, BifrostPrecompilesChecks>,
-	PrecompileAt<AddressU64<2048>, GovernancePrecompile<R>, BifrostPrecompilesChecks>,
+	// 0x0800 (2048): the Democracy governance precompile — removed with `pallet_democracy`.
 	PrecompileAt<
 		AddressU64<2049>,
 		CollectivePrecompile<R, CouncilInstance>,
