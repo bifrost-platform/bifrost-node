@@ -49,6 +49,11 @@ pub struct Cli {
 	#[clap(long, default_value = "10")]
 	pub logs_request_timeout: u64,
 
+	/// Maximum allowed gas limit for eth_call/eth_estimateGas will be
+	/// `block.gas_limit * execute_gas_limit_multiplier`. (default 10)
+	#[clap(long, default_value = "10")]
+	pub execute_gas_limit_multiplier: u64,
+
 	/// Maximum fee history cache size.
 	#[clap(long, default_value = "2048")]
 	pub fee_history_limit: u64,
