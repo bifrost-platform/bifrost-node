@@ -1,0 +1,480 @@
+[
+    {
+        "type": "function",
+        "name": "get_flow_descriptor",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "flow_id",
+                "type": "bytes16",
+                "internalType": "bytes16"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "version",
+                "type": "uint16",
+                "internalType": "uint16"
+            },
+            {
+                "name": "main_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "investor_scoped",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "main_slots",
+                "type": "tuple[]",
+                "internalType": "struct TrancheCustomFlowsUniversal.SlotDefView[]",
+                "components": [
+                    {
+                        "name": "id",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    },
+                    {
+                        "name": "optional",
+                        "type": "bool",
+                        "internalType": "bool"
+                    }
+                ]
+            },
+            {
+                "name": "sub_tracks",
+                "type": "tuple[]",
+                "internalType": "struct TrancheCustomFlowsUniversal.DescriptorTrackView[]",
+                "components": [
+                    {
+                        "name": "slots",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheCustomFlowsUniversal.SlotDefView[]",
+                        "components": [
+                            {
+                                "name": "id",
+                                "type": "uint8",
+                                "internalType": "uint8"
+                            },
+                            {
+                                "name": "optional",
+                                "type": "bool",
+                                "internalType": "bool"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "chains",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheCustomFlowsUniversal.TrackChainView[]",
+                        "components": [
+                            {
+                                "name": "chain_id",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "optional",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "skip_slots",
+                                "type": "uint8[]",
+                                "internalType": "uint8[]"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_flow_instance",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "flow_id",
+                "type": "bytes16",
+                "internalType": "bytes16"
+            },
+            {
+                "name": "instance_key",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "closed",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "pending_lanes",
+                "type": "uint16",
+                "internalType": "uint16"
+            },
+            {
+                "name": "opened_at",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "main_lane",
+                "type": "tuple[]",
+                "internalType": "struct TrancheCustomFlowsUniversal.SlotView[]",
+                "components": [
+                    {
+                        "name": "slot_id",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    },
+                    {
+                        "name": "satisfied",
+                        "type": "bool",
+                        "internalType": "bool"
+                    },
+                    {
+                        "name": "slot_metadata",
+                        "type": "bytes",
+                        "internalType": "bytes"
+                    },
+                    {
+                        "name": "attempts",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheCustomFlowsUniversal.AttemptView[]",
+                        "components": [
+                            {
+                                "name": "success",
+                                "type": "bool",
+                                "internalType": "bool"
+                            },
+                            {
+                                "name": "metadata",
+                                "type": "bytes",
+                                "internalType": "bytes"
+                            },
+                            {
+                                "name": "tx",
+                                "type": "tuple",
+                                "internalType": "struct TrancheCustomFlowsUniversal.TxRecord",
+                                "components": [
+                                    {
+                                        "name": "chain_id",
+                                        "type": "uint64",
+                                        "internalType": "uint64"
+                                    },
+                                    {
+                                        "name": "tx_hash",
+                                        "type": "bytes",
+                                        "internalType": "bytes"
+                                    },
+                                    {
+                                        "name": "recorded_at",
+                                        "type": "uint256",
+                                        "internalType": "uint256"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "sub_tracks",
+                "type": "tuple[]",
+                "internalType": "struct TrancheCustomFlowsUniversal.SubLaneGroup[]",
+                "components": [
+                    {
+                        "name": "track_index",
+                        "type": "uint8",
+                        "internalType": "uint8"
+                    },
+                    {
+                        "name": "lanes",
+                        "type": "tuple[]",
+                        "internalType": "struct TrancheCustomFlowsUniversal.SubLaneView[]",
+                        "components": [
+                            {
+                                "name": "chain",
+                                "type": "uint64",
+                                "internalType": "uint64"
+                            },
+                            {
+                                "name": "slots",
+                                "type": "tuple[]",
+                                "internalType": "struct TrancheCustomFlowsUniversal.SlotView[]",
+                                "components": [
+                                    {
+                                        "name": "slot_id",
+                                        "type": "uint8",
+                                        "internalType": "uint8"
+                                    },
+                                    {
+                                        "name": "satisfied",
+                                        "type": "bool",
+                                        "internalType": "bool"
+                                    },
+                                    {
+                                        "name": "slot_metadata",
+                                        "type": "bytes",
+                                        "internalType": "bytes"
+                                    },
+                                    {
+                                        "name": "attempts",
+                                        "type": "tuple[]",
+                                        "internalType": "struct TrancheCustomFlowsUniversal.AttemptView[]",
+                                        "components": [
+                                            {
+                                                "name": "success",
+                                                "type": "bool",
+                                                "internalType": "bool"
+                                            },
+                                            {
+                                                "name": "metadata",
+                                                "type": "bytes",
+                                                "internalType": "bytes"
+                                            },
+                                            {
+                                                "name": "tx",
+                                                "type": "tuple",
+                                                "internalType": "struct TrancheCustomFlowsUniversal.TxRecord",
+                                                "components": [
+                                                    {
+                                                        "name": "chain_id",
+                                                        "type": "uint64",
+                                                        "internalType": "uint64"
+                                                    },
+                                                    {
+                                                        "name": "tx_hash",
+                                                        "type": "bytes",
+                                                        "internalType": "bytes"
+                                                    },
+                                                    {
+                                                        "name": "recorded_at",
+                                                        "type": "uint256",
+                                                        "internalType": "uint256"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_investor_active_flows",
+        "inputs": [
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "flow_id",
+                "type": "bytes16",
+                "internalType": "bytes16"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "instance_keys",
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "get_investor_flow_history",
+        "inputs": [
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "flow_id",
+                "type": "bytes16",
+                "internalType": "bytes16"
+            },
+            {
+                "name": "offset",
+                "type": "uint256",
+                "internalType": "uint256"
+            },
+            {
+                "name": "limit",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "instance_keys",
+                "type": "bytes32[]",
+                "internalType": "bytes32[]"
+            },
+            {
+                "name": "total",
+                "type": "uint256",
+                "internalType": "uint256"
+            }
+        ],
+        "stateMutability": "view"
+    },
+    {
+        "type": "function",
+        "name": "record_flow_tx",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "flow_id",
+                "type": "bytes16",
+                "internalType": "bytes16"
+            },
+            {
+                "name": "instance_key",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            },
+            {
+                "name": "track_chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "slot_id",
+                "type": "uint8",
+                "internalType": "uint8"
+            },
+            {
+                "name": "chain_id",
+                "type": "uint64",
+                "internalType": "uint64"
+            },
+            {
+                "name": "tx_hash",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "success",
+                "type": "bool",
+                "internalType": "bool"
+            },
+            {
+                "name": "attempt_metadata",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "slot_metadata",
+                "type": "bytes",
+                "internalType": "bytes"
+            },
+            {
+                "name": "investor",
+                "type": "bytes32",
+                "internalType": "bytes32"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+    },
+    {
+        "type": "event",
+        "name": "FlowTxRecorded",
+        "inputs": [
+            {
+                "name": "product_id",
+                "type": "uint64",
+                "indexed": true,
+                "internalType": "uint64"
+            },
+            {
+                "name": "flow_id",
+                "type": "bytes16",
+                "indexed": true,
+                "internalType": "bytes16"
+            },
+            {
+                "name": "instance_key",
+                "type": "bytes32",
+                "indexed": true,
+                "internalType": "bytes32"
+            },
+            {
+                "name": "track_chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "slot_id",
+                "type": "uint8",
+                "indexed": false,
+                "internalType": "uint8"
+            },
+            {
+                "name": "chain_id",
+                "type": "uint64",
+                "indexed": false,
+                "internalType": "uint64"
+            },
+            {
+                "name": "tx_hash",
+                "type": "bytes",
+                "indexed": false,
+                "internalType": "bytes"
+            },
+            {
+                "name": "success",
+                "type": "bool",
+                "indexed": false,
+                "internalType": "bool"
+            }
+        ],
+        "anonymous": false
+    }
+]

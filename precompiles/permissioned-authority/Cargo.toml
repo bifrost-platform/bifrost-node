@@ -1,0 +1,35 @@
+[package]
+name = "precompile-permissioned-authority"
+version = "1.0.0"
+description = "A precompile that exposes pallet permissioned-authority's round info with the bfc-staking precompile ABI"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# Bifrost
+pallet-permissioned-authority = { workspace = true }
+precompile-utils = { workspace = true }
+
+# Substrate
+frame-system = { workspace = true }
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+
+# Frontier
+fp-evm = { workspace = true }
+pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
+
+[features]
+default = ["std"]
+std = [
+	"pallet-permissioned-authority/std",
+	"precompile-utils/std",
+	"frame-system/std",
+	"sp-core/std",
+	"sp-std/std",
+	"fp-evm/std",
+	"pallet-evm/std",
+]

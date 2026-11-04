@@ -1,0 +1,37 @@
+[package]
+name = "precompile-svm-pda"
+version = "1.0.0"
+description = "A stateless precompile deriving Solana program derived addresses (Agave find_program_address)"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+precompile-utils = { workspace = true }
+
+# Substrate
+sp-core = { workspace = true }
+sp-io = { workspace = true }
+sp-std = { workspace = true }
+
+# Frontier / EVM
+fp-evm = { workspace = true }
+
+# Crypto — the same curve25519-dalek major as Agave's `solana-pubkey`, so the on-curve test is
+# bit-for-bit the one Solana runs
+curve25519-dalek = { workspace = true }
+
+[dev-dependencies]
+precompile-utils = { workspace = true, features = ["testing"] }
+
+[features]
+default = ["std"]
+std = [
+	"fp-evm/std",
+	"precompile-utils/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-std/std",
+]

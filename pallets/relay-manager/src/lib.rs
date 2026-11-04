@@ -202,3 +202,40 @@ impl<AccountId: PartialEq + Clone> DelayedRelayerSet<AccountId> {
 		DelayedRelayerSet { old, new }
 	}
 }
+
+/// `RelayExecutiveManager` backed by a `pallet_membership` instance (the relay executives of the
+/// public Bifrost chains). Replaces `old` with `new` in the member list — and as prime — only if
+/// `old` is a member and `new` isn't, notifying `MembershipChanged`.
+pub struct MembershipRelayExecutives<T, I>(PhantomData<(T, I)>);
+
+impl<T, I> bp_staking::traits::RelayExecutiveManager<T::AccountId>
+	for MembershipRelayExecutives<T, I>
+where
+	T: pallet_membership::Config<I>,
+	I: 'static,
+{
+	fn replace_member(old: &T::AccountId, new: &T::AccountId) {
+		use frame_support::traits::ChangeMembers;
+		use pallet_membership::{Members, Prime};
+
+		let mut members = Members::<T, I>::get();
+		if let Some(location) = members.binary_search(old).ok() {
+			if members.binary_search(new).is_err() {
+				members[location] = new.clone();
+				members.sort();
+
+				Members::<T, I>::put(members.clone());
+				T::MembershipChanged::change_members_sorted(
+					&[new.clone()],
+					&[old.clone()],
+					&members[..],
+				);
+
+				if Prime::<T, I>::get().as_ref() == Some(old) {
+					Prime::<T, I>::put(new);
+					T::MembershipChanged::set_prime(Some(new.clone()));
+				}
+			}
+		}
+	}
+}
