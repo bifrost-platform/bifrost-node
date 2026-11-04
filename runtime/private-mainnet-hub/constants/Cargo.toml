@@ -1,0 +1,20 @@
+[package]
+name = "bifrost-private-mainnet-hub-constants"
+version = "1.0.0"
+description = "The runtime constants for Bifrost private mainnet hub chain"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# Bifrost
+bifrost-common-constants = { workspace = true }
+
+# Substrate
+frame-support = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["bifrost-common-constants/std", "frame-support/std"]

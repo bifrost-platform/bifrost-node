@@ -1,0 +1,51 @@
+[package]
+name = "pallet-tranche-custom-flows"
+version = "1.0.0"
+description = "An append-only registry for product-specific extra tx flows in the OmniFi tranche-system, attested by the same trusted recorder as pallet-tranche-tx-registry. Step topology is defined by an on-chain descriptor, not pallet code."
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# General
+log = { workspace = true }
+serde = { workspace = true, optional = true }
+
+# Substrate
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-runtime = { workspace = true }
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+sp-io = { workspace = true }
+
+# OmniFi tranche-system
+bp-tranche = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+	"serde",
+	"scale-info/std",
+	"parity-scale-codec/std",
+	"frame-support/std",
+	"frame-benchmarking?/std",
+	"frame-system/std",
+	"sp-runtime/std",
+	"sp-std/std",
+	"sp-core/std",
+	"sp-io/std",
+	"bp-tranche/std",
+]
+try-runtime = ["frame-support/try-runtime"]
+runtime-benchmarks = [
+	"frame-benchmarking",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+]

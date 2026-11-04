@@ -39,9 +39,6 @@ pub mod weights;
 
 pub use adapter::BifrostFeeAdapter;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
-
 pub use pallet::*;
 pub use types::*;
 pub use weights::WeightInfo;

@@ -159,7 +159,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	// The version of the authorship interface.
 	authoring_version: 1,
 	// The version of the runtime spec.
-	spec_version: 507,
+	spec_version: 508,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
@@ -248,7 +248,8 @@ impl Contains<RuntimeCall> for SafeModeWhitelistedCalls {
 			| RuntimeCall::SafeMode(_)
 			| RuntimeCall::TxPause(_)
 			| RuntimeCall::ImOnline(pallet_im_online::Call::heartbeat { .. })
-			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. }) => true,
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat { .. })
+			| RuntimeCall::RelayManager(pallet_relay_manager::Call::heartbeat_v2 { .. }) => true,
 			_ => false,
 		}
 	}
@@ -843,6 +844,8 @@ impl pallet_relay_manager::Config for Runtime {
 	type Blaze = Blaze;
 	type SocketQueue = BtcSocketQueue;
 	type RegistrationPool = BtcRegistrationPool;
+	type RelayExecutives =
+		pallet_relay_manager::MembershipRelayExecutives<Runtime, pallet_membership::Instance3>;
 	type RelayQueue = ();
 	type ValidatorSet = Historical;
 	type ReportUnresponsiveness = Offences;

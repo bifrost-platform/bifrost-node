@@ -1,0 +1,86 @@
+[package]
+name = "bifrost-private-testnet-hub-node"
+version = "1.0.0"
+description = "The node client implementation for Bifrost private testnet hub chain"
+authors = { workspace = true }
+homepage = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+# third-party dependencies
+serde_json = { workspace = true }
+jsonrpsee = { workspace = true, features = ["server"] }
+futures = { workspace = true }
+hex-literal = { workspace = true }
+
+# substrate client dependencies
+sc-client-api = { workspace = true }
+sc-executor = { workspace = true }
+sc-service = { workspace = true }
+sc-telemetry = { workspace = true }
+sc-transaction-pool = { workspace = true }
+sc-transaction-pool-api = { workspace = true }
+sc-consensus-manual-seal = { workspace = true }
+sc-consensus-aura = { workspace = true }
+sc-consensus-grandpa = { workspace = true }
+sc-consensus-grandpa-rpc = { workspace = true }
+sc-consensus = { workspace = true }
+sc-network = { workspace = true }
+sc-network-sync = { workspace = true }
+sc-rpc = { workspace = true }
+sc-chain-spec = { workspace = true }
+sc-basic-authorship = { workspace = true }
+sc-offchain = { workspace = true }
+
+# substrate primitives dependencies
+sp-core = { workspace = true, features = ["std"] }
+sp-runtime = { workspace = true, features = ["std"] }
+sp-api = { workspace = true, features = ["std"] }
+sp-consensus-aura = { workspace = true, features = ["std"] }
+sp-consensus-grandpa = { workspace = true, features = ["std"] }
+sp-block-builder = { workspace = true, features = ["std"] }
+sp-timestamp = { workspace = true, features = ["std"] }
+sp-blockchain = { workspace = true }
+sp-consensus = { workspace = true }
+sp-inherents = { workspace = true }
+
+# FRAME dependencies
+pallet-bfc-staking = { workspace = true }
+pallet-im-online = { workspace = true, features = ["std"] }
+pallet-transaction-payment-rpc = { workspace = true }
+substrate-frame-rpc-system = { workspace = true }
+
+# Frontier dependencies
+fc-db = { workspace = true, features = ["rocksdb"] }
+fc-rpc-core = { workspace = true }
+fc-mapping-sync = { workspace = true, features = ["sql"] }
+fc-rpc-debug = { workspace = true }
+fc-rpc-trace = { workspace = true }
+fc-rpc = { workspace = true, features = ["rpc-binary-search-estimate", "aura"] }
+
+fp-evm = { workspace = true }
+fp-ext = { workspace = true, features = ["std"] }
+fp-rpc = { workspace = true, features = ["std"] }
+fp-rpc-txpool = { workspace = true, features = ["std"] }
+pallet-ethereum = { workspace = true, features = [
+    "std",
+    "forbid-evm-reentrancy",
+] }
+
+# benchmarking dependencies
+frame-benchmarking = { workspace = true, optional = true, features = ["std"] }
+
+# Local Dependencies
+bp-core = { workspace = true }
+bifrost-private-testnet-hub-runtime = { workspace = true, features = ["std", "evm-tracing"] }
+bifrost-private-testnet-hub-constants = { workspace = true }
+bifrost-common-node = { workspace = true }
+
+[features]
+default = []
+runtime-benchmarks = [
+    "bifrost-private-testnet-hub-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+]
