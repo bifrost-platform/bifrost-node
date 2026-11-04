@@ -90,6 +90,9 @@ pub struct FullDevDeps<C, P, BE, SC, CIDP> {
 	pub max_block_range: u32,
 	/// Timeout for eth logs query in seconds. (default 10)
 	pub logs_request_timeout: u64,
+	/// Maximum allowed gas limit for eth_call/eth_estimateGas will be
+	/// `block.gas_limit * execute_gas_limit_multiplier`. (default 10)
+	pub execute_gas_limit_multiplier: u64,
 	/// Mandated parent hashes for a given block hash.
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
@@ -140,6 +143,9 @@ pub struct FullDeps<C, P, BE, SC, CIDP> {
 	pub max_block_range: u32,
 	/// Timeout for eth logs query in seconds. (default 10)
 	pub logs_request_timeout: u64,
+	/// Maximum allowed gas limit for eth_call/eth_estimateGas will be
+	/// `block.gas_limit * execute_gas_limit_multiplier`. (default 10)
+	pub execute_gas_limit_multiplier: u64,
 	/// Mandated parent hashes for a given block hash.
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
