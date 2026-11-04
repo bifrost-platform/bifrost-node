@@ -838,6 +838,7 @@ pub fn build_rpc_extensions_builder(
 			max_past_logs: rpc_config.max_past_logs,
 			max_block_range: rpc_config.max_block_range,
 			logs_request_timeout: rpc_config.logs_request_timeout,
+			execute_gas_limit_multiplier: rpc_config.execute_gas_limit_multiplier,
 			forced_parent_hashes: None,
 			sync_service: sync_service.clone(),
 			pending_create_inherent_data_providers,

@@ -14,7 +14,6 @@ use precompile_btc_socket_queue::BtcSocketQueuePrecompile;
 use precompile_collective::CollectivePrecompile;
 use precompile_governance::GovernancePrecompile;
 use precompile_relay_manager::RelayManagerPrecompile;
-use precompile_bifrost_evm_tx_payment::BifrostTransactionPaymentPrecompile;
 
 use precompile_utils::precompile_set::*;
 
@@ -58,8 +57,6 @@ pub type BifrostPrecompilesAt<R> = (
 	>,
 	PrecompileAt<AddressU64<4096>, BalancePrecompile<R>, BifrostPrecompilesChecks>,
 	PrecompileAt<AddressU64<8192>, RelayManagerPrecompile<R>, BifrostPrecompilesChecks>,
-	// Bifrost Transaction Payment Precompile at 0x0810 (2064)
-	PrecompileAt<AddressU64<2064>, BifrostTransactionPaymentPrecompile<R>, BifrostPrecompilesChecks>,
 );
 
 type BifrostPrecompilesInner<R> = PrecompileSetBuilder<
