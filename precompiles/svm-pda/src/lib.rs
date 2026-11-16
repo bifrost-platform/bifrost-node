@@ -24,8 +24,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use precompile_utils::{prelude::*, solidity::codec::UnboundedBytes};
-use sp_core::H256;
+use precompile_utils::prelude::*;
+use sp_core::{ConstU32, H256};
 use sp_std::vec::Vec;
 
 /// Most seeds a caller may pass (Solana's `MAX_SEEDS` = 16 counts the bump seed).
@@ -143,10 +143,15 @@ impl SvmPdaPrecompile {
 	fn derive_pda(
 		handle: &mut impl PrecompileHandle,
 		program_id: H256,
-		seeds: Vec<UnboundedBytes>,
+		// Bounded in the ABI decoder, which runs before any gas is charged: an unbounded
+		// `bytes[]` lets many array items point at one large blob and be copied each time.
+		seeds: BoundedVec<
+			BoundedBytes<ConstU32<{ MAX_SEED_LEN as u32 }>>,
+			ConstU32<{ MAX_SEEDS as u32 }>,
+		>,
 	) -> EvmResult<(H256, u8)> {
 		handle.record_cost(BASE_GAS)?;
-		let seeds: Vec<Vec<u8>> = seeds.into_iter().map(Into::into).collect();
+		let seeds: Vec<Vec<u8>> = Vec::from(seeds).into_iter().map(Into::into).collect();
 		let refs: Vec<&[u8]> = seeds.iter().map(|s| s.as_slice()).collect();
 		let per_try = attempt_gas(refs.iter().map(|s| s.len()).sum());
 		match find_program_address_with(&refs, &program_id.0, || handle.record_cost(per_try))? {
@@ -350,6 +355,31 @@ mod tests {
 		);
 		let (r, _) = call(enc(seeds), u64::MAX);
 		assert!(r.is_ok());
+	}
+
+	/// Many array items pointing at one large blob must be refused by the decoder, before
+	/// anything is copied or charged.
+	#[test]
+	fn oversized_or_aliased_seeds_are_refused_while_decoding() {
+		let word = |n: u64| H256::from_low_u64_be(n).0.to_vec();
+		// `n` offsets that all point just past the offset table, at one `blob_len`-byte seed.
+		let aliased = |n: u64, blob_len: u64| {
+			let mut input = selector("derive_pda(bytes32,bytes[])").to_be_bytes().to_vec();
+			input.extend_from_slice(&PROGRAM);
+			input.extend(word(0x40));
+			input.extend(word(n));
+			(0..n).for_each(|_| input.extend(word(n * 32)));
+			input.extend(word(blob_len));
+			input.extend(vec![0u8; blob_len as usize]);
+			input
+		};
+		for input in [aliased(64, 4096), aliased(16, 1), aliased(1, 33)] {
+			let (r, gas) = call(input, u64::MAX);
+			assert!(r.is_err());
+			assert_eq!(gas, 0, "refused before BASE_GAS, so before the function body");
+		}
+		let (r, _) = call(aliased(15, 32), u64::MAX);
+		assert!(r.is_ok(), "the largest valid input still decodes: {r:?}");
 	}
 
 	/// Cross-check against an independent on-curve test: decompress by hand (the spec's formula,

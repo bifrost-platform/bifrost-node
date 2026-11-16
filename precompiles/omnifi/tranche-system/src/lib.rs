@@ -86,6 +86,30 @@ type EvmCollateralInput = (u64, Address, U256);
 type EvmAdapterInput = (u8, Address, u16, Address, Vec<EvmCollateralInput>);
 /// `MultichainAdapterInput` — (adapter_address, chain_id, weightBps, adapters)
 type EvmMultichainAdapterInput = (Address, u64, u16, Vec<EvmAdapterInput>);
+
+/// An ABI array whose length is checked by the decoder. Decoding runs before the function
+/// body, so before the role check and any gas charge, and array items may all point at
+/// the same calldata: an unbounded nested array costs N×M×K decodes for N+M+K words of input.
+type AbiVec<T, const N: u32> = precompile_utils::solidity::codec::BoundedVec<T, ConstU32<N>>;
+type AbiAdapters = AbiVec<
+	(u8, Address, u16, Address, AbiVec<EvmCollateralInput, MAX_COLLATERALS>),
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+>;
+type AbiMultichainAdapters = AbiVec<(Address, u64, u16, AbiAdapters), MAX_MULTICHAIN_ADAPTERS>;
+
+fn plain_adapters(adapters: AbiAdapters) -> Vec<EvmAdapterInput> {
+	Vec::from(adapters)
+		.into_iter()
+		.map(|(t, s, w, b, c)| (t, s, w, b, c.into()))
+		.collect()
+}
+
+fn plain_multichain_adapters(adapters: AbiMultichainAdapters) -> Vec<EvmMultichainAdapterInput> {
+	Vec::from(adapters)
+		.into_iter()
+		.map(|(a, c, w, inner)| (a, c, w, plain_adapters(inner)))
+		.collect()
+}
 /// `MultichainTrancheManagerInput` — (chain_id, tranche_manager_address)
 type EvmMultichainTrancheManagerInput = (u64, Address);
 /// `SettlementModeInput` — (is_sync, settlement_start_timestamp, settlement_length_secs,
@@ -173,10 +197,14 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		valuation: EvmValuationInput,
-		tranches: Vec<EvmTrancheInput>,
-		multichain_adapters: Vec<EvmMultichainAdapterInput>,
-		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHE_INPUTS>,
+		multichain_adapters: AbiMultichainAdapters,
+		multichain_tranche_managers: AbiVec<EvmMultichainTrancheManagerInput, MAX_TRANCHE_MANAGERS>,
 	) -> EvmResult {
+		let multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput> =
+			multichain_tranche_managers.into();
+		let tranches: Vec<EvmTrancheInput> = tranches.into();
+		let multichain_adapters = plain_multichain_adapters(multichain_adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 
@@ -260,11 +288,13 @@ where
 		product_id: ProductId,
 		chain_id: u64,
 		valuation: EvmSingleChainValuationInput,
-		tranches: Vec<EvmTrancheInput>,
+		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHES_PER_CHAIN>,
 		tranche_manager: Address,
-		adapters: Vec<EvmAdapterInput>,
+		adapters: AbiAdapters,
 		ledger: Address,
 	) -> EvmResult {
+		let tranches: Vec<EvmTrancheInput> = tranches.into();
+		let adapters = plain_adapters(adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
@@ -450,8 +480,9 @@ where
 		product_id: ProductId,
 		parent_adapter_address: Address,
 		parent_chain_id: u64,
-		adapters: Vec<EvmAdapterInput>,
+		adapters: AbiAdapters,
 	) -> EvmResult {
+		let adapters = plain_adapters(adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
@@ -498,8 +529,9 @@ where
 	fn set_multichain_adapters(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
-		multichain_adapters: Vec<EvmMultichainAdapterInput>,
+		multichain_adapters: AbiMultichainAdapters,
 	) -> EvmResult {
+		let multichain_adapters = plain_multichain_adapters(multichain_adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
@@ -538,8 +570,10 @@ where
 	fn set_multichain_tranche_managers(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
-		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+		multichain_tranche_managers: AbiVec<EvmMultichainTrancheManagerInput, MAX_TRANCHE_MANAGERS>,
 	) -> EvmResult {
+		let multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput> =
+			multichain_tranche_managers.into();
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
