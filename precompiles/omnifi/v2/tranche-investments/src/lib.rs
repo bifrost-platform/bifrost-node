@@ -1,7 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
-use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
+use frame_support::{
+	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	pallet_prelude::Encode,
+};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_tranche_investments_v2::{
 	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, InvestmentApprovalInput,
@@ -495,9 +498,11 @@ where
 
 		let last_id = pallet_tranche_investments_v2::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
-		let settlement =
-			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id)
-				.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settlement = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id),
+		)?
+		.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let settle = settlement
 			.tranches
 			.iter()
@@ -523,9 +528,12 @@ where
 		else {
 			return Ok(U256::zero());
 		};
-		Ok(pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id)
-			.map(|s| s.pending_deposit_assets)
-			.unwrap_or_default())
+		Ok(with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id),
+		)?
+		.map(|s| s.pending_deposit_assets)
+		.unwrap_or_default())
 	}
 
 	/// Read a product's most recently recorded settlement: its settlement_id, each
@@ -552,8 +560,9 @@ where
 		// (see `SingleChainProductDetails`'s doc comment), so there's no point
 		// reading further only to hit a less specific "not found" error.
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			pallet_tranche_system::ProductDetails::Multichain(product) => product,
 			pallet_tranche_system::ProductDetails::SingleChain(_) => {
@@ -563,9 +572,11 @@ where
 
 		let last_id = pallet_tranche_investments_v2::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
-		let settlement =
-			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id)
-				.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settlement = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id),
+		)?
+		.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let product_nav =
 			pallet_tranche_investments_v2::ProductNavs::<Runtime>::get(product_id, last_id)
 				.ok_or_else(|| revert("product has no recorded settlement"))?;
@@ -620,9 +631,11 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
-		let settlement =
-			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, settlement_id)
-				.ok_or_else(|| revert("settlement not found"))?;
+		let settlement = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, settlement_id),
+		)?
+		.ok_or_else(|| revert("settlement not found"))?;
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_nav =
@@ -709,8 +722,10 @@ where
 			// One charge per `settlement_id` examined, not per entry returned — see
 			// `get_pending_requests`'s identical rationale.
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			let Some(settlement) =
-				pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, id)
+			let Some(settlement) = with_size_charged(
+				handle,
+				pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, id),
+			)?
 			else {
 				return Ok(None);
 			};
@@ -774,10 +789,13 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
-		let valuations = pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(
-			product_id,
-			settlement_id,
-		)
+		let valuations = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(
+				product_id,
+				settlement_id,
+			),
+		)?
 		.ok_or_else(|| revert("adapter valuations not found"))?;
 
 		Ok(valuations.iter().map(encode_adapter_valuation).collect())
@@ -831,8 +849,10 @@ where
 
 		let entries = walk_recent_settlements(handle, last_id, offset, limit, |handle, id| {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			let Some(valuations) =
-				pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(product_id, id)
+			let Some(valuations) = with_size_charged(
+				handle,
+				pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(product_id, id),
+			)?
 			else {
 				return Ok(None);
 			};
@@ -908,6 +928,22 @@ where
 	}
 	Ok(entries)
 }
+/// Gas per 32-byte word of a stored value decoded and re-encoded into the ABI output (the
+/// EVM `COPY` rate, as in the tx-registry-v3 precompile).
+const COPY_GAS_PER_WORD: u64 = 3;
+
+/// Charges for the size of a value just read, on top of the flat storage-read charge:
+/// `Products`, `Settlements` and `AdapterValuations` range from a few hundred bytes to
+/// hundreds of KB.
+fn with_size_charged<T: Encode>(
+	handle: &mut impl PrecompileHandle,
+	value: Option<T>,
+) -> EvmResult<Option<T>> {
+	let size = value.as_ref().map_or(0, Encode::encoded_size) as u64;
+	handle.record_external_cost(None, Some(size), None)?;
+	handle.record_cost(COPY_GAS_PER_WORD.saturating_mul(size.div_ceil(32)))?;
+	Ok(value)
+}
 
 /// Reverts if `product_id` is a registered single-chain product — this whole
 /// precompile only ever tracks Multichain products (a single-chain product's
@@ -925,7 +961,7 @@ where
 {
 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 	if let Some(pallet_tranche_system::ProductDetails::SingleChain(_)) =
-		pallet_tranche_system::Products::<Runtime>::get(product_id)
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
 	{
 		return Err(revert("product is a single-chain product; not tracked here"));
 	}
@@ -944,8 +980,9 @@ where
 	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
 {
 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-	let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-		.ok_or_else(|| revert("product not found"))?;
+	let product =
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+			.ok_or_else(|| revert("product not found"))?;
 	// Single-chain products never interact with pallet-tranche-investments (no
 	// Hub-deployed Valuation to record against) — see
 	// `SingleChainProductDetails`'s doc comment.

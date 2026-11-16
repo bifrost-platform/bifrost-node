@@ -3,6 +3,7 @@
 
 use frame_support::{
 	dispatch::{GetDispatchInfo, PostDispatchInfo},
+	pallet_prelude::Encode,
 	traits::Get,
 };
 use pallet_evm::AddressMapping;
@@ -20,6 +21,23 @@ use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, vec, vec::Ve
 
 pub mod universal;
 pub use universal::TrancheSystemUniversalPrecompile;
+
+/// Gas per 32-byte word of a stored value decoded and re-encoded into the ABI output (the
+/// EVM `COPY` rate, as in the tx-registry-v3 precompile).
+const COPY_GAS_PER_WORD: u64 = 3;
+
+/// Charges for the size of a value just read, on top of the flat storage-read charge:
+/// a product holds
+/// up to 100 tranches and 110 adapters, each with up to 10 collaterals.
+pub(crate) fn with_size_charged<T: Encode>(
+	handle: &mut impl PrecompileHandle,
+	value: Option<T>,
+) -> EvmResult<Option<T>> {
+	let size = value.as_ref().map_or(0, Encode::encoded_size) as u64;
+	handle.record_external_cost(None, Some(size), None)?;
+	handle.record_cost(COPY_GAS_PER_WORD.saturating_mul(size.div_ceil(32)))?;
+	Ok(value)
+}
 
 // ---------------------------------------------------------------------------
 // EVM-only <-> ChainAddress conversion
@@ -617,8 +635,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<(Address, Address, u64, u64, u64)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let (
 			base_asset,
 			valuation_address,
@@ -679,8 +698,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmTrancheInput>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let tranches = match &product {
 			ProductDetails::Multichain(product) => product
 				.tranches
@@ -710,8 +730,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmMultichainAdapterInput>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::Multichain(product) => product,
 			ProductDetails::SingleChain(_) => {
@@ -750,8 +771,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmAdaptersByChain>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		Ok(match product {
 			ProductDetails::Multichain(product) => product
 				.multichain_adapters
@@ -776,8 +798,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Address> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		match product {
 			ProductDetails::SingleChain(product) => evm(&product.tranche_manager),
 			ProductDetails::Multichain(_) => {
@@ -797,8 +820,9 @@ where
 	#[precompile::view]
 	fn get_ledger(handle: &mut impl PrecompileHandle, product_id: ProductId) -> EvmResult<Address> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		match product {
 			ProductDetails::SingleChain(product) => evm(&product.ledger),
 			ProductDetails::Multichain(_) => Err(revert(
@@ -820,8 +844,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmMultichainTrancheManagerInput>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::Multichain(product) => product,
 			ProductDetails::SingleChain(_) => {
@@ -858,8 +883,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<EvmMultichainProductDetails> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::Multichain(product) => product,
 			ProductDetails::SingleChain(_) => {
@@ -929,8 +955,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<EvmSingleChainProductDetails> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::SingleChain(product) => product,
 			ProductDetails::Multichain(_) => {
@@ -1257,4 +1284,27 @@ fn decode_multichain_tranche_managers(
 		}
 	}
 	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many multichain_tranche_managers"))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use precompile_utils::testing::MockHandle;
+
+	#[test]
+	fn a_read_value_is_charged_by_its_size() {
+		let context = pallet_evm::Context {
+			address: H160::zero(),
+			caller: H160::zero(),
+			apparent_value: U256::zero(),
+		};
+		let mut handle = MockHandle::new(H160::zero(), context);
+		handle.gas_limit = u64::MAX;
+
+		assert_eq!(with_size_charged(&mut handle, None::<Vec<u8>>), Ok(None));
+		assert_eq!(handle.gas_used, 0);
+		// 64 bytes and a 2-byte length prefix: 3 words
+		assert!(with_size_charged(&mut handle, Some(vec![0u8; 64])).is_ok());
+		assert_eq!(handle.gas_used, 3 * COPY_GAS_PER_WORD);
+	}
 }
