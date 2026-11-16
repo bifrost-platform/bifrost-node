@@ -970,3 +970,45 @@ mod benches {
 
 bifrost_common_runtime::impl_common_runtime_apis!();
 bifrost_common_runtime::impl_self_contained_call!();
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use fp_self_contained::SelfContainedCall;
+	use frame_support::dispatch::GetDispatchInfo;
+	use sp_runtime::transaction_validity::InvalidTransaction;
+
+	/// An Ethereum transaction that the call filter would reject at dispatch must already be
+	/// refused by pool validation and block pre-dispatch: its fee and nonce are only taken
+	/// inside the EVM, which a filtered call never reaches.
+	#[test]
+	fn filtered_ethereum_transactions_are_refused_before_dispatch() {
+		let one = H256::from_low_u64_be(1);
+		let call = RuntimeCall::Ethereum(pallet_ethereum::Call::transact {
+			transaction: pallet_ethereum::Transaction::Legacy(ethereum::LegacyTransaction {
+				nonce: U256::zero(),
+				gas_price: U256::zero(),
+				gas_limit: U256::from(21_000),
+				action: ethereum::TransactionAction::Call(H160::zero()),
+				value: U256::zero(),
+				input: Vec::new(),
+				signature: ethereum::legacy::TransactionSignature::new(27, one, one)
+					.expect("in range"),
+			}),
+		});
+		let (who, info) = (H160::zero(), call.get_dispatch_info());
+		let filtered = Some(Err(InvalidTransaction::Call.into()));
+
+		sp_io::TestExternalities::default().execute_with(|| {
+			// not filtered: whatever pallet-ethereum's own checks say, it is not `Call`
+			assert_ne!(call.validate_self_contained(&who, &info, 0), filtered);
+
+			pallet_safe_mode::EnteredUntil::<Runtime>::put(100);
+			assert_eq!(call.validate_self_contained(&who, &info, 0), filtered);
+			assert_eq!(
+				call.pre_dispatch_self_contained(&who, &info, 0),
+				Some(Err(InvalidTransaction::Call.into()))
+			);
+		});
+	}
+}
