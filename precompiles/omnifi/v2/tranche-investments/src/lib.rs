@@ -135,7 +135,7 @@ where
 		order_type: u8,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let decoded_order_type = decode_order_type(order_type)?;
 
 		let call = InvestmentsCall::<Runtime>::record_investment_request {
@@ -190,7 +190,7 @@ where
 	) -> EvmResult {
 		let allocations: Vec<EvmAllocation> = allocations.into();
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_allocations = decode_allocations(&allocations)?;
 
 		let call = InvestmentsCall::<Runtime>::record_investment_approval {
@@ -237,7 +237,7 @@ where
 	) -> EvmResult {
 		let approvals = plain_approvals(approvals);
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_approvals = decode_investment_approvals(&approvals)?;
 
 		let call = InvestmentsCall::<Runtime>::record_investment_approvals {
@@ -287,7 +287,7 @@ where
 	) -> EvmResult {
 		let valuations = plain_adapter_valuations(valuations);
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_valuations = decode_adapter_valuations(&valuations)?;
 
 		let call = InvestmentsCall::<Runtime>::record_adapter_valuations {
@@ -329,7 +329,7 @@ where
 	) -> EvmResult {
 		let tranches: Vec<EvmTrancheSettle> = tranches.into();
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_tranches = decode_tranche_settles(&tranches)?;
 
 		let call = InvestmentsCall::<Runtime>::record_settlement {
@@ -933,11 +933,17 @@ where
 }
 
 /// Reads `pallet-tranche-system`'s `Products` storage directly to confirm
-/// `caller` equals `product_id`'s registered Valuation contract address.
-fn ensure_caller_is_valuation<Runtime>(product_id: ProductId, caller: H160) -> EvmResult
+/// `caller` equals `product_id`'s registered Valuation contract address. Charges the
+/// read first: any account reaches this check, with a `product_id` of its choosing.
+fn ensure_caller_is_valuation<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+	caller: H160,
+) -> EvmResult
 where
-	Runtime: pallet_tranche_system::Config,
+	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
 {
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 	let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
 		.ok_or_else(|| revert("product not found"))?;
 	// Single-chain products never interact with pallet-tranche-investments (no
