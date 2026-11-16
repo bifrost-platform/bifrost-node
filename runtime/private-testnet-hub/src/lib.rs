@@ -283,12 +283,14 @@ impl pallet_tx_pause::Config for Runtime {
 
 parameter_types! {
 	pub const EnterDuration: BlockNumber = 2 * MINUTES;
-	pub const EnterDepositAmount: Balance = 2_000 * BFC;
+	pub const EnterDepositAmount: Option<Balance> = None;
 	pub const ExtendDuration: BlockNumber = 1 * MINUTES;
-	pub const ExtendDepositAmount: Balance = 1_000 * BFC;
+	pub const ExtendDepositAmount: Option<Balance> = None;
 	pub const ReleaseDelay: u32 = 1 * MINUTES;
 }
 
+/// Same as the private mainnet hub: safe mode can only be entered/extended/exited
+/// by `Root` (no permissionless deposits).
 impl pallet_safe_mode::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Currency = Balances;
