@@ -3,6 +3,7 @@
 //! `ChainAddress` (EVM addresses left-padded) and every foreign tx hash is
 //! `bytes`. The EVM-only interface in the crate root keeps its original ABI.
 
+use crate::with_size_charged;
 use frame_support::{
 	dispatch::{GetDispatchInfo, PostDispatchInfo},
 	traits::Get,
@@ -12,7 +13,8 @@ use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
 	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_COLLATERALS,
+	MAX_MULTICHAIN_ADAPTERS,
 	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
@@ -59,6 +61,31 @@ type EvmCollateralInput = (u64, H256, U256);
 type EvmAdapterInput = (u8, H256, u16, H256, Vec<EvmCollateralInput>);
 /// `MultichainAdapterInput` — (adapter_address, chain_id, weightBps, adapters)
 type EvmMultichainAdapterInput = (H256, u64, u16, Vec<EvmAdapterInput>);
+
+/// An ABI array whose length is checked by the decoder. Decoding runs before the function
+/// body, so before the role check and any gas charge, and array items may all point at
+/// the same calldata: an unbounded nested array costs N×M×K decodes for N+M+K words of input.
+type AbiVec<T, const N: u32> = precompile_utils::solidity::codec::BoundedVec<T, ConstU32<N>>;
+type AbiAdapters<const N: u32> =
+	AbiVec<(u8, H256, u16, H256, AbiVec<EvmCollateralInput, MAX_COLLATERALS>), N>;
+type AbiMultichainAdapters = AbiVec<
+	(H256, u64, u16, AbiAdapters<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>),
+	MAX_MULTICHAIN_ADAPTERS,
+>;
+
+fn plain_adapters<const N: u32>(adapters: AbiAdapters<N>) -> Vec<EvmAdapterInput> {
+	Vec::from(adapters)
+		.into_iter()
+		.map(|(t, s, w, b, c)| (t, s, w, b, c.into()))
+		.collect()
+}
+
+fn plain_multichain_adapters(adapters: AbiMultichainAdapters) -> Vec<EvmMultichainAdapterInput> {
+	Vec::from(adapters)
+		.into_iter()
+		.map(|(a, c, w, inner)| (a, c, w, plain_adapters(inner)))
+		.collect()
+}
 /// `MultichainTrancheManagerInput` — (chain_id, tranche_manager_address)
 type EvmMultichainTrancheManagerInput = (u64, H256);
 /// `SettlementModeInput` — (is_sync, settlement_start_timestamp, settlement_length_secs,
@@ -141,10 +168,14 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		valuation: EvmValuationInput,
-		tranches: Vec<EvmTrancheInput>,
-		multichain_adapters: Vec<EvmMultichainAdapterInput>,
-		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHE_INPUTS>,
+		multichain_adapters: AbiMultichainAdapters,
+		multichain_tranche_managers: AbiVec<EvmMultichainTrancheManagerInput, MAX_TRANCHE_MANAGERS>,
 	) -> EvmResult {
+		let multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput> =
+			multichain_tranche_managers.into();
+		let tranches: Vec<EvmTrancheInput> = tranches.into();
+		let multichain_adapters = plain_multichain_adapters(multichain_adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 
@@ -228,11 +259,13 @@ where
 		product_id: ProductId,
 		chain_id: u64,
 		valuation: EvmSingleChainValuationInput,
-		tranches: Vec<EvmTrancheInput>,
+		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHES_PER_CHAIN>,
 		tranche_manager: H256,
-		adapters: Vec<EvmAdapterInput>,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 		ledger: H256,
 	) -> EvmResult {
+		let tranches: Vec<EvmTrancheInput> = tranches.into();
+		let adapters = plain_adapters(adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		ensure_caller_is_product_admin::<Runtime>(handle, product_id, &caller_account)?;
@@ -332,7 +365,7 @@ where
 		// has already happened by then.
 		let cascaded = if decoded_action == CrudAction::Update {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			cascaded_tranche_targets::<Runtime>(product_id, &vault_id, &tranche_type)
+			cascaded_tranche_targets::<Runtime>(handle, product_id, &vault_id, &tranche_type)?
 		} else {
 			Vec::new()
 		};
@@ -413,8 +446,9 @@ where
 		product_id: ProductId,
 		parent_adapter_address: H256,
 		parent_chain_id: u64,
-		adapters: Vec<EvmAdapterInput>,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 	) -> EvmResult {
+		let adapters = plain_adapters(adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
@@ -456,8 +490,9 @@ where
 	fn set_multichain_adapters(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
-		multichain_adapters: Vec<EvmMultichainAdapterInput>,
+		multichain_adapters: AbiMultichainAdapters,
 	) -> EvmResult {
+		let multichain_adapters = plain_multichain_adapters(multichain_adapters);
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
@@ -491,8 +526,10 @@ where
 	fn set_multichain_tranche_managers(
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
-		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+		multichain_tranche_managers: AbiVec<EvmMultichainTrancheManagerInput, MAX_TRANCHE_MANAGERS>,
 	) -> EvmResult {
+		let multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput> =
+			multichain_tranche_managers.into();
 		let caller = handle.context().caller;
 		let caller_account = Runtime::AddressMapping::into_account_id(caller);
 		let origin = product_authority_origin::<Runtime>(handle, product_id, caller_account)?;
@@ -534,10 +571,14 @@ where
 		product_id: ProductId,
 		product_admin: Address,
 		valuation: EvmValuationInput,
-		tranches: Vec<EvmTrancheInput>,
-		multichain_adapters: Vec<EvmMultichainAdapterInput>,
-		multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput>,
+		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHE_INPUTS>,
+		multichain_adapters: AbiMultichainAdapters,
+		multichain_tranche_managers: AbiVec<EvmMultichainTrancheManagerInput, MAX_TRANCHE_MANAGERS>,
 	) -> EvmResult {
+		let multichain_tranche_managers: Vec<EvmMultichainTrancheManagerInput> =
+			multichain_tranche_managers.into();
+		let tranches: Vec<EvmTrancheInput> = tranches.into();
+		let multichain_adapters = plain_multichain_adapters(multichain_adapters);
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		ensure_caller_is_product_factory::<Runtime>(handle, &caller_account)?;
 		if product_admin.0.is_zero() {
@@ -613,11 +654,13 @@ where
 		product_admin: Address,
 		chain_id: u64,
 		valuation: EvmSingleChainValuationInput,
-		tranches: Vec<EvmTrancheInput>,
+		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHES_PER_CHAIN>,
 		tranche_manager: H256,
-		adapters: Vec<EvmAdapterInput>,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 		ledger: H256,
 	) -> EvmResult {
+		let tranches: Vec<EvmTrancheInput> = tranches.into();
+		let adapters = plain_adapters(adapters);
 		let caller_account = Runtime::AddressMapping::into_account_id(handle.context().caller);
 		ensure_caller_is_product_factory::<Runtime>(handle, &caller_account)?;
 		if product_admin.0.is_zero() {
@@ -699,8 +742,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<(H256, H256, u64, u64, u64)> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let (
 			base_asset,
 			valuation_address,
@@ -761,8 +805,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmTrancheInput>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let tranches = match &product {
 			ProductDetails::Multichain(product) => product
 				.tranches
@@ -792,8 +837,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmMultichainAdapterInput>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::Multichain(product) => product,
 			ProductDetails::SingleChain(_) => {
@@ -827,8 +873,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmAdaptersByChain>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		Ok(match product {
 			ProductDetails::Multichain(product) => product
 				.multichain_adapters
@@ -853,8 +900,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<H256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		match product {
 			ProductDetails::SingleChain(product) => Ok(product.tranche_manager),
 			ProductDetails::Multichain(_) => {
@@ -874,8 +922,9 @@ where
 	#[precompile::view]
 	fn get_ledger(handle: &mut impl PrecompileHandle, product_id: ProductId) -> EvmResult<H256> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		match product {
 			ProductDetails::SingleChain(product) => Ok(product.ledger),
 			ProductDetails::Multichain(_) => Err(revert(
@@ -897,8 +946,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<Vec<EvmMultichainTrancheManagerInput>> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::Multichain(product) => product,
 			ProductDetails::SingleChain(_) => {
@@ -935,8 +985,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<EvmMultichainProductDetails> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::Multichain(product) => product,
 			ProductDetails::SingleChain(_) => {
@@ -1001,8 +1052,9 @@ where
 		product_id: ProductId,
 	) -> EvmResult<EvmSingleChainProductDetails> {
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			ProductDetails::SingleChain(product) => product,
 			ProductDetails::Multichain(_) => {
@@ -1212,12 +1264,15 @@ fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmTrancheInput {
 /// `product_id` doesn't exist, `vault` isn't found in it, or `new_type`
 /// matches `vault`'s current type (nothing to cascade).
 fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
+	handle: &mut impl PrecompileHandle,
 	product_id: ProductId,
 	vault: &VaultId,
 	new_type: &TrancheType,
-) -> Vec<(u64, H256, H256, H256, u8)> {
-	let Some(product) = pallet_tranche_system::Products::<Runtime>::get(product_id) else {
-		return Vec::new();
+) -> EvmResult<Vec<(u64, H256, H256, H256, u8)>> {
+	let Some(product) =
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+	else {
+		return Ok(Vec::new());
 	};
 
 	let old_type = match &product {
@@ -1233,10 +1288,10 @@ fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
 			.map(|t| t.tranche_type.clone()),
 	};
 	let Some(old_type) = old_type else {
-		return Vec::new();
+		return Ok(Vec::new());
 	};
 	if &old_type == new_type {
-		return Vec::new();
+		return Ok(Vec::new());
 	}
 
 	let mut targets = Vec::new();
@@ -1259,7 +1314,7 @@ fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
 			}
 		}
 	}
-	targets
+	Ok(targets)
 }
 
 /// `create_product`-only: each entry's `priority` is passed straight through
@@ -1314,9 +1369,9 @@ fn decode_source_type(
 /// within `create_product`/`set_multichain_adapters`). Reverts on a duplicate
 /// `source_address` — the incoming array has no uniqueness guarantee the way
 /// a `BoundedBTreeMap` would, unlike `pallet_tranche_system`'s own storage.
-fn decode_adapters(
+fn decode_adapters<const N: u32>(
 	adapters: &[EvmAdapterInput],
-) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>>> {
+) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<N>>> {
 	let mut map = BTreeMap::new();
 	for (source_type, source_address, weight_bps, borrower, collaterals) in adapters.iter().cloned()
 	{
@@ -1362,4 +1417,39 @@ fn decode_multichain_tranche_managers(
 		}
 	}
 	BoundedBTreeMap::try_from(map).map_err(|_| revert("too many multichain_tranche_managers"))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use precompile_utils::solidity::codec::Reader;
+
+	/// `n` multichain adapters that all point at one item, whose `m` adapters all point at
+	/// one adapter with no collaterals: the calldata an attacker sends to multiply decode work.
+	fn aliased(n: u64, m: u64) -> Vec<u8> {
+		let word = |v: u64| H256::from_low_u64_be(v).0;
+		let mut input = Vec::new();
+		let mut push = |words: &[u64]| words.iter().for_each(|w| input.extend(word(*w)));
+		push(&[0x20, n]);
+		(0..n).for_each(|_| push(&[n * 32]));
+		// MultichainAdapterInput: adapter_address, chain_id, weightBps, offset of `adapters`
+		push(&[1, 1, 1, 0x80, m]);
+		(0..m).for_each(|_| push(&[m * 32]));
+		// AdapterInput: source_type, source_address, weightBps, borrower, offset of
+		// `collaterals`, then an empty `collaterals`
+		push(&[1, 1, 1, 0, 0xa0, 0]);
+		input
+	}
+
+	#[test]
+	fn nested_adapter_arrays_are_bounded_while_decoding() {
+		let read = |n, m| Reader::new(&aliased(n, m)).read::<AbiMultichainAdapters>();
+		assert!(read(MAX_MULTICHAIN_ADAPTERS as u64 + 1, 1).is_err());
+		assert!(read(1, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER as u64 + 1).is_err());
+		let decoded = plain_multichain_adapters(
+			read(MAX_MULTICHAIN_ADAPTERS as u64, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER as u64)
+				.expect("the largest valid shape still decodes"),
+		);
+		assert_eq!(decoded.iter().map(|(_, _, _, adapters)| adapters.len()).sum::<usize>(), 100);
+	}
 }

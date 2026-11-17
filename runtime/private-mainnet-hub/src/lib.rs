@@ -746,6 +746,7 @@ impl pallet_tranche_permissions::Config for Runtime {
 	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
 	type Vaults = TrancheSystem;
 	type Products = TrancheSystem;
+	type Chains = TrancheSystem;
 	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TranchePermissionsBenchmarkHelper;
@@ -763,6 +764,11 @@ impl pallet_tranche_permissions::BenchmarkHelper for TranchePermissionsBenchmark
 		product_id: pallet_tranche_system::ProductId,
 		vault: pallet_tranche_system::VaultId,
 	) {
+		// the vault's chain must be registered for the investor-address check
+		pallet_tranche_system::ChainInfos::<Runtime>::insert(
+			vault.chain_id,
+			pallet_tranche_system::ChainInfo { address_len: 32, tx_hash_len: 32 },
+		);
 		pallet_tranche_system::Vaults::<Runtime>::insert(
 			vault,
 			pallet_tranche_system::VaultRegistration { product_id, removed: false },
@@ -828,6 +834,7 @@ pub struct TrancheTxRegistryV3BenchmarkHelper;
 impl pallet_tranche_tx_registry_v3::Config for Runtime {
 	type GovernanceOrigin = EnsureRoot<AccountId>;
 	type RecorderOrigin = pallet_tranche_tx_registry_v3::EnsureTxRecorder<Runtime>;
+	type Chains = TrancheSystem;
 	type WeightInfo = pallet_tranche_tx_registry_v3::weights::SubstrateWeight<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TrancheTxRegistryV3BenchmarkHelper;
@@ -837,6 +844,9 @@ impl pallet_tranche_tx_registry_v3::Config for Runtime {
 impl pallet_tranche_tx_registry_v3::BenchmarkHelper for TrancheTxRegistryV3BenchmarkHelper {
 	fn seed_recorder() {
 		pallet_tranche_tx_registry_v3::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
+	fn seed_chain(chain_id: u64, info: pallet_tranche_system::ChainInfo) {
+		pallet_tranche_system::ChainInfos::<Runtime>::insert(chain_id, info);
 	}
 }
 
@@ -979,3 +989,45 @@ mod benches {
 
 bifrost_common_runtime::impl_common_runtime_apis!();
 bifrost_common_runtime::impl_self_contained_call!();
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use fp_self_contained::SelfContainedCall;
+	use frame_support::dispatch::GetDispatchInfo;
+	use sp_runtime::transaction_validity::InvalidTransaction;
+
+	/// An Ethereum transaction that the call filter would reject at dispatch must already be
+	/// refused by pool validation and block pre-dispatch: its fee and nonce are only taken
+	/// inside the EVM, which a filtered call never reaches.
+	#[test]
+	fn filtered_ethereum_transactions_are_refused_before_dispatch() {
+		let one = H256::from_low_u64_be(1);
+		let call = RuntimeCall::Ethereum(pallet_ethereum::Call::transact {
+			transaction: pallet_ethereum::Transaction::Legacy(ethereum::LegacyTransaction {
+				nonce: U256::zero(),
+				gas_price: U256::zero(),
+				gas_limit: U256::from(21_000),
+				action: ethereum::TransactionAction::Call(H160::zero()),
+				value: U256::zero(),
+				input: Vec::new(),
+				signature: ethereum::legacy::TransactionSignature::new(27, one, one)
+					.expect("in range"),
+			}),
+		});
+		let (who, info) = (H160::zero(), call.get_dispatch_info());
+		let filtered = Some(Err(InvalidTransaction::Call.into()));
+
+		sp_io::TestExternalities::default().execute_with(|| {
+			// not filtered: whatever pallet-ethereum's own checks say, it is not `Call`
+			assert_ne!(call.validate_self_contained(&who, &info, 0), filtered);
+
+			pallet_safe_mode::EnteredUntil::<Runtime>::put(100);
+			assert_eq!(call.validate_self_contained(&who, &info, 0), filtered);
+			assert_eq!(
+				call.pre_dispatch_self_contained(&who, &info, 0),
+				Some(Err(InvalidTransaction::Call.into()))
+			);
+		});
+	}
+}

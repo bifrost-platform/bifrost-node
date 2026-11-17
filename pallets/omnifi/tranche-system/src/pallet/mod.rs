@@ -2,7 +2,7 @@ mod impls;
 
 use crate::{
 	is_permissionless_product_id, migrations, product_id_prefix, AdapterInfo, AdapterKey,
-	ChainAddress, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
+	ChainAddress, ChainInfo, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo,
 	MultichainProductDetails, OnProductCreated, ProductAdminRegistry, ProductDetails, ProductId, SettlementMode,
 	SingleChainProductDetails, SingleChainValuationInfo, Tranche, TrancheInput, TrancheType,
 	ValuationInfo, VaultId, VaultRegistration, WeightInfo, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
@@ -105,6 +105,13 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// `product_id` is already taken by an existing product.
 		ProductAlreadyExists,
+		/// An address is on a chain governance has not registered with `set_chain_info`.
+		ChainNotRegistered,
+		/// An address is not in its chain's canonical form (left-padded with zeros to the
+		/// chain's address length).
+		InvalidChainAddress,
+		/// `set_chain_info` was given a length its carrier type cannot hold.
+		InvalidChainInfo,
 		/// No product exists for `product_id`.
 		ProductNotFound,
 		/// `create_product` requires at least one tranche.
@@ -266,6 +273,8 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(crate) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// A chain was registered, changed or (`info: None`) unregistered.
+		ChainInfoSet { chain_id: u64, info: Option<ChainInfo> },
 		/// A new product was created.
 		ProductCreated {
 			product_id: ProductId,
@@ -406,6 +415,13 @@ pub mod pallet {
 	/// grant/revoke to the Spoke chain a vault lives on. Defaults to the zero
 	/// address (propagation reverts until sudo sets it). Only writable by root.
 	pub type OrchestratorAddress<T: Config> = StorageValue<_, H160, ValueQuery>;
+
+	#[pallet::storage]
+	/// The chains products can live on, with each chain's native address and tx identifier
+	/// lengths. Every address a product introduces must be on a registered chain and in
+	/// that chain's canonical form, so one contract cannot be registered under several
+	/// different 32-byte values. Only writable by root.
+	pub type ChainInfos<T: Config> = StorageMap<_, Blake2_128Concat, u64, ChainInfo>;
 
 	// -----------------------------------------------------------------------
 	// Hooks
@@ -631,6 +647,9 @@ pub mod pallet {
 			priority: u8,
 		) -> DispatchResultWithPostInfo {
 			let authority = Self::ensure_product_authority(origin, product_id)?;
+			if action != CrudAction::Remove {
+				Self::ensure_tranche_addresses(&vault, &asset, &shares)?;
+			}
 
 			// See `apply_set_tranche`'s own doc comment for the full logic —
 			// Multichain-vs-SingleChain dispatch, the `Remove`-only
@@ -718,6 +737,7 @@ pub mod pallet {
 			>,
 		) -> DispatchResultWithPostInfo {
 			let authority = Self::ensure_product_authority(origin, product_id)?;
+			Self::ensure_adapter_addresses(parent_chain_id, adapters.iter())?;
 
 			let n = adapters.len() as u32;
 
@@ -812,6 +832,7 @@ pub mod pallet {
 			>,
 		) -> DispatchResultWithPostInfo {
 			let authority = Self::ensure_product_authority(origin, product_id)?;
+			Self::ensure_multichain_adapter_addresses(&multichain_adapters)?;
 
 			Self::ensure_weights_sum_to_10000(
 				multichain_adapters.values().map(|info| info.weight_bps),
@@ -865,6 +886,24 @@ pub mod pallet {
 			Ok(Some(<T as Config>::WeightInfo::set_multichain_adapters(t, o, n)).into())
 		}
 
+		/// Register, change or (`None`) unregister a chain. Root-only. Unregistering a chain
+		/// does not touch products already on it, but they can no longer introduce or change
+		/// addresses there.
+		#[pallet::call_index(11)]
+		// shortcut: not benchmarked (one write), benchmark with the rest of the pallet
+		#[pallet::weight(T::DbWeight::get().writes(1))]
+		pub fn set_chain_info(
+			origin: OriginFor<T>,
+			chain_id: u64,
+			info: Option<ChainInfo>,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+			ensure!(info.map_or(true, |info| info.is_valid()), Error::<T>::InvalidChainInfo);
+			ChainInfos::<T>::set(chain_id, info);
+			Self::deposit_event(Event::ChainInfoSet { chain_id, info });
+			Ok(())
+		}
+
 		/// Set the single, global Orchestrator contract address. Root-only —
 		/// see `OrchestratorAddress`'s doc comment.
 		#[pallet::call_index(4)]
@@ -899,6 +938,9 @@ pub mod pallet {
 			>,
 		) -> DispatchResultWithPostInfo {
 			let authority = Self::ensure_product_authority(origin, product_id)?;
+			for (chain_id, tranche_manager) in multichain_tranche_managers.iter() {
+				Self::ensure_chain_address(*chain_id, tranche_manager)?;
+			}
 
 			let (t, a) = Products::<T>::try_mutate(
 				product_id,
@@ -1092,6 +1134,13 @@ pub mod pallet {
 		) -> DispatchResult {
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
+			for tranche in tranches.iter() {
+				Self::ensure_tranche_addresses(&tranche.vault, &tranche.asset, &tranche.shares)?;
+			}
+			Self::ensure_multichain_adapter_addresses(&multichain_adapters)?;
+			for (chain_id, tranche_manager) in multichain_tranche_managers.iter() {
+				Self::ensure_chain_address(*chain_id, tranche_manager)?;
+			}
 			ensure!(
 				!valuation.base_asset.is_zero() && !valuation.valuation_address.is_zero(),
 				Error::<T>::ZeroAddress
@@ -1206,6 +1255,15 @@ pub mod pallet {
 		) -> DispatchResult {
 			ensure!(!Products::<T>::contains_key(product_id), Error::<T>::ProductAlreadyExists);
 			ensure!(!tranches.is_empty(), Error::<T>::EmptyTranches);
+			for address in
+				[&valuation.base_asset, &valuation.valuation_address, &tranche_manager, &ledger]
+			{
+				Self::ensure_chain_address(chain_id, address)?;
+			}
+			for tranche in tranches.iter() {
+				Self::ensure_tranche_addresses(&tranche.vault, &tranche.asset, &tranche.shares)?;
+			}
+			Self::ensure_adapter_addresses(chain_id, adapters.iter())?;
 			ensure!(
 				!valuation.base_asset.is_zero()
 					&& !valuation.valuation_address.is_zero()

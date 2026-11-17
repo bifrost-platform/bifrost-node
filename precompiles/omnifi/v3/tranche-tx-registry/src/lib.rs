@@ -26,7 +26,8 @@ use pallet_evm::AddressMapping;
 use pallet_tranche_tx_registry_v3::{
 	history::HISTORY_PAGE_SIZE, Call as RegistryCall, ChainId, CloseOutcome, FlowId, InstanceKey,
 	InstanceStatus, Lane, Part, ProductId, ProductModel, SlotDef, SlotId, SlotName, SlotRecord,
-	TemplateId, TxHash, MAX_INSTANCE_LANES, MAX_MAIN_SLOTS, MAX_TRACK_SLOTS, MAX_TX_HASH_LEN,
+	TemplateId, TxHash, MAX_ATTEMPT_METADATA, MAX_INSTANCE_LANES, MAX_INSTANCE_METADATA,
+	MAX_LANE_DECLARATIONS, MAX_MAIN_SLOTS, MAX_TRACK_SLOTS, MAX_TX_HASH_LEN,
 };
 use parity_scale_codec::Encode;
 use precompile_utils::{
@@ -129,6 +130,9 @@ pub const SELECTOR_LOG_INSTANCE_CLOSED: [u8; 32] =
 /// `record_tx_batch` instances per EVM call — keeps one call well inside a
 /// block (the pallet itself accepts up to `MAX_BATCH_INSTANCES`).
 pub const MAX_EVM_BATCH: usize = 50;
+/// An ABI array whose length is checked by the decoder, which runs before the function
+/// body: an over-long array is refused before it is copied.
+type AbiVec<T, const N: u32> = precompile_utils::solidity::codec::BoundedVec<T, ConstU32<N>>;
 /// `get_instance_slots` backstops: slot entries scanned (every slot of a
 /// fully laned instance), and cumulative metadata bytes assembled.
 const MAX_SLOT_SCAN: usize =
@@ -170,14 +174,15 @@ where
 		completes: bool,
 		part_index: u16,
 		part_count: u16,
-		metadata: UnboundedBytes,
+		metadata: BoundedBytes<ConstU32<MAX_ATTEMPT_METADATA>>,
 		investor: H256,
-		instance_metadata: UnboundedBytes,
+		instance_metadata: BoundedBytes<ConstU32<MAX_INSTANCE_METADATA>>,
 		scope: H256,
-		declare_lanes: Vec<(u8, u64)>,
+		declare_lanes: AbiVec<(u8, u64), MAX_LANE_DECLARATIONS>,
 		link_flow_id: Bytes16,
 		link_key: H256,
 	) -> EvmResult {
+		let declare_lanes: Vec<(u8, u64)> = declare_lanes.into();
 		let call = RegistryCall::<Runtime>::record_tx {
 			product_id,
 			flow_id: flow_id.0,
@@ -225,7 +230,7 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		flow_id: Bytes16,
-		instance_keys: Vec<H256>,
+		instance_keys: AbiVec<H256, { MAX_EVM_BATCH as u32 }>,
 		lane_chain_id: u64,
 		slot_id: u8,
 		chain_id: u64,
@@ -233,13 +238,11 @@ where
 		completes: bool,
 		part_index: u16,
 		part_count: u16,
-		metadata: UnboundedBytes,
+		metadata: BoundedBytes<ConstU32<MAX_ATTEMPT_METADATA>>,
 		link_flow_id: Bytes16,
 		link_key: H256,
 	) -> EvmResult {
-		if instance_keys.len() > MAX_EVM_BATCH {
-			return Err(revert("instance_keys exceeds MAX_EVM_BATCH (50)"));
-		}
+		let instance_keys: Vec<H256> = instance_keys.into();
 		let mut unique: Vec<H256> = Vec::with_capacity(instance_keys.len());
 		for key in &instance_keys {
 			if !unique.contains(key) {
@@ -898,7 +901,7 @@ fn link(flow_id: Bytes16, key: H256) -> Option<(FlowId, H256)> {
 }
 
 fn optional_bytes<S: sp_core::Get<u32>>(
-	bytes: UnboundedBytes,
+	bytes: BoundedBytes<S>,
 	too_long: &'static str,
 ) -> EvmResult<Option<BoundedVec<u8, S>>> {
 	let bytes: Vec<u8> = bytes.into();

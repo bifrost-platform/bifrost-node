@@ -28,11 +28,22 @@ use sp_std::{vec, vec::Vec};
 
 const PID: ProductId = 1;
 
+/// Registers every chain the inputs below use (tranches and managers on 1.., single-chain
+/// on 7, multichain adapters on 100.., collaterals on 900..), as EVM chains. Called from
+/// the origin helpers, which every benchmark goes through.
+fn register_chains<T: Config>() {
+	for chain_id in (1..=20).chain(100..120).chain(900..920) {
+		ChainInfos::<T>::insert(chain_id, crate::ChainInfo { address_len: 20, tx_hash_len: 32 });
+	}
+}
+
 fn admin_origin<T: Config>() -> T::RuntimeOrigin {
+	register_chains::<T>();
 	T::ProductAdminOrigin::try_successful_origin().expect("ProductAdminOrigin benchmark helper")
 }
 
 fn factory_origin<T: Config>() -> T::RuntimeOrigin {
+	register_chains::<T>();
 	T::ProductFactoryOrigin::try_successful_origin().expect("ProductFactoryOrigin benchmark helper")
 }
 
@@ -437,4 +448,6 @@ mod benchmarks {
 		);
 		assert!(Products::<T>::contains_key(pid));
 	}
+
+	impl_benchmark_test_suite!(Pallet, crate::mock::new_test_ext(), crate::mock::Test);
 }

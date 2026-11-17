@@ -23,7 +23,7 @@
     "sourceMap": true,
     "target": "es2020",
     "outDir": "build",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true
   },

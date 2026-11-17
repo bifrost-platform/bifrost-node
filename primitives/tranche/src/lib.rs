@@ -67,6 +67,53 @@ pub fn as_evm(address: &ChainAddress) -> Option<H160> {
 		.then(|| H160::from_slice(&address.as_bytes()[12..]))
 }
 
+/// What the hub knows about a chain products can live on, registered by governance
+/// (`pallet_tranche_system::set_chain_info`). [`ChainAddress`] and [`TxHash`] are wide enough
+/// for every chain, so without this the same EVM address could be written as several
+/// different 32-byte values, each a distinct storage key.
+#[derive(
+	Clone,
+	Copy,
+	Encode,
+	Decode,
+	DecodeWithMemTracking,
+	PartialEq,
+	Eq,
+	RuntimeDebug,
+	TypeInfo,
+	MaxEncodedLen,
+)]
+pub struct ChainInfo {
+	/// Bytes in a native address: 20 for EVM, 32 for Solana and Stellar.
+	pub address_len: u8,
+	/// Bytes in a native tx identifier: 32 for EVM and Stellar, 64 for Solana.
+	pub tx_hash_len: u8,
+}
+
+impl ChainInfo {
+	/// Both lengths fit their carrier types.
+	pub fn is_valid(&self) -> bool {
+		(1..=32).contains(&self.address_len) &&
+			(1..=MAX_TX_HASH_LEN as u8).contains(&self.tx_hash_len)
+	}
+
+	/// Is `address` this chain's canonical form: left-padded with zeros to 32 bytes?
+	pub fn accepts_address(&self, address: &ChainAddress) -> bool {
+		let padding = 32usize.saturating_sub(self.address_len as usize);
+		address.as_bytes()[..padding].iter().all(|b| *b == 0)
+	}
+
+	/// Is `tx_hash` as long as this chain's tx identifiers?
+	pub fn accepts_tx_hash(&self, tx_hash: &TxHash) -> bool {
+		tx_hash.len() == self.tx_hash_len as usize
+	}
+}
+
+/// Looks up a chain's [`ChainInfo`]: `None` for a chain governance has not registered.
+pub trait ChainInspect {
+	fn chain_info(chain_id: ChainId) -> Option<ChainInfo>;
+}
+
 /// A recorded tx hash must be non-empty and not all zeros (the zero value is the
 /// precompile-side "unset" sentinel).
 pub fn is_valid_tx_hash(tx_hash: &TxHash) -> bool {
@@ -141,6 +188,27 @@ pub mod legacy {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn chain_info_accepts_only_the_canonical_form() {
+		let evm = ChainInfo { address_len: 20, tx_hash_len: 32 };
+		let canonical = from_evm(H160::repeat_byte(0xab));
+		let mut alias = canonical;
+		alias.0[0] = 1;
+		assert!(evm.accepts_address(&canonical));
+		assert!(!evm.accepts_address(&alias), "same low 20 bytes, non-zero padding");
+		assert!(evm.accepts_tx_hash(&TxHash::truncate_from(vec![1; 32])));
+		assert!(!evm.accepts_tx_hash(&TxHash::truncate_from(vec![1; 64])));
+
+		let solana = ChainInfo { address_len: 32, tx_hash_len: 64 };
+		assert!(solana.accepts_address(&alias), "all 32 bytes are the address");
+		assert!(solana.accepts_tx_hash(&TxHash::truncate_from(vec![1; 64])));
+
+		assert!(evm.is_valid() && solana.is_valid());
+		assert!(!ChainInfo { address_len: 33, tx_hash_len: 32 }.is_valid());
+		assert!(!ChainInfo { address_len: 20, tx_hash_len: 65 }.is_valid());
+		assert!(!ChainInfo { address_len: 0, tx_hash_len: 32 }.is_valid());
+	}
 
 	#[test]
 	fn evm_address_round_trips() {

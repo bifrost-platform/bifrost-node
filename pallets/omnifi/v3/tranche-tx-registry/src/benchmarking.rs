@@ -49,8 +49,15 @@ fn gov<T: Config>() -> T::RuntimeOrigin {
 	T::GovernanceOrigin::try_successful_origin().expect("GovernanceOrigin benchmark helper")
 }
 
+/// Chain 1, the one every benchmarked record is on, with `tx_hash`'s max-length hashes.
+fn seed_chain<T: Config>() {
+	let info = crate::ChainInfo { address_len: 32, tx_hash_len: crate::MAX_TX_HASH_LEN as u8 };
+	T::BenchmarkHelper::seed_chain(1, info);
+}
+
 fn rec<T: Config>() -> T::RuntimeOrigin {
 	T::BenchmarkHelper::seed_recorder();
+	seed_chain::<T>();
 	T::RecorderOrigin::try_successful_origin().expect("RecorderOrigin benchmark helper")
 }
 
@@ -136,6 +143,7 @@ fn bench_record<T: Config>(
 	instance_metadata: Option<InstanceMetadata>,
 	link: Option<InstanceRef>,
 ) {
+	seed_chain::<T>();
 	Pallet::<T>::do_record_tx(
 		PID,
 		BENCH_FLOW,
