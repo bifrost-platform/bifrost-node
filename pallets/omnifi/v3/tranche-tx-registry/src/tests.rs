@@ -542,6 +542,26 @@ fn v2_migration_moves_builtin_v1_flows_only() {
 }
 
 #[test]
+fn a_tx_must_be_on_a_registered_chain_with_a_hash_of_its_length() {
+	new_test_ext().execute_with(|| {
+		assign_multichain();
+		assert_noop!(
+			rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, UNREGISTERED_CHAIN, tx(1))
+				.investor()
+				.send(),
+			Error::<Test>::ChainNotRegistered
+		);
+		// the mock's chains have 32-byte hashes; a Solana-length one is refused
+		let long = BoundedVec::truncate_from(vec![1; 64]);
+		assert_noop!(
+			rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, A, long).investor().send(),
+			Error::<Test>::InvalidTxHashLength
+		);
+		assert_ok!(rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, A, tx(1)).investor().send());
+	});
+}
+
+#[test]
 fn opening_rules() {
 	new_test_ext().execute_with(|| {
 		assert_noop!(

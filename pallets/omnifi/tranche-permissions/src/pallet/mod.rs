@@ -2,7 +2,8 @@ mod impls;
 
 use crate::{Role, WeightInfo};
 use pallet_tranche_system::{
-	is_permissionless_product_id, ChainAddress, ProductId, ProductInspect, VaultId, VaultInspect,
+	is_permissionless_product_id, ChainAddress, ChainInspect, ProductId, ProductInspect, VaultId,
+	VaultInspect,
 };
 
 use frame_support::{
@@ -41,6 +42,9 @@ pub mod pallet {
 		/// `Multichain` one before granting/revoking `Role::TrancheInvestor` —
 		/// see `Error::TrancheInvestorMultichainOnly`.
 		type Products: ProductInspect;
+		/// The chain registry — implemented by pallet-tranche-system. A whitelisted
+		/// investor must be an address in the canonical form of the vault's chain.
+		type Chains: pallet_tranche_system::ChainInspect;
 		/// Weight information for extrinsics in this pallet.
 		type WeightInfo: WeightInfo;
 		/// Benchmark-only setup hook — see [`crate::BenchmarkHelper`].
@@ -62,6 +66,10 @@ pub mod pallet {
 		NotGranted,
 		/// The vault does not exist or does not belong to the given product.
 		ProductOrVaultNotFound,
+		/// The vault's chain is not registered with pallet-tranche-system's `set_chain_info`.
+		ChainNotRegistered,
+		/// The investor is not in the canonical address form of the vault's chain.
+		InvalidInvestorAddress,
 		/// `Role::TrancheInvestor` grants/revokes are `Multichain`-only — a
 		/// `SingleChain` product's own TrancheManager Contract manages investor
 		/// whitelisting directly, never through this pallet.
@@ -232,6 +240,10 @@ pub mod pallet {
 			investor: ChainAddress,
 		) -> DispatchResult {
 			Self::ensure_tranche_investor_allowed(origin, product_id, &vault)?;
+			// Grant only: an entry stored before its chain was registered must stay revocable.
+			let chain =
+				T::Chains::chain_info(vault.chain_id).ok_or(Error::<T>::ChainNotRegistered)?;
+			ensure!(chain.accepts_address(&investor), Error::<T>::InvalidInvestorAddress);
 			let key = (product_id, vault.clone(), investor);
 			ensure!(!TrancheInvestors::<T>::contains_key(&key), Error::<T>::AlreadyGranted);
 			TrancheInvestors::<T>::insert(key, ());

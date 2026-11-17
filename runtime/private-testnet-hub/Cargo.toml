@@ -96,11 +96,7 @@ pallet-oracle-registry = { workspace = true }
 pallet-cccp-relay-queue = { workspace = true }
 pallet-tranche-system = { workspace = true }
 pallet-tranche-permissions = { workspace = true }
-pallet-tranche-investments = { workspace = true }
 pallet-tranche-investments-v2 = { workspace = true }
-pallet-tranche-tx-registry = { workspace = true }
-pallet-tranche-tx-registry-v2 = { workspace = true }
-pallet-tranche-custom-flows = { workspace = true }
 pallet-tranche-tx-registry-v3 = { workspace = true }
 
 # Precompiled Contracts
@@ -120,11 +116,7 @@ precompile-blaze = { workspace = true }
 precompile-bifrost-evm-tx-payment = { workspace = true }
 precompile-tranche-system = { workspace = true }
 precompile-tranche-permissions = { workspace = true }
-precompile-tranche-investments = { workspace = true }
 precompile-tranche-investments-v2 = { workspace = true }
-precompile-tranche-tx-registry = { workspace = true }
-precompile-tranche-tx-registry-v2 = { workspace = true }
-precompile-tranche-custom-flows = { workspace = true }
 precompile-tranche-tx-registry-v3 = { workspace = true }
 precompile-svm-pda = { workspace = true }
 
@@ -172,11 +164,7 @@ std = [
 	"pallet-cccp-relay-queue/std",
 	"pallet-tranche-system/std",
 	"pallet-tranche-permissions/std",
-	"pallet-tranche-investments/std",
 	"pallet-tranche-investments-v2/std",
-	"pallet-tranche-tx-registry/std",
-	"pallet-tranche-tx-registry-v2/std",
-	"pallet-tranche-custom-flows/std",
 	"pallet-tranche-tx-registry-v3/std",
 	"pallet-im-online/std",
 	"pallet-offences/std",
@@ -219,11 +207,7 @@ std = [
 	"precompile-bifrost-evm-tx-payment/std",
 	"precompile-tranche-system/std",
 	"precompile-tranche-permissions/std",
-	"precompile-tranche-investments/std",
 	"precompile-tranche-investments-v2/std",
-	"precompile-tranche-tx-registry/std",
-	"precompile-tranche-tx-registry-v2/std",
-	"precompile-tranche-custom-flows/std",
 	"precompile-tranche-tx-registry-v3/std",
 	"precompile-svm-pda/std",
 	"substrate-wasm-builder",
@@ -270,23 +254,8 @@ runtime-benchmarks = [
 	"pallet-btc-registration-pool/runtime-benchmarks",
 	"pallet-btc-socket-queue/runtime-benchmarks",
 	"pallet-tranche-system/runtime-benchmarks",
-	# v1's own `runtime-benchmarks` feature must also be forwarded — NOT to
-	# benchmark v1 (it's deliberately absent from the `benches!` list below,
-	# and its weights.rs is untouched), but because `frame-support/runtime-
-	# benchmarks` above is a single, workspace-unified feature: once it's on,
-	# `EnsureOrigin::try_successful_origin` becomes a required (not defaulted)
-	# trait method for every `EnsureOrigin` impl in the whole build graph,
-	# including v1's `EnsureValuation`/`EnsureTxRecorder` — which only define
-	# it under their own crate's `runtime-benchmarks` cfg. Compile-time only:
-	# doesn't add v1 to `benches!`, doesn't touch v1's declared weights.
-	"pallet-tranche-investments/runtime-benchmarks",
-	"pallet-tranche-tx-registry/runtime-benchmarks",
-	# permissions is shared (not forked) and genuinely benchmarked here — see
-	# pallet-tranche-system's comment above for the same rationale.
 	"pallet-tranche-permissions/runtime-benchmarks",
 	"pallet-tranche-investments-v2/runtime-benchmarks",
-	"pallet-tranche-tx-registry-v2/runtime-benchmarks",
-	"pallet-tranche-custom-flows/runtime-benchmarks",
 	"pallet-tranche-tx-registry-v3/runtime-benchmarks",
 ]
 

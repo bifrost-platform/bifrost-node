@@ -2,6 +2,10 @@
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+#[cfg(test)]
+mod chain_tests;
+#[cfg(test)]
+mod mock;
 mod pallet;
 pub mod weights;
 
@@ -23,7 +27,7 @@ use sp_std::marker::PhantomData;
 /// and re-exported here as the canonical `pallet_tranche_system::ProductId`.
 /// The move is SCALE-encoding-neutral (crate path only affects `TypeInfo`
 /// metadata) — this pallet's existing storage needs no migration.
-pub use bp_tranche::{ChainAddress, ProductId};
+pub use bp_tranche::{ChainAddress, ChainInfo, ChainInspect, ProductId};
 
 /// Maximum number of tranches a single chain within a product can have.
 /// Originally a flat, product-wide cap; rescoped (2026-08-20) to apply per

@@ -43,7 +43,14 @@ macro_rules! impl_self_contained_call {
 				len: usize,
 			) -> Option<TransactionValidity> {
 				match self {
-					RuntimeCall::Ethereum(call) => call.validate_self_contained(info, dispatch_info, len),
+					RuntimeCall::Ethereum(call) => {
+						// Fee and nonce are only taken inside the EVM, which a call filtered at
+						// dispatch (safe mode, tx pause) never reaches: refuse it here instead.
+						if !<<Runtime as frame_system::Config>::BaseCallFilter as frame_support::traits::Contains<RuntimeCall>>::contains(self) {
+							return Some(Err(sp_runtime::transaction_validity::InvalidTransaction::Call.into()));
+						}
+						call.validate_self_contained(info, dispatch_info, len)
+					},
 					_ => None,
 				}
 			}
@@ -55,7 +62,14 @@ macro_rules! impl_self_contained_call {
 				len: usize,
 			) -> Option<Result<(), TransactionValidityError>> {
 				match self {
-					RuntimeCall::Ethereum(call) => call.pre_dispatch_self_contained(info, dispatch_info, len),
+					RuntimeCall::Ethereum(call) => {
+						// Fee and nonce are only taken inside the EVM, which a call filtered at
+						// dispatch (safe mode, tx pause) never reaches: refuse it here instead.
+						if !<<Runtime as frame_system::Config>::BaseCallFilter as frame_support::traits::Contains<RuntimeCall>>::contains(self) {
+							return Some(Err(sp_runtime::transaction_validity::InvalidTransaction::Call.into()));
+						}
+						call.pre_dispatch_self_contained(info, dispatch_info, len)
+					},
 					_ => None,
 				}
 			}

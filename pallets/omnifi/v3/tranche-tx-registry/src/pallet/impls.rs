@@ -7,6 +7,7 @@ use crate::{
 };
 
 use super::pallet::*;
+use crate::ChainInspect;
 use core::marker::PhantomData;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -130,6 +131,8 @@ impl<T: Config> Pallet<T> {
 		link: Option<InstanceRef>,
 	) -> DispatchResult {
 		ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::ZeroTxHash);
+		let chain = T::Chains::chain_info(chain_id).ok_or(Error::<T>::ChainNotRegistered)?;
+		ensure!(chain.accepts_tx_hash(&tx_hash), Error::<T>::InvalidTxHashLength);
 		if let Some((index, count)) = part {
 			ensure!(
 				count >= 1 && count <= MAX_PART_COUNT && index < count,
