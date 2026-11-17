@@ -130,113 +130,10 @@ impl frame_support::traits::Get<Vec<H160>> for PrecompileAddresses {
 	}
 }
 
-parameter_types! {
-	/// The removed `pallet_democracy` (index 51), whose storage `RemoveDemocracy` clears.
-	pub const DemocracyPalletName: &'static str = "Democracy";
-}
-
-/// Clears the removed Democracy pallet's storage (on the live chain: the storage version and the
-/// three zero counters — no proposals, referenda, votes, locks or deposits). A no-op once run, so
-/// it can be dropped from the tuple after the upgrade.
-pub type RemoveDemocracy = frame_support::migrations::RemovePallet<
-	DemocracyPalletName,
-	<Runtime as frame_system::Config>::DbWeight,
->;
-
-/// The chains this hub's products live on, registered by `SeedChainInfos` on the upgrade that
-/// introduces the chain registry.
-pub struct InitialChains;
-impl frame_support::traits::Get<Vec<(u64, pallet_tranche_system::ChainInfo)>> for InitialChains {
-	fn get() -> Vec<(u64, pallet_tranche_system::ChainInfo)> {
-		use pallet_tranche_system::ChainInfo;
-		const EVM: ChainInfo = ChainInfo { address_len: 20, tx_hash_len: 32 };
-		const SOLANA: ChainInfo = ChainInfo { address_len: 32, tx_hash_len: 64 };
-		vec![
-			(49_088, EVM),           // Bifrost testnet
-			(11_155_111, EVM),       // Sepolia
-			(84_532, EVM),           // Base Sepolia
-			(91_342, EVM),           // GIWA Sepolia
-			(46_630, EVM),           // Robinhood testnet
-			(97, EVM),               // BSC testnet
-			(1_397_705_728, SOLANA), // Solana devnet
-		]
-	}
-}
-
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing
 /// `OnRuntimeUpgrade`.
-type SingleBlockMigrations = (
-	bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,
-	RemoveDemocracy,
-	pallet_tranche_system::migrations::SeedChainInfos<Runtime, InitialChains>,
-);
-
-parameter_types! {
-	// The OmniFi pallets removed from this runtime (indices 82 to 85).
-	pub const TrancheInvestmentsPalletName: &'static str = "TrancheInvestments";
-	pub const TrancheTxRegistryPalletName: &'static str = "TrancheTxRegistry";
-	pub const TrancheCustomFlowsPalletName: &'static str = "TrancheCustomFlows";
-	pub const TrancheTxRegistryV2PalletName: &'static str = "TrancheTxRegistryV2";
-}
-
-/// Weight charged per key `ClearRemovedPallet` clears, which sets how many keys go in a
-/// block (about 30k). Only inherents are included while it runs, so this is deliberately
-/// not `pallet_migrations`' benchmarked 125µs (a full database read and write per key),
-/// which would take 91 blocks: clearing the same 290k keys on a local node took under 8µs
-/// a key.
-pub const CLEAR_WEIGHT_PER_KEY: Weight = Weight::from_parts(13_000_000, 0);
-
-/// Clears the storage a pallet left behind when it was removed from the runtime, a block's
-/// worth of keys per step. The live chain holds about 290k such keys, too many for the
-/// single-block `RemovePallet`; `pallet_migrations::migrations::ResetPallet` needs the
-/// pallet to still be in the runtime.
-pub struct ClearRemovedPallet<Name>(sp_std::marker::PhantomData<Name>);
-
-impl<Name: frame_support::traits::Get<&'static str>> frame_support::migrations::SteppedMigration
-	for ClearRemovedPallet<Name>
-{
-	type Cursor = ();
-	type Identifier = [u8; 16];
-
-	fn id() -> Self::Identifier {
-		("ClearRemovedPallet::", Name::get()).using_encoded(sp_io::hashing::twox_128)
-	}
-
-	fn step(
-		_cursor: Option<Self::Cursor>,
-		meter: &mut frame_support::weights::WeightMeter,
-	) -> Result<Option<Self::Cursor>, frame_support::migrations::SteppedMigrationError> {
-		let budget: u32 = meter
-			.remaining()
-			.checked_div_per_component(&CLEAR_WEIGHT_PER_KEY)
-			.unwrap_or_default()
-			.unique_saturated_into();
-		if budget == 0 {
-			return Err(frame_support::migrations::SteppedMigrationError::InsufficientWeight {
-				required: CLEAR_WEIGHT_PER_KEY,
-			});
-		}
-
-		let prefix = sp_io::hashing::twox_128(Name::get().as_bytes());
-		let (removed, done) = match sp_io::storage::clear_prefix(&prefix, Some(budget)) {
-			sp_io::KillStorageResult::AllRemoved(n) => (n, true),
-			sp_io::KillStorageResult::SomeRemaining(n) => (n, false),
-		};
-		meter.consume(CLEAR_WEIGHT_PER_KEY.saturating_mul(removed.into()));
-		Ok(if done { None } else { Some(()) })
-	}
-}
-
-/// Multi-block migrations, run by `pallet_migrations` after a runtime upgrade. Only
-/// inherents are included while they run.
-#[cfg(not(feature = "runtime-benchmarks"))]
-type SteppedMigrations = (
-	pallet_identity::migration::v2::LazyMigrationV1ToV2<Runtime>,
-	ClearRemovedPallet<TrancheInvestmentsPalletName>,
-	ClearRemovedPallet<TrancheTxRegistryPalletName>,
-	ClearRemovedPallet<TrancheCustomFlowsPalletName>,
-	ClearRemovedPallet<TrancheTxRegistryV2PalletName>,
-);
+type SingleBlockMigrations =
+	(bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -1245,11 +1142,11 @@ parameter_types! {
 impl pallet_migrations::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	// `Migrations` must satisfy `MockedMigrations` under `runtime-benchmarks`
-	// (blanket-impl'd for tuples down to the 0-tuple, but not for the real
-	// migrations) — swapped to `()` only for that feature so normal
-	// (non-benchmark) builds keep the real migrations unchanged.
+	// (blanket-impl'd for tuples down to the 0-tuple, but not for
+	// `LazyMigrationV1ToV2` itself) — swapped to `()` only for that feature so
+	// normal (non-benchmark) builds keep the real migration unchanged.
 	#[cfg(not(feature = "runtime-benchmarks"))]
-	type Migrations = SteppedMigrations;
+	type Migrations = pallet_identity::migration::v2::LazyMigrationV1ToV2<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type Migrations = ();
 	type CursorMaxLen = ConstU32<65_536>;
@@ -1496,7 +1393,7 @@ mod runtime {
 	#[runtime::pallet_index(50)]
 	pub type Scheduler = pallet_scheduler;
 
-	// 51: Democracy — removed (storage cleared by `RemoveDemocracy`, see `SingleBlockMigrations`).
+	// 51: Democracy — removed.
 
 	#[runtime::pallet_index(52)]
 	pub type Council = pallet_collective<Instance1>;
@@ -1576,80 +1473,3 @@ mod benches {
 
 bifrost_common_runtime::impl_common_runtime_apis!();
 bifrost_common_runtime::impl_self_contained_call!();
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use frame_support::{
-		migrations::{SteppedMigration, SteppedMigrationError},
-		weights::WeightMeter,
-	};
-
-	type Clear = ClearRemovedPallet<TrancheTxRegistryPalletName>;
-
-	#[test]
-	fn clear_removed_pallet_stays_within_the_meter_and_its_own_prefix() {
-		let removed = sp_io::hashing::twox_128(b"TrancheTxRegistry");
-		// a pallet that stays, whose name only starts the same way
-		let kept = sp_io::hashing::twox_128(b"TrancheTxRegistryV3");
-
-		let mut ext = sp_io::TestExternalities::default();
-		ext.execute_with(|| {
-			for i in 0..1_000u32 {
-				sp_io::storage::set(&[&removed[..], &i.encode()].concat(), &[1]);
-			}
-			sp_io::storage::set(&kept, &[1]);
-		});
-		// `clear_prefix` only counts keys that are already in the backend
-		ext.commit_all().unwrap();
-
-		let left = |ext: &mut sp_io::TestExternalities| {
-			ext.execute_with(|| {
-				let mut n = 0;
-				let mut key = removed.to_vec();
-				while let Some(next) = sp_io::storage::next_key(&key) {
-					if !next.starts_with(&removed) {
-						break;
-					}
-					n += 1;
-					key = next;
-				}
-				n
-			})
-		};
-
-		// room for 400 keys a step: 1_000 keys take three steps
-		let per_step = CLEAR_WEIGHT_PER_KEY.saturating_mul(400);
-		let mut remaining = vec![];
-		loop {
-			let done = ext.execute_with(|| {
-				Clear::step(None, &mut WeightMeter::with_limit(per_step)).unwrap().is_none()
-			});
-			ext.commit_all().unwrap();
-			remaining.push(left(&mut ext));
-			if done {
-				break;
-			}
-		}
-		assert_eq!(remaining, vec![600, 200, 0]);
-		ext.execute_with(|| assert!(sp_io::storage::exists(&kept)));
-
-		// no room for a single key: asks for more weight instead of reporting progress
-		ext.execute_with(|| {
-			assert!(matches!(
-				Clear::step(None, &mut WeightMeter::with_limit(Weight::zero())),
-				Err(SteppedMigrationError::InsufficientWeight { .. })
-			));
-		});
-	}
-
-	#[test]
-	fn initial_chains_are_valid_and_distinct() {
-		let chains = InitialChains::get();
-		assert!(chains.iter().all(|(_, info)| info.is_valid()));
-		let mut ids: Vec<u64> = chains.iter().map(|(id, _)| *id).collect();
-		ids.sort();
-		ids.dedup();
-		assert_eq!(ids.len(), chains.len());
-	}
-}
