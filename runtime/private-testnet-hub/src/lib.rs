@@ -1184,6 +1184,7 @@ impl pallet_tranche_permissions::Config for Runtime {
 	type ProductAdminOrigin = pallet_tranche_system::EnsureProductAdmin<Runtime>;
 	type Vaults = TrancheSystem;
 	type Products = TrancheSystem;
+	type Chains = TrancheSystem;
 	type WeightInfo = pallet_tranche_permissions::weights::SubstrateWeight<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TranchePermissionsBenchmarkHelper;
@@ -1202,6 +1203,11 @@ impl pallet_tranche_permissions::BenchmarkHelper for TranchePermissionsBenchmark
 		product_id: pallet_tranche_system::ProductId,
 		vault: pallet_tranche_system::VaultId,
 	) {
+		// the vault's chain must be registered for the investor-address check
+		pallet_tranche_system::ChainInfos::<Runtime>::insert(
+			vault.chain_id,
+			pallet_tranche_system::ChainInfo { address_len: 32, tx_hash_len: 32 },
+		);
 		pallet_tranche_system::Vaults::<Runtime>::insert(
 			vault,
 			pallet_tranche_system::VaultRegistration { product_id, removed: false },
@@ -1267,6 +1273,7 @@ pub struct TrancheTxRegistryV3BenchmarkHelper;
 impl pallet_tranche_tx_registry_v3::Config for Runtime {
 	type GovernanceOrigin = EnsureRoot<AccountId>;
 	type RecorderOrigin = pallet_tranche_tx_registry_v3::EnsureTxRecorder<Runtime>;
+	type Chains = TrancheSystem;
 	type WeightInfo = pallet_tranche_tx_registry_v3::weights::SubstrateWeight<Runtime>;
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = TrancheTxRegistryV3BenchmarkHelper;
@@ -1276,6 +1283,9 @@ impl pallet_tranche_tx_registry_v3::Config for Runtime {
 impl pallet_tranche_tx_registry_v3::BenchmarkHelper for TrancheTxRegistryV3BenchmarkHelper {
 	fn seed_recorder() {
 		pallet_tranche_tx_registry_v3::TxRecorder::<Runtime>::put(AccountId::from([0x11u8; 20]));
+	}
+	fn seed_chain(chain_id: u64, info: pallet_tranche_system::ChainInfo) {
+		pallet_tranche_system::ChainInfos::<Runtime>::insert(chain_id, info);
 	}
 }
 

@@ -66,6 +66,14 @@ impl frame_system::Config for Test {
 
 /// Every vault "belongs" to every product and every chain set checks out —
 /// enough for the extrinsic bodies to run without pulling in pallet-tranche-system.
+/// Every chain is registered, with the full-width addresses the benchmarks use.
+pub struct MockChains;
+impl pallet_tranche_system::ChainInspect for MockChains {
+	fn chain_info(_: u64) -> Option<pallet_tranche_system::ChainInfo> {
+		Some(pallet_tranche_system::ChainInfo { address_len: 32, tx_hash_len: 32 })
+	}
+}
+
 pub struct MockVaults;
 impl VaultInspect for MockVaults {
 	fn vault_belongs_to_product(_: ProductId, _: &VaultId) -> bool {
@@ -105,6 +113,7 @@ impl pallet_tranche_permissions::Config for Test {
 	type ProductAdminOrigin = frame_system::EnsureSigned<u64>;
 	type Vaults = MockVaults;
 	type Products = MockProducts;
+	type Chains = MockChains;
 	type WeightInfo = ();
 	#[cfg(feature = "runtime-benchmarks")]
 	type BenchmarkHelper = ();

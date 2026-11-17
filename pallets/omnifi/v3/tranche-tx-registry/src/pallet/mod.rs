@@ -44,6 +44,10 @@ pub mod pallet {
 		/// version shares one recorder identity.
 		type RecorderOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
+		/// The chain registry — implemented by pallet-tranche-system. A tx can only be
+		/// recorded on a registered chain, with a hash of that chain's length.
+		type Chains: crate::ChainInspect;
+
 		type WeightInfo: WeightInfo;
 
 		#[cfg(feature = "runtime-benchmarks")]
@@ -100,6 +104,10 @@ pub mod pallet {
 		ScopeWithoutInvestor,
 		/// `tx_hash` is empty or all zeros.
 		ZeroTxHash,
+		/// `chain_id` is not registered with pallet-tranche-system's `set_chain_info`.
+		ChainNotRegistered,
+		/// `tx_hash` is not as long as `chain_id`'s tx identifiers.
+		InvalidTxHashLength,
 		/// This `(chain_id, tx_hash, part)` is already attested to this slot —
 		/// one tx may carry several parts (e.g. several FINALIZE chunks sent by
 		/// one `continueFinalize`), each recorded once.

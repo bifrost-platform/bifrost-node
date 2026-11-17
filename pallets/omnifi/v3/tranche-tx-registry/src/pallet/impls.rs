@@ -7,6 +7,7 @@ use crate::{
 };
 
 use super::pallet::*;
+use crate::ChainInspect;
 use core::marker::PhantomData;
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -130,6 +131,8 @@ impl<T: Config> Pallet<T> {
 		link: Option<InstanceRef>,
 	) -> DispatchResult {
 		ensure!(is_valid_tx_hash(&tx_hash), Error::<T>::ZeroTxHash);
+		let chain = T::Chains::chain_info(chain_id).ok_or(Error::<T>::ChainNotRegistered)?;
+		ensure!(chain.accepts_tx_hash(&tx_hash), Error::<T>::InvalidTxHashLength);
 		if let Some((index, count)) = part {
 			ensure!(
 				count >= 1 && count <= MAX_PART_COUNT && index < count,
@@ -214,9 +217,9 @@ impl<T: Config> Pallet<T> {
 			(product_id, flow_id, instance_key, resolved.lane, slot_id),
 			|record| -> Result<bool, Error<T>> {
 				ensure!(
-					!record.attempts.iter().any(|a| a.tx.chain_id == chain_id &&
-						a.tx.tx_hash == tx_hash &&
-						a.part == part),
+					!record.attempts.iter().any(|a| a.tx.chain_id == chain_id
+						&& a.tx.tx_hash == tx_hash
+						&& a.part == part),
 					Error::<T>::DuplicateAttestation
 				);
 				let part_count = part.map(|(_, count)| count);
@@ -254,14 +257,15 @@ impl<T: Config> Pallet<T> {
 		// --- 5. progress ---
 		if newly_completed {
 			match resolved.lane {
-				Lane::Main =>
+				Lane::Main => {
 					if was_open {
 						instance.main_stage =
 							Some(instance.main_stage.map_or(slot_id, |s| s.max(slot_id)));
 						if resolved.required {
 							instance.main_done = instance.main_done.saturating_add(1);
 						}
-					},
+					}
+				},
 				Lane::Sub { .. } => {
 					let state = lane_states
 						.iter_mut()
@@ -300,9 +304,9 @@ impl<T: Config> Pallet<T> {
 		};
 
 		// --- 7. completion ---
-		let just_completed = was_open &&
-			instance.main_done >= template.main_required_count &&
-			instance.pending_lanes == 0;
+		let just_completed = was_open
+			&& instance.main_done >= template.main_required_count
+			&& instance.pending_lanes == 0;
 		if just_completed {
 			instance.status = InstanceStatus::Completed;
 			instance.closed_at = Some(now);

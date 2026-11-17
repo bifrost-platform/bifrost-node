@@ -234,8 +234,9 @@ fn closed_events() -> Vec<(InstanceKey, CloseOutcome)> {
 	System::events()
 		.into_iter()
 		.filter_map(|r| match r.event {
-			RuntimeEvent::Registry(Event::InstanceClosed { instance_key, outcome, .. }) =>
-				Some((instance_key, outcome)),
+			RuntimeEvent::Registry(Event::InstanceClosed { instance_key, outcome, .. }) => {
+				Some((instance_key, outcome))
+			},
 			_ => None,
 		})
 		.collect()
@@ -538,6 +539,26 @@ fn v2_migration_moves_builtin_v1_flows_only() {
 		ProductFlows::<Test>::insert(PID2, FLOW_DEPOSIT, MC_DEPOSIT_V1);
 		<Registry as OnRuntimeUpgrade>::on_runtime_upgrade();
 		assert_eq!(ProductFlows::<Test>::get(PID2, FLOW_DEPOSIT), Some(MC_DEPOSIT_V1));
+	});
+}
+
+#[test]
+fn a_tx_must_be_on_a_registered_chain_with_a_hash_of_its_length() {
+	new_test_ext().execute_with(|| {
+		assign_multichain();
+		assert_noop!(
+			rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, UNREGISTERED_CHAIN, tx(1))
+				.investor()
+				.send(),
+			Error::<Test>::ChainNotRegistered
+		);
+		// the mock's chains have 32-byte hashes; a Solana-length one is refused
+		let long = BoundedVec::truncate_from(vec![1; 64]);
+		assert_noop!(
+			rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, A, long).investor().send(),
+			Error::<Test>::InvalidTxHashLength
+		);
+		assert_ok!(rec(FLOW_DEPOSIT, key(1), dep::REQUESTED, A, tx(1)).investor().send());
 	});
 }
 
