@@ -93,6 +93,9 @@ pub struct FullDevDeps<C, P, BE, SC, CIDP> {
 	/// Maximum allowed gas limit for eth_call/eth_estimateGas will be
 	/// `block.gas_limit * execute_gas_limit_multiplier`. (default 10)
 	pub execute_gas_limit_multiplier: u64,
+	/// Maximum number of existing storage slots an eth_call `state` override may clear in one
+	/// request, summed over all overridden accounts. Larger requests are rejected. (default 10000)
+	pub state_override_max_storage_keys: u32,
 	/// Mandated parent hashes for a given block hash.
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service
@@ -146,6 +149,9 @@ pub struct FullDeps<C, P, BE, SC, CIDP> {
 	/// Maximum allowed gas limit for eth_call/eth_estimateGas will be
 	/// `block.gas_limit * execute_gas_limit_multiplier`. (default 10)
 	pub execute_gas_limit_multiplier: u64,
+	/// Maximum number of existing storage slots an eth_call `state` override may clear in one
+	/// request, summed over all overridden accounts. Larger requests are rejected. (default 10000)
+	pub state_override_max_storage_keys: u32,
 	/// Mandated parent hashes for a given block hash.
 	pub forced_parent_hashes: Option<BTreeMap<H256, H256>>,
 	/// Chain syncing service

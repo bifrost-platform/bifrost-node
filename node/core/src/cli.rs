@@ -54,6 +54,12 @@ pub struct Cli {
 	#[clap(long, default_value = "10")]
 	pub execute_gas_limit_multiplier: u64,
 
+	/// Maximum number of existing storage slots an eth_call `state` override may clear in one
+	/// request, summed over all overridden accounts. Larger requests are rejected (callers can
+	/// use `stateDiff` instead); 0 allows `state` only on accounts without storage. (default 10000)
+	#[clap(long, default_value = "10000")]
+	pub state_override_max_storage_keys: u32,
+
 	/// Maximum fee history cache size.
 	#[clap(long, default_value = "2048")]
 	pub fee_history_limit: u64,

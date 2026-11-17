@@ -54,6 +54,7 @@ pub struct RpcConfig {
 	pub max_block_range: u32,
 	pub logs_request_timeout: u64,
 	pub execute_gas_limit_multiplier: u64,
+	pub state_override_max_storage_keys: u32,
 	pub tracing_raw_max_memory_usage: usize,
 	pub frontier_backend_type: BackendTypeConfig,
 }
