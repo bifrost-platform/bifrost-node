@@ -45,7 +45,8 @@ pub use weights::WeightInfo;
 
 pub use bp_tranche::{
 	history::{self, HistoryPage, PagedInvestorHistory},
-	is_valid_tx_hash, ChainAddress, ChainId, ProductId, TxHash, TxRecord, MAX_TX_HASH_LEN,
+	is_valid_tx_hash, ChainAddress, ChainId, ChainInfo, ChainInspect, ProductId, TxHash, TxRecord,
+	MAX_TX_HASH_LEN,
 };
 use parity_scale_codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
@@ -87,11 +88,14 @@ where
 pub trait BenchmarkHelper {
 	/// Seeds the shared recorder identity `RecorderOrigin` checks.
 	fn seed_recorder();
+	/// Registers `chain_id` with whatever `Config::Chains` reads.
+	fn seed_chain(chain_id: ChainId, info: ChainInfo);
 }
 
 #[cfg(feature = "runtime-benchmarks")]
 impl BenchmarkHelper for () {
 	fn seed_recorder() {}
+	fn seed_chain(_: ChainId, _: ChainInfo) {}
 }
 
 // ---------------------------------------------------------------------------

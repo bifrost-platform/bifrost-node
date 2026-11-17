@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-node"
-version = "2.1.1"
+version = "2.2.4"
 dependencies = [
  "bifrost-common-node",
  "bifrost-dev-node",
@@ -1457,6 +1457,7 @@ dependencies = [
  "sp-core",
  "sp-genesis-builder",
  "sp-inherents",
+ "sp-io",
  "sp-offchain",
  "sp-runtime",
  "sp-session",
@@ -1588,13 +1589,9 @@ dependencies = [
  "pallet-session",
  "pallet-sudo",
  "pallet-timestamp",
- "pallet-tranche-custom-flows",
- "pallet-tranche-investments",
  "pallet-tranche-investments-v2",
  "pallet-tranche-permissions",
  "pallet-tranche-system",
- "pallet-tranche-tx-registry",
- "pallet-tranche-tx-registry-v2",
  "pallet-tranche-tx-registry-v3",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -1612,13 +1609,9 @@ dependencies = [
  "precompile-collective",
  "precompile-relay-manager",
  "precompile-svm-pda",
- "precompile-tranche-custom-flows",
- "precompile-tranche-investments",
  "precompile-tranche-investments-v2",
  "precompile-tranche-permissions",
  "precompile-tranche-system",
- "precompile-tranche-tx-registry",
- "precompile-tranche-tx-registry-v2",
  "precompile-tranche-tx-registry-v3",
  "precompile-utils",
  "scale-info",
@@ -1796,7 +1789,7 @@ dependencies = [
 [[package]]
 name = "binary-merkle-tree"
 version = "16.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "hash-db",
  "log",
@@ -1812,7 +1805,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "regex",
@@ -2935,7 +2928,7 @@ dependencies = [
 [[package]]
 name = "cumulus-client-parachain-inherent"
 version = "0.22.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "cumulus-primitives-core",
@@ -2957,7 +2950,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-parachain-system"
 version = "0.25.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "bytes",
@@ -2995,7 +2988,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-parachain-system-proc-macro"
 version = "0.7.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
@@ -3006,7 +2999,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-core"
 version = "0.23.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "polkadot-core-primitives",
@@ -3023,7 +3016,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-parachain-inherent"
 version = "0.23.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "cumulus-primitives-core",
@@ -3037,7 +3030,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-proof-size-hostfunction"
 version = "0.16.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "sp-externalities",
  "sp-runtime-interface",
@@ -3047,7 +3040,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-storage-weight-reclaim"
 version = "16.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-proof-size-hostfunction",
@@ -3064,7 +3057,7 @@ dependencies = [
 [[package]]
 name = "cumulus-relay-chain-interface"
 version = "0.28.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "cumulus-primitives-core",
@@ -3084,7 +3077,7 @@ dependencies = [
 [[package]]
 name = "cumulus-test-relay-sproof-builder"
 version = "0.24.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "cumulus-primitives-core",
  "parity-scale-codec",
@@ -3291,7 +3284,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ab67060fc6b8ef687992d439ca0fa36e7ed17e9a0b16b25b601e8757df720de"
 dependencies = [
  "data-encoding",
- "syn 2.0.117",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3974,7 +3967,7 @@ dependencies = [
 [[package]]
 name = "evm-tracer"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum-types",
  "evm",
@@ -4054,7 +4047,7 @@ dependencies = [
 [[package]]
 name = "fc-api"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "async-trait",
  "fp-storage",
@@ -4066,7 +4059,7 @@ dependencies = [
 [[package]]
 name = "fc-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "async-trait",
  "fp-consensus",
@@ -4082,7 +4075,7 @@ dependencies = [
 [[package]]
 name = "fc-db"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "async-trait",
  "ethereum",
@@ -4094,7 +4087,7 @@ dependencies = [
  "futures 0.3.32",
  "kvdb-rocksdb",
  "log",
- "parity-db 0.5.4",
+ "parity-db",
  "parity-scale-codec",
  "parking_lot 0.12.5",
  "sc-client-api",
@@ -4112,7 +4105,7 @@ dependencies = [
 [[package]]
 name = "fc-evm-tracing"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum-types",
  "fp-rpc-debug",
@@ -4129,7 +4122,7 @@ dependencies = [
 [[package]]
 name = "fc-mapping-sync"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "fc-db",
  "fc-storage",
@@ -4152,7 +4145,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4208,7 +4201,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core"
 version = "1.1.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4224,7 +4217,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4238,7 +4231,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum-types",
  "fc-evm-tracing",
@@ -4252,7 +4245,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-core-types"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum-types",
  "serde",
@@ -4262,7 +4255,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4293,7 +4286,7 @@ dependencies = [
 [[package]]
 name = "fc-rpc-trace"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4330,7 +4323,7 @@ dependencies = [
 [[package]]
 name = "fc-storage"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4484,7 +4477,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 [[package]]
 name = "fork-tree"
 version = "13.0.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -4511,7 +4504,7 @@ dependencies = [
 [[package]]
 name = "fp-account"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "hex",
  "impl-serde",
@@ -4529,7 +4522,7 @@ dependencies = [
 [[package]]
 name = "fp-consensus"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -4540,7 +4533,7 @@ dependencies = [
 [[package]]
 name = "fp-ethereum"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4552,7 +4545,7 @@ dependencies = [
 [[package]]
 name = "fp-evm"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "environmental",
  "evm",
@@ -4568,7 +4561,7 @@ dependencies = [
 [[package]]
 name = "fp-ext"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum-types",
  "fp-rpc-evm-tracing-events",
@@ -4581,7 +4574,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc"
 version = "3.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4597,7 +4590,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-debug"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -4610,7 +4603,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-evm-tracing-events"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "environmental",
  "ethereum",
@@ -4625,7 +4618,7 @@ dependencies = [
 [[package]]
 name = "fp-rpc-txpool"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "parity-scale-codec",
@@ -4639,7 +4632,7 @@ dependencies = [
 [[package]]
 name = "fp-self-contained"
 version = "1.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -4651,7 +4644,7 @@ dependencies = [
 [[package]]
 name = "fp-storage"
 version = "2.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -4666,7 +4659,7 @@ checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 [[package]]
 name = "frame-benchmarking"
 version = "45.0.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "frame-support-procedural",
@@ -4690,7 +4683,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking-cli"
 version = "53.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "Inflector",
  "array-bytes 6.2.3",
@@ -4769,7 +4762,7 @@ dependencies = [
 [[package]]
 name = "frame-election-provider-solution-type"
 version = "16.1.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
@@ -4780,7 +4773,7 @@ dependencies = [
 [[package]]
 name = "frame-election-provider-support"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-election-provider-solution-type",
  "frame-support",
@@ -4797,7 +4790,7 @@ dependencies = [
 [[package]]
 name = "frame-executive"
 version = "45.0.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "aquamarine",
  "frame-support",
@@ -4827,7 +4820,7 @@ dependencies = [
 [[package]]
 name = "frame-metadata-hash-extension"
 version = "0.13.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "const-hex",
@@ -4843,7 +4836,7 @@ dependencies = [
 [[package]]
 name = "frame-storage-access-test-runtime"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "cumulus-pallet-parachain-system",
  "parity-scale-codec",
@@ -4857,7 +4850,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "45.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "aquamarine",
  "array-bytes 6.2.3",
@@ -4898,7 +4891,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "36.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -4918,7 +4911,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural-tools"
 version = "13.0.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate 3.4.0",
@@ -4930,7 +4923,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "12.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4940,7 +4933,7 @@ dependencies = [
 [[package]]
 name = "frame-system"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "cfg-if",
  "docify",
@@ -4959,7 +4952,7 @@ dependencies = [
 [[package]]
 name = "frame-system-benchmarking"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -4973,7 +4966,7 @@ dependencies = [
 [[package]]
 name = "frame-system-rpc-runtime-api"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "parity-scale-codec",
@@ -4983,7 +4976,7 @@ dependencies = [
 [[package]]
 name = "frame-try-runtime"
 version = "0.51.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -7295,15 +7288,6 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.5.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83faa42c0a078c393f6b29d5db232d8be22776a891f8f56e5284faee4a20b327"
-dependencies = [
- "libc",
-]
-
-[[package]]
-name = "memmap2"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
@@ -8043,7 +8027,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-conversion"
 version = "27.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8061,7 +8045,7 @@ dependencies = [
 [[package]]
 name = "pallet-aura"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8077,7 +8061,7 @@ dependencies = [
 [[package]]
 name = "pallet-authority-discovery"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8092,7 +8076,7 @@ dependencies = [
 [[package]]
 name = "pallet-authorship"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8105,7 +8089,7 @@ dependencies = [
 [[package]]
 name = "pallet-babe"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8128,7 +8112,7 @@ dependencies = [
 [[package]]
 name = "pallet-balances"
 version = "46.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8144,7 +8128,7 @@ dependencies = [
 [[package]]
 name = "pallet-base-fee"
 version = "1.0.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "fp-evm",
  "frame-support",
@@ -8249,7 +8233,7 @@ dependencies = [
 [[package]]
 name = "pallet-broker"
 version = "0.24.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bitvec",
  "frame-benchmarking",
@@ -8338,7 +8322,7 @@ dependencies = [
 [[package]]
 name = "pallet-collective"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8355,7 +8339,7 @@ dependencies = [
 [[package]]
 name = "pallet-democracy"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8372,7 +8356,7 @@ dependencies = [
 [[package]]
 name = "pallet-ethereum"
 version = "4.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "ethereum",
  "ethereum-types",
@@ -8395,7 +8379,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm"
 version = "6.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "cumulus-primitives-storage-weight-reclaim",
  "environmental",
@@ -8420,7 +8404,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-blake2"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "fp-evm",
 ]
@@ -8428,7 +8412,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-bn128"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "fp-evm",
  "sp-core",
@@ -8438,7 +8422,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-modexp"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "fp-evm",
  "num",
@@ -8447,7 +8431,7 @@ dependencies = [
 [[package]]
 name = "pallet-evm-precompile-simple"
 version = "2.0.0-dev"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "fp-evm",
  "ripemd",
@@ -8457,7 +8441,7 @@ dependencies = [
 [[package]]
 name = "pallet-grandpa"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8479,7 +8463,7 @@ dependencies = [
 [[package]]
 name = "pallet-identity"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "enumflags2",
  "frame-benchmarking",
@@ -8495,7 +8479,7 @@ dependencies = [
 [[package]]
 name = "pallet-im-online"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8514,7 +8498,7 @@ dependencies = [
 [[package]]
 name = "pallet-membership"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8530,7 +8514,7 @@ dependencies = [
 [[package]]
 name = "pallet-message-queue"
 version = "48.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "environmental",
  "frame-benchmarking",
@@ -8549,7 +8533,7 @@ dependencies = [
 [[package]]
 name = "pallet-migrations"
 version = "15.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8568,7 +8552,7 @@ dependencies = [
 [[package]]
 name = "pallet-mmr"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -8580,7 +8564,7 @@ dependencies = [
 [[package]]
 name = "pallet-offences"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8632,7 +8616,7 @@ dependencies = [
 [[package]]
 name = "pallet-preimage"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8648,7 +8632,7 @@ dependencies = [
 [[package]]
 name = "pallet-proxy"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
@@ -8681,7 +8665,7 @@ dependencies = [
 [[package]]
 name = "pallet-safe-mode"
 version = "26.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "pallet-balances",
@@ -8695,7 +8679,7 @@ dependencies = [
 [[package]]
 name = "pallet-scheduler"
 version = "46.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8712,7 +8696,7 @@ dependencies = [
 [[package]]
 name = "pallet-session"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8734,7 +8718,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -8755,7 +8739,7 @@ dependencies = [
 [[package]]
 name = "pallet-sudo"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8770,7 +8754,7 @@ dependencies = [
 [[package]]
 name = "pallet-timestamp"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8863,11 +8847,13 @@ dependencies = [
 name = "pallet-tranche-system"
 version = "1.0.0"
 dependencies = [
+ "bp-core",
  "bp-tranche",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
  "log",
+ "pallet-balances",
  "pallet-evm",
  "pallet-timestamp",
  "parity-scale-codec",
@@ -8940,7 +8926,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8956,7 +8942,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc"
 version = "48.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "jsonrpsee",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -8972,7 +8958,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc-runtime-api"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
@@ -8984,7 +8970,7 @@ dependencies = [
 [[package]]
 name = "pallet-treasury"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9003,7 +8989,7 @@ dependencies = [
 [[package]]
 name = "pallet-tx-pause"
 version = "26.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "parity-scale-codec",
@@ -9014,7 +9000,7 @@ dependencies = [
 [[package]]
 name = "pallet-utility"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9028,10 +9014,11 @@ dependencies = [
 
 [[package]]
 name = "parity-db"
-version = "0.4.13"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "592a28a24b09c9dc20ac8afaa6839abc417c720afe42c12e1e4a9d6aa2508d2e"
+checksum = "cd67682e0852e7b476b8502a4abe27890f82d3c482a65e4acf985d17f6048f9d"
 dependencies = [
+ "ahash 0.8.12",
  "blake2 0.10.6",
  "crc32fast",
  "fs2",
@@ -9039,31 +9026,10 @@ dependencies = [
  "libc",
  "log",
  "lz4",
- "memmap2 0.5.10",
- "parking_lot 0.12.5",
- "rand 0.8.5",
- "siphasher 0.3.11",
- "snap",
- "winapi",
-]
-
-[[package]]
-name = "parity-db"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6985a45b0597d68448dac9db2907f9f72bbaf63fe3383d4ba15f99096c87212f"
-dependencies = [
- "blake2 0.10.6",
- "crc32fast",
- "fs2",
- "hex",
- "libc",
- "log",
- "lz4",
- "memmap2 0.9.10",
+ "memmap2",
  "parking_lot 0.12.5",
  "rand 0.9.2",
- "siphasher 1.0.2",
+ "siphasher",
  "snap",
  "winapi",
 ]
@@ -9364,7 +9330,7 @@ dependencies = [
 [[package]]
 name = "polkadot-core-primitives"
 version = "21.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9375,7 +9341,7 @@ dependencies = [
 [[package]]
 name = "polkadot-node-metrics"
 version = "28.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bs58",
  "futures 0.3.32",
@@ -9392,7 +9358,7 @@ dependencies = [
 [[package]]
 name = "polkadot-node-network-protocol"
 version = "28.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-channel 1.9.0",
  "async-trait",
@@ -9417,7 +9383,7 @@ dependencies = [
 [[package]]
 name = "polkadot-node-primitives"
 version = "23.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bitvec",
  "bounded-vec",
@@ -9441,7 +9407,7 @@ dependencies = [
 [[package]]
 name = "polkadot-node-subsystem-types"
 version = "28.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "derive_more 0.99.20",
@@ -9469,7 +9435,7 @@ dependencies = [
 [[package]]
 name = "polkadot-overseer"
 version = "28.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -9489,7 +9455,7 @@ dependencies = [
 [[package]]
 name = "polkadot-parachain-primitives"
 version = "20.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "bounded-collections",
@@ -9506,7 +9472,7 @@ dependencies = [
 [[package]]
 name = "polkadot-primitives"
 version = "22.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bitvec",
  "bounded-collections",
@@ -9535,7 +9501,7 @@ dependencies = [
 [[package]]
 name = "polkadot-runtime-metrics"
 version = "25.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bs58",
  "frame-benchmarking",
@@ -9547,7 +9513,7 @@ dependencies = [
 [[package]]
 name = "polkadot-runtime-parachains"
 version = "24.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bitflags 1.3.2",
  "bitvec",
@@ -9594,7 +9560,7 @@ dependencies = [
 [[package]]
 name = "polkadot-sdk-frame"
 version = "0.14.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9629,7 +9595,7 @@ dependencies = [
 [[package]]
 name = "polkadot-statement-table"
 version = "23.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "polkadot-primitives",
@@ -10029,6 +9995,7 @@ dependencies = [
  "pallet-evm",
  "pallet-tranche-investments-v2",
  "pallet-tranche-system",
+ "precompile-tranche-system",
  "precompile-utils",
  "sp-core",
  "sp-runtime",
@@ -10118,7 +10085,7 @@ dependencies = [
 [[package]]
 name = "precompile-utils"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "derive_more 1.0.0",
  "environmental",
@@ -10147,7 +10114,7 @@ dependencies = [
 [[package]]
 name = "precompile-utils-macro"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#536257eed843936c067add3bb3104c4fa7d50511"
+source = "git+https://github.com/bifrost-platform/bifrost-frontier?branch=bifrost-polkadot-stable2512#b96e6d5dd10a80465e2c00afffcacd3a430e05b4"
 dependencies = [
  "case",
  "num_enum",
@@ -10399,7 +10366,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck 0.4.1",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -10419,7 +10386,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
  "heck 0.4.1",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "petgraph 0.8.3",
@@ -10451,7 +10418,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -10464,7 +10431,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -11069,7 +11036,7 @@ dependencies = [
  "once_cell",
  "ring 0.17.14",
  "rustls-pki-types",
- "rustls-webpki 0.103.9",
+ "rustls-webpki 0.103.16",
  "subtle 2.6.1",
  "zeroize",
 ]
@@ -11110,7 +11077,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
- "rustls-webpki 0.103.9",
+ "rustls-webpki 0.103.16",
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs 0.26.11",
@@ -11135,9 +11102,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.9"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7df23109aa6c1567d1c575b9952556388da57401e4ace1d15f79eedad0d8f53"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring 0.17.14",
  "rustls-pki-types",
@@ -11203,7 +11170,7 @@ dependencies = [
 [[package]]
 name = "sc-allocator"
 version = "35.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "log",
  "sp-core",
@@ -11214,7 +11181,7 @@ dependencies = [
 [[package]]
 name = "sc-authority-discovery"
 version = "0.55.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -11246,7 +11213,7 @@ dependencies = [
 [[package]]
 name = "sc-basic-authorship"
 version = "0.53.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "futures 0.3.32",
  "log",
@@ -11268,7 +11235,7 @@ dependencies = [
 [[package]]
 name = "sc-block-builder"
 version = "0.48.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -11283,11 +11250,11 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec"
 version = "48.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "docify",
- "memmap2 0.9.10",
+ "memmap2",
  "parity-scale-codec",
  "sc-chain-spec-derive",
  "sc-client-api",
@@ -11309,7 +11276,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec-derive"
 version = "12.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
@@ -11320,7 +11287,7 @@ dependencies = [
 [[package]]
 name = "sc-cli"
 version = "0.57.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "bip39",
@@ -11362,7 +11329,7 @@ dependencies = [
 [[package]]
 name = "sc-client-api"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "fnv",
  "futures 0.3.32",
@@ -11388,7 +11355,7 @@ dependencies = [
 [[package]]
 name = "sc-client-db"
 version = "0.51.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "hash-db",
  "kvdb",
@@ -11396,7 +11363,7 @@ dependencies = [
  "kvdb-rocksdb",
  "linked-hash-map",
  "log",
- "parity-db 0.4.13",
+ "parity-db",
  "parity-scale-codec",
  "parking_lot 0.12.5",
  "sc-client-api",
@@ -11416,7 +11383,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -11439,7 +11406,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-aura"
 version = "0.55.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "fork-tree",
@@ -11470,7 +11437,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-babe"
 version = "0.55.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "fork-tree",
@@ -11507,7 +11474,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-epochs"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "fork-tree",
  "parity-scale-codec",
@@ -11520,7 +11487,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.40.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "ahash 0.8.12",
  "array-bytes 6.2.3",
@@ -11564,7 +11531,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa-rpc"
 version = "0.40.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "finality-grandpa",
  "futures 0.3.32",
@@ -11584,7 +11551,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-manual-seal"
 version = "0.56.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -11619,7 +11586,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-slots"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -11642,7 +11609,7 @@ dependencies = [
 [[package]]
 name = "sc-executor"
 version = "0.47.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.5",
@@ -11665,7 +11632,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-common"
 version = "0.43.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "polkavm",
  "sc-allocator",
@@ -11678,7 +11645,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-polkavm"
 version = "0.40.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "log",
  "polkavm",
@@ -11689,7 +11656,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-wasmtime"
 version = "0.43.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "anyhow",
  "log",
@@ -11705,7 +11672,7 @@ dependencies = [
 [[package]]
 name = "sc-informant"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "console",
  "futures 0.3.32",
@@ -11721,7 +11688,7 @@ dependencies = [
 [[package]]
 name = "sc-keystore"
 version = "39.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "parking_lot 0.12.5",
@@ -11735,7 +11702,7 @@ dependencies = [
 [[package]]
 name = "sc-mixnet"
 version = "0.25.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "arrayvec 0.7.6",
@@ -11763,7 +11730,7 @@ dependencies = [
 [[package]]
 name = "sc-network"
 version = "0.55.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "async-channel 1.9.0",
@@ -11812,7 +11779,7 @@ dependencies = [
 [[package]]
 name = "sc-network-common"
 version = "0.52.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bitflags 1.3.2",
  "parity-scale-codec",
@@ -11822,7 +11789,7 @@ dependencies = [
 [[package]]
 name = "sc-network-gossip"
 version = "0.55.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "ahash 0.8.12",
  "futures 0.3.32",
@@ -11841,7 +11808,7 @@ dependencies = [
 [[package]]
 name = "sc-network-light"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "async-channel 1.9.0",
@@ -11862,7 +11829,7 @@ dependencies = [
 [[package]]
 name = "sc-network-sync"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "async-channel 1.9.0",
@@ -11897,7 +11864,7 @@ dependencies = [
 [[package]]
 name = "sc-network-transactions"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "futures 0.3.32",
@@ -11916,7 +11883,7 @@ dependencies = [
 [[package]]
 name = "sc-network-types"
 version = "0.20.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bs58",
  "bytes",
@@ -11937,7 +11904,7 @@ dependencies = [
 [[package]]
 name = "sc-offchain"
 version = "50.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bytes",
  "fnv",
@@ -11971,7 +11938,7 @@ dependencies = [
 [[package]]
 name = "sc-proposer-metrics"
 version = "0.20.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "log",
  "substrate-prometheus-endpoint",
@@ -11980,7 +11947,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc"
 version = "50.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "futures 0.3.32",
  "jsonrpsee",
@@ -12012,7 +11979,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-api"
 version = "0.54.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "jsonrpsee",
  "parity-scale-codec",
@@ -12032,7 +11999,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-server"
 version = "27.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "dyn-clone",
  "forwarded-header-value",
@@ -12056,7 +12023,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-spec-v2"
 version = "0.55.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "futures 0.3.32",
@@ -12089,7 +12056,7 @@ dependencies = [
 [[package]]
 name = "sc-runtime-utilities"
 version = "0.7.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "sc-executor",
@@ -12104,7 +12071,7 @@ dependencies = [
 [[package]]
 name = "sc-service"
 version = "0.56.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "directories",
@@ -12168,7 +12135,7 @@ dependencies = [
 [[package]]
 name = "sc-state-db"
 version = "0.41.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -12179,7 +12146,7 @@ dependencies = [
 [[package]]
 name = "sc-sysinfo"
 version = "46.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "derive_more 0.99.20",
  "futures 0.3.32",
@@ -12199,7 +12166,7 @@ dependencies = [
 [[package]]
 name = "sc-telemetry"
 version = "30.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "chrono",
  "futures 0.3.32",
@@ -12218,7 +12185,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "chrono",
  "console",
@@ -12246,7 +12213,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing-proc-macro"
 version = "11.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
@@ -12257,7 +12224,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool"
 version = "44.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -12289,7 +12256,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool-api"
 version = "43.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -12307,7 +12274,7 @@ dependencies = [
 [[package]]
 name = "sc-utils"
 version = "20.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-channel 1.9.0",
  "futures 0.3.32",
@@ -12904,12 +12871,6 @@ checksum = "620a1d43d70e142b1d46a929af51d44f383db9c7a2ec122de2cd992ccfcf3c18"
 
 [[package]]
 name = "siphasher"
-version = "0.3.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
-
-[[package]]
-name = "siphasher"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
@@ -12996,7 +12957,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sha3",
- "siphasher 1.0.2",
+ "siphasher",
  "slab",
  "smallvec",
  "soketto",
@@ -13035,7 +12996,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde_json",
- "siphasher 1.0.2",
+ "siphasher",
  "slab",
  "smol",
  "smoldot",
@@ -13104,7 +13065,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "hash-db",
@@ -13126,7 +13087,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "26.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "Inflector",
  "blake2 0.10.6",
@@ -13140,7 +13101,7 @@ dependencies = [
 [[package]]
 name = "sp-application-crypto"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13152,7 +13113,7 @@ dependencies = [
 [[package]]
 name = "sp-arithmetic"
 version = "28.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "integer-sqrt",
@@ -13166,7 +13127,7 @@ dependencies = [
 [[package]]
 name = "sp-authority-discovery"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13178,7 +13139,7 @@ dependencies = [
 [[package]]
 name = "sp-block-builder"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "sp-api",
  "sp-inherents",
@@ -13188,7 +13149,7 @@ dependencies = [
 [[package]]
 name = "sp-blockchain"
 version = "43.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "futures 0.3.32",
  "parity-scale-codec",
@@ -13207,7 +13168,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus"
 version = "0.46.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "futures 0.3.32",
@@ -13221,7 +13182,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-aura"
 version = "0.46.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -13237,7 +13198,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-babe"
 version = "0.46.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -13255,7 +13216,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-grandpa"
 version = "27.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "finality-grandpa",
  "log",
@@ -13272,7 +13233,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-slots"
 version = "0.46.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13283,7 +13244,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "39.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "ark-vrf",
  "array-bytes 6.2.3",
@@ -13344,7 +13305,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -13357,7 +13318,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing-proc-macro"
 version = "0.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "quote",
  "sp-crypto-hashing 0.1.0 (git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512)",
@@ -13367,7 +13328,7 @@ dependencies = [
 [[package]]
 name = "sp-database"
 version = "10.0.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "kvdb",
  "kvdb-rocksdb",
@@ -13377,7 +13338,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13387,7 +13348,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.31.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -13397,7 +13358,7 @@ dependencies = [
 [[package]]
 name = "sp-genesis-builder"
 version = "0.21.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13409,7 +13370,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -13422,7 +13383,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "44.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bytes",
  "docify",
@@ -13448,7 +13409,7 @@ dependencies = [
 [[package]]
 name = "sp-keyring"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "sp-core",
  "sp-runtime",
@@ -13458,7 +13419,7 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.45.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.5",
@@ -13469,7 +13430,7 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "11.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "thiserror 1.0.69",
  "zstd 0.12.4",
@@ -13478,7 +13439,7 @@ dependencies = [
 [[package]]
 name = "sp-metadata-ir"
 version = "0.12.1"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "frame-metadata",
  "parity-scale-codec",
@@ -13488,7 +13449,7 @@ dependencies = [
 [[package]]
 name = "sp-mixnet"
 version = "0.18.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13499,7 +13460,7 @@ dependencies = [
 [[package]]
 name = "sp-mmr-primitives"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -13516,7 +13477,7 @@ dependencies = [
 [[package]]
 name = "sp-npos-elections"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13529,7 +13490,7 @@ dependencies = [
 [[package]]
 name = "sp-offchain"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "sp-api",
  "sp-core",
@@ -13539,7 +13500,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "13.0.2"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "backtrace",
  "regex",
@@ -13548,7 +13509,7 @@ dependencies = [
 [[package]]
 name = "sp-rpc"
 version = "37.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "rustc-hash 1.1.0",
  "serde",
@@ -13558,7 +13519,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "45.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "binary-merkle-tree",
  "bytes",
@@ -13589,7 +13550,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "33.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -13607,7 +13568,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "20.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "Inflector",
  "expander",
@@ -13620,7 +13581,7 @@ dependencies = [
 [[package]]
 name = "sp-session"
 version = "42.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -13634,7 +13595,7 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "42.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "impl-trait-for-tuples",
  "parity-scale-codec",
@@ -13647,7 +13608,7 @@ dependencies = [
 [[package]]
 name = "sp-state-machine"
 version = "0.49.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "hash-db",
  "log",
@@ -13667,7 +13628,7 @@ dependencies = [
 [[package]]
 name = "sp-statement-store"
 version = "24.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "aes-gcm",
  "curve25519-dalek",
@@ -13691,12 +13652,12 @@ dependencies = [
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 
 [[package]]
 name = "sp-storage"
 version = "22.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -13708,7 +13669,7 @@ dependencies = [
 [[package]]
 name = "sp-timestamp"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -13720,7 +13681,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "19.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "regex",
@@ -13732,7 +13693,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-pool"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "sp-api",
  "sp-runtime",
@@ -13741,7 +13702,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-storage-proof"
 version = "40.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -13755,7 +13716,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "42.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "ahash 0.8.12",
  "foldhash 0.1.5",
@@ -13780,7 +13741,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "43.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -13797,7 +13758,7 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "15.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "parity-scale-codec",
  "proc-macro-warning",
@@ -13809,7 +13770,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "24.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -13821,7 +13782,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "33.2.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "bounded-collections",
  "parity-scale-codec",
@@ -13995,7 +13956,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "staging-xcm"
 version = "21.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "bounded-collections",
@@ -14016,7 +13977,7 @@ dependencies = [
 [[package]]
 name = "staging-xcm-builder"
 version = "25.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "environmental",
  "frame-support",
@@ -14040,7 +14001,7 @@ dependencies = [
 [[package]]
 name = "staging-xcm-executor"
 version = "24.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "environmental",
  "frame-benchmarking",
@@ -14141,7 +14102,7 @@ dependencies = [
 [[package]]
 name = "substrate-bip39"
 version = "0.6.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "hmac 0.12.1",
  "pbkdf2",
@@ -14166,7 +14127,7 @@ dependencies = [
 [[package]]
 name = "substrate-build-script-utils"
 version = "11.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 
 [[package]]
 name = "substrate-fixed"
@@ -14182,7 +14143,7 @@ dependencies = [
 [[package]]
 name = "substrate-frame-rpc-system"
 version = "49.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "docify",
  "frame-system-rpc-runtime-api",
@@ -14202,7 +14163,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.17.7"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "http-body-util",
  "hyper 1.8.1",
@@ -14226,7 +14187,7 @@ dependencies = [
 [[package]]
 name = "substrate-wasm-builder"
 version = "31.1.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "array-bytes 6.2.3",
  "build-helper",
@@ -15002,7 +14963,7 @@ dependencies = [
 [[package]]
 name = "tracing-gum"
 version = "23.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "coarsetime",
  "polkadot-primitives",
@@ -15013,7 +14974,7 @@ dependencies = [
 [[package]]
 name = "tracing-gum-proc-macro"
 version = "5.0.0"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "expander",
  "proc-macro-crate 3.4.0",
@@ -16588,7 +16549,7 @@ dependencies = [
 [[package]]
 name = "xcm-procedural"
 version = "11.0.2"
-source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#75d9550f7b524023453a03c769567c342c5f8241"
+source = "git+https://github.com/bifrost-platform/polkadot-sdk?branch=bifrost-polkadot-stable2512#940ed67217bcc5b6c0770bbdf618b9f5191a3a04"
 dependencies = [
  "Inflector",
  "proc-macro2",

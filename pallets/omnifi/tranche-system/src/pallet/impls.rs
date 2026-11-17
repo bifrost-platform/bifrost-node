@@ -1,7 +1,8 @@
 use crate::{
-	is_permissionless_product_id, AdapterInfo, AdapterInspect, AdapterKey, ChainAddress,
-	ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo, ProductDetails, ProductId,
-	ProductInspect, Tranche, TrancheType, VaultId, VaultInspect, VaultRegistration, WeightInfo,
+	is_permissionless_product_id, AdapterInfo, AdapterInspect, AdapterKey, ChainAddress, ChainInfo,
+	ChainInspect, ChainTranches, CrudAction, FlowVersion, MultichainAdapterInfo, ProductDetails,
+	ProductId, ProductInspect, SourceType, Tranche, TrancheType, VaultId, VaultInspect,
+	VaultRegistration, WeightInfo,
 };
 
 use super::pallet::*;
@@ -40,6 +41,55 @@ pub(crate) enum ProductAuthority {
 }
 
 impl<T: Config> Pallet<T> {
+	/// `address` must be on a registered chain and in that chain's canonical form. Without
+	/// this the same contract could be bound under several 32-byte values, each a
+	/// distinct key in `Vaults` / `AdapterIndex`.
+	pub(crate) fn ensure_chain_address(chain_id: u64, address: &ChainAddress) -> DispatchResult {
+		let info = ChainInfos::<T>::get(chain_id).ok_or(Error::<T>::ChainNotRegistered)?;
+		ensure!(info.accepts_address(address), Error::<T>::InvalidChainAddress);
+		Ok(())
+	}
+
+	/// A tranche's vault, asset and share token all live on the vault's chain.
+	pub(crate) fn ensure_tranche_addresses(
+		vault: &VaultId,
+		asset: &ChainAddress,
+		shares: &ChainAddress,
+	) -> DispatchResult {
+		for address in [&vault.vault_address, asset, shares] {
+			Self::ensure_chain_address(vault.chain_id, address)?;
+		}
+		Ok(())
+	}
+
+	/// Adapters and their borrowers live on `chain_id` (the parent MultichainAdapter's
+	/// chain, or a single-chain product's); each collateral carries its own chain.
+	pub(crate) fn ensure_adapter_addresses<'a>(
+		chain_id: u64,
+		adapters: impl Iterator<Item = (&'a ChainAddress, &'a AdapterInfo)>,
+	) -> DispatchResult {
+		for (address, info) in adapters {
+			Self::ensure_chain_address(chain_id, address)?;
+			if let SourceType::OffchainSource { borrower, collaterals } = &info.source_type {
+				Self::ensure_chain_address(chain_id, borrower)?;
+				for collateral in collaterals.iter() {
+					Self::ensure_chain_address(collateral.chain_id, &collateral.nft_contract)?;
+				}
+			}
+		}
+		Ok(())
+	}
+
+	pub(crate) fn ensure_multichain_adapter_addresses<S: Get<u32>>(
+		multichain_adapters: &BoundedBTreeMap<AdapterKey, MultichainAdapterInfo, S>,
+	) -> DispatchResult {
+		for (key, info) in multichain_adapters.iter() {
+			Self::ensure_chain_address(key.chain_id, &key.address)?;
+			Self::ensure_adapter_addresses(key.chain_id, info.adapters.iter())?;
+		}
+		Ok(())
+	}
+
 	/// Origin check shared by every product-management extrinsic: either the
 	/// product's admin (`ProductAdminOrigin`, verified against `product_id` by the
 	/// precompile) or the ProductFactory (`ProductFactoryOrigin`) — the latter only
@@ -740,6 +790,12 @@ impl<T: Config> Pallet<T> {
 				AdapterIndex::<T>::insert(&adapter_key, product_id);
 			}
 		}
+	}
+}
+
+impl<T: Config> ChainInspect for Pallet<T> {
+	fn chain_info(chain_id: u64) -> Option<ChainInfo> {
+		ChainInfos::<T>::get(chain_id)
 	}
 }
 

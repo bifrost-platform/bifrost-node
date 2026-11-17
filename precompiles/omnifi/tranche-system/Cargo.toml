@@ -25,6 +25,9 @@ sp-std = { workspace = true }
 fp-evm = { workspace = true }
 pallet-evm = { workspace = true, features = ["forbid-evm-reentrancy"] }
 
+[dev-dependencies]
+precompile-utils = { workspace = true, features = ["testing"] }
+
 [features]
 default = ["std"]
 std = [

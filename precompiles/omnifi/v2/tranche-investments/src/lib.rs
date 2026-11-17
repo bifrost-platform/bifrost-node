@@ -9,6 +9,7 @@ use pallet_tranche_investments_v2::{
 	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
+use precompile_tranche_system::with_size_charged;
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
@@ -40,6 +41,28 @@ type EvmInvestmentApprovalInput = (H256, Vec<EvmAllocation>, U256);
 type EvmAssetPosition = (H256, U256, U256, U256, bool);
 /// `AdapterValuation` — (chainId, adapter, epochId, valuationCutoff, principal, positions)
 type EvmAdapterValuation = (u64, H256, U256, u64, U256, Vec<EvmAssetPosition>);
+
+/// An ABI array whose length is checked by the decoder. Decoding runs before the function
+/// body, so before the role check and any gas charge, and array items may all point at
+/// the same calldata: an unbounded nested array costs N×M×K decodes for N+M+K words of input.
+type AbiVec<T, const N: u32> = precompile_utils::solidity::codec::BoundedVec<T, ConstU32<N>>;
+type AbiApprovals =
+	AbiVec<(H256, AbiVec<EvmAllocation, MAX_ALLOCATIONS>, U256), MAX_SETTLEMENT_REQUESTS>;
+type AbiAdapterValuations = AbiVec<
+	(u64, H256, U256, u64, U256, AbiVec<EvmAssetPosition, MAX_ASSET_POSITIONS>),
+	MAX_ADAPTER_VALUATIONS,
+>;
+
+fn plain_approvals(approvals: AbiApprovals) -> Vec<EvmInvestmentApprovalInput> {
+	Vec::from(approvals).into_iter().map(|(id, a, r)| (id, a.into(), r)).collect()
+}
+
+fn plain_adapter_valuations(valuations: AbiAdapterValuations) -> Vec<EvmAdapterValuation> {
+	Vec::from(valuations)
+		.into_iter()
+		.map(|(c, a, e, v, p, ps)| (c, a, e, v, p, ps.into()))
+		.collect()
+}
 /// `TrancheSettle` — (vault_chain_id, vault_address, tranche_nav, share_price,
 /// units_outstanding, principal)
 type EvmTrancheSettle = (u64, H256, U256, U256, U256, U256);
@@ -113,7 +136,7 @@ where
 		order_type: u8,
 	) -> EvmResult {
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let decoded_order_type = decode_order_type(order_type)?;
 
 		let call = InvestmentsCall::<Runtime>::record_investment_request {
@@ -163,11 +186,12 @@ where
 		product_id: ProductId,
 		request_id: H256,
 		settlement_id: U256,
-		allocations: Vec<EvmAllocation>,
+		allocations: AbiVec<EvmAllocation, MAX_ALLOCATIONS>,
 		receivable_amount: U256,
 	) -> EvmResult {
+		let allocations: Vec<EvmAllocation> = allocations.into();
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_allocations = decode_allocations(&allocations)?;
 
 		let call = InvestmentsCall::<Runtime>::record_investment_approval {
@@ -210,10 +234,11 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		settlement_id: U256,
-		approvals: Vec<EvmInvestmentApprovalInput>,
+		approvals: AbiApprovals,
 	) -> EvmResult {
+		let approvals = plain_approvals(approvals);
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_approvals = decode_investment_approvals(&approvals)?;
 
 		let call = InvestmentsCall::<Runtime>::record_investment_approvals {
@@ -259,10 +284,11 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		settlement_id: U256,
-		valuations: Vec<EvmAdapterValuation>,
+		valuations: AbiAdapterValuations,
 	) -> EvmResult {
+		let valuations = plain_adapter_valuations(valuations);
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_valuations = decode_adapter_valuations(&valuations)?;
 
 		let call = InvestmentsCall::<Runtime>::record_adapter_valuations {
@@ -298,12 +324,13 @@ where
 		handle: &mut impl PrecompileHandle,
 		product_id: ProductId,
 		settlement_id: U256,
-		tranches: Vec<EvmTrancheSettle>,
+		tranches: AbiVec<EvmTrancheSettle, { pallet_tranche_system::MAX_TRANCHE_INPUTS }>,
 		pending_deposit_assets: U256,
 		product_nav: U256,
 	) -> EvmResult {
+		let tranches: Vec<EvmTrancheSettle> = tranches.into();
 		let caller = handle.context().caller;
-		ensure_caller_is_valuation::<Runtime>(product_id, caller)?;
+		ensure_caller_is_valuation::<Runtime>(handle, product_id, caller)?;
 		let bounded_tranches = decode_tranche_settles(&tranches)?;
 
 		let call = InvestmentsCall::<Runtime>::record_settlement {
@@ -469,9 +496,11 @@ where
 
 		let last_id = pallet_tranche_investments_v2::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
-		let settlement =
-			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id)
-				.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settlement = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id),
+		)?
+		.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let settle = settlement
 			.tranches
 			.iter()
@@ -497,9 +526,12 @@ where
 		else {
 			return Ok(U256::zero());
 		};
-		Ok(pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id)
-			.map(|s| s.pending_deposit_assets)
-			.unwrap_or_default())
+		Ok(with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id),
+		)?
+		.map(|s| s.pending_deposit_assets)
+		.unwrap_or_default())
 	}
 
 	/// Read a product's most recently recorded settlement: its settlement_id, each
@@ -526,8 +558,9 @@ where
 		// (see `SingleChainProductDetails`'s doc comment), so there's no point
 		// reading further only to hit a less specific "not found" error.
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-		let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-			.ok_or_else(|| revert("product not found"))?;
+		let product =
+			with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+				.ok_or_else(|| revert("product not found"))?;
 		let product = match product {
 			pallet_tranche_system::ProductDetails::Multichain(product) => product,
 			pallet_tranche_system::ProductDetails::SingleChain(_) => {
@@ -537,9 +570,11 @@ where
 
 		let last_id = pallet_tranche_investments_v2::LastSettlementId::<Runtime>::get(product_id)
 			.ok_or_else(|| revert("product has no recorded settlement"))?;
-		let settlement =
-			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id)
-				.ok_or_else(|| revert("product has no recorded settlement"))?;
+		let settlement = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, last_id),
+		)?
+		.ok_or_else(|| revert("product has no recorded settlement"))?;
 		let product_nav =
 			pallet_tranche_investments_v2::ProductNavs::<Runtime>::get(product_id, last_id)
 				.ok_or_else(|| revert("product has no recorded settlement"))?;
@@ -594,9 +629,11 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
-		let settlement =
-			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, settlement_id)
-				.ok_or_else(|| revert("settlement not found"))?;
+		let settlement = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, settlement_id),
+		)?
+		.ok_or_else(|| revert("settlement not found"))?;
 
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		let product_nav =
@@ -683,8 +720,10 @@ where
 			// One charge per `settlement_id` examined, not per entry returned — see
 			// `get_pending_requests`'s identical rationale.
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			let Some(settlement) =
-				pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, id)
+			let Some(settlement) = with_size_charged(
+				handle,
+				pallet_tranche_investments_v2::Settlements::<Runtime>::get(product_id, id),
+			)?
 			else {
 				return Ok(None);
 			};
@@ -748,10 +787,13 @@ where
 		handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 		ensure_not_single_chain_product::<Runtime>(handle, product_id)?;
 
-		let valuations = pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(
-			product_id,
-			settlement_id,
-		)
+		let valuations = with_size_charged(
+			handle,
+			pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(
+				product_id,
+				settlement_id,
+			),
+		)?
 		.ok_or_else(|| revert("adapter valuations not found"))?;
 
 		Ok(valuations.iter().map(encode_adapter_valuation).collect())
@@ -805,8 +847,10 @@ where
 
 		let entries = walk_recent_settlements(handle, last_id, offset, limit, |handle, id| {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			let Some(valuations) =
-				pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(product_id, id)
+			let Some(valuations) = with_size_charged(
+				handle,
+				pallet_tranche_investments_v2::AdapterValuations::<Runtime>::get(product_id, id),
+			)?
 			else {
 				return Ok(None);
 			};
@@ -899,7 +943,7 @@ where
 {
 	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
 	if let Some(pallet_tranche_system::ProductDetails::SingleChain(_)) =
-		pallet_tranche_system::Products::<Runtime>::get(product_id)
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
 	{
 		return Err(revert("product is a single-chain product; not tracked here"));
 	}
@@ -907,13 +951,20 @@ where
 }
 
 /// Reads `pallet-tranche-system`'s `Products` storage directly to confirm
-/// `caller` equals `product_id`'s registered Valuation contract address.
-fn ensure_caller_is_valuation<Runtime>(product_id: ProductId, caller: H160) -> EvmResult
+/// `caller` equals `product_id`'s registered Valuation contract address. Charges the
+/// read first: any account reaches this check, with a `product_id` of its choosing.
+fn ensure_caller_is_valuation<Runtime>(
+	handle: &mut impl PrecompileHandle,
+	product_id: ProductId,
+	caller: H160,
+) -> EvmResult
 where
-	Runtime: pallet_tranche_system::Config,
+	Runtime: pallet_tranche_system::Config + pallet_evm::Config,
 {
-	let product = pallet_tranche_system::Products::<Runtime>::get(product_id)
-		.ok_or_else(|| revert("product not found"))?;
+	handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
+	let product =
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+			.ok_or_else(|| revert("product not found"))?;
 	// Single-chain products never interact with pallet-tranche-investments (no
 	// Hub-deployed Valuation to record against) — see
 	// `SingleChainProductDetails`'s doc comment.
