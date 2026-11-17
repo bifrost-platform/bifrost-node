@@ -72,9 +72,7 @@ where
 		o.into().and_then(|raw| match raw {
 			frame_system::RawOrigin::Signed(who)
 				if pallet::pallet::TxRecorder::<T>::get().as_ref() == Some(&who) =>
-			{
-				Ok(who)
-			},
+				Ok(who),
 			raw => Err(OuterOrigin::from(raw)),
 		})
 	}

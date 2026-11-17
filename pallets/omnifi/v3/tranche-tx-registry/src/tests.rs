@@ -234,9 +234,8 @@ fn closed_events() -> Vec<(InstanceKey, CloseOutcome)> {
 	System::events()
 		.into_iter()
 		.filter_map(|r| match r.event {
-			RuntimeEvent::Registry(Event::InstanceClosed { instance_key, outcome, .. }) => {
-				Some((instance_key, outcome))
-			},
+			RuntimeEvent::Registry(Event::InstanceClosed { instance_key, outcome, .. }) =>
+				Some((instance_key, outcome)),
 			_ => None,
 		})
 		.collect()

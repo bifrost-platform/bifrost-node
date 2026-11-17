@@ -93,8 +93,8 @@ pub struct ChainInfo {
 impl ChainInfo {
 	/// Both lengths fit their carrier types.
 	pub fn is_valid(&self) -> bool {
-		(1..=32).contains(&self.address_len)
-			&& (1..=MAX_TX_HASH_LEN as u8).contains(&self.tx_hash_len)
+		(1..=32).contains(&self.address_len) &&
+			(1..=MAX_TX_HASH_LEN as u8).contains(&self.tx_hash_len)
 	}
 
 	/// Is `address` this chain's canonical form: left-padded with zeros to 32 bytes?
