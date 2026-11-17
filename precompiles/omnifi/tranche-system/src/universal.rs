@@ -13,7 +13,8 @@ use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
 	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_COLLATERALS,
+	MAX_MULTICHAIN_ADAPTERS,
 	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
@@ -65,13 +66,14 @@ type EvmMultichainAdapterInput = (H256, u64, u16, Vec<EvmAdapterInput>);
 /// body, so before the role check and any gas charge, and array items may all point at
 /// the same calldata: an unbounded nested array costs N×M×K decodes for N+M+K words of input.
 type AbiVec<T, const N: u32> = precompile_utils::solidity::codec::BoundedVec<T, ConstU32<N>>;
-type AbiAdapters = AbiVec<
-	(u8, H256, u16, H256, AbiVec<EvmCollateralInput, MAX_COLLATERALS>),
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+type AbiAdapters<const N: u32> =
+	AbiVec<(u8, H256, u16, H256, AbiVec<EvmCollateralInput, MAX_COLLATERALS>), N>;
+type AbiMultichainAdapters = AbiVec<
+	(H256, u64, u16, AbiAdapters<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>),
+	MAX_MULTICHAIN_ADAPTERS,
 >;
-type AbiMultichainAdapters = AbiVec<(H256, u64, u16, AbiAdapters), MAX_MULTICHAIN_ADAPTERS>;
 
-fn plain_adapters(adapters: AbiAdapters) -> Vec<EvmAdapterInput> {
+fn plain_adapters<const N: u32>(adapters: AbiAdapters<N>) -> Vec<EvmAdapterInput> {
 	Vec::from(adapters)
 		.into_iter()
 		.map(|(t, s, w, b, c)| (t, s, w, b, c.into()))
@@ -259,7 +261,7 @@ where
 		valuation: EvmSingleChainValuationInput,
 		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHES_PER_CHAIN>,
 		tranche_manager: H256,
-		adapters: AbiAdapters,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 		ledger: H256,
 	) -> EvmResult {
 		let tranches: Vec<EvmTrancheInput> = tranches.into();
@@ -363,7 +365,7 @@ where
 		// has already happened by then.
 		let cascaded = if decoded_action == CrudAction::Update {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			cascaded_tranche_targets::<Runtime>(product_id, &vault_id, &tranche_type)
+			cascaded_tranche_targets::<Runtime>(handle, product_id, &vault_id, &tranche_type)?
 		} else {
 			Vec::new()
 		};
@@ -444,7 +446,7 @@ where
 		product_id: ProductId,
 		parent_adapter_address: H256,
 		parent_chain_id: u64,
-		adapters: AbiAdapters,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 	) -> EvmResult {
 		let adapters = plain_adapters(adapters);
 		let caller = handle.context().caller;
@@ -654,7 +656,7 @@ where
 		valuation: EvmSingleChainValuationInput,
 		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHES_PER_CHAIN>,
 		tranche_manager: H256,
-		adapters: AbiAdapters,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 		ledger: H256,
 	) -> EvmResult {
 		let tranches: Vec<EvmTrancheInput> = tranches.into();
@@ -1262,12 +1264,15 @@ fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmTrancheInput {
 /// `product_id` doesn't exist, `vault` isn't found in it, or `new_type`
 /// matches `vault`'s current type (nothing to cascade).
 fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
+	handle: &mut impl PrecompileHandle,
 	product_id: ProductId,
 	vault: &VaultId,
 	new_type: &TrancheType,
-) -> Vec<(u64, H256, H256, H256, u8)> {
-	let Some(product) = pallet_tranche_system::Products::<Runtime>::get(product_id) else {
-		return Vec::new();
+) -> EvmResult<Vec<(u64, H256, H256, H256, u8)>> {
+	let Some(product) =
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+	else {
+		return Ok(Vec::new());
 	};
 
 	let old_type = match &product {
@@ -1283,10 +1288,10 @@ fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
 			.map(|t| t.tranche_type.clone()),
 	};
 	let Some(old_type) = old_type else {
-		return Vec::new();
+		return Ok(Vec::new());
 	};
 	if &old_type == new_type {
-		return Vec::new();
+		return Ok(Vec::new());
 	}
 
 	let mut targets = Vec::new();
@@ -1309,7 +1314,7 @@ fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
 			}
 		}
 	}
-	targets
+	Ok(targets)
 }
 
 /// `create_product`-only: each entry's `priority` is passed straight through
@@ -1364,9 +1369,9 @@ fn decode_source_type(
 /// within `create_product`/`set_multichain_adapters`). Reverts on a duplicate
 /// `source_address` — the incoming array has no uniqueness guarantee the way
 /// a `BoundedBTreeMap` would, unlike `pallet_tranche_system`'s own storage.
-fn decode_adapters(
+fn decode_adapters<const N: u32>(
 	adapters: &[EvmAdapterInput],
-) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>>> {
+) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<N>>> {
 	let mut map = BTreeMap::new();
 	for (source_type, source_address, weight_bps, borrower, collaterals) in adapters.iter().cloned()
 	{

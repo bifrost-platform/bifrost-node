@@ -11,7 +11,8 @@ use pallet_tranche_system::{
 	AdapterInfo, AdapterKey, Call as TrancheSystemCall, CollateralAsset, CrudAction,
 	MultichainAdapterInfo, ProductDetails, ProductId, SettlementMode, SingleChainValuationInfo,
 	SourceType, Tranche, TrancheInput, TrancheType, ValuationInfo, VaultId,
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
+	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER, MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_COLLATERALS,
+	MAX_MULTICHAIN_ADAPTERS,
 	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_INPUTS, MAX_TRANCHE_MANAGERS,
 };
 use precompile_utils::prelude::*;
@@ -26,10 +27,10 @@ pub use universal::TrancheSystemUniversalPrecompile;
 /// EVM `COPY` rate, as in the tx-registry-v3 precompile).
 const COPY_GAS_PER_WORD: u64 = 3;
 
-/// Charges for the size of a value just read, on top of the flat storage-read charge:
-/// a product holds
-/// up to 100 tranches and 110 adapters, each with up to 10 collaterals.
-pub(crate) fn with_size_charged<T: Encode>(
+/// Charges for the size of a value just read, on top of the flat storage-read charge: a
+/// product holds up to 100 tranches and 110 adapters, each with up to 10 collaterals, and
+/// the investments-v2 precompile's `Settlements` / `AdapterValuations` reach hundreds of KB.
+pub fn with_size_charged<T: Encode>(
 	handle: &mut impl PrecompileHandle,
 	value: Option<T>,
 ) -> EvmResult<Option<T>> {
@@ -109,13 +110,14 @@ type EvmMultichainAdapterInput = (Address, u64, u16, Vec<EvmAdapterInput>);
 /// body, so before the role check and any gas charge, and array items may all point at
 /// the same calldata: an unbounded nested array costs N×M×K decodes for N+M+K words of input.
 type AbiVec<T, const N: u32> = precompile_utils::solidity::codec::BoundedVec<T, ConstU32<N>>;
-type AbiAdapters = AbiVec<
-	(u8, Address, u16, Address, AbiVec<EvmCollateralInput, MAX_COLLATERALS>),
-	MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+type AbiAdapters<const N: u32> =
+	AbiVec<(u8, Address, u16, Address, AbiVec<EvmCollateralInput, MAX_COLLATERALS>), N>;
+type AbiMultichainAdapters = AbiVec<
+	(Address, u64, u16, AbiAdapters<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>),
+	MAX_MULTICHAIN_ADAPTERS,
 >;
-type AbiMultichainAdapters = AbiVec<(Address, u64, u16, AbiAdapters), MAX_MULTICHAIN_ADAPTERS>;
 
-fn plain_adapters(adapters: AbiAdapters) -> Vec<EvmAdapterInput> {
+fn plain_adapters<const N: u32>(adapters: AbiAdapters<N>) -> Vec<EvmAdapterInput> {
 	Vec::from(adapters)
 		.into_iter()
 		.map(|(t, s, w, b, c)| (t, s, w, b, c.into()))
@@ -308,7 +310,7 @@ where
 		valuation: EvmSingleChainValuationInput,
 		tranches: AbiVec<EvmTrancheInput, MAX_TRANCHES_PER_CHAIN>,
 		tranche_manager: Address,
-		adapters: AbiAdapters,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT>,
 		ledger: Address,
 	) -> EvmResult {
 		let tranches: Vec<EvmTrancheInput> = tranches.into();
@@ -412,7 +414,7 @@ where
 		// has already happened by then.
 		let cascaded = if decoded_action == CrudAction::Update {
 			handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-			cascaded_tranche_targets::<Runtime>(product_id, &vault_id, &tranche_type)
+			cascaded_tranche_targets::<Runtime>(handle, product_id, &vault_id, &tranche_type)?
 		} else {
 			Vec::new()
 		};
@@ -498,7 +500,7 @@ where
 		product_id: ProductId,
 		parent_adapter_address: Address,
 		parent_chain_id: u64,
-		adapters: AbiAdapters,
+		adapters: AbiAdapters<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>,
 	) -> EvmResult {
 		let adapters = plain_adapters(adapters);
 		let caller = handle.context().caller;
@@ -1120,12 +1122,15 @@ fn encode_tranche_input(tranche: &Tranche, priority: u8) -> EvmResult<EvmTranche
 /// `product_id` doesn't exist, `vault` isn't found in it, or `new_type`
 /// matches `vault`'s current type (nothing to cascade).
 fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
+	handle: &mut impl PrecompileHandle,
 	product_id: ProductId,
 	vault: &VaultId,
 	new_type: &TrancheType,
-) -> Vec<(u64, Address, Address, Address, u8)> {
-	let Some(product) = pallet_tranche_system::Products::<Runtime>::get(product_id) else {
-		return Vec::new();
+) -> EvmResult<Vec<(u64, Address, Address, Address, u8)>> {
+	let Some(product) =
+		with_size_charged(handle, pallet_tranche_system::Products::<Runtime>::get(product_id))?
+	else {
+		return Ok(Vec::new());
 	};
 
 	let old_type = match &product {
@@ -1141,10 +1146,10 @@ fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
 			.map(|t| t.tranche_type.clone()),
 	};
 	let Some(old_type) = old_type else {
-		return Vec::new();
+		return Ok(Vec::new());
 	};
 	if &old_type == new_type {
-		return Vec::new();
+		return Ok(Vec::new());
 	}
 
 	let mut targets = Vec::new();
@@ -1168,7 +1173,7 @@ fn cascaded_tranche_targets<Runtime: pallet_tranche_system::Config>(
 			}
 		}
 	}
-	targets
+	Ok(targets)
 }
 
 /// `create_product`-only: each entry's `priority` is passed straight through
@@ -1236,9 +1241,9 @@ fn decode_source_type(
 /// within `create_product`/`set_multichain_adapters`). Reverts on a duplicate
 /// `source_address` — the incoming array has no uniqueness guarantee the way
 /// a `BoundedBTreeMap` would, unlike `pallet_tranche_system`'s own storage.
-fn decode_adapters(
+fn decode_adapters<const N: u32>(
 	adapters: &[EvmAdapterInput],
-) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER>>> {
+) -> EvmResult<BoundedBTreeMap<H256, AdapterInfo, ConstU32<N>>> {
 	let mut map = BTreeMap::new();
 	for (source_type, source_address, weight_bps, borrower, collaterals) in adapters.iter().cloned()
 	{
@@ -1289,22 +1294,77 @@ fn decode_multichain_tranche_managers(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use fp_evm::{Context, ExitError, ExitReason, Transfer};
 	use precompile_utils::testing::MockHandle;
+
+	/// `MockHandle` drops external costs: this keeps the proof size it is asked to record.
+	struct Recording(MockHandle, u64);
+
+	impl PrecompileHandle for Recording {
+		fn call(
+			&mut self,
+			to: H160,
+			transfer: Option<Transfer>,
+			input: Vec<u8>,
+			gas_limit: Option<u64>,
+			is_static: bool,
+			context: &Context,
+		) -> (ExitReason, Vec<u8>) {
+			self.0.call(to, transfer, input, gas_limit, is_static, context)
+		}
+		fn record_cost(&mut self, cost: u64) -> Result<(), ExitError> {
+			self.0.record_cost(cost)
+		}
+		fn record_external_cost(
+			&mut self,
+			_ref_time: Option<u64>,
+			proof_size: Option<u64>,
+			_storage_growth: Option<u64>,
+		) -> Result<(), ExitError> {
+			self.1 += proof_size.unwrap_or(0);
+			Ok(())
+		}
+		fn refund_external_cost(&mut self, _ref_time: Option<u64>, _proof_size: Option<u64>) {}
+		fn remaining_gas(&self) -> u64 {
+			self.0.remaining_gas()
+		}
+		fn log(&mut self, address: H160, topics: Vec<H256>, data: Vec<u8>) -> Result<(), ExitError> {
+			self.0.log(address, topics, data)
+		}
+		fn code_address(&self) -> H160 {
+			self.0.code_address()
+		}
+		fn input(&self) -> &[u8] {
+			self.0.input()
+		}
+		fn context(&self) -> &Context {
+			self.0.context()
+		}
+		fn origin(&self) -> H160 {
+			self.0.origin()
+		}
+		fn is_static(&self) -> bool {
+			self.0.is_static()
+		}
+		fn gas_limit(&self) -> Option<u64> {
+			self.0.gas_limit()
+		}
+		fn is_contract_being_constructed(&self, address: H160) -> bool {
+			self.0.is_contract_being_constructed(address)
+		}
+	}
 
 	#[test]
 	fn a_read_value_is_charged_by_its_size() {
-		let context = pallet_evm::Context {
-			address: H160::zero(),
-			caller: H160::zero(),
-			apparent_value: U256::zero(),
-		};
-		let mut handle = MockHandle::new(H160::zero(), context);
-		handle.gas_limit = u64::MAX;
+		let context =
+			Context { address: H160::zero(), caller: H160::zero(), apparent_value: U256::zero() };
+		let mut handle = Recording(MockHandle::new(H160::zero(), context), 0);
+		handle.0.gas_limit = u64::MAX;
 
 		assert_eq!(with_size_charged(&mut handle, None::<Vec<u8>>), Ok(None));
-		assert_eq!(handle.gas_used, 0);
-		// 64 bytes and a 2-byte length prefix: 3 words
+		assert_eq!((handle.0.gas_used, handle.1), (0, 0));
+		// 64 bytes and a 2-byte length prefix: 66 bytes of proof, 3 words of gas
 		assert!(with_size_charged(&mut handle, Some(vec![0u8; 64])).is_ok());
-		assert_eq!(handle.gas_used, 3 * COPY_GAS_PER_WORD);
+		assert_eq!((handle.0.gas_used, handle.1), (3 * COPY_GAS_PER_WORD, 66));
 	}
 }

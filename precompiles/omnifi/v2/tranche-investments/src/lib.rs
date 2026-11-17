@@ -1,10 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unused_crate_dependencies)]
 
-use frame_support::{
-	dispatch::{GetDispatchInfo, PostDispatchInfo},
-	pallet_prelude::Encode,
-};
+use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_tranche_investments_v2::{
 	AdapterValuation, Allocation, AssetPosition, Call as InvestmentsCall, InvestmentApprovalInput,
@@ -12,6 +9,7 @@ use pallet_tranche_investments_v2::{
 	MAX_SETTLEMENT_REQUESTS,
 };
 use pallet_tranche_system::{AdapterKey, ProductId, VaultId};
+use precompile_tranche_system::with_size_charged;
 use precompile_utils::prelude::*;
 use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
@@ -927,22 +925,6 @@ where
 		id -= U256::one();
 	}
 	Ok(entries)
-}
-/// Gas per 32-byte word of a stored value decoded and re-encoded into the ABI output (the
-/// EVM `COPY` rate, as in the tx-registry-v3 precompile).
-const COPY_GAS_PER_WORD: u64 = 3;
-
-/// Charges for the size of a value just read, on top of the flat storage-read charge:
-/// `Products`, `Settlements` and `AdapterValuations` range from a few hundred bytes to
-/// hundreds of KB.
-fn with_size_charged<T: Encode>(
-	handle: &mut impl PrecompileHandle,
-	value: Option<T>,
-) -> EvmResult<Option<T>> {
-	let size = value.as_ref().map_or(0, Encode::encoded_size) as u64;
-	handle.record_external_cost(None, Some(size), None)?;
-	handle.record_cost(COPY_GAS_PER_WORD.saturating_mul(size.div_ceil(32)))?;
-	Ok(value)
 }
 
 /// Reverts if `product_id` is a registered single-chain product — this whole

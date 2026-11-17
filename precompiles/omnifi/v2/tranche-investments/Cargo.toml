@@ -12,6 +12,7 @@ repository = { workspace = true }
 # OmniFi tranche-system
 pallet-tranche-system = { workspace = true }
 pallet-tranche-investments-v2 = { workspace = true }
+precompile-tranche-system = { workspace = true }
 precompile-utils = { workspace = true }
 
 # Substrate
@@ -34,6 +35,7 @@ std = [
 	"pallet-tranche-system/std",
 	"pallet-tranche-investments-v2/std",
 	"pallet-evm/std",
+	"precompile-tranche-system/std",
 	"precompile-utils/std",
 	"sp-core/std",
 	"sp-runtime/std",

@@ -9966,6 +9966,7 @@ dependencies = [
  "pallet-evm",
  "pallet-tranche-investments-v2",
  "pallet-tranche-system",
+ "precompile-tranche-system",
  "precompile-utils",
  "sp-core",
  "sp-runtime",
