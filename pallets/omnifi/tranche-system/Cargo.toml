@@ -31,6 +31,10 @@ pallet-evm = { workspace = true }
 # OmniFi tranche-system
 bp-tranche = { workspace = true }
 
+[dev-dependencies]
+pallet-balances = { workspace = true, features = ["std"] }
+bp-core = { workspace = true, features = ["std"] }
+
 [features]
 default = ["std"]
 std = [

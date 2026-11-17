@@ -2,6 +2,10 @@
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+#[cfg(test)]
+mod chain_tests;
+#[cfg(test)]
+mod mock;
 mod pallet;
 pub mod weights;
 
