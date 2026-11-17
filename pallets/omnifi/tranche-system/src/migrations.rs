@@ -5,18 +5,22 @@
 //! run again.
 
 use crate::{
-	AdapterInfo, AdapterKey, ChainTranches, CollateralAsset, Config, MultichainAdapterInfo,
-	MultichainProductDetails, Pallet, ProductDetails, ProductId, SettlementMode,
-	SingleChainProductDetails, SingleChainValuationInfo, SourceType, Tranche, TrancheType,
-	ValuationInfo, VaultId, VaultRegistration, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
+	AdapterInfo, AdapterKey, ChainInfo, ChainInfos, ChainTranches, CollateralAsset, Config,
+	MultichainAdapterInfo, MultichainProductDetails, Pallet, ProductDetails, ProductId,
+	SettlementMode, SingleChainProductDetails, SingleChainValuationInfo, SourceType, Tranche,
+	TrancheType, ValuationInfo, VaultId, VaultRegistration, MAX_ADAPTERS_PER_MULTICHAIN_ADAPTER,
 	MAX_ADAPTERS_PER_SINGLE_CHAIN_PRODUCT, MAX_COLLATERALS, MAX_MULTICHAIN_ADAPTERS,
 	MAX_TRANCHES_PER_CHAIN, MAX_TRANCHE_CHAINS, MAX_TRANCHE_MANAGERS,
 };
 
 use bp_tranche::from_evm;
 use frame_support::{
-	migrations::VersionedMigration, pallet_prelude::*, storage_alias,
-	traits::UncheckedOnRuntimeUpgrade, weights::Weight, Blake2_128Concat,
+	migrations::VersionedMigration,
+	pallet_prelude::*,
+	storage_alias,
+	traits::{OnRuntimeUpgrade, UncheckedOnRuntimeUpgrade},
+	weights::Weight,
+	Blake2_128Concat,
 };
 use sp_core::{ConstU32, H160};
 use sp_runtime::{BoundedBTreeMap, BoundedVec};
@@ -31,6 +35,31 @@ macro_rules! log {
 			$patter $(, $values)*
 		)
 	};
+}
+
+/// Registers every `(chain_id, info)` of `Chains` in the chain registry, unless that chain
+/// already has an entry. The registry is new storage, so a chain that upgrades into it
+/// starts empty and every product write would fail with `ChainNotRegistered`.
+///
+/// It never overwrites an entry, but it would bring back a chain root removed later, so
+/// drop it from the runtime's migrations once the upgrade is done.
+pub struct SeedChainInfos<T, Chains>(PhantomData<(T, Chains)>);
+
+impl<T: Config, Chains: Get<Vec<(u64, ChainInfo)>>> OnRuntimeUpgrade for SeedChainInfos<T, Chains> {
+	fn on_runtime_upgrade() -> Weight {
+		let chains = Chains::get();
+		let mut inserted = 0u64;
+		for (chain_id, info) in chains.iter() {
+			if !info.is_valid() {
+				log!(error, "SeedChainInfos: skipped chain {} with invalid lengths", chain_id);
+			} else if !ChainInfos::<T>::contains_key(chain_id) {
+				ChainInfos::<T>::insert(chain_id, info);
+				inserted += 1;
+			}
+		}
+		log!(info, "SeedChainInfos: registered {} of {} chain(s)", inserted, chains.len());
+		T::DbWeight::get().reads_writes(chains.len() as u64, inserted)
+	}
 }
 
 /// v6 -> v7: non-EVM support. Every address that lives on a product/spoke chain

@@ -370,3 +370,34 @@ fn product_updates_are_checked_like_creation() {
 		));
 	});
 }
+
+#[test]
+fn seed_chain_infos_registers_missing_chains_and_keeps_existing_ones() {
+	use crate::migrations::SeedChainInfos;
+	use frame_support::traits::OnRuntimeUpgrade;
+
+	frame_support::parameter_types! {
+		pub Seed: Vec<(u64, ChainInfo)> = vec![
+			(EVM, ChainInfo { address_len: 20, tx_hash_len: 32 }),
+			(SOLANA, ChainInfo { address_len: 32, tx_hash_len: 64 }),
+			(UNREGISTERED, ChainInfo { address_len: 33, tx_hash_len: 32 }),
+		];
+	}
+
+	new_test_ext().execute_with(|| {
+		// root already registered chain 1 differently: the seed must not overwrite it
+		let existing = ChainInfo { address_len: 32, tx_hash_len: 32 };
+		ChainInfos::<Test>::insert(EVM, existing);
+
+		SeedChainInfos::<Test, Seed>::on_runtime_upgrade();
+		SeedChainInfos::<Test, Seed>::on_runtime_upgrade();
+
+		assert_eq!(ChainInfos::<Test>::get(EVM), Some(existing));
+		assert_eq!(
+			ChainInfos::<Test>::get(SOLANA),
+			Some(ChainInfo { address_len: 32, tx_hash_len: 64 })
+		);
+		// invalid lengths are skipped, not stored
+		assert_eq!(ChainInfos::<Test>::get(UNREGISTERED), None);
+	});
+}

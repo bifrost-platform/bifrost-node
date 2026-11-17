@@ -124,10 +124,26 @@ impl frame_support::traits::Get<Vec<H160>> for PrecompileAddresses {
 	}
 }
 
+/// The chains this hub's products live on, registered by `SeedChainInfos` on the upgrade that
+/// introduces the chain registry.
+pub struct InitialChains;
+impl frame_support::traits::Get<Vec<(u64, pallet_tranche_system::ChainInfo)>> for InitialChains {
+	fn get() -> Vec<(u64, pallet_tranche_system::ChainInfo)> {
+		use pallet_tranche_system::ChainInfo;
+		const EVM: ChainInfo = ChainInfo { address_len: 20, tx_hash_len: 32 };
+		vec![
+			(PrivateMainnetHubChainId::get(), EVM), // this hub
+			(1, EVM),                               // Ethereum
+		]
+	}
+}
+
 /// All migrations executed on runtime upgrade as a nested tuple of types implementing
 /// `OnRuntimeUpgrade`.
-type SingleBlockMigrations =
-	(bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,);
+type SingleBlockMigrations = (
+	bifrost_common_runtime::migrations::EnsurePrecompileCode<Runtime, PrecompileAddresses>,
+	pallet_tranche_system::migrations::SeedChainInfos<Runtime, InitialChains>,
+);
 
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
@@ -167,7 +183,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	authoring_version: 1,
 	// The version of the runtime spec, encoded as semver `MAJOR_MINOR_PATCH` with three digits
 	// per minor/patch: `1_000_000` = v1.0.0, `1_002_003` = v1.2.3.
-	spec_version: 1_000_000,
+	spec_version: 1_000_003,
 	// The version of the implementation of the spec.
 	impl_version: 1,
 	// A list of supported runtime APIs along with their versions.
