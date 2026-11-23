@@ -129,6 +129,7 @@ pub fn run() -> sc_cli::Result<()> {
 		max_block_range: cli.max_block_range,
 		logs_request_timeout: cli.logs_request_timeout,
 		execute_gas_limit_multiplier: cli.execute_gas_limit_multiplier,
+		state_override_max_storage_keys: cli.state_override_max_storage_keys,
 		tracing_raw_max_memory_usage: cli.tracing_raw_max_memory_usage,
 		frontier_backend_type: match cli.frontier_backend_type {
 			BackendType::KeyValue => BackendTypeConfig::KeyValue,
