@@ -29,7 +29,7 @@ ord_parameter_types! {
 pub const UNREGISTERED_CHAIN: u64 = u64::MAX;
 pub struct MockChains;
 
-fn mock_chain_key(chain_id: u64) -> Vec<u8> {
+pub fn mock_chain_key(chain_id: u64) -> Vec<u8> {
 	parity_scale_codec::Encode::encode(&(b"mock-chain", chain_id))
 }
 
