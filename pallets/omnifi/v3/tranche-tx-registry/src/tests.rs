@@ -1303,6 +1303,204 @@ fn cccp_settlement_waits_for_every_relayed_arrival() {
 	});
 }
 
+// `*-sol` v1 — a MessageGateway (Solana) spoke next to the CCCP spoke `A`
+const SOL: u64 = 1397705728;
+
+mod sol {
+	pub const DEP_REQUESTED: u8 = 0;
+	pub const DEP_BRIDGED: u8 = 1;
+	pub const DEP_ATTESTED: u8 = 2;
+	pub const DEP_QUEUED: u8 = 3;
+	pub const DEP_APPROVED: u8 = 5;
+	pub const DEP_SETTLE_APPLIED: u8 = 6;
+	pub const WL_REQUESTED: u8 = 0;
+	pub const WL_ATTESTED: u8 = 2;
+	pub const WL_APPLIED: u8 = 3;
+	// mc-settle-sol (track indexes are `mc-settlement`'s, `set`)
+	pub const COLLECT_BRIDGED: u8 = 2;
+	pub const COLLECT_ATTESTED: u8 = 3;
+	pub const NAV_REPORTED: u8 = 5;
+	pub const RESPONSE_ATTESTED: u8 = 7;
+	pub const NAV_RECEIVED: u8 = 9;
+	pub const FINALIZE_STARTED: u8 = 10;
+	pub const SETTLED: u8 = 11;
+	pub const FINALIZE_ATTESTED: u8 = 13;
+	pub const SETTLE_APPLIED: u8 = 14;
+	pub const HOLD_ROUTE_ATTESTED: u8 = 20;
+	pub const HOLD_ROUTE_RECEIVED: u8 = 21;
+	pub const HOLD_CCTP_RECEIVED: u8 = 22;
+}
+
+/// A 64-byte Solana signature.
+fn sig(n: u8) -> TxHash {
+	BoundedVec::truncate_from(vec![n; 64])
+}
+
+#[test]
+fn solana_templates_are_their_mc_counterparts_plus_attested_slots() {
+	new_test_ext().execute_with(|| {
+		let text = |n: &crate::SlotName| String::from_utf8(n.to_vec()).unwrap();
+		// every slot in id order as (main or track name, slot name, required)
+		let steps = |id| {
+			let t = Templates::<Test>::get(id).unwrap();
+			let mut all: Vec<_> = t
+				.main
+				.iter()
+				.map(|s| (s.id, "main".to_string(), text(&s.name), s.required))
+				.collect();
+			for track in t.tracks.iter() {
+				all.extend(
+					track
+						.slots
+						.iter()
+						.map(|s| (s.id, text(&track.name), text(&s.name), s.required)),
+				);
+			}
+			all.sort();
+			assert!(all.iter().enumerate().all(|(i, s)| s.0 as usize == i), "ids run 0..n");
+			all.into_iter()
+				.map(|(_, at, name, required)| (at, name, required))
+				.collect::<Vec<_>>()
+		};
+		let solana = [MC_DEPOSIT_SOL_V1, MC_REDEEM_SOL_V1, MC_SETTLE_SOL_V1, MC_WHITELIST_SOL_V1];
+		let counterparts = [MC_DEPOSIT_V2, MC_REDEEM_V2, MC_SETTLEMENT_V1, MC_WHITELIST_V1];
+		for (sol, mc) in solana.into_iter().zip(counterparts) {
+			// an optional `<message>Attested` right after every `<message>Bridged`
+			let want: Vec<_> = steps(mc)
+				.into_iter()
+				.flat_map(|(at, name, required)| {
+					let attested = name
+						.strip_suffix("Bridged")
+						.map(|message| (at.clone(), format!("{message}Attested"), false));
+					core::iter::once((at, name, required)).chain(attested)
+				})
+				.collect();
+			assert_eq!(steps(sol), want);
+			let tracks = |id| {
+				Templates::<Test>::get(id)
+					.unwrap()
+					.tracks
+					.iter()
+					.map(|t| text(&t.name))
+					.collect::<Vec<_>>()
+			};
+			assert_eq!(tracks(sol), tracks(mc));
+		}
+		// opt-in: no product model gets them by default
+		for model in [ProductModel::Multichain, ProductModel::SingleChain] {
+			assert!(!DefaultFlows::<Test>::get(model).values().any(|t| solana.contains(t)));
+		}
+	});
+}
+
+#[test]
+fn solana_product_records_signatures_and_attestations() {
+	new_test_ext().execute_with(|| {
+		frame_support::storage::unhashed::put(
+			&mock_chain_key(SOL),
+			&crate::ChainInfo { address_len: 32, tx_hash_len: 64 },
+		);
+		assign_multichain();
+		for (flow, template) in [
+			(FLOW_DEPOSIT, MC_DEPOSIT_SOL_V1),
+			(FLOW_REDEEM, MC_REDEEM_SOL_V1),
+			(FLOW_SETTLEMENT, MC_SETTLE_SOL_V1),
+			(FLOW_WHITELIST, MC_WHITELIST_SOL_V1),
+		] {
+			assert_ok!(Registry::assign_flow(RuntimeOrigin::root(), PID, flow, Some(template)));
+		}
+
+		// whitelist: hub request, attested by two attesters, Solana `deliver_whitelist`
+		let w = key(0x70);
+		assert_ok!(rec(FLOW_WHITELIST, w, sol::WL_REQUESTED, HUB, tx(1))
+			.investor()
+			.scope(vault())
+			.send());
+		assert_ok!(rec(FLOW_WHITELIST, w, sol::WL_ATTESTED, HUB, tx(2)).send());
+		assert_ok!(rec(FLOW_WHITELIST, w, sol::WL_ATTESTED, HUB, tx(3)).send());
+		assert_ok!(rec(FLOW_WHITELIST, w, sol::WL_APPLIED, SOL, sig(4)).send());
+		assert_eq!(instance(FLOW_WHITELIST, w).status, InstanceStatus::Completed);
+		assert_eq!(slot(FLOW_WHITELIST, w, Lane::Main, sol::WL_ATTESTED).attempts.len(), 2);
+
+		// deposit on Solana: `request_deposit`, attestation, hub `deliver` (DepositQueued)
+		let d = key(1);
+		assert_ok!(rec(FLOW_DEPOSIT, d, sol::DEP_REQUESTED, SOL, sig(10)).investor().send());
+		assert_eq!(instance(FLOW_DEPOSIT, d).template, MC_DEPOSIT_SOL_V1);
+		assert_ok!(rec(FLOW_DEPOSIT, d, sol::DEP_ATTESTED, HUB, tx(11)).send());
+		assert_ok!(rec(FLOW_DEPOSIT, d, sol::DEP_QUEUED, HUB, tx(12)).send());
+
+		// settlement over the CCCP spoke A and the Solana spoke
+		let s = key(0x71);
+		assert_ok!(rec(FLOW_SETTLEMENT, s, set::STARTED, HUB, tx(20))
+			.declare(vec![(set::COLLECT, A), (set::COLLECT, SOL)])
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::COLLECT_BRIDGED, A, tx(21)).lane(A).send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::NAV_REPORTED, A, tx(22)).lane(A).send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::NAV_RECEIVED, HUB, tx(23)).lane(A).send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::COLLECT_ATTESTED, HUB, tx(24)).lane(SOL).send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::NAV_REPORTED, SOL, sig(25)).lane(SOL).send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::RESPONSE_ATTESTED, HUB, tx(26))
+			.lane(SOL)
+			.part(0, 1)
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::NAV_RECEIVED, HUB, tx(27)).lane(SOL).send());
+
+		// two FINALIZE chunks to Solana; the second one's tx closes the round and
+		// routes Solana's held deposit
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::FINALIZE_STARTED, HUB, tx(30))
+			.lane(SOL)
+			.part(0, 2)
+			.declare(vec![(set::FINALIZE, SOL)])
+			.send());
+		assert_ok!(batch(
+			FLOW_DEPOSIT,
+			vec![d],
+			sol::DEP_APPROVED,
+			HUB,
+			tx(30),
+			Some((FLOW_SETTLEMENT, s))
+		));
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::FINALIZE_STARTED, HUB, tx(31))
+			.lane(SOL)
+			.part(1, 2)
+			.send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::SETTLED, HUB, tx(31))
+			.declare(vec![(set::FINALIZE, SOL), (set::HOLD, SOL)])
+			.send());
+		for (i, n) in [(0u16, 32u8), (1, 33)] {
+			assert_ok!(rec(FLOW_SETTLEMENT, s, sol::FINALIZE_ATTESTED, HUB, tx(n))
+				.lane(SOL)
+				.part(i, 2)
+				.send());
+			// `deliver_finalize` / `buffer_execute_finalize`
+			assert_ok!(rec(FLOW_SETTLEMENT, s, sol::SETTLE_APPLIED, SOL, sig(n + 2))
+				.lane(SOL)
+				.part(i, 2)
+				.send());
+		}
+		assert_ok!(batch(FLOW_DEPOSIT, vec![d], sol::DEP_SETTLE_APPLIED, SOL, sig(34), None));
+		assert_eq!(instance(FLOW_DEPOSIT, d).status, InstanceStatus::Completed);
+		assert!(slot(FLOW_DEPOSIT, d, Lane::Main, sol::DEP_BRIDGED).attempts.is_empty());
+
+		// hold ROUTE: `deliver_route` burns to A, which lands it with `receiveCctp`
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::HOLD_ROUTE_ATTESTED, HUB, tx(40)).lane(SOL).send());
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::HOLD_ROUTE_RECEIVED, SOL, sig(41))
+			.lane(SOL)
+			.declare(vec![(set::HOLD_CCTP, SOL)])
+			.send());
+		let i = instance(FLOW_SETTLEMENT, s);
+		assert_eq!((i.status, i.pending_lanes), (InstanceStatus::Open, 1));
+		assert_ok!(rec(FLOW_SETTLEMENT, s, sol::HOLD_CCTP_RECEIVED, A, tx(42))
+			.lane(SOL)
+			.part(0, 1)
+			.send());
+		let i = instance(FLOW_SETTLEMENT, s);
+		assert_eq!((i.status, i.lane_count), (InstanceStatus::Completed, 5));
+		let applied = slot(FLOW_SETTLEMENT, s, sub(set::FINALIZE, SOL), sol::SETTLE_APPLIED);
+		assert_eq!(applied.attempts[0].tx.tx_hash.len(), 64);
+	});
+}
+
 #[test]
 fn settlement_restart_reuses_the_instance() {
 	new_test_ext().execute_with(|| {
