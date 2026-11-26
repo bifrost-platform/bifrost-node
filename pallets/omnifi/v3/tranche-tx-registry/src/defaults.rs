@@ -8,7 +8,10 @@
 //! The defaults cover products whose transfer method is CCTP or none. A
 //! product that moves assets over CCCP instead (`BRIDGE_CCCP`, e.g. one with a
 //! spoke CCTP doesn't reach) is assigned the opt-in [`mc_settle_cccp`] for its
-//! settlement flow. Step-by-step recorder guidance lives in
+//! settlement flow. A product with a spoke the hub reaches over the
+//! MessageGateway instead of CCCP (Solana) is assigned the opt-in `*-sol`
+//! templates ([`mc_deposit_sol`], …) for its deposit, redeem, settlement and
+//! whitelist flows. Step-by-step recorder guidance lives in
 //! `docs/tranche-tx-registry-v3/default-templates.md`.
 
 use crate::{
@@ -39,6 +42,12 @@ pub const SC_REDEEM_V1: TemplateId = TemplateId { name: slug("sc-redeem"), versi
 pub const SC_SETTLEMENT_V1: TemplateId = TemplateId { name: slug("sc-settlement"), version: 1 }; // 0x73632d736574746c656d656e74000000
 pub const SC_WHITELIST_V1: TemplateId = TemplateId { name: slug("sc-whitelist"), version: 1 }; // 0x73632d77686974656c69737400000000
 pub const RECEIVE_V1: TemplateId = TemplateId { name: slug("receive"), version: 1 }; // 0x72656365697665000000000000000000
+/// Opt-in templates for products with a MessageGateway (Solana) spoke — never default flows.
+pub const MC_DEPOSIT_SOL_V1: TemplateId = TemplateId { name: slug("mc-deposit-sol"), version: 1 }; // 0x6d632d6465706f7369742d736f6c0000
+pub const MC_REDEEM_SOL_V1: TemplateId = TemplateId { name: slug("mc-redeem-sol"), version: 1 }; // 0x6d632d72656465656d2d736f6c000000
+pub const MC_SETTLE_SOL_V1: TemplateId = TemplateId { name: slug("mc-settle-sol"), version: 1 }; // 0x6d632d736574746c652d736f6c000000
+pub const MC_WHITELIST_SOL_V1: TemplateId =
+	TemplateId { name: slug("mc-whitelist-sol"), version: 1 }; // 0x6d632d77686974656c6973742d736f6c
 
 fn slot(id: SlotId, name: &str, required: bool) -> SlotDef {
 	SlotDef { id, name: BoundedVec::truncate_from(name.as_bytes().to_vec()), required }
@@ -267,6 +276,143 @@ pub fn mc_whitelist() -> Template {
 	)
 }
 
+// ---- MessageGateway (Solana) spokes, opt-in ----
+//
+// A gateway message has no Socket tx: each attester posts its signature on the
+// hub (`MessageGateway.attest` → `Attested(digest, attester, srcChain,
+// dstChain, nonce, sig)`, one tx per attester, several messages per tx) and the
+// relayer delivers in the tx that emits the domain event (hub `deliver` →
+// `GatewayDelivered` + the Valuation event; Solana `deliver_*` → the spoke
+// event). So each `*-sol` template is its `mc-*` counterpart plus an optional
+// `<message>Attested` slot right after every `<message>Bridged` slot,
+// renumbered in order. A gateway lane fills `*Attested` (`chain_id` = hub, one
+// attempt per message — its first attester tx; FINALIZE chunks carry their part like
+// `FinalizeBridged`) and leaves `*Bridged` empty; a CCCP lane of the same
+// product does the opposite. A Solana spoke is CCTP or NONE only, so no CCCP
+// relay tracks. Solana's own keeper txs (`allocate`, `drain_payout_async`,
+// buffered-FINALIZE staging) name no round or request and get no slot.
+
+/// [`mc_deposit_v2`] with `DepositAttested` — the DEPOSIT_REQUEST envelope
+/// (`src` = the vault chain, `nonce` = its outbox seq) attested on the hub.
+pub fn mc_deposit_sol() -> Template {
+	template(
+		true,
+		vec![
+			slot(0, "DepositRequested", true),
+			slot(1, "DepositBridged", false),
+			slot(2, "DepositAttested", false),
+			slot(3, "DepositQueued", true),
+			slot(4, "BatchRouted", false),
+			slot(5, "DepositsApproved", true),
+			slot(6, "SettleApplied", true),
+			slot(7, "RequestClaimed", false),
+		],
+		vec![],
+	)
+}
+
+/// [`mc_redeem_v2`] with `RedeemAttested`.
+pub fn mc_redeem_sol() -> Template {
+	template(
+		true,
+		vec![
+			slot(0, "RedeemRequested", true),
+			slot(1, "RedeemBridged", false),
+			slot(2, "RedeemAttested", false),
+			slot(3, "RedeemQueued", true),
+			slot(4, "RedeemCarried", false),
+			slot(5, "RedeemHeldForCoverage", false),
+			slot(6, "RedeemsApproved", true),
+			slot(7, "SettleApplied", true),
+			slot(8, "RequestClaimed", false),
+		],
+		vec![],
+	)
+}
+
+/// [`mc_settlement`] with `CollectAttested`, `ResponseAttested`,
+/// `FinalizeAttested` and the three ROUTE `*Attested`. On a Solana lane the
+/// hook slots are `deliver_collect` (`DepositGateSet`, vault chains only),
+/// `respond` (`NavReported`, always one RESPONSE chunk), `deliver_finalize` /
+/// `buffer_execute_finalize` (`SettleApplied`) and `deliver_route`
+/// (`RouteApplied` + one `CctpSent` per remote chain, or `WithdrawRequested`);
+/// a CCTP arrival on Solana is `receive_cctp` (`CctpReceived`).
+pub fn mc_settle_sol() -> Template {
+	template(
+		false,
+		vec![
+			slot(0, "SettleStarted", true),
+			slot(1, "CollectAborted", false),
+			slot(11, "Settled", true),
+		],
+		vec![
+			track(
+				"collect-response",
+				vec![
+					slot(2, "CollectBridged", false),
+					slot(3, "CollectAttested", false),
+					slot(4, "DepositGateSet", false),
+					slot(5, "NavReported", true),
+					slot(6, "ResponseBridged", false),
+					slot(7, "ResponseAttested", false),
+					slot(8, "ResponseChunkApplied", false),
+					slot(9, "NavReceived", true),
+				],
+			),
+			track(
+				"finalize",
+				vec![
+					slot(10, "FinalizeStarted", false),
+					slot(12, "FinalizeBridged", false),
+					slot(13, "FinalizeAttested", false),
+					slot(14, "SettleApplied", true),
+				],
+			),
+			track(
+				"payout-move",
+				vec![
+					slot(15, "PayoutRouteBridged", false),
+					slot(16, "PayoutRouteAttested", false),
+					slot(17, "PayoutRouteReceived", true),
+				],
+			),
+			track("payout-move-cctp", vec![slot(18, "PayoutCctpReceived", true)]),
+			track(
+				"hold",
+				vec![
+					slot(19, "HoldRouteBridged", false),
+					slot(20, "HoldRouteAttested", false),
+					slot(21, "HoldRouteReceived", true),
+				],
+			),
+			track("hold-cctp", vec![slot(22, "HoldCctpReceived", true)]),
+			track(
+				"pull",
+				vec![
+					slot(23, "PullRouteBridged", false),
+					slot(24, "PullRouteAttested", false),
+					slot(25, "WithdrawRequested", true),
+				],
+			),
+		],
+	)
+}
+
+/// [`mc_whitelist`] with `WhitelistAttested`; on Solana `WhitelistApplied` is
+/// `deliver_whitelist`.
+pub fn mc_whitelist_sol() -> Template {
+	template(
+		true,
+		vec![
+			slot(0, "WhitelistRequested", true),
+			slot(1, "WhitelistBridged", false),
+			slot(2, "WhitelistAttested", false),
+			slot(3, "WhitelistApplied", true),
+		],
+		vec![],
+	)
+}
+
 /// Single-chain deposit — Manager and Valuation live on the product's own
 /// chain, no messaging. SYNC orders approve in the request tx (the approval
 /// is logged before `DepositRequested`; record the opening event first),
@@ -324,6 +470,10 @@ pub fn templates() -> Vec<(TemplateId, Template)> {
 		(SC_SETTLEMENT_V1, sc_settlement()),
 		(SC_WHITELIST_V1, sc_whitelist()),
 		(RECEIVE_V1, receive()),
+		(MC_DEPOSIT_SOL_V1, mc_deposit_sol()),
+		(MC_REDEEM_SOL_V1, mc_redeem_sol()),
+		(MC_SETTLE_SOL_V1, mc_settle_sol()),
+		(MC_WHITELIST_SOL_V1, mc_whitelist_sol()),
 	]
 }
 
