@@ -11,7 +11,9 @@
 //! settlement flow. A product with a spoke the hub reaches over the
 //! MessageGateway instead of CCCP (Solana) is assigned the opt-in `*-sol`
 //! templates ([`mc_deposit_sol`], …) for its deposit, redeem, settlement and
-//! whitelist flows. Step-by-step recorder guidance lives in
+//! whitelist flows. A product with a spoke InstantSwap is assigned the opt-in
+//! [`instant`] for the `instant` flow (no default for that flow at all).
+//! Step-by-step recorder guidance lives in
 //! `docs/tranche-tx-registry-v3/default-templates.md`.
 
 use crate::{
@@ -27,6 +29,7 @@ pub const FLOW_REDEEM: FlowId = slug("redeem"); // 0x72656465656d000000000000000
 pub const FLOW_SETTLEMENT: FlowId = slug("settlement"); // 0x736574746c656d656e74000000000000
 pub const FLOW_WHITELIST: FlowId = slug("whitelist"); // 0x77686974656c69737400000000000000
 pub const FLOW_RECEIVE: FlowId = slug("receive"); // 0x72656365697665000000000000000000
+pub const FLOW_INSTANT: FlowId = slug("instant"); // 0x696e7374616e74000000000000000000
 
 // ---- template ids (name is bytes16, same padding as flow ids) ----
 pub const MC_DEPOSIT_V1: TemplateId = TemplateId { name: slug("mc-deposit"), version: 1 }; // 0x6d632d6465706f736974000000000000
@@ -48,6 +51,8 @@ pub const MC_REDEEM_SOL_V1: TemplateId = TemplateId { name: slug("mc-redeem-sol"
 pub const MC_SETTLE_SOL_V1: TemplateId = TemplateId { name: slug("mc-settle-sol"), version: 1 }; // 0x6d632d736574746c652d736f6c000000
 pub const MC_WHITELIST_SOL_V1: TemplateId =
 	TemplateId { name: slug("mc-whitelist-sol"), version: 1 }; // 0x6d632d77686974656c6973742d736f6c
+/// Opt-in template for products with a spoke InstantSwap — never a default flow.
+pub const INSTANT_V1: TemplateId = TemplateId { name: slug("instant"), version: 1 }; // 0x696e7374616e74000000000000000000
 
 fn slot(id: SlotId, name: &str, required: bool) -> SlotDef {
 	SlotDef { id, name: BoundedVec::truncate_from(name.as_bytes().to_vec()), required }
@@ -456,6 +461,14 @@ pub fn receive() -> Template {
 	template(true, vec![slot(0, "Received", true)], vec![])
 }
 
+/// A spoke InstantSwap swap at the last confirmed share price — opens and
+/// completes in one attestation, nothing reaches the hub. The one slot covers
+/// both `InstantDeposit` and `InstantWithdraw` (the kind goes in the instance
+/// metadata). Only products with an InstantSwap deployed are assigned it.
+pub fn instant() -> Template {
+	template(true, vec![slot(0, "Swapped", true)], vec![])
+}
+
 pub fn templates() -> Vec<(TemplateId, Template)> {
 	vec![
 		(MC_DEPOSIT_V1, mc_deposit()),
@@ -474,6 +487,7 @@ pub fn templates() -> Vec<(TemplateId, Template)> {
 		(MC_REDEEM_SOL_V1, mc_redeem_sol()),
 		(MC_SETTLE_SOL_V1, mc_settle_sol()),
 		(MC_WHITELIST_SOL_V1, mc_whitelist_sol()),
+		(INSTANT_V1, instant()),
 	]
 }
 

@@ -1197,6 +1197,37 @@ fn cccp_settlement_template_shape_and_opt_in() {
 }
 
 #[test]
+fn instant_swap_is_opt_in_and_completes_in_one_record() {
+	new_test_ext().execute_with(|| {
+		// the recorder resolves the slot by this name (`map/templates.rs`)
+		let t = Templates::<Test>::get(INSTANT_V1).unwrap();
+		assert!(t.investor_scoped && t.tracks.is_empty());
+		assert_eq!(t.main.to_vec(), vec![slot_def(0, "Swapped", true)]);
+		assert_eq!(t.main_required_count, 1);
+		for model in [ProductModel::Multichain, ProductModel::SingleChain] {
+			assert!(!DefaultFlows::<Test>::get(model).contains_key(&FLOW_INSTANT));
+		}
+		assign_multichain();
+		assert_noop!(
+			rec(FLOW_INSTANT, key(1), 0, A, tx(1)).investor().scope(vault()).send(),
+			Error::<Test>::FlowNotAssigned
+		);
+		assert_ok!(Registry::assign_flow(
+			RuntimeOrigin::root(),
+			PID,
+			FLOW_INSTANT,
+			Some(INSTANT_V1)
+		));
+		assert_ok!(rec(FLOW_INSTANT, key(1), 0, A, tx(1)).investor().scope(vault()).send());
+		assert_eq!(instance(FLOW_INSTANT, key(1)).status, InstanceStatus::Completed);
+		assert_eq!(
+			LatestByScope::<Test>::get((investor(), PID, FLOW_INSTANT, vault())),
+			Some(key(1))
+		);
+	});
+}
+
+#[test]
 fn cccp_settlement_waits_for_every_relayed_arrival() {
 	new_test_ext().execute_with(|| {
 		assign_multichain();

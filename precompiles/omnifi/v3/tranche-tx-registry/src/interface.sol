@@ -11,7 +11,7 @@ TrancheTxRegistryV3 constant TRANCHE_TX_REGISTRY_V3_CONTRACT = TrancheTxRegistry
 
 /// @title pallet-tranche-tx-registry-v3 — template-driven tx evidence registry
 /// @notice Every OmniFi flow (deposit, redeem, settlement, whitelist, receive,
-/// and any product-specific flow) is recorded as `(slot, lane, chain_id,
+/// instant, and any product-specific flow) is recorded as `(slot, lane, chain_id,
 /// tx_hash)` attestations against an on-chain template. The recorder is the
 /// single source of truth: the registry never enforces step order — it only
 /// derives progress (completed slots, done lanes, instance status) by
